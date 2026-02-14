@@ -9,9 +9,15 @@ import (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "login" {
-		runLogin()
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "login":
+			runLogin()
+			return
+		case "--version", "-version", "-v":
+			println("gsbs-client", Version)
+			return
+		}
 	}
 
 	// On Windows, run as system tray app (no console) unless --console is passed
