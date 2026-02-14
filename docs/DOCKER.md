@@ -43,6 +43,34 @@ Create the named volume if needed (Docker creates it on first use). The SQLite f
 
 ---
 
+## Pushing to Docker Hub
+
+1. **Log in** (use your Docker Hub username and password or a [Personal Access Token](https://hub.docker.com/settings/security)):
+   ```bash
+   docker login
+   ```
+
+2. **Build and tag** the image with your Docker Hub username and repository name:
+   ```bash
+   docker build -t YOUR_DOCKERHUB_USERNAME/gsbs-server:latest .
+   docker tag YOUR_DOCKERHUB_USERNAME/gsbs-server:latest YOUR_DOCKERHUB_USERNAME/gsbs-server:v1.0.1   # optional version tag
+   ```
+   Replace `YOUR_DOCKERHUB_USERNAME` with your actual Docker Hub username.
+
+3. **Push** the image:
+   ```bash
+   docker push YOUR_DOCKERHUB_USERNAME/gsbs-server:latest
+   docker push YOUR_DOCKERHUB_USERNAME/gsbs-server:v1.0.1   # if you tagged a version
+   ```
+
+**Pre-built image:** The official image is published at [dendlomm/gsbs-server](https://hub.docker.com/r/dendlomm/gsbs-server) on Docker Hub. Anyone can run:
+```bash
+docker pull dendlomm/gsbs-server:latest
+docker run -d -p 8080:8080 -e GSBS_SESSION_SECRET=xxx -v gsbs-data:/app/data -e GSBS_DB=/app/data/gsbs.db dendlomm/gsbs-server:latest
+```
+
+---
+
 ## Environment variables
 
 | Variable | Default | Description |

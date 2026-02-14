@@ -29,3 +29,12 @@ go build -o gsbs-server .
   Header: `Authorization: Bearer <token>`  
   Headers: `X-Game-ID`, `X-Path-Key`, optional `X-File-Path`  
   Body: raw file bytes
+
+## Windows exe icon
+
+`icon.ico` is the application icon for the Windows build. To embed it in the .exe, install [rsrc](https://github.com/akavel/rsrc) and run (when building for Windows):
+
+```bash
+rsrc -ico server/icon.ico -o server/rsrc.syso
+GOOS=windows GOARCH=amd64 go build -o gsbs-server.exe ./server
+```

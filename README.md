@@ -1,5 +1,7 @@
 # GSBS — Game Sync & Backup Service
 
+![GSBS logo](docs/images/gsbs-logo.png)
+
 A server-based game save syncing system. **Windows** and **Linux** clients sync game saves to a central server with multi-user support. Multiple clients per user stay in sync; new clients pull all saves and only write where the game is installed (folder exists).
 
 ## Features
