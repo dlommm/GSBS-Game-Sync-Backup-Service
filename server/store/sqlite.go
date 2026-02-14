@@ -94,6 +94,13 @@ func (s *sqliteStore) UserByUsername(ctx context.Context, username string) (user
 	return userID, passwordHash, err
 }
 
+// UsernameByID looks up the username for the given user ID (for dashboard and admin auth).
+func (s *sqliteStore) UsernameByID(ctx context.Context, userID string) (string, error) {
+	var username string
+	err := s.db.QueryRowContext(ctx, `SELECT username FROM users WHERE id = ?`, userID).Scan(&username)
+	return username, err
+}
+
 func (s *sqliteStore) RegisterClient(ctx context.Context, userID, name, os string) (string, error) {
 	id := genID()
 	token := genID()
@@ -130,6 +137,13 @@ func (s *sqliteStore) ListClientsByUserID(ctx context.Context, userID string) ([
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// RegenerateClientToken assigns a new token for the client; the previous token stops working (used by admin revoke).
+func (s *sqliteStore) RegenerateClientToken(ctx context.Context, clientID string) error {
+	newToken := genID()
+	_, err := s.db.ExecContext(ctx, `UPDATE clients SET token = ? WHERE id = ?`, newToken, clientID)
+	return err
 }
 
 func (s *sqliteStore) UpsertSave(ctx context.Context, userID, gameID, pathKey string, content []byte) error {
@@ -245,6 +259,72 @@ func (s *sqliteStore) GetManifestSince(ctx context.Context, since string) ([]typ
 		}
 		e.IsConfig = isConfig != 0
 		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// CountUsers returns the total number of registered users (admin stats).
+func (s *sqliteStore) CountUsers(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&n)
+	return n, err
+}
+
+// CountClients returns the total number of registered clients (admin stats).
+func (s *sqliteStore) CountClients(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM clients`).Scan(&n)
+	return n, err
+}
+
+// CountSaves returns the total number of save blobs across all users (admin stats).
+func (s *sqliteStore) CountSaves(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM saves`).Scan(&n)
+	return n, err
+}
+
+// CountGameSaveLocations returns the number of manifest entries (PCGW game save locations).
+func (s *sqliteStore) CountGameSaveLocations(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM game_save_locations`).Scan(&n)
+	return n, err
+}
+
+// ListUsers returns all users for the admin UI (id, username, created_at).
+func (s *sqliteStore) ListUsers(ctx context.Context) ([]UserInfo, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, username, created_at FROM users ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UserInfo
+	for rows.Next() {
+		var u UserInfo
+		if err := rows.Scan(&u.ID, &u.Username, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// ListAllClients returns all clients with their owner username for the admin UI.
+func (s *sqliteStore) ListAllClients(ctx context.Context) ([]ClientInfoWithUser, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT c.id, c.user_id, u.username, c.name, c.os, COALESCE(c.last_seen, c.created_at) FROM clients c JOIN users u ON c.user_id = u.id ORDER BY u.username, c.name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ClientInfoWithUser
+	for rows.Next() {
+		var c ClientInfoWithUser
+		if err := rows.Scan(&c.ID, &c.UserID, &c.Username, &c.Name, &c.OS, &c.LastSeen); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
 	}
 	return out, rows.Err()
 }

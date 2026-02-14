@@ -29,7 +29,8 @@ func main() {
 
 	authSvc := auth.NewService(st)
 	apiHandler := api.NewHandler(st, authSvc)
-	webHandler := webui.NewWebHandler(st, authSvc, os.Getenv("GSBS_SESSION_SECRET"))
+	// GSBS_ADMIN_USERNAME: if set, only this user can access /admin (stats and revoke client tokens).
+	webHandler := webui.NewWebHandler(st, authSvc, os.Getenv("GSBS_SESSION_SECRET"), os.Getenv("GSBS_ADMIN_USERNAME"))
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiHandler)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(webui.StaticFiles())))
