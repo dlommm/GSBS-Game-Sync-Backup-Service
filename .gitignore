@@ -1,0 +1,19 @@
+# Binaries
+gsbs-client
+gsbs-server
+pcgw-fetch
+pcgw-sync
+
+# Database
+gsbs.db
+*.db
+
+# Go
+/bin/
+/vendor/
+
+# IDE / OS
+.idea/
+.DS_Store
+*.swp
+*.swo
