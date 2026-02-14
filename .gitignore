@@ -1,8 +1,9 @@
-# Binaries
+# Binaries / build output
 gsbs-client
 gsbs-server
 pcgw-fetch
 pcgw-sync
+dist/
 
 # Database
 gsbs.db
