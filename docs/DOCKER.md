@@ -53,14 +53,14 @@ Create the named volume if needed (Docker creates it on first use). The SQLite f
 2. **Build and tag** the image with your Docker Hub username and repository name:
    ```bash
    docker build -t YOUR_DOCKERHUB_USERNAME/gsbs-server:latest .
-   docker tag YOUR_DOCKERHUB_USERNAME/gsbs-server:latest YOUR_DOCKERHUB_USERNAME/gsbs-server:v1.0.1   # optional version tag
+   docker tag YOUR_DOCKERHUB_USERNAME/gsbs-server:latest YOUR_DOCKERHUB_USERNAME/gsbs-server:v1.0.2   # optional version tag
    ```
    Replace `YOUR_DOCKERHUB_USERNAME` with your actual Docker Hub username.
 
 3. **Push** the image:
    ```bash
    docker push YOUR_DOCKERHUB_USERNAME/gsbs-server:latest
-   docker push YOUR_DOCKERHUB_USERNAME/gsbs-server:v1.0.1   # if you tagged a version
+   docker push YOUR_DOCKERHUB_USERNAME/gsbs-server:v1.0.2   # if you tagged a version
    ```
 
 **Pre-built image:** The official image is published at [dendlomm/gsbs-server](https://hub.docker.com/r/dendlomm/gsbs-server) on Docker Hub. Anyone can run:

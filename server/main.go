@@ -17,6 +17,10 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-version" || os.Args[1] == "-v") {
+		println("gsbs-server", Version)
+		return
+	}
 	dbPath := os.Getenv("GSBS_DB")
 	if dbPath == "" {
 		dbPath = "gsbs.db"
