@@ -2,10 +2,24 @@
 
 Windows and Linux client that syncs game saves to the GSBS server.
 
-**Build and run (from repo root):**
-```bash
-go build -o gsbs-client ./client && ./gsbs-client login
-```
+## Windows: system tray
+
+On Windows, double‑click **gsbs-client.exe** (or run it from Start). It runs in the **system tray** (notification area). No console window.
+
+**First launch:** Config is blank (no server, no token). A **Login** dialog opens automatically so you can connect to your server:
+- **Server URL** — e.g. `http://localhost:8080`, `https://your-server:8080`, or your Docker/remote server URL.
+- **Username** and **Password** — your GSBS account. Click **Login** to save the token and start syncing.
+
+**Tray menu:**
+- **Server: (not set)** or **Server: your-url** — shows current server (click **Login** to change).
+- **Open server in browser** — open the server WebUI (only when a server is set).
+- **Login...** — open the login dialog to connect to a server or switch account (server URL, username, password). Sync restarts after a successful login.
+- **Edit config file** — open `%APPDATA%\gsbs\config.json` in Notepad for advanced options (e.g. watch_paths).
+- **Sync now** — run a sync immediately.
+- **Quit** — exit the client.
+
+To run with a **console** (e.g. for debugging):  
+`gsbs-client.exe --console`
 
 ## First-time setup
 
@@ -59,7 +73,17 @@ Example for Assassin's Creed Rogue (Ubisoft Connect, Windows):
 
 ## Building
 
+**Linux:**
 ```bash
-GOOS=windows GOARCH=amd64 go build -o gsbs-client.exe .
-GOOS=linux   GOARCH=amd64 go build -o gsbs-client .
+go build -o gsbs-client ./client
 ```
+
+**Windows (from repo root):**
+```bash
+# Tray app (no console window when run)
+GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui" -o gsbs-client.exe ./client
+```
+For a console build (shows a window): omit the `-ldflags "-H windowsgui"`.
+
+**Cross-compile from Linux/macOS:**  
+The same commands work. For full tray behavior on Windows, build the Windows client on a Windows machine with `CGO_ENABLED=1` if the tray icon does not appear.

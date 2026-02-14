@@ -1,5 +1,7 @@
 # GSBS Architecture
 
+![GSBS logo](images/gsbs-logo.png)
+
 ## Overview
 
 - **Server**: Central service. Handles user auth, stores one copy of each “logical” save per user (keyed by game + path key). Exposes push/pull/list APIs.

@@ -9,7 +9,7 @@ import (
 //go:embed templates/*.html
 var templatesFS embed.FS
 
-//go:embed static/*.css
+//go:embed static/*.css static/*.png
 var staticFS embed.FS
 
 // StaticFiles returns an http.FileSystem for serving embedded static assets (CSS, etc.).

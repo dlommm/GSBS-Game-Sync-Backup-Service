@@ -28,7 +28,8 @@ func loadConfig() (*config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return defaultConfig(path), nil
+			// First launch: blank config so user is prompted to login (server + credentials).
+			return blankConfig(), nil
 		}
 		return nil, err
 	}
@@ -40,6 +41,16 @@ func loadConfig() (*config, error) {
 		c.ServerURL = "http://localhost:8080"
 	}
 	return &c, nil
+}
+
+// blankConfig is used when no config file exists (first launch). Empty server and token so user must login.
+func blankConfig() *config {
+	return &config{
+		ServerURL:    "",
+		Token:        "",
+		SyncInterval: 5 * time.Minute,
+		WatchPaths:   []watchPath{},
+	}
 }
 
 func defaultConfig(_ string) *config {
