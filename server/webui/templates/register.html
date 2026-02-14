@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register — GSBS</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="auth-page">
+  <main class="auth-card">
+    <h1>Create account</h1>
+    <p class="subtitle">Register for Game Sync & Backup</p>
+    {{if .Error}}
+    <p class="error">{{.Error}}</p>
+    {{end}}
+    <form method="post" action="/register" class="auth-form">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" required autocomplete="username">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required autocomplete="new-password">
+      <label for="confirm_password">Confirm password</label>
+      <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password">
+      <button type="submit">Register</button>
+    </form>
+    <p class="auth-footer">Already have an account? <a href="/login">Sign in</a></p>
+  </main>
+</body>
+</html>

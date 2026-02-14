@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — GSBS</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="dashboard-header">
+    <h1>GSBS Dashboard</h1>
+    <form method="post" action="/logout" style="display:inline;">
+      <button type="submit" class="btn-logout">Log out</button>
+    </form>
+  </header>
+  <main class="dashboard-main">
+    {{if .Error}}
+    <p class="error">{{.Error}}</p>
+    {{end}}
+    <section class="card">
+      <h2>Clients</h2>
+      {{if .Clients}}
+      <table class="table">
+        <thead>
+          <tr><th>Name</th><th>OS</th><th>Last seen</th></tr>
+        </thead>
+        <tbody>
+          {{range .Clients}}
+          <tr><td>{{.Name}}</td><td>{{.OS}}</td><td>{{.LastSeen}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      <p>No clients registered yet. Use the client app and run <code>gsbs-client login</code> to add one.</p>
+      {{end}}
+    </section>
+    <section class="card">
+      <h2>Synced saves</h2>
+      {{if .Saves}}
+      <table class="table">
+        <thead>
+          <tr><th>Game ID</th><th>Path key</th><th>Updated</th></tr>
+        </thead>
+        <tbody>
+          {{range .Saves}}
+          <tr><td>{{.GameID}}</td><td><code>{{.PathKey}}</code></td><td>{{.UpdatedAt}}</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{else}}
+      <p>No saves synced yet. Add watch paths in the client config or install games that are in the manifest.</p>
+      {{end}}
+    </section>
+  </main>
+</body>
+</html>
