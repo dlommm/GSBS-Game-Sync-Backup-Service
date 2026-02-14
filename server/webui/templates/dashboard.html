@@ -1,54 +1,83 @@
+<!-- Dashboard: stats (clients, saves, storage), clients table, synced saves table. Admin link shown only when IsAdmin. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard — GSBS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body class="app-shell">
   <header class="dashboard-header">
-    <h1>GSBS Dashboard</h1>
-    <form method="post" action="/logout" style="display:inline;">
-      <button type="submit" class="btn-logout">Log out</button>
-    </form>
+    <h1>GSBS</h1>
+    <nav class="header-nav">
+      <a href="/dashboard" class="active">Dashboard</a>
+      {{if .IsAdmin}}
+      <a href="/admin">Admin</a>
+      {{end}}
+      <span class="user-badge">{{.Username}}</span>
+      <form method="post" action="/logout" style="display:inline;">
+        <button type="submit" class="btn-logout">Log out</button>
+      </form>
+    </nav>
   </header>
   <main class="dashboard-main">
     {{if .Error}}
     <p class="error">{{.Error}}</p>
     {{end}}
+    <section class="stats-grid">
+      <div class="stat-card">
+        <div class="value">{{.Stats.ClientCount}}</div>
+        <div class="label">Clients</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">{{.Stats.SaveCount}}</div>
+        <div class="label">Synced saves</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">{{formatBytes .Stats.TotalBytes}}</div>
+        <div class="label">Storage used</div>
+      </div>
+    </section>
     <section class="card">
       <h2>Clients</h2>
       {{if .Clients}}
-      <table class="table">
-        <thead>
-          <tr><th>Name</th><th>OS</th><th>Last seen</th></tr>
-        </thead>
-        <tbody>
-          {{range .Clients}}
-          <tr><td>{{.Name}}</td><td>{{.OS}}</td><td>{{.LastSeen}}</td></tr>
-          {{end}}
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Name</th><th>OS</th><th>Last seen</th></tr>
+          </thead>
+          <tbody>
+            {{range .Clients}}
+            <tr><td>{{.Name}}</td><td><span class="badge">{{.OS}}</span></td><td class="muted">{{formatTime .LastSeen}}</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
       {{else}}
-      <p>No clients registered yet. Use the client app and run <code>gsbs-client login</code> to add one.</p>
+      <p class="card-empty">No clients registered yet. Use the client app and run <code>gsbs-client login</code> to add one.</p>
       {{end}}
     </section>
     <section class="card">
       <h2>Synced saves</h2>
       {{if .Saves}}
-      <table class="table">
-        <thead>
-          <tr><th>Game ID</th><th>Path key</th><th>Updated</th></tr>
-        </thead>
-        <tbody>
-          {{range .Saves}}
-          <tr><td>{{.GameID}}</td><td><code>{{.PathKey}}</code></td><td>{{.UpdatedAt}}</td></tr>
-          {{end}}
-        </tbody>
-      </table>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Game ID</th><th>Path key</th><th>Updated</th></tr>
+          </thead>
+          <tbody>
+            {{range .Saves}}
+            <tr><td>{{.GameID}}</td><td><code>{{.PathKey}}</code></td><td class="muted">{{formatTime .UpdatedAt}}</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
       {{else}}
-      <p>No saves synced yet. Add watch paths in the client config or install games that are in the manifest.</p>
+      <p class="card-empty">No saves synced yet. Add watch paths in the client config or install games that are in the manifest.</p>
       {{end}}
     </section>
   </main>
