@@ -1,0 +1,13 @@
+# Avoid copying build output and dev files into the image
+dist/
+gsbs.db
+*.db
+.git
+.gitignore
+*.md
+client/
+cmd/
+pcgw-fetch
+pcgw-sync
+gsbs-client
+gsbs-server
