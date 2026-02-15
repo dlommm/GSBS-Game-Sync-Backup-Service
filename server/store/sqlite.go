@@ -17,10 +17,12 @@ type sqliteStore struct {
 
 // NewSQLite creates a SQLite-backed store.
 func NewSQLite(path string) (Store, error) {
-	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on")
+	// WAL mode improves concurrent read performance; single connection avoids "database is locked" under concurrent writes.
+	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on&_journal_mode=WAL")
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(1)
 	s := &sqliteStore{db: db}
 	if err := s.migrate(); err != nil {
 		db.Close()
@@ -310,6 +312,85 @@ func (s *sqliteStore) ListUsers(ctx context.Context) ([]UserInfo, error) {
 	return out, rows.Err()
 }
 
+// UpdateClientLastSeen updates the last_seen timestamp for a client (called on push/pull API).
+func (s *sqliteStore) UpdateClientLastSeen(ctx context.Context, clientID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE clients SET last_seen = ? WHERE id = ?`,
+		time.Now().UTC().Format(time.RFC3339), clientID,
+	)
+	return err
+}
+
+// ListSaveSummaries returns lightweight save info (no content blob) with game title from manifest.
+func (s *sqliteStore) ListSaveSummaries(ctx context.Context, userID string) ([]SaveSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT s.game_id, s.path_key, LENGTH(s.content) AS size_bytes, s.updated_at,
+		       COALESCE(g.game_title, s.game_id) AS game_title
+		FROM saves s
+		LEFT JOIN (SELECT DISTINCT game_id, game_title FROM game_save_locations) g
+		  ON s.game_id = g.game_id
+		WHERE s.user_id = ?
+		ORDER BY s.updated_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SaveSummary
+	for rows.Next() {
+		var ss SaveSummary
+		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle); err != nil {
+			return nil, err
+		}
+		out = append(out, ss)
+	}
+	return out, rows.Err()
+}
+
+// UserStorageBytes returns total storage in bytes for a user's saves.
+func (s *sqliteStore) UserStorageBytes(ctx context.Context, userID string) (int64, error) {
+	var n int64
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(LENGTH(content)), 0) FROM saves WHERE user_id = ?`, userID).Scan(&n)
+	return n, err
+}
+
+// DistinctGameCount returns the number of unique games a user has saves for.
+func (s *sqliteStore) DistinctGameCount(ctx context.Context, userID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT game_id) FROM saves WHERE user_id = ?`, userID).Scan(&n)
+	return n, err
+}
+
+// TotalStorageBytes returns total storage in bytes across all saves (admin stats).
+func (s *sqliteStore) TotalStorageBytes(ctx context.Context) (int64, error) {
+	var n int64
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(LENGTH(content)), 0) FROM saves`).Scan(&n)
+	return n, err
+}
+
+// ListUserStats returns all users with per-user aggregate stats (admin page).
+func (s *sqliteStore) ListUserStats(ctx context.Context) ([]UserStatRow, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT u.id, u.username, u.created_at,
+		       (SELECT COUNT(*) FROM clients c WHERE c.user_id = u.id) AS client_count,
+		       (SELECT COUNT(*) FROM saves s WHERE s.user_id = u.id) AS save_count,
+		       (SELECT COALESCE(SUM(LENGTH(s.content)), 0) FROM saves s WHERE s.user_id = u.id) AS storage_bytes
+		FROM users u
+		ORDER BY u.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UserStatRow
+	for rows.Next() {
+		var u UserStatRow
+		if err := rows.Scan(&u.ID, &u.Username, &u.CreatedAt, &u.ClientCount, &u.SaveCount, &u.StorageBytes); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 // ListAllClients returns all clients with their owner username for the admin UI.
 func (s *sqliteStore) ListAllClients(ctx context.Context) ([]ClientInfoWithUser, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -333,14 +414,6 @@ func genID() string {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {
 		return time.Now().Format("20060102150405") + "00000000"
-	}
-	return hex.EncodeToString(b)
-}
-
-func randomHex(n int) string {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		return "00000000"
 	}
 	return hex.EncodeToString(b)
 }

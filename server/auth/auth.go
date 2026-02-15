@@ -64,6 +64,19 @@ func (s *Service) Login(ctx context.Context, username, password, clientName, cli
 	return uid, token, nil
 }
 
+// Authenticate validates username/password and returns the userID without registering a client device.
+// Use this for web UI logins that only need a session, not a device token.
+func (s *Service) Authenticate(ctx context.Context, username, password string) (userID string, err error) {
+	uid, hash, err := s.store.UserByUsername(ctx, username)
+	if err != nil {
+		return "", ErrBadCredentials
+	}
+	if err := CheckPassword(password, hash); err != nil {
+		return "", err
+	}
+	return uid, nil
+}
+
 // ValidateToken returns userID and clientID if the token is valid.
 func (s *Service) ValidateToken(ctx context.Context, token string) (userID, clientID string, err error) {
 	userID, clientID, _, _, err = s.store.ClientByToken(ctx, token)

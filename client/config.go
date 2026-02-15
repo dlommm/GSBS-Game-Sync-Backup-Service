@@ -2,19 +2,84 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 )
 
+// Duration wraps time.Duration with human-friendly JSON marshaling.
+// Serializes as a string like "5m", "30s", "1h". Accepts strings ("5m") or
+// numbers (nanoseconds, for backward compatibility) when unmarshaling.
+type Duration time.Duration
+
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).String())
+}
+
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var v interface{}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	switch val := v.(type) {
+	case string:
+		dur, err := time.ParseDuration(val)
+		if err != nil {
+			return fmt.Errorf("invalid duration %q: %w", val, err)
+		}
+		*d = Duration(dur)
+	case float64:
+		// Backward compat: accept raw nanoseconds (old configs)
+		*d = Duration(time.Duration(int64(val)))
+	default:
+		return fmt.Errorf("invalid duration type %T", v)
+	}
+	return nil
+}
+
+func (d Duration) Duration() time.Duration {
+	return time.Duration(d)
+}
+
+// String returns a concise human-readable duration like "5m0s".
+func (d Duration) String() string {
+	dur := time.Duration(d)
+	if dur == 0 {
+		return "0s"
+	}
+	s := dur.String()
+	// Trim unnecessary trailing "0s" for cleaner display (e.g. "5m" instead of "5m0s")
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	return s
+}
+
+// parseDurationFlex parses a human-friendly duration string like "5m", "30s", "1h",
+// or a plain integer (treated as seconds for user convenience).
+func parseDurationFlex(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty duration")
+	}
+	// If it's a bare integer, treat as seconds
+	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return time.Duration(n) * time.Second, nil
+	}
+	return time.ParseDuration(s)
+}
+
 type config struct {
-	ServerURL            string        `json:"server_url"`
-	Token                string        `json:"token"`
-	ClientName           string        `json:"client_name,omitempty"` // name shown on server for this machine
-	SyncInterval         time.Duration `json:"sync_interval"`
-	UbisoftConnectFolder string        `json:"ubisoft_connect_folder,omitempty"` // e.g. C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher
-	LauncherUserID       string        `json:"launcher_user_id,omitempty"`       // launcher user ID for paths like savegames\<user-id>\895
-	WatchPaths           []watchPath   `json:"watch_paths"`
+	ServerURL            string    `json:"server_url"`
+	Token                string    `json:"token"`
+	ClientName           string    `json:"client_name,omitempty"` // name shown on server for this machine
+	SyncInterval         Duration  `json:"sync_interval"`
+	UbisoftConnectFolder string    `json:"ubisoft_connect_folder,omitempty"` // e.g. C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher
+	LauncherUserID       string    `json:"launcher_user_id,omitempty"`       // launcher user ID for paths like savegames\<user-id>\895
+	WatchPaths           []watchPath `json:"watch_paths"`
 }
 
 type watchPath struct {
@@ -49,7 +114,7 @@ func blankConfig() *config {
 	return &config{
 		ServerURL:    "",
 		Token:        "",
-		SyncInterval: 5 * time.Minute,
+		SyncInterval: Duration(5 * time.Minute),
 		WatchPaths:   []watchPath{},
 	}
 }
@@ -57,7 +122,7 @@ func blankConfig() *config {
 func defaultConfig(_ string) *config {
 	return &config{
 		ServerURL:    "http://localhost:8080",
-		SyncInterval: 5 * time.Minute,
+		SyncInterval: Duration(5 * time.Minute),
 		WatchPaths:   []watchPath{},
 	}
 }

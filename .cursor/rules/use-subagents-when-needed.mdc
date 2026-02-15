@@ -1,0 +1,26 @@
+---
+description: When to delegate to GSBS subagents so work is scoped and context is isolated
+alwaysApply: true
+---
+
+# Use subagents when the task fits
+
+Delegate to the matching GSBS subagent whenever the user's request clearly falls in one of these areas. Do not wait for the user to ask for a subagent — choose based on what is needed.
+
+## When to delegate
+
+| If the task is mainly about… | Delegate to |
+|------------------------------|------------|
+| Adding or changing API routes, auth, store, WebUI, or the PCGW sync job; multi-file work in `server/` | **gsbs-server** |
+| Sync (push/pull), watcher, client config, tray, or list; multi-file work in `client/` or path resolution for the client | **gsbs-client** |
+| PCGW integration, wikitext parsing, path placeholders, `pkg/paths` or `pkg/pcgw`, manifest schema or `game_save_locations` | **gsbs-pcgw-paths** |
+| Build, release script, Docker, version/ldflags, or deploy docs | **gsbs-release** |
+
+## How to decide
+
+- **Single clear domain** → Delegate to that subagent (e.g. "add a new API endpoint" → gsbs-server).
+- **Spans two domains** → Delegate to the one that does the majority of the work first, or run both in parallel if independent (e.g. "add endpoint and have client call it" → gsbs-server then gsbs-client, or delegate server and then handle client in main context).
+- **Small or exploratory** (e.g. "where is auth?") → No need to delegate; answer in main context.
+- **Unclear** → Prefer delegating if the change touches multiple files in server/, client/, pkg/pcgw, or pkg/paths so the subagent gets isolated context.
+
+Subagents are in `.cursor/agents/` (gsbs-server.md, gsbs-client.md, gsbs-pcgw-paths.md, gsbs-release.md). Invoke the relevant one at the start of the task when the above applies.

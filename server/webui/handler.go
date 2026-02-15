@@ -16,26 +16,28 @@ type WebHandler struct {
 	auth          *auth.Service
 	secret        string
 	adminUsername string
+	allowRegister bool
 	templates     *template.Template
 }
 
 // NewWebHandler creates a WebHandler. secret is used to sign session cookies; if empty, a default is used (insecure for production).
 // adminUsername is the username allowed to access /admin; if empty, admin UI is disabled.
-func NewWebHandler(st store.Store, authSvc *auth.Service, secret, adminUsername string) *WebHandler {
+func NewWebHandler(st store.Store, authSvc *auth.Service, secret, adminUsername string, allowRegister bool) *WebHandler {
 	if secret == "" {
-		secret = "gsbs-default-secret-change-me"
+		secret = "gsbs-default-secret-change-me" // fallback so WebUI works out-of-box; main logs a warning
 	}
 	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
-		"formatTime": formatTime,
+		"formatTime":  formatTime,
 		"formatBytes": formatBytes,
+		"truncate":    truncate,
 	}).ParseFS(templatesFS, "templates/*.html"))
-	return &WebHandler{store: st, auth: authSvc, secret: secret, adminUsername: adminUsername, templates: tmpl}
+	return &WebHandler{store: st, auth: authSvc, secret: secret, adminUsername: adminUsername, allowRegister: allowRegister, templates: tmpl}
 }
 
 // formatTime formats an RFC3339 timestamp for display: "just now", "5 mins ago", or "Jan 2, 2006" for older dates.
 func formatTime(s string) string {
 	if s == "" {
-		return "—"
+		return "\u2014"
 	}
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
@@ -71,31 +73,34 @@ func formatTime(s string) string {
 
 // formatBytes formats a byte count as "0 B", "512 B", "1.2 MB", etc. (1024-based units).
 func formatBytes(n int64) string {
-	const unit = 1024
 	if n < 0 {
 		n = 0
 	}
-	if n < unit {
+	units := []string{"B", "KB", "MB", "GB", "TB"}
+	if n < 1024 {
 		return fmt.Sprintf("%d B", n)
 	}
-	div, exp := int64(unit), 0
-	for v := n / unit; v >= unit; v /= unit {
-		div *= unit
-		exp++
+	d := float64(n)
+	i := 0
+	for d >= 1024 && i < len(units)-1 {
+		d /= 1024
+		i++
 	}
-	units := []string{"B", "KB", "MB", "GB", "TB"}
-	if exp >= len(units) {
-		exp = len(units) - 1
-		div = 1
-		for i := 0; i < exp; i++ {
-			div *= unit
-		}
+	if d >= 10 || d == float64(int64(d)) {
+		return fmt.Sprintf("%d %s", int64(d), units[i])
 	}
-	v := float64(n) / float64(div)
-	if v >= 10 || v == float64(int64(v)) {
-		return fmt.Sprintf("%d %s", int64(v), units[exp])
+	return fmt.Sprintf("%.1f %s", d, units[i])
+}
+
+// truncate shortens a string to maxLen characters, appending "..." if truncated.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
 	}
-	return fmt.Sprintf("%.1f %s", v, units[exp])
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
 }
 
 func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +157,9 @@ func (h *WebHandler) serveLogin(w http.ResponseWriter, r *http.Request) {
 		Redirect(w, r, "/dashboard")
 		return
 	}
-	h.templates.ExecuteTemplate(w, "login.html", nil)
+	h.templates.ExecuteTemplate(w, "login.html", map[string]interface{}{
+		"AllowRegister": h.allowRegister,
+	})
 }
 
 func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -163,12 +170,18 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 	if username == "" || password == "" {
-		h.templates.ExecuteTemplate(w, "login.html", map[string]string{"Error": "Username and password required"})
+		h.templates.ExecuteTemplate(w, "login.html", map[string]interface{}{
+			"Error":         "Username and password required",
+			"AllowRegister": h.allowRegister,
+		})
 		return
 	}
-	userID, _, err := h.auth.Login(r.Context(), username, password, "web", "web")
+	userID, err := h.auth.Authenticate(r.Context(), username, password)
 	if err != nil {
-		h.templates.ExecuteTemplate(w, "login.html", map[string]string{"Error": "Invalid username or password"})
+		h.templates.ExecuteTemplate(w, "login.html", map[string]interface{}{
+			"Error":         "Invalid username or password",
+			"AllowRegister": h.allowRegister,
+		})
 		return
 	}
 	SetSession(w, h.secret, userID)
@@ -176,10 +189,19 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WebHandler) serveRegister(w http.ResponseWriter, r *http.Request) {
-	h.templates.ExecuteTemplate(w, "register.html", nil)
+	h.templates.ExecuteTemplate(w, "register.html", map[string]interface{}{
+		"AllowRegister": h.allowRegister,
+	})
 }
 
 func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
+	if !h.allowRegister {
+		h.templates.ExecuteTemplate(w, "register.html", map[string]interface{}{
+			"Error":         "Registration is currently disabled by the server administrator.",
+			"AllowRegister": false,
+		})
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
@@ -188,28 +210,37 @@ func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	confirm := r.FormValue("confirm_password")
 	if username == "" || password == "" {
-		h.templates.ExecuteTemplate(w, "register.html", map[string]string{"Error": "Username and password required"})
+		h.templates.ExecuteTemplate(w, "register.html", map[string]interface{}{
+			"Error":         "Username and password required",
+			"AllowRegister": h.allowRegister,
+		})
 		return
 	}
 	if password != confirm {
-		h.templates.ExecuteTemplate(w, "register.html", map[string]string{"Error": "Passwords do not match"})
+		h.templates.ExecuteTemplate(w, "register.html", map[string]interface{}{
+			"Error":         "Passwords do not match",
+			"AllowRegister": h.allowRegister,
+		})
 		return
 	}
 	_, err := h.auth.RegisterUser(r.Context(), username, password)
 	if err != nil {
-		h.templates.ExecuteTemplate(w, "register.html", map[string]string{"Error": "Username already taken"})
+		h.templates.ExecuteTemplate(w, "register.html", map[string]interface{}{
+			"Error":         "Username already taken",
+			"AllowRegister": h.allowRegister,
+		})
 		return
 	}
 	Redirect(w, r, "/login")
 }
 
-// dashboardData is passed to the dashboard template (clients, saves, stats, and optional error).
+// dashboardData is passed to the dashboard template.
 type dashboardData struct {
 	Username  string
 	IsAdmin   bool
 	Stats     dashboardStats
 	Clients   []store.ClientInfo
-	Saves     []saveSummary
+	Saves     []store.SaveSummary
 	Error     string
 }
 
@@ -217,14 +248,8 @@ type dashboardData struct {
 type dashboardStats struct {
 	ClientCount int
 	SaveCount   int
+	GameCount   int
 	TotalBytes  int64
-}
-
-// saveSummary is a row for the synced-saves table (game_id, path_key, updated_at).
-type saveSummary struct {
-	GameID    string
-	PathKey   string
-	UpdatedAt string
 }
 
 func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
@@ -239,24 +264,17 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 		h.templates.ExecuteTemplate(w, "dashboard.html", dashboardData{Username: username, Error: "Failed to load clients"})
 		return
 	}
-	saveBlobs, err := h.store.ListSaves(r.Context(), userID)
+	saves, err := h.store.ListSaveSummaries(r.Context(), userID)
 	if err != nil {
 		h.templates.ExecuteTemplate(w, "dashboard.html", dashboardData{Username: username, Clients: clients, Error: "Failed to load saves"})
 		return
 	}
-	var totalBytes int64
-	saves := make([]saveSummary, len(saveBlobs))
-	for i := range saveBlobs {
-		saves[i] = saveSummary{
-			GameID:    saveBlobs[i].GameID,
-			PathKey:   saveBlobs[i].PathKey,
-			UpdatedAt: saveBlobs[i].UpdatedAt,
-		}
-		totalBytes += int64(len(saveBlobs[i].Content))
-	}
+	totalBytes, _ := h.store.UserStorageBytes(r.Context(), userID)
+	gameCount, _ := h.store.DistinctGameCount(r.Context(), userID)
 	stats := dashboardStats{
 		ClientCount: len(clients),
 		SaveCount:   len(saves),
+		GameCount:   gameCount,
 		TotalBytes:  totalBytes,
 	}
 	isAdmin := h.adminUsername != "" && username == h.adminUsername
@@ -269,22 +287,24 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// adminData is passed to the admin template (global stats, users list, clients list, revoke feedback).
+// adminData is passed to the admin template.
 type adminData struct {
-	Username     string
-	Stats        adminStats
-	Users        []store.UserInfo
-	Clients      []store.ClientInfoWithUser
-	Error        string
-	Revoked      bool
+	Username      string
+	Stats         adminStats
+	Users         []store.UserStatRow
+	Clients       []store.ClientInfoWithUser
+	Error         string
+	Revoked       bool
+	AllowRegister bool
 }
 
-// adminStats holds global counts shown on the admin page (users, clients, saves, manifest entries).
+// adminStats holds global counts shown on the admin page.
 type adminStats struct {
 	UserCount     int
 	ClientCount   int
 	SaveCount     int
 	ManifestCount int
+	TotalBytes    int64
 }
 
 // serveAdmin renders the admin page. Only the user whose username equals adminUsername may access it.
@@ -303,7 +323,8 @@ func (h *WebHandler) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	clientCount, _ := h.store.CountClients(r.Context())
 	saveCount, _ := h.store.CountSaves(r.Context())
 	manifestCount, _ := h.store.CountGameSaveLocations(r.Context())
-	users, _ := h.store.ListUsers(r.Context())
+	totalBytes, _ := h.store.TotalStorageBytes(r.Context())
+	users, _ := h.store.ListUserStats(r.Context())
 	clients, _ := h.store.ListAllClients(r.Context())
 	revoked := r.URL.Query().Get("revoked") == "1"
 	h.templates.ExecuteTemplate(w, "admin.html", adminData{
@@ -313,14 +334,16 @@ func (h *WebHandler) serveAdmin(w http.ResponseWriter, r *http.Request) {
 			ClientCount:   clientCount,
 			SaveCount:     saveCount,
 			ManifestCount: manifestCount,
+			TotalBytes:    totalBytes,
 		},
-		Users:   users,
-		Clients: clients,
-		Revoked: revoked,
+		Users:         users,
+		Clients:       clients,
+		Revoked:       revoked,
+		AllowRegister: h.allowRegister,
 	})
 }
 
-// handleRevokeClient revokes a client's token (POST /admin/revoke). Admin-only; client must run gsbs-client login again.
+// handleRevokeClient revokes a client's token (POST /admin/revoke). Admin-only.
 func (h *WebHandler) handleRevokeClient(w http.ResponseWriter, r *http.Request) {
 	userID := GetSession(r, h.secret)
 	if userID == "" {

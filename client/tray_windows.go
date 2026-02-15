@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -57,9 +58,41 @@ func runLoginDialogProcess() {
 }
 
 var (
+	syncMu     sync.Mutex
 	syncCancel context.CancelFunc
 	syncNowCh  chan struct{}
 )
+
+// restartSync cancels the current sync loop and starts a new one with the given config.
+// Must be called with syncMu NOT held (it acquires it internally).
+func restartSync(cfg *config) {
+	syncMu.Lock()
+	defer syncMu.Unlock()
+	if syncCancel != nil {
+		syncCancel()
+	}
+	syncNowCh = make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	syncCancel = cancel
+	go func() {
+		if err := runSync(ctx, cfg, syncNowCh); err != nil {
+			log.Println("sync:", err)
+		}
+	}()
+}
+
+// triggerSyncNow sends on the syncNow channel if a sync loop is running.
+func triggerSyncNow() {
+	syncMu.Lock()
+	ch := syncNowCh
+	syncMu.Unlock()
+	if ch != nil {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
 
 func onReady() {
 	systray.SetTitle("GSBS")
@@ -89,40 +122,31 @@ func onReady() {
 	}
 	updateServerLabel(mServer, cfg.ServerURL)
 
-	// currentCfg is used by menu handlers; updated when user logs in successfully
+	// currentCfg is used by menu handlers; protected by syncMu.
 	currentCfg := cfg
 
 	// Start local setup server so "Login" opens the browser to a form (works reliably on Windows).
 	setupURL := StartSetupServer()
 
-	syncNowCh = make(chan struct{})
-	var ctx context.Context
-	ctx, syncCancel = context.WithCancel(context.Background())
-	go func() {
-		if err := runSync(ctx, currentCfg, syncNowCh); err != nil {
-			log.Println("sync:", err)
-		}
-	}()
+	restartSync(currentCfg)
 
 	// First run: if not logged in, open the setup page in the browser after a short delay.
 	go func() {
-		if (currentCfg.ServerURL == "" || currentCfg.Token == "") && setupURL != "" {
+		syncMu.Lock()
+		needSetup := currentCfg.ServerURL == "" || currentCfg.Token == ""
+		syncMu.Unlock()
+		if needSetup && setupURL != "" {
 			time.Sleep(800 * time.Millisecond)
 			open.Run(setupURL)
 			// Poll for config change so we can update tray and restart sync when user logs in via browser
 			for i := 0; i < 60; i++ {
 				time.Sleep(2 * time.Second)
 				if reload, _ := loadConfig(); reload != nil && reload.Token != "" {
+					syncMu.Lock()
 					currentCfg = reload
-					updateServerLabel(mServer, currentCfg.ServerURL)
-					syncCancel()
-					syncNowCh = make(chan struct{})
-					ctx, syncCancel = context.WithCancel(context.Background())
-					go func() {
-						if err := runSync(ctx, currentCfg, syncNowCh); err != nil {
-							log.Println("sync:", err)
-						}
-					}()
+					syncMu.Unlock()
+					updateServerLabel(mServer, reload.ServerURL)
+					restartSync(reload)
 					return
 				}
 			}
@@ -133,11 +157,13 @@ func onReady() {
 		for {
 			select {
 			case <-mOpenServer.ClickedCh:
-				if currentCfg.ServerURL == "" {
-					// Could show a message box; for now just don't open
+				syncMu.Lock()
+				url := currentCfg.ServerURL
+				syncMu.Unlock()
+				if url == "" {
 					continue
 				}
-				open.Run(currentCfg.ServerURL)
+				open.Run(url)
 			case <-mLogin.ClickedCh:
 				// Open setup page in browser (reliable on Windows; no dialogs or console).
 				if url := GetSetupURL(); url != "" {
@@ -147,16 +173,11 @@ func onReady() {
 				go func() {
 					time.Sleep(3 * time.Second)
 					if reload, _ := loadConfig(); reload != nil && reload.Token != "" {
+						syncMu.Lock()
 						currentCfg = reload
-						updateServerLabel(mServer, currentCfg.ServerURL)
-						syncCancel()
-						syncNowCh = make(chan struct{})
-						ctx, syncCancel = context.WithCancel(context.Background())
-						go func() {
-							if err := runSync(ctx, currentCfg, syncNowCh); err != nil {
-								log.Println("sync:", err)
-							}
-						}()
+						syncMu.Unlock()
+						updateServerLabel(mServer, reload.ServerURL)
+						restartSync(reload)
 					}
 				}()
 			case <-mLoginConsole.ClickedCh:
@@ -171,24 +192,16 @@ func onReady() {
 				_ = cmd.Run()
 				// Reload config and restart sync in case user logged in
 				if reload, _ := loadConfig(); reload != nil && reload.Token != "" {
+					syncMu.Lock()
 					currentCfg = reload
-					updateServerLabel(mServer, currentCfg.ServerURL)
-					syncCancel()
-					syncNowCh = make(chan struct{})
-					ctx, syncCancel = context.WithCancel(context.Background())
-					go func() {
-						if err := runSync(ctx, currentCfg, syncNowCh); err != nil {
-							log.Println("sync:", err)
-						}
-					}()
+					syncMu.Unlock()
+					updateServerLabel(mServer, reload.ServerURL)
+					restartSync(reload)
 				}
 			case <-mEditConfig.ClickedCh:
 				openConfigInEditor()
 			case <-mSyncNow.ClickedCh:
-				select {
-				case syncNowCh <- struct{}{}:
-				default:
-				}
+				triggerSyncNow()
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 				return
@@ -198,6 +211,8 @@ func onReady() {
 }
 
 func onExit() {
+	syncMu.Lock()
+	defer syncMu.Unlock()
 	if syncCancel != nil {
 		syncCancel()
 	}

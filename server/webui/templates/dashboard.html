@@ -1,4 +1,4 @@
-<!-- Dashboard: stats (clients, saves, storage), clients table, synced saves table. Admin link shown only when IsAdmin. -->
+<!-- Dashboard: stats, clients, synced saves with game titles and sizes. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,74 +12,115 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="app-shell">
-  <header class="dashboard-header">
-    <img src="/static/favicon.png" alt="" class="header-icon" aria-hidden="true">
-    <h1>GSBS</h1>
-    <nav class="header-nav">
+  <header class="topbar">
+    <div class="topbar-left">
+      <img src="/static/favicon.png" alt="" class="topbar-icon" aria-hidden="true">
+      <span class="topbar-brand">GSBS</span>
+    </div>
+    <nav class="topbar-nav">
       <a href="/dashboard" class="active">Dashboard</a>
-      {{if .IsAdmin}}
-      <a href="/admin">Admin</a>
-      {{end}}
-      <span class="user-badge">{{.Username}}</span>
-      <form method="post" action="/logout" style="display:inline;">
-        <button type="submit" class="btn-logout">Log out</button>
-      </form>
+      {{if .IsAdmin}}<a href="/admin">Admin</a>{{end}}
     </nav>
+    <div class="topbar-right">
+      <span class="topbar-user">{{.Username}}</span>
+      <form method="post" action="/logout" class="inline-form">
+        <button type="submit" class="btn-ghost">Log out</button>
+      </form>
+    </div>
   </header>
-  <main class="dashboard-main">
+
+  <main class="page-content">
     {{if .Error}}
-    <p class="error">{{.Error}}</p>
+    <div class="alert alert-error">{{.Error}}</div>
     {{end}}
-    <section class="stats-grid">
+
+    <!-- Stats -->
+    <section class="stats-row">
       <div class="stat-card">
-        <div class="value">{{.Stats.ClientCount}}</div>
-        <div class="label">Clients</div>
+        <div class="stat-value">{{.Stats.ClientCount}}</div>
+        <div class="stat-label">Clients</div>
       </div>
       <div class="stat-card">
-        <div class="value">{{.Stats.SaveCount}}</div>
-        <div class="label">Synced saves</div>
+        <div class="stat-value">{{.Stats.GameCount}}</div>
+        <div class="stat-label">Games</div>
       </div>
       <div class="stat-card">
-        <div class="value">{{formatBytes .Stats.TotalBytes}}</div>
-        <div class="label">Storage used</div>
+        <div class="stat-value">{{.Stats.SaveCount}}</div>
+        <div class="stat-label">Synced saves</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{formatBytes .Stats.TotalBytes}}</div>
+        <div class="stat-label">Storage used</div>
       </div>
     </section>
-    <section class="card">
-      <h2>Clients</h2>
+
+    <!-- Clients -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Your Clients</h2>
+      </div>
       {{if .Clients}}
       <div class="table-wrap">
-        <table class="table">
+        <table class="data-table">
           <thead>
-            <tr><th>Name</th><th>OS</th><th>Last seen</th></tr>
+            <tr>
+              <th>Name</th>
+              <th>Platform</th>
+              <th>Last active</th>
+            </tr>
           </thead>
           <tbody>
             {{range .Clients}}
-            <tr><td>{{.Name}}</td><td><span class="badge">{{.OS}}</span></td><td class="muted">{{formatTime .LastSeen}}</td></tr>
+            <tr>
+              <td class="cell-primary">{{.Name}}</td>
+              <td><span class="os-badge os-{{.OS}}">{{.OS}}</span></td>
+              <td class="cell-muted">{{formatTime .LastSeen}}</td>
+            </tr>
             {{end}}
           </tbody>
         </table>
       </div>
       {{else}}
-      <p class="card-empty">No clients registered yet. Use the client app and run <code>gsbs-client login</code> to add one.</p>
+      <div class="panel-empty">
+        <p>No clients registered yet.</p>
+        <p class="hint">Run <code>gsbs-client login</code> on your PC to connect it.</p>
+      </div>
       {{end}}
     </section>
-    <section class="card">
-      <h2>Synced saves</h2>
+
+    <!-- Synced Saves -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Synced Saves</h2>
+      </div>
       {{if .Saves}}
       <div class="table-wrap">
-        <table class="table">
+        <table class="data-table">
           <thead>
-            <tr><th>Game ID</th><th>Path key</th><th>Updated</th></tr>
+            <tr>
+              <th>Game</th>
+              <th>Path key</th>
+              <th>Size</th>
+              <th>Last synced</th>
+            </tr>
           </thead>
           <tbody>
             {{range .Saves}}
-            <tr><td>{{.GameID}}</td><td><code>{{.PathKey}}</code></td><td class="muted">{{formatTime .UpdatedAt}}</td></tr>
+            <tr>
+              <td class="cell-primary">{{.GameTitle}}</td>
+              <td><code class="code-inline">{{truncate .PathKey 16}}</code></td>
+              <td class="cell-size">{{formatBytes .SizeBytes}}</td>
+              <td class="cell-muted">{{formatTime .UpdatedAt}}</td>
+            </tr>
             {{end}}
           </tbody>
         </table>
       </div>
       {{else}}
-      <p class="card-empty">No saves synced yet. Add watch paths in the client config or install games that are in the manifest.</p>
+      <div class="panel-empty">
+        <p>No saves synced yet.</p>
+        <p class="hint">Install games that are in the manifest, or add custom watch paths in your client config.</p>
+      </div>
       {{end}}
     </section>
   </main>

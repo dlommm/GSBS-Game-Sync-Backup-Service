@@ -15,10 +15,11 @@
   <main class="auth-card">
     <img src="/static/logo.png" alt="GSBS" class="auth-logo">
     <h1>Create account</h1>
-    <p class="subtitle">Register for Game Sync & Backup</p>
+    <p class="subtitle">Register for Game Sync &amp; Backup</p>
     {{if .Error}}
     <p class="error">{{.Error}}</p>
     {{end}}
+    {{if .AllowRegister}}
     <form method="post" action="/register" class="auth-form">
       <label for="username">Username</label>
       <input id="username" name="username" type="text" required autocomplete="username">
@@ -28,6 +29,9 @@
       <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password">
       <button type="submit">Register</button>
     </form>
+    {{else}}
+    <div class="alert alert-info">Registration is currently disabled by the server administrator. Contact your admin if you need an account.</div>
+    {{end}}
     <p class="auth-footer">Already have an account? <a href="/login">Sign in</a></p>
   </main>
 </body>

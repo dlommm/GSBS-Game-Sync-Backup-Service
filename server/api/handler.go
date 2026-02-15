@@ -1,10 +1,13 @@
 package api
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,26 +16,32 @@ import (
 	"github.com/gsbs/gsbs/server/store"
 )
 
+// MaxSaveSize is the maximum allowed body size for POST /api/saves (50 MiB).
+const MaxSaveSize = 50 * 1024 * 1024
+
 // Handler is the HTTP API handler.
 type Handler struct {
-	store store.Store
-	auth  *auth.Service
+	store         store.Store
+	auth          *auth.Service
+	allowRegister bool
 
 	manifestCache struct {
-		mu    sync.RWMutex
+		mu      sync.RWMutex
 		entries []types.GameSaveLocation
-		at     time.Time
+		at      time.Time
 	}
 }
 
 const manifestCacheTTL = 10 * time.Minute
 
-func NewHandler(st store.Store, authSvc *auth.Service) *Handler {
-	return &Handler{store: st, auth: authSvc}
+func NewHandler(st store.Store, authSvc *auth.Service, allowRegister bool) *Handler {
+	return &Handler{store: st, auth: authSvc, allowRegister: allowRegister}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
+	case r.URL.Path == "/api/health" && r.Method == http.MethodGet:
+		h.handleHealth(w, r)
 	case r.URL.Path == "/api/register" && r.Method == http.MethodPost:
 		h.handleRegister(w, r)
 	case r.URL.Path == "/api/login" && r.Method == http.MethodPost:
@@ -46,6 +55,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
 type registerRequest struct {
@@ -65,13 +80,26 @@ type loginResponse struct {
 }
 
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
+	if !h.allowRegister {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "registration is disabled"})
+		return
+	}
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
+	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" || req.Password == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username and password required"})
+		return
+	}
+	if len(req.Username) > 128 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username too long"})
+		return
+	}
+	if len(req.Password) < 8 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
 		return
 	}
 	_, err := h.auth.RegisterUser(r.Context(), req.Username, req.Password)
@@ -88,6 +116,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
+	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" || req.Password == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username and password required"})
 		return
@@ -106,6 +135,8 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, loginResponse{Token: token})
 }
 
+// withAuth wraps a handler requiring auth. Passes userID to the handler.
+// Also updates client last_seen on every authenticated request.
 func (h *Handler) withAuth(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
@@ -119,21 +150,29 @@ func (h *Handler) withAuth(fn func(http.ResponseWriter, *http.Request, string)) 
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing token"})
 			return
 		}
-		userID, _, err := h.auth.ValidateToken(r.Context(), token)
+		userID, clientID, err := h.auth.ValidateToken(r.Context(), token)
 		if err != nil {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 			return
 		}
+		// Update last_seen asynchronously (best-effort; use background context so it runs after response).
+		clientIDCopy := clientID
+		go func() {
+			ctx := context.Background()
+			if err := h.store.UpdateClientLastSeen(ctx, clientIDCopy); err != nil {
+				log.Printf("update last_seen for client %s: %v", clientIDCopy, err)
+			}
+		}()
 		fn(w, r, userID)
 	}
 }
 
 // pullSaveItem is the JSON shape for one save (content as base64).
 type pullSaveItem struct {
-	GameID   string `json:"game_id"`
-	PathKey  string `json:"path_key"`
+	GameID    string `json:"game_id"`
+	PathKey   string `json:"path_key"`
 	UpdatedAt string `json:"updated_at"`
-	Content  string `json:"content"` // base64
+	Content   string `json:"content"` // base64
 }
 
 func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID string) {
@@ -155,19 +194,32 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID stri
 }
 
 func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID string) {
-	gameID := r.Header.Get("X-Game-ID")
-	pathKey := r.Header.Get("X-Path-Key")
+	gameID := strings.TrimSpace(r.Header.Get("X-Game-ID"))
+	pathKey := strings.TrimSpace(r.Header.Get("X-Path-Key"))
 	filePath := r.Header.Get("X-File-Path")
 	if gameID == "" || pathKey == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "X-Game-ID and X-Path-Key required"})
 		return
 	}
-	content, err := io.ReadAll(r.Body)
+	if len(gameID) > 512 || len(pathKey) > 1024 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "X-Game-ID or X-Path-Key too long"})
+		return
+	}
+	limited := http.MaxBytesReader(nil, r.Body, MaxSaveSize)
+	content, err := io.ReadAll(limited)
 	if err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "save too large (max 50 MiB)"})
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body failed"})
 		return
 	}
-	_ = filePath
+	if len(content) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "empty content"})
+		return
+	}
+	log.Printf("push: user=%s game=%s path_key=%s file=%s size=%d", userID, gameID, pathKey, filePath, len(content))
 	if err := h.store.UpsertSave(r.Context(), userID, gameID, pathKey, content); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
 		return

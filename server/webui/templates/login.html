@@ -14,7 +14,7 @@
 <body class="auth-page">
   <main class="auth-card">
     <img src="/static/logo.png" alt="GSBS" class="auth-logo">
-    <h1>Game Sync & Backup</h1>
+    <h1>Game Sync &amp; Backup</h1>
     <p class="subtitle">Sign in to your account</p>
     {{if .Error}}
     <p class="error">{{.Error}}</p>
@@ -26,7 +26,9 @@
       <input id="password" name="password" type="password" required autocomplete="current-password">
       <button type="submit">Sign in</button>
     </form>
+    {{if .AllowRegister}}
     <p class="auth-footer">Don't have an account? <a href="/register">Register</a></p>
+    {{end}}
   </main>
 </body>
 </html>

@@ -11,8 +11,13 @@ go build -o gsbs-server .
 
 - `GSBS_ADDR` — listen address (default `:8080`)
 - `GSBS_DB` — SQLite path (default `gsbs.db`)
+- `GSBS_SESSION_SECRET` — secret for WebUI session cookies (set in production)
+- `GSBS_ALLOW_REGISTER` — `false` to disable registration
+- `GSBS_ADMIN_USERNAME` — restrict `/admin` to this user
 
 ## API
+
+- **GET /api/health** — Health check (no auth). Returns `{"status":"ok"}`.
 
 - **POST /api/register** — Create user  
   Body: `{"username":"...","password":"..."}`
@@ -25,10 +30,12 @@ go build -o gsbs-server .
   Header: `Authorization: Bearer <token>`  
   Response: `{"saves":[{"game_id","path_key","updated_at","content":"<base64>"}]}`
 
+- **GET /api/manifest** — Game save locations (no auth). Optional query `?since=<RFC3339>` for delta.
+
 - **POST /api/saves** — Upload a save  
   Header: `Authorization: Bearer <token>`  
   Headers: `X-Game-ID`, `X-Path-Key`, optional `X-File-Path`  
-  Body: raw file bytes
+  Body: raw file bytes (max 50 MiB)
 
 ## Windows exe icon
 
