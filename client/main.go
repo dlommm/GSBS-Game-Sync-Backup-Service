@@ -14,13 +14,19 @@ func main() {
 		case "login":
 			runLogin()
 			return
+		case "login-dialog":
+			runLoginDialogProcess()
+			return
+		case "list":
+			runList()
+			return
 		case "--version", "-version", "-v":
 			println("gsbs-client", Version)
 			return
 		}
 	}
 
-	// On Windows, run as system tray app (no console) unless --console is passed
+	// On Windows, run tray (setup/login is via browser; see tray "Login / Setup...").
 	if runtime.GOOS == "windows" && !consoleMode() {
 		runTray()
 		return

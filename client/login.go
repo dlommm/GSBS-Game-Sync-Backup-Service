@@ -11,18 +11,31 @@ import (
 	"time"
 )
 
+// defaultClientName returns a default name for this client (hostname or "client").
+func defaultClientName() string {
+	name, err := os.Hostname()
+	if err != nil || name == "" {
+		return "client"
+	}
+	return name
+}
+
 // DoLogin calls the server login API and returns a config with the token set (and saves it).
 // Used by both CLI runLogin and the Windows tray login dialog.
-// serverURL must be non-empty (e.g. https://your-server:8080).
-func DoLogin(serverURL, username, password string) (*config, error) {
+// serverURL must be non-empty (e.g. https://your-server:8080). clientName is sent to the server; if empty, defaultClientName() is used.
+func DoLogin(serverURL, username, password, clientName string) (*config, error) {
 	serverURL = strings.TrimSpace(serverURL)
 	username = strings.TrimSpace(username)
 	password = strings.TrimSpace(password)
+	clientName = strings.TrimSpace(clientName)
 	if serverURL == "" {
 		return nil, fmt.Errorf("server URL is required")
 	}
 	if username == "" || password == "" {
 		return nil, fmt.Errorf("username and password are required")
+	}
+	if clientName == "" {
+		clientName = defaultClientName()
 	}
 	// Normalize URL (no trailing slash)
 	serverURL = strings.TrimSuffix(serverURL, "/")
@@ -33,7 +46,7 @@ func DoLogin(serverURL, username, password string) (*config, error) {
 	body := map[string]string{
 		"username":    username,
 		"password":    password,
-		"client_name": "client",
+		"client_name": clientName,
 		"client_os":   clientOS,
 	}
 	jsonBody, _ := json.Marshal(body)
@@ -54,6 +67,7 @@ func DoLogin(serverURL, username, password string) (*config, error) {
 	cfg := &config{
 		ServerURL:    serverURL,
 		Token:        out.Token,
+		ClientName:   clientName,
 		SyncInterval: 5 * time.Minute,
 		WatchPaths:   []watchPath{},
 	}
@@ -81,7 +95,17 @@ func runLogin() {
 	fmt.Print("Password: ")
 	password, _ := reader.ReadString('\n')
 	password = strings.TrimSpace(password)
-	cfg, err := DoLogin(cfg.ServerURL, username, password)
+	clientName := cfg.ClientName
+	if clientName == "" {
+		clientName = defaultClientName()
+	}
+	fmt.Print("Client name [", clientName, "]: ")
+	clientNameLine, _ := reader.ReadString('\n')
+	clientNameLine = strings.TrimSpace(clientNameLine)
+	if clientNameLine != "" {
+		clientName = clientNameLine
+	}
+	cfg, err := DoLogin(cfg.ServerURL, username, password, clientName)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
