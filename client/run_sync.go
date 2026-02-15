@@ -37,15 +37,17 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}) error 
 	manifestEntries := LoadManifestFromDisk()
 	if entries, err := FetchManifest(ctx, cfg.ServerURL, ""); err == nil {
 		manifestEntries = entries
+		log.Printf("manifest: fetched %d entries from server", len(manifestEntries))
 		if err := SaveManifestToDisk(entries); err != nil {
 			log.Println("save manifest cache:", err)
 		}
 	} else {
-		log.Println("fetch manifest (using cache if any):", err)
+		log.Printf("fetch manifest (using cache with %d entries): %v", len(manifestEntries), err)
 	}
 
 	effectiveWatchPaths := ManifestToWatchPaths(manifestEntries, resolver, currentOS, true)
 	effectiveWatchPaths = mergeWatchPaths(effectiveWatchPaths, cfg.WatchPaths)
+	log.Printf("sync: %d active watch paths", len(effectiveWatchPaths))
 
 	resolvePath := func(gameID, pathKey string) string {
 		for _, wp := range effectiveWatchPaths {
@@ -66,6 +68,8 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}) error 
 
 	if err := client.PullAndApplyWithResolver(ctx, resolvePath); err != nil {
 		log.Println("initial pull:", err)
+	} else {
+		log.Println("initial pull: complete")
 	}
 
 	watcher, err := sync.NewWatcher(resolver, currentOS, client)
@@ -85,7 +89,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}) error 
 	}
 	go watcher.Run(ctx)
 
-	interval := cfg.SyncInterval
+	interval := cfg.SyncInterval.Duration()
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
@@ -100,10 +104,14 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}) error 
 		case <-ticker.C:
 			if err := client.PullAndApplyWithResolver(ctx, resolvePath); err != nil {
 				log.Println("periodic pull:", err)
+			} else {
+				log.Println("periodic pull: complete")
 			}
 		case <-syncNowCh:
 			if err := client.PullAndApplyWithResolver(ctx, resolvePath); err != nil {
 				log.Println("sync now:", err)
+			} else {
+				log.Println("sync now: complete")
 			}
 		}
 	}

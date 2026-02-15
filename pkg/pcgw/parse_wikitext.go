@@ -133,7 +133,12 @@ func parseGameDataTemplates(wikitext, gameID string) []SaveLocationTemplate {
 			s = s[start+1:]
 			continue
 		}
-		pathRaw := s[pathStart:end]
+		// end points past the closing }}; exclude those 2 chars from the path
+		if end-2 <= pathStart {
+			s = s[end:]
+			continue
+		}
+		pathRaw := s[pathStart : end-2]
 		pathNorm := NormalizePathTemplate(pathRaw)
 		if pathNorm != "" {
 			out = append(out, SaveLocationTemplate{

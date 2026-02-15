@@ -68,7 +68,7 @@ func DoLogin(serverURL, username, password, clientName string) (*config, error) 
 		ServerURL:    serverURL,
 		Token:        out.Token,
 		ClientName:   clientName,
-		SyncInterval: 5 * time.Minute,
+		SyncInterval: Duration(5 * time.Minute),
 		WatchPaths:   []watchPath{},
 	}
 	if err := saveConfig(cfg); err != nil {

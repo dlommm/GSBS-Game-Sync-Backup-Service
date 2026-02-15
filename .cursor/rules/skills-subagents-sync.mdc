@@ -1,0 +1,27 @@
+---
+description: Keep Cursor skills and subagents in sync with the codebase and plan
+alwaysApply: true
+---
+
+# Keep skills and subagents up to date
+
+When you change the project in ways that affect how agents should work, update the matching skill and subagent so future agents stay accurate.
+
+## When to update
+
+- **New major component or directory** (e.g. new `pkg/` package, new `cmd/` tool): Add or extend the relevant skill in `.cursor/skills/` and, if it deserves focused multi-step work, add a subagent in `.cursor/agents/` with the same name and aligned description/scope.
+- **API, auth, store, WebUI, or server job changes**: Update `.cursor/skills/gsbs-server/SKILL.md` and `.cursor/agents/gsbs-server.md` (routes, store methods, conventions, checklist).
+- **Client sync, config, watcher, tray, or list changes**: Update `.cursor/skills/gsbs-client/SKILL.md` and `.cursor/agents/gsbs-client.md` (config shape, folder-exists rule, manifest usage).
+- **PCGW, path resolution, or manifest schema changes**: Update `.cursor/skills/gsbs-pcgw-paths/SKILL.md` and `.cursor/agents/gsbs-pcgw-paths.md` (placeholders, resolver, rate limits, DB columns).
+- **Build, release, or Docker changes**: Update `.cursor/skills/gsbs-release/SKILL.md` and `.cursor/agents/gsbs-release.md` (ldflags, script, env, docs).
+- **Architecture or plan changes**: Update `docs/ARCHITECTURE.md` and, if delegation or scoping changes, `.cursor/SUBAGENTS.md` and `AGENTS.md`.
+
+## How to update
+
+- **Skills** (`.cursor/skills/<name>/SKILL.md`): Keep scope, conventions, and checklists accurate. Preserve frontmatter `name` and `description`; refine `description` if the “when to use” trigger changes.
+- **Subagents** (`.cursor/agents/<name>.md`): Keep the prompt body and scope in sync with the skill. Ensure frontmatter `description` matches when the agent should delegate (e.g. “Use when…” / “Use proactively for…”). Same names as skills (gsbs-server, gsbs-client, gsbs-pcgw-paths, gsbs-release) so the mapping stays 1:1.
+- **SUBAGENTS.md**: Keep the “When to use which skill” table and role summaries aligned with actual skills and subagents. Add a row or role if you add a new skill/subagent pair.
+
+## One-to-one mapping
+
+Each domain has one skill and one subagent with the same name: gsbs-server, gsbs-client, gsbs-pcgw-paths, gsbs-release. When you edit one, consider whether the other needs the same scope/convention update so they stay consistent.

@@ -74,6 +74,13 @@ sequenceDiagram
 
 - **game_save_locations**: `id`, `game_id`, `pcgw_page_id`, `game_title`, `platform`, `path_template`, `is_config`, `updated_at`, `source`. Unique on `(game_id, platform, path_template)`. Filled by the PCGW sync job; read by the manifest API.
 
+## Operational behaviour
+
+- **Health**: `GET /api/health` returns `{"status":"ok"}` (no auth) for load balancers and probes.
+- **Push body limit**: POST `/api/saves` body is limited to 50 MiB to avoid resource exhaustion.
+- **Graceful shutdown**: Server handles SIGINT/SIGTERM, stops accepting new requests, and shuts down within 15 seconds.
+- **SQLite**: WAL mode and a single open connection are used for stability and to avoid “database is locked” under concurrent use.
+
 ## Security
 
 - All API access authenticated (e.g. per-user API token or session).

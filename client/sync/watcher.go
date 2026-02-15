@@ -6,10 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gsbs/gsbs/pkg/paths"
 )
+
+const debounceDelay = 2 * time.Second
 
 // WatchPath describes a path to watch (from config).
 type WatchPath struct {
@@ -26,6 +29,7 @@ type Watcher struct {
 	fw        *fsnotify.Watcher
 	mu        sync.Mutex
 	pathMap   map[string]pathInfo // watched directory -> gameID, pathKey (events under that dir use this info)
+	timers    map[string]*time.Timer
 }
 
 type pathInfo struct {
@@ -45,6 +49,7 @@ func NewWatcher(resolver *paths.Resolver, currentOS paths.OS, client *Client) (*
 		client:    client,
 		fw:        fw,
 		pathMap:   make(map[string]pathInfo),
+		timers:    make(map[string]*time.Timer),
 	}
 	return w, nil
 }
@@ -75,10 +80,11 @@ func (w *Watcher) AddPaths(watchPaths []WatchPath) error {
 			}
 		}
 	}
+	log.Printf("watching %d directories", len(w.pathMap))
 	return nil
 }
 
-// Run starts the watch loop and uploads on write events.
+// Run starts the watch loop and uploads on write/create/rename events with per-file debouncing.
 func (w *Watcher) Run(ctx context.Context) {
 	for {
 		select {
@@ -88,23 +94,38 @@ func (w *Watcher) Run(ctx context.Context) {
 			if !ok {
 				return
 			}
-			if ev.Op&fsnotify.Write != fsnotify.Write {
+			if ev.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename) == 0 {
 				continue
 			}
 			dir := filepath.Dir(ev.Name)
 			w.mu.Lock()
 			info, ok := w.pathMap[dir]
-			w.mu.Unlock()
 			if !ok {
+				w.mu.Unlock()
 				continue
 			}
-			content, err := os.ReadFile(ev.Name)
-			if err != nil {
-				continue
+			// Reset or create a debounce timer for this file.
+			if t, exists := w.timers[ev.Name]; exists {
+				t.Stop()
 			}
-			if err := w.client.Push(ctx, info.GameID, info.PathKey, ev.Name, content); err != nil {
-				log.Println("push after watch:", err)
-			}
+			filePath := ev.Name
+			gameID := info.GameID
+			pathKey := info.PathKey
+			w.timers[filePath] = time.AfterFunc(debounceDelay, func() {
+				content, err := os.ReadFile(filePath)
+				if err != nil {
+					log.Printf("watcher: read %s: %v", filePath, err)
+				} else if err := w.client.Push(ctx, gameID, pathKey, filePath, content); err != nil {
+					log.Printf("push after watch: %v", err)
+				} else {
+					log.Printf("push: game=%s file=%s size=%d", gameID, filePath, len(content))
+				}
+				// Remove timer from map so it doesn't grow unbounded
+				w.mu.Lock()
+				delete(w.timers, filePath)
+				w.mu.Unlock()
+			})
+			w.mu.Unlock()
 		case err := <-w.fw.Errors:
 			if err != nil {
 				log.Println("watcher error:", err)
@@ -114,5 +135,10 @@ func (w *Watcher) Run(ctx context.Context) {
 }
 
 func (w *Watcher) Close() error {
+	w.mu.Lock()
+	for _, t := range w.timers {
+		t.Stop()
+	}
+	w.mu.Unlock()
 	return w.fw.Close()
 }

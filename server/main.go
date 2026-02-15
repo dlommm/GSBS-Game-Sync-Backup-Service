@@ -5,6 +5,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/pcgw"
@@ -32,9 +35,21 @@ func main() {
 	defer st.Close()
 
 	authSvc := auth.NewService(st)
-	apiHandler := api.NewHandler(st, authSvc)
-	// GSBS_ADMIN_USERNAME: if set, only this user can access /admin (stats and revoke client tokens).
-	webHandler := webui.NewWebHandler(st, authSvc, os.Getenv("GSBS_SESSION_SECRET"), os.Getenv("GSBS_ADMIN_USERNAME"))
+
+	// GSBS_ALLOW_REGISTER: "false" disables public registration; default is true.
+	allowRegister := true
+	if v := os.Getenv("GSBS_ALLOW_REGISTER"); strings.EqualFold(v, "false") || v == "0" {
+		allowRegister = false
+		log.Println("Public registration is DISABLED (set GSBS_ALLOW_REGISTER=true to enable)")
+	}
+
+	sessionSecret := os.Getenv("GSBS_SESSION_SECRET")
+	if sessionSecret == "" || sessionSecret == "gsbs-default-secret-change-me" {
+		log.Println("WARNING: GSBS_SESSION_SECRET is not set or is default; set a strong secret in production")
+	}
+
+	apiHandler := api.NewHandler(st, authSvc, allowRegister)
+	webHandler := webui.NewWebHandler(st, authSvc, sessionSecret, os.Getenv("GSBS_ADMIN_USERNAME"), allowRegister)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiHandler)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(webui.StaticFiles())))
@@ -58,8 +73,22 @@ func main() {
 	if addr == "" {
 		addr = ":8080"
 	}
-	log.Println("GSBS server listening on", addr)
-	if err := http.ListenAndServe(addr, handler); err != nil {
-		log.Fatal(err)
+	srv := &http.Server{Addr: addr, Handler: handler}
+	go func() {
+		log.Println("GSBS server listening on", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+	log.Println("shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("server shutdown: %v", err)
 	}
+	log.Println("server stopped")
 }

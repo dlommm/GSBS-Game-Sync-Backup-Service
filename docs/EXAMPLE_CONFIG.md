@@ -20,6 +20,7 @@ To support multiple Steam libraries (e.g. another drive), extend the resolver’
 {
   "server_url": "https://your-gsbs-server.example.com",
   "token": "YOUR_TOKEN_FROM_LOGIN",
+  "client_name": "My-Desktop",
   "sync_interval": "5m",
   "watch_paths": [
     {
@@ -32,6 +33,8 @@ To support multiple Steam libraries (e.g. another drive), extend the resolver’
   ]
 }
 ```
+
+`sync_interval` accepts human-friendly durations: `"30s"`, `"5m"`, `"1h"`, `"2h30m"`. The client will pull saves from the server at this interval. File changes are pushed immediately (with a 2-second debounce).
 
 **Linux (Steam Play)** — sync the Proton prefix save folder (you may need to resolve `[Note 1]` from the wiki, often `drive_c/users/steamuser/Documents/...` or similar):
 

@@ -59,7 +59,14 @@ go mod tidy && go build -o gsbs-server ./server && go build -o gsbs-client ./cli
    ```bash
    cd server && go build -o gsbs-server . && ./gsbs-server
    ```
-   Optional env: `GSBS_ADDR=:8080` `GSBS_DB=gsbs.db` (see `server/README.md`).
+   **Server environment variables** (all optional):
+   - `GSBS_ADDR` — Listen address (default `:8080`).
+   - `GSBS_DB` — SQLite database path (default `gsbs.db`).
+   - `GSBS_SESSION_SECRET` — Secret for signing WebUI session cookies; **set a strong value in production** (otherwise a warning is logged).
+   - `GSBS_ALLOW_REGISTER` — Set to `false` or `0` to disable public registration.
+   - `GSBS_ADMIN_USERNAME` — If set, only this user can access the `/admin` page (stats, revoke client tokens).
+
+   See `server/README.md` for API details.
 
 2. **Client**  
    ```bash
