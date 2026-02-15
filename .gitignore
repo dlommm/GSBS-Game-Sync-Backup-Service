@@ -1,6 +1,8 @@
 # Binaries / build output
 gsbs-client
 gsbs-server
+gsbs-client-windows-amd64.exe
+gsbs-server-windows-amd64.exe
 pcgw-fetch
 pcgw-sync
 dist/

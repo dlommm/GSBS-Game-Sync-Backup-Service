@@ -21,7 +21,7 @@ func main() {
 			runList()
 			return
 		case "--version", "-version", "-v":
-			println("gsbs-client", Version)
+			printVersion()
 			return
 		}
 	}
