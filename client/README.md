@@ -2,6 +2,44 @@
 
 Windows and Linux client that syncs game saves to the GSBS server.
 
+## How sync works (server → client → games on this machine)
+
+1. **Server**: A job (e.g. PCGW sync) fills the server’s **game save locations** (manifest) from PCGamingWiki: which games have known save paths per platform.
+2. **Manifest**: The client fetches the manifest from the server (`GET /api/manifest`). No login required for the manifest.
+3. **Client checks this machine**: For each manifest entry for your OS, the client resolves the path (e.g. `%APPDATA%\...`, `<SteamLibrary-folder>\...`). It only watches and syncs paths where **the directory actually exists** — i.e. the game is installed on this computer.
+4. **Push**: When a watched save file changes, the client uploads it to the server.
+5. **Pull**: When the client runs a sync (or “Sync now”), it downloads all your saves from the server and writes each one only if the target directory exists locally (game installed). If the game isn’t installed, that save is skipped.
+
+So “what games can be saved and pushed” = games from the manifest (plus any manual `watch_paths` in config) where the save folder exists on this machine. Use **`gsbs-client list`** to see that list.
+
+## Checking what games can be saved and synced
+
+From a terminal (or `gsbs-client.exe --console` on Windows):
+
+```bash
+gsbs-client list
+```
+
+This will:
+
+- Use your configured **server URL** (and cached or live manifest from the server).
+- Resolve all known game save paths for your OS and show only games where the save **directory exists** on this machine (i.e. the game is installed).
+- If you are logged in (`token` in config), it also shows whether each game has a save **on the server** (`[synced on server]`) or not (`[not on server]`).
+
+Example output:
+
+```
+Games that can be saved and synced on this machine:
+(Save directory exists locally; client will watch and push changes, and pull server saves here.)
+
+  Elden Ring  game_id=1245620 path_key=abc123 [synced on server]
+    C:\Users\You\AppData\Roaming\Elden Ring\...
+  Some Game  game_id=456 path_key=def456 [not on server] (from config)
+    D:\Games\SomeGame\saves
+```
+
+Requires `server_url` in config (e.g. from `gsbs-client login`). The server must be running and should have run the PCGW sync job so the manifest is populated.
+
 ## Windows: system tray
 
 On Windows, double‑click **gsbs-client.exe** (or run it from Start). It runs in the **system tray** (notification area). No console window.
@@ -63,7 +101,13 @@ Example for Assassin's Creed Rogue (Ubisoft Connect, Windows):
 }
 ```
 
-3. **Run**:
+3. **See which games can be synced** (optional):
+   ```bash
+   ./gsbs-client list
+   ```
+   Shows games from the manifest (and config) where the save folder exists on this machine.
+
+4. **Run**:
    ```bash
    ./gsbs-client
    ```

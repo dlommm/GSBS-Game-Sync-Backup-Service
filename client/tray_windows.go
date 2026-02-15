@@ -7,11 +7,14 @@ import (
 	"context"
 	_ "embed"
 	"encoding/binary"
+	"fmt"
 	"image"
 	"image/png"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/getlantern/systray"
@@ -22,6 +25,37 @@ func runTray() {
 	systray.Run(onReady, onExit)
 }
 
+// runFirstTimeSetupIfNeeded: if config has no server or token, run a console login subprocess so the user can set up before the tray starts.
+func runFirstTimeSetupIfNeeded() {
+	cfg, _ := loadConfig()
+	if cfg != nil && cfg.ServerURL != "" && cfg.Token != "" {
+		return // already configured
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(exe, "login")
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x10} // CREATE_NEW_CONSOLE — child gets its own console window
+	cmd.Run()
+}
+
+// runLoginDialogProcess shows the login popup in this process, saves config on success, and exits. Used when tray runs "gsbs-client login-dialog".
+func runLoginDialogProcess() {
+	cfg, _ := loadConfig()
+	if cfg == nil {
+		cfg = blankConfig()
+	}
+	fmt.Println("Opening login window...")
+	newCfg, err := showLoginDialog(cfg.ServerURL, cfg.ClientName)
+	if err != nil || newCfg == nil {
+		fmt.Println("Login cancelled or failed.")
+		os.Exit(1)
+	}
+	fmt.Println("Login successful.")
+	os.Exit(0)
+}
+
 var (
 	syncCancel context.CancelFunc
 	syncNowCh  chan struct{}
@@ -30,15 +64,20 @@ var (
 func onReady() {
 	systray.SetTitle("GSBS")
 	systray.SetTooltip("Game Sync & Backup Service")
+	// Set icon after a delay so the tray is ready (systray may log a false-positive error but the icon still shows).
 	if len(iconData) > 0 {
-		systray.SetIcon(iconData)
+		go func() {
+			time.Sleep(500 * time.Millisecond)
+			systray.SetIcon(iconData)
+		}()
 	}
 
 	mServer := systray.AddMenuItem("Server: (not set)", "Current server URL")
 	mServer.Disable()
 
 	mOpenServer := systray.AddMenuItem("Open server in browser", "Open server URL in default browser")
-	mLogin := systray.AddMenuItem("Login...", "Connect to server (enter URL, username, password)")
+	mLogin := systray.AddMenuItem("Login / Setup...", "Open setup page in browser (server URL, username, password, client name)")
+	mLoginConsole := systray.AddMenuItem("Login (console)...", "Open a console window to log in")
 	mEditConfig := systray.AddMenuItem("Edit config file", "Open config in Notepad")
 	mSyncNow := systray.AddMenuItem("Sync now", "Run a sync immediately")
 	systray.AddSeparator()
@@ -53,6 +92,9 @@ func onReady() {
 	// currentCfg is used by menu handlers; updated when user logs in successfully
 	currentCfg := cfg
 
+	// Start local setup server so "Login" opens the browser to a form (works reliably on Windows).
+	setupURL := StartSetupServer()
+
 	syncNowCh = make(chan struct{})
 	var ctx context.Context
 	ctx, syncCancel = context.WithCancel(context.Background())
@@ -62,22 +104,27 @@ func onReady() {
 		}
 	}()
 
-	// On first launch (no server or no token), show login dialog after a short delay so tray appears first
+	// First run: if not logged in, open the setup page in the browser after a short delay.
 	go func() {
-		if currentCfg.ServerURL == "" || currentCfg.Token == "" {
-			time.Sleep(400 * time.Millisecond)
-			newCfg, _ := showLoginDialog(currentCfg.ServerURL)
-			if newCfg != nil {
-				currentCfg = newCfg
-				updateServerLabel(mServer, currentCfg.ServerURL)
-				syncCancel()
-				syncNowCh = make(chan struct{})
-				ctx, syncCancel = context.WithCancel(context.Background())
-				go func() {
-					if err := runSync(ctx, currentCfg, syncNowCh); err != nil {
-						log.Println("sync:", err)
-					}
-				}()
+		if (currentCfg.ServerURL == "" || currentCfg.Token == "") && setupURL != "" {
+			time.Sleep(800 * time.Millisecond)
+			open.Run(setupURL)
+			// Poll for config change so we can update tray and restart sync when user logs in via browser
+			for i := 0; i < 60; i++ {
+				time.Sleep(2 * time.Second)
+				if reload, _ := loadConfig(); reload != nil && reload.Token != "" {
+					currentCfg = reload
+					updateServerLabel(mServer, currentCfg.ServerURL)
+					syncCancel()
+					syncNowCh = make(chan struct{})
+					ctx, syncCancel = context.WithCancel(context.Background())
+					go func() {
+						if err := runSync(ctx, currentCfg, syncNowCh); err != nil {
+							log.Println("sync:", err)
+						}
+					}()
+					return
+				}
 			}
 		}
 	}()
@@ -92,14 +139,40 @@ func onReady() {
 				}
 				open.Run(currentCfg.ServerURL)
 			case <-mLogin.ClickedCh:
-				newCfg, err := showLoginDialog(currentCfg.ServerURL)
-				if err != nil && newCfg == nil {
-					continue // cancelled or dialog error
+				// Open setup page in browser (reliable on Windows; no dialogs or console).
+				if url := GetSetupURL(); url != "" {
+					open.Run(url)
 				}
-				if newCfg != nil {
-					currentCfg = newCfg
+				// After a short delay, reload config in case user just logged in in the browser
+				go func() {
+					time.Sleep(3 * time.Second)
+					if reload, _ := loadConfig(); reload != nil && reload.Token != "" {
+						currentCfg = reload
+						updateServerLabel(mServer, currentCfg.ServerURL)
+						syncCancel()
+						syncNowCh = make(chan struct{})
+						ctx, syncCancel = context.WithCancel(context.Background())
+						go func() {
+							if err := runSync(ctx, currentCfg, syncNowCh); err != nil {
+								log.Println("sync:", err)
+							}
+						}()
+					}
+				}()
+			case <-mLoginConsole.ClickedCh:
+				// Run gsbs-client login in a new console window (direct exec with CREATE_NEW_CONSOLE).
+				exe, err := os.Executable()
+				if err != nil {
+					log.Println("login (console):", err)
+					continue
+				}
+				cmd := exec.Command(exe, "login")
+				cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x10} // CREATE_NEW_CONSOLE
+				_ = cmd.Run()
+				// Reload config and restart sync in case user logged in
+				if reload, _ := loadConfig(); reload != nil && reload.Token != "" {
+					currentCfg = reload
 					updateServerLabel(mServer, currentCfg.ServerURL)
-					// Restart sync with new config
 					syncCancel()
 					syncNowCh = make(chan struct{})
 					ctx, syncCancel = context.WithCancel(context.Background())

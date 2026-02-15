@@ -10,9 +10,10 @@ import (
 type config struct {
 	ServerURL            string        `json:"server_url"`
 	Token                string        `json:"token"`
+	ClientName           string        `json:"client_name,omitempty"` // name shown on server for this machine
 	SyncInterval         time.Duration `json:"sync_interval"`
 	UbisoftConnectFolder string        `json:"ubisoft_connect_folder,omitempty"` // e.g. C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher
-	LauncherUserID       string        `json:"launcher_user_id,omitempty"`         // launcher user ID for paths like savegames\<user-id>\895
+	LauncherUserID       string        `json:"launcher_user_id,omitempty"`       // launcher user ID for paths like savegames\<user-id>\895
 	WatchPaths           []watchPath   `json:"watch_paths"`
 }
 
