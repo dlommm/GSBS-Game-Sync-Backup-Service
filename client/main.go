@@ -41,8 +41,9 @@ func main() {
 	defer cancel()
 
 	syncNow := make(chan struct{})
+	refreshManifest := make(chan struct{})
 	go func() {
-		if err := runSync(ctx, cfg, syncNow); err != nil {
+		if err := runSync(ctx, cfg, syncNow, refreshManifest); err != nil {
 			log.Fatal(err)
 		}
 	}()

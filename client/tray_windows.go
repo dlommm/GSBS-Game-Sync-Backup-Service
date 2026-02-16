@@ -58,9 +58,10 @@ func runLoginDialogProcess() {
 }
 
 var (
-	syncMu     sync.Mutex
-	syncCancel context.CancelFunc
-	syncNowCh  chan struct{}
+	syncMu             sync.Mutex
+	syncCancel         context.CancelFunc
+	syncNowCh          chan struct{}
+	refreshManifestCh  chan struct{}
 )
 
 // restartSync cancels the current sync loop and starts a new one with the given config.
@@ -72,10 +73,11 @@ func restartSync(cfg *config) {
 		syncCancel()
 	}
 	syncNowCh = make(chan struct{})
+	refreshManifestCh = make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	syncCancel = cancel
 	go func() {
-		if err := runSync(ctx, cfg, syncNowCh); err != nil {
+		if err := runSync(ctx, cfg, syncNowCh, refreshManifestCh); err != nil {
 			log.Println("sync:", err)
 		}
 	}()
@@ -85,6 +87,19 @@ func restartSync(cfg *config) {
 func triggerSyncNow() {
 	syncMu.Lock()
 	ch := syncNowCh
+	syncMu.Unlock()
+	if ch != nil {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// triggerManifestRefresh sends on the refresh channel if a sync loop is running.
+func triggerManifestRefresh() {
+	syncMu.Lock()
+	ch := refreshManifestCh
 	syncMu.Unlock()
 	if ch != nil {
 		select {
@@ -113,6 +128,7 @@ func onReady() {
 	mLoginConsole := systray.AddMenuItem("Login (console)...", "Open a console window to log in")
 	mEditConfig := systray.AddMenuItem("Edit config file", "Open config in Notepad")
 	mSyncNow := systray.AddMenuItem("Sync now", "Run a sync immediately")
+	mRefreshManifest := systray.AddMenuItem("Refresh manifest", "Re-fetch game save locations from server")
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("Quit", "Exit GSBS")
 
@@ -202,6 +218,8 @@ func onReady() {
 				openConfigInEditor()
 			case <-mSyncNow.ClickedCh:
 				triggerSyncNow()
+			case <-mRefreshManifest.ClickedCh:
+				triggerManifestRefresh()
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 				return

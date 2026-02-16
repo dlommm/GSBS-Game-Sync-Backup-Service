@@ -63,6 +63,8 @@ Create the named volume if needed (Docker creates it on first use). The SQLite f
    docker push YOUR_DOCKERHUB_USERNAME/gsbs-server:v1.0.2   # if you tagged a version
    ```
 
+**Releases:** The script `./script/release.sh [VERSION]` builds the four GitHub release binaries and also builds and pushes the server image to Docker Hub (by default `dendlomm/gsbs-server:$VERSION` and `:latest`). Run `docker login` before the script if you are pushing to Docker Hub.
+
 **Pre-built image:** The official image is published at [dendlomm/gsbs-server](https://hub.docker.com/r/dendlomm/gsbs-server) on Docker Hub. Anyone can run:
 ```bash
 docker pull dendlomm/gsbs-server:latest

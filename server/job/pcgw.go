@@ -13,7 +13,8 @@ import (
 
 // PCGWSync runs a full sync: list game pages from PCGW (Cargo Infobox_game), fetch wikitext,
 // parse save locations, upsert into store. Rate limits to 1 request per second.
-func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client) error {
+// Returns the number of upserted entries and any error.
+func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client) (int, error) {
 	const rateLimit = time.Second
 	const chunkSize = 100
 	offset := 0
@@ -21,7 +22,7 @@ func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client) error {
 	for {
 		pages, err := client.ListGamePages(chunkSize, offset)
 		if err != nil {
-			return err
+			return totalUpserted, err
 		}
 		if len(pages) == 0 {
 			break
@@ -29,7 +30,7 @@ func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client) error {
 		for _, p := range pages {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return totalUpserted, ctx.Err()
 			default:
 			}
 			wikitext, err := client.ParsePageWikitext(strconv.FormatInt(p.PageID, 10))
@@ -72,5 +73,5 @@ func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client) error {
 		offset += len(pages)
 	}
 	log.Printf("pcgw sync: done, upserted %d location entries", totalUpserted)
-	return nil
+	return totalUpserted, nil
 }

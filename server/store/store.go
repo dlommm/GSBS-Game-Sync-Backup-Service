@@ -51,6 +51,16 @@ type Store interface {
 	ListUserStats(ctx context.Context) ([]UserStatRow, error)          // All users with per-user stats
 	ListAllClients(ctx context.Context) ([]ClientInfoWithUser, error)  // All clients with owner username
 
+	// Job tracking (admin jobs dashboard)
+	LogJobStart(ctx context.Context, jobName string) (runID string, err error)
+	LogJobFinish(ctx context.Context, runID, status, errorMsg string, entriesCount int) error
+	ListJobRuns(ctx context.Context, jobName string, limit int) ([]JobRun, error)
+	GetLatestJobRun(ctx context.Context, jobName string) (*JobRun, error)
+
+	// Manifest fetch tracking (admin manifest fetch log)
+	LogManifestFetch(ctx context.Context, clientID, clientName, username string, entriesCount int) error
+	ListManifestFetches(ctx context.Context, limit int) ([]ManifestFetchRow, error)
+
 	// Close releases resources (e.g. DB connection).
 	Close() error
 }
@@ -106,4 +116,25 @@ type ClientInfoWithUser struct {
 	Name     string
 	OS       string
 	LastSeen string
+}
+
+// JobRun represents one execution of a background job (e.g. PCGW sync).
+type JobRun struct {
+	ID           string
+	JobName      string
+	StartedAt    string
+	FinishedAt   string // empty while running
+	Status       string // "running", "success", "failed"
+	ErrorMessage string
+	EntriesCount int
+}
+
+// ManifestFetchRow records a single manifest download by a client.
+type ManifestFetchRow struct {
+	ID           string
+	ClientID     string // empty for unauthenticated
+	ClientName   string
+	Username     string
+	EntriesCount int
+	FetchedAt    string
 }

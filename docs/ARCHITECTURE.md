@@ -11,6 +11,8 @@
 
 - **Users**: `id`, `username`, password hash, created_at.
 - **Clients**: `id`, `user_id`, `name`, `os` (windows/linux), last_seen, optional auth token.
+- **Job runs**: `id`, `job_name`, `started_at`, `finished_at`, `status` (running/success/failed), `error_message`, `entries_count`. Tracks PCGW sync job executions for the admin dashboard.
+- **Manifest fetches**: `id`, `client_id`, `client_name`, `username`, `entries_count`, `fetched_at`. Logs every manifest download for admin visibility.
 - **Saves**: `user_id`, `game_id` (e.g. PCGW page or Steam App ID), `path_key` (stable key for the logical path, e.g. hash of normalized path), `content` (binary or path to blob), `updated_at`. One “current” version per (user, game_id, path_key).
 
 Path key ensures the same logical save (e.g. “Assassin’s Creed Rogue – Ubisoft Connect Worldwide”) maps to one blob even if absolute paths differ per OS (e.g. Windows vs Linux).
@@ -73,6 +75,26 @@ sequenceDiagram
 ## Database (server)
 
 - **game_save_locations**: `id`, `game_id`, `pcgw_page_id`, `game_title`, `platform`, `path_template`, `is_config`, `updated_at`, `source`. Unique on `(game_id, platform, path_template)`. Filled by the PCGW sync job; read by the manifest API.
+
+## Server-Sent Events (SSE)
+
+- **Hub**: `server/sse/hub.go` manages a set of connected SSE clients. Supports Subscribe (returns event channel + unsubscribe func), Broadcast (non-blocking fan-out), and Count.
+- **Endpoint**: `GET /api/events` (auth required). Clients connect with their Bearer token and receive a long-lived SSE stream. Events are typed (e.g. `manifest-updated`).
+- **Push manifest**: Admin can push a `manifest-updated` event to all connected clients via `POST /admin/push-manifest` in the WebUI. This also invalidates the server's manifest cache.
+- **Client listener**: `ListenSSE()` in `client/manifest.go` connects to SSE, auto-reconnects with exponential backoff (2s-60s). On `manifest-updated`, the sync loop re-fetches the manifest, updates watch paths, and triggers a pull.
+
+## Job Runner
+
+- **Runner**: `server/job/runner.go` wraps job execution with DB tracking (`job_runs` table), dedup (prevents concurrent runs of the same job), and SSE broadcast on completion.
+- **PCGW sync**: Runs weekly (Sunday 03:00 via cron) or manually via `POST /admin/run-job` in the admin WebUI. Logs start/finish/status/error/entries_count.
+
+## Admin WebUI
+
+- **Stats**: User count, client count, save count, storage, manifest entries, SSE clients.
+- **Jobs panel**: Shows recent job runs (status, duration, entries, errors) with a "Run Now" button.
+- **Manifest viewer**: Searchable table of all `game_save_locations` entries with a "Push to Clients" button.
+- **Manifest fetch log**: Recent downloads with client name, username, entry count, timestamp.
+- **Users and Clients**: Tables with stats and revoke action.
 
 ## Operational behaviour
 

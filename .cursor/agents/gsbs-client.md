@@ -4,7 +4,7 @@ description: Client-side specialist for GSBS. Always use for implementing or cha
 model: inherit
 ---
 
-You are the GSBS client specialist. Focus only on client-side code: config, sync (push/pull), watcher, manifest, list, and tray.
+You are the GSBS client specialist. Focus only on client-side code: config, sync (push/pull), watcher, manifest, SSE listener, list, and tray.
 
 When invoked:
 
@@ -12,8 +12,12 @@ When invoked:
 
 2. **Folder-exists rule**: Never write a pulled save when the target directory does not exist (game not installed). In pull flow, resolve path per (game_id, path_key); if path is "" or parent dir does not exist, skip and continue.
 
-3. **Sync**: Push on watcher change; pull fetches all saves and applies only where resolvePath returns a path and that path’s directory exists. Use manifest (GET /api/manifest) merged with config `watch_paths`; filter by platform (windows/linux) and resolve for current OS.
+3. **Sync**: Push on watcher change; pull fetches all saves and applies only where resolvePath returns a path and that path's directory exists. Use manifest (GET /api/manifest with auth token) merged with config `watch_paths`; filter by platform (windows/linux) and resolve for current OS.
 
-4. **Tray**: Windows in `tray_windows.go` / `tray_login_windows.go`; stub in `tray_stub.go` for non-Windows. Version from ldflags (client/version.go).
+4. **SSE**: `ListenSSE()` in `manifest.go` connects to `GET /api/events` (auth required), auto-reconnects with exponential backoff (2s–60s). On `manifest-updated` event, `run_sync.go` re-fetches manifest, updates watch paths, and triggers a pull. Runs as a goroutine alongside the sync loop.
+
+5. **Manifest**: `FetchManifest(ctx, baseURL, token, since)` sends the auth token as a Bearer header for server-side fetch tracking. Cached to disk at `~/.config/gsbs/manifest.json`.
+
+6. **Tray**: Windows in `tray_windows.go` / `tray_login_windows.go`; stub in `tray_stub.go` for non-Windows. Version from ldflags (client/version.go).
 
 Deliver a concise summary of what was changed and any follow-up (e.g. server API or docs) the parent agent should handle.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/gsbs/gsbs/server/auth"
+	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
 )
 
@@ -24,6 +26,7 @@ type Handler struct {
 	store         store.Store
 	auth          *auth.Service
 	allowRegister bool
+	hub           *sse.Hub
 
 	manifestCache struct {
 		mu      sync.RWMutex
@@ -34,8 +37,17 @@ type Handler struct {
 
 const manifestCacheTTL = 10 * time.Minute
 
-func NewHandler(st store.Store, authSvc *auth.Service, allowRegister bool) *Handler {
-	return &Handler{store: st, auth: authSvc, allowRegister: allowRegister}
+func NewHandler(st store.Store, authSvc *auth.Service, allowRegister bool, hub *sse.Hub) *Handler {
+	return &Handler{store: st, auth: authSvc, allowRegister: allowRegister, hub: hub}
+}
+
+// InvalidateManifestCache clears the in-memory manifest cache so the next
+// request reads fresh data from the DB.
+func (h *Handler) InvalidateManifestCache() {
+	h.manifestCache.mu.Lock()
+	h.manifestCache.entries = nil
+	h.manifestCache.at = time.Time{}
+	h.manifestCache.mu.Unlock()
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -52,6 +64,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.withAuth(h.handlePush)(w, r)
 	case r.URL.Path == "/api/manifest" && r.Method == http.MethodGet:
 		h.handleManifest(w, r)
+	case r.URL.Path == "/api/events" && r.Method == http.MethodGet:
+		h.withAuth(h.handleSSE)(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -253,7 +267,66 @@ func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "manifest failed"})
 		return
 	}
+
+	// Log the fetch (best-effort). If auth token is present, resolve client info.
+	go func() {
+		ctx := context.Background()
+		clientID, clientName, username := "", "", ""
+		token := r.Header.Get("Authorization")
+		if token != "" && len(token) > 7 && token[:7] == "Bearer " {
+			token = token[7:]
+		}
+		if token == "" {
+			token = r.URL.Query().Get("token")
+		}
+		if token != "" {
+			if uid, cid, cname, _, authErr := h.store.ClientByToken(ctx, token); authErr == nil {
+				clientID = cid
+				clientName = cname
+				if uname, err := h.store.UsernameByID(ctx, uid); err == nil {
+					username = uname
+				}
+			}
+		}
+		_ = h.store.LogManifestFetch(ctx, clientID, clientName, username, len(entries))
+	}()
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{"entries": entries})
+}
+
+// handleSSE streams server-sent events to an authenticated client.
+func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request, userID string) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	ch, unsub := h.hub.Subscribe(userID)
+	defer unsub()
+
+	// Send initial heartbeat so the client knows the connection is live.
+	fmt.Fprint(w, ": heartbeat\n\n")
+	flusher.Flush()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case evt, ok := <-ch:
+			if !ok {
+				return
+			}
+			fmt.Fprint(w, evt.Format())
+			flusher.Flush()
+		}
+	}
 }
 
 func encodeBase64(b []byte) string {

@@ -1,12 +1,17 @@
 package webui
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"
 	"time"
 
+	"github.com/gsbs/gsbs/pkg/types"
+	"github.com/gsbs/gsbs/server/api"
 	"github.com/gsbs/gsbs/server/auth"
+	"github.com/gsbs/gsbs/server/job"
+	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
 )
 
@@ -18,20 +23,24 @@ type WebHandler struct {
 	adminUsername string
 	allowRegister bool
 	templates     *template.Template
+	hub           *sse.Hub
+	apiHandler    *api.Handler
+	jobRunner     *job.Runner
 }
 
 // NewWebHandler creates a WebHandler. secret is used to sign session cookies; if empty, a default is used (insecure for production).
 // adminUsername is the username allowed to access /admin; if empty, admin UI is disabled.
-func NewWebHandler(st store.Store, authSvc *auth.Service, secret, adminUsername string, allowRegister bool) *WebHandler {
+func NewWebHandler(st store.Store, authSvc *auth.Service, secret, adminUsername string, allowRegister bool, hub *sse.Hub, apiHandler *api.Handler, jobRunner *job.Runner) *WebHandler {
 	if secret == "" {
 		secret = "gsbs-default-secret-change-me" // fallback so WebUI works out-of-box; main logs a warning
 	}
 	tmpl := template.Must(template.New("").Funcs(template.FuncMap{
-		"formatTime":  formatTime,
-		"formatBytes": formatBytes,
-		"truncate":    truncate,
+		"formatTime":    formatTime,
+		"formatBytes":   formatBytes,
+		"truncate":      truncate,
+		"formatDuration": formatDuration,
 	}).ParseFS(templatesFS, "templates/*.html"))
-	return &WebHandler{store: st, auth: authSvc, secret: secret, adminUsername: adminUsername, allowRegister: allowRegister, templates: tmpl}
+	return &WebHandler{store: st, auth: authSvc, secret: secret, adminUsername: adminUsername, allowRegister: allowRegister, templates: tmpl, hub: hub, apiHandler: apiHandler, jobRunner: jobRunner}
 }
 
 // formatTime formats an RFC3339 timestamp for display: "just now", "5 mins ago", or "Jan 2, 2006" for older dates.
@@ -103,6 +112,29 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen-3] + "..."
 }
 
+// formatDuration computes human-readable duration between two RFC3339 timestamps.
+func formatDuration(start, end string) string {
+	if start == "" || end == "" {
+		return "—"
+	}
+	t1, err1 := time.Parse(time.RFC3339, start)
+	t2, err2 := time.Parse(time.RFC3339, end)
+	if err1 != nil || err2 != nil {
+		return "—"
+	}
+	d := t2.Sub(t1)
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
+}
+
 func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	switch {
@@ -144,6 +176,18 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case path == "/admin/revoke":
 		if r.Method == http.MethodPost {
 			h.handleRevokeClient(w, r)
+		} else {
+			http.NotFound(w, r)
+		}
+	case path == "/admin/push-manifest":
+		if r.Method == http.MethodPost {
+			h.handlePushManifest(w, r)
+		} else {
+			http.NotFound(w, r)
+		}
+	case path == "/admin/run-job":
+		if r.Method == http.MethodPost {
+			h.handleRunJob(w, r)
 		} else {
 			http.NotFound(w, r)
 		}
@@ -293,8 +337,16 @@ type adminData struct {
 	Stats         adminStats
 	Users         []store.UserStatRow
 	Clients       []store.ClientInfoWithUser
+	Manifest      []types.GameSaveLocation
+	Fetches       []store.ManifestFetchRow
+	LatestJob     *store.JobRun
+	RecentJobs    []store.JobRun
+	JobRunning    bool
+	SSEClients    int
 	Error         string
 	Revoked       bool
+	Pushed        bool
+	JobStarted    bool
 	AllowRegister bool
 }
 
@@ -319,14 +371,31 @@ func (h *WebHandler) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	userCount, _ := h.store.CountUsers(r.Context())
-	clientCount, _ := h.store.CountClients(r.Context())
-	saveCount, _ := h.store.CountSaves(r.Context())
-	manifestCount, _ := h.store.CountGameSaveLocations(r.Context())
-	totalBytes, _ := h.store.TotalStorageBytes(r.Context())
-	users, _ := h.store.ListUserStats(r.Context())
-	clients, _ := h.store.ListAllClients(r.Context())
+	ctx := r.Context()
+	userCount, _ := h.store.CountUsers(ctx)
+	clientCount, _ := h.store.CountClients(ctx)
+	saveCount, _ := h.store.CountSaves(ctx)
+	manifestCount, _ := h.store.CountGameSaveLocations(ctx)
+	totalBytes, _ := h.store.TotalStorageBytes(ctx)
+	users, _ := h.store.ListUserStats(ctx)
+	clients, _ := h.store.ListAllClients(ctx)
+	manifest, _ := h.store.ListGameSaveLocations(ctx)
+	fetches, _ := h.store.ListManifestFetches(ctx, 50)
+	latestJob, _ := h.store.GetLatestJobRun(ctx, "pcgw_sync")
+	recentJobs, _ := h.store.ListJobRuns(ctx, "pcgw_sync", 10)
+
+	sseClients := 0
+	if h.hub != nil {
+		sseClients = h.hub.Count()
+	}
+	jobRunning := false
+	if h.jobRunner != nil {
+		jobRunning = h.jobRunner.IsRunning("pcgw_sync")
+	}
+
 	revoked := r.URL.Query().Get("revoked") == "1"
+	pushed := r.URL.Query().Get("pushed") == "1"
+	jobStarted := r.URL.Query().Get("job_started") == "1"
 	h.templates.ExecuteTemplate(w, "admin.html", adminData{
 		Username: username,
 		Stats: adminStats{
@@ -338,7 +407,15 @@ func (h *WebHandler) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		},
 		Users:         users,
 		Clients:       clients,
+		Manifest:      manifest,
+		Fetches:       fetches,
+		LatestJob:     latestJob,
+		RecentJobs:    recentJobs,
+		JobRunning:    jobRunning,
+		SSEClients:    sseClients,
 		Revoked:       revoked,
+		Pushed:        pushed,
+		JobStarted:    jobStarted,
 		AllowRegister: h.allowRegister,
 	})
 }
@@ -369,4 +446,43 @@ func (h *WebHandler) handleRevokeClient(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	Redirect(w, r, "/admin?revoked=1")
+}
+
+// handlePushManifest broadcasts a manifest-updated SSE event to all connected clients.
+func (h *WebHandler) handlePushManifest(w http.ResponseWriter, r *http.Request) {
+	userID := GetSession(r, h.secret)
+	if userID == "" {
+		Redirect(w, r, "/login")
+		return
+	}
+	username, _ := h.store.UsernameByID(r.Context(), userID)
+	if h.adminUsername == "" || username != h.adminUsername {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	if h.apiHandler != nil {
+		h.apiHandler.InvalidateManifestCache()
+	}
+	if h.hub != nil {
+		h.hub.Broadcast(sse.Event{Type: "manifest-updated", Data: "{}"})
+	}
+	Redirect(w, r, "/admin?pushed=1")
+}
+
+// handleRunJob manually triggers the PCGW sync job.
+func (h *WebHandler) handleRunJob(w http.ResponseWriter, r *http.Request) {
+	userID := GetSession(r, h.secret)
+	if userID == "" {
+		Redirect(w, r, "/login")
+		return
+	}
+	username, _ := h.store.UsernameByID(r.Context(), userID)
+	if h.adminUsername == "" || username != h.adminUsername {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	if h.jobRunner != nil {
+		h.jobRunner.RunPCGWSync(context.Background())
+	}
+	Redirect(w, r, "/admin?job_started=1")
 }
