@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gsbs/gsbs/pkg/pcgw"
 	"github.com/gsbs/gsbs/server/api"
 	"github.com/gsbs/gsbs/server/auth"
 	"github.com/gsbs/gsbs/server/job"
+	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
 	"github.com/gsbs/gsbs/server/webui"
 	"github.com/robfig/cron/v3"
@@ -48,8 +48,11 @@ func main() {
 		log.Println("WARNING: GSBS_SESSION_SECRET is not set or is default; set a strong secret in production")
 	}
 
-	apiHandler := api.NewHandler(st, authSvc, allowRegister)
-	webHandler := webui.NewWebHandler(st, authSvc, sessionSecret, os.Getenv("GSBS_ADMIN_USERNAME"), allowRegister)
+	hub := sse.NewHub()
+	runner := job.NewRunner(st, hub)
+
+	apiHandler := api.NewHandler(st, authSvc, allowRegister, hub)
+	webHandler := webui.NewWebHandler(st, authSvc, sessionSecret, os.Getenv("GSBS_ADMIN_USERNAME"), allowRegister, hub, apiHandler, runner)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiHandler)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(webui.StaticFiles())))
@@ -59,12 +62,7 @@ func main() {
 	// Weekly PCGW manifest sync (Sunday 03:00)
 	c := cron.New()
 	_, _ = c.AddFunc("0 3 * * 0", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
-		defer cancel()
-		pcgwClient := pcgw.NewClient()
-		if err := job.PCGWSync(ctx, st, pcgwClient); err != nil {
-			log.Printf("pcgw weekly sync: %v", err)
-		}
+		runner.RunPCGWSync(context.Background())
 	})
 	c.Start()
 	defer c.Stop()

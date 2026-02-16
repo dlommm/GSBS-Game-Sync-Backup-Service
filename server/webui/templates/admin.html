@@ -1,4 +1,4 @@
-<!-- Admin: global stats, users with per-user stats, all clients with Revoke. -->
+<!-- Admin: global stats, jobs, manifest, fetch log, users, clients. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -33,9 +33,15 @@
     {{if .Revoked}}
     <div class="alert alert-success">Client token revoked. The client must run <code>gsbs-client login</code> to reconnect.</div>
     {{end}}
+    {{if .Pushed}}
+    <div class="alert alert-success">Manifest push event sent to {{.SSEClients}} connected client(s).</div>
+    {{end}}
+    {{if .JobStarted}}
+    <div class="alert alert-info">PCGW sync job started in background.</div>
+    {{end}}
 
     <!-- Global Stats -->
-    <section class="stats-row stats-row-5">
+    <section class="stats-row stats-row-6">
       <div class="stat-card">
         <div class="stat-value">{{.Stats.UserCount}}</div>
         <div class="stat-label">Users</div>
@@ -55,6 +61,10 @@
       <div class="stat-card">
         <div class="stat-value">{{.Stats.ManifestCount}}</div>
         <div class="stat-label">Manifest entries</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{.SSEClients}}</div>
+        <div class="stat-label">SSE clients</div>
       </div>
     </section>
 
@@ -77,6 +87,136 @@
           <span class="config-val">{{.Username}}</span>
         </div>
       </div>
+    </section>
+
+    <!-- Jobs -->
+    <section class="panel">
+      <div class="panel-header-actions">
+        <h2>Jobs</h2>
+        <div class="panel-actions">
+          {{if .JobRunning}}
+          <span class="badge-running">Running…</span>
+          {{else}}
+          <form method="post" action="/admin/run-job" class="inline-form">
+            <button type="submit" class="btn-primary-sm" onclick="this.disabled=true;this.form.submit();">Run PCGW Sync</button>
+          </form>
+          {{end}}
+        </div>
+      </div>
+      {{if .RecentJobs}}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Job</th>
+              <th>Started</th>
+              <th>Duration</th>
+              <th>Status</th>
+              <th>Entries</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .RecentJobs}}
+            <tr>
+              <td class="cell-primary">{{.JobName}}</td>
+              <td class="cell-muted">{{formatTime .StartedAt}}</td>
+              <td class="cell-muted">{{formatDuration .StartedAt .FinishedAt}}</td>
+              <td>
+                {{if eq .Status "success"}}<span class="badge-success">success</span>
+                {{else if eq .Status "running"}}<span class="badge-running">running</span>
+                {{else}}<span class="badge-failed">failed</span>{{end}}
+              </td>
+              <td class="cell-size">{{.EntriesCount}}</td>
+              <td class="cell-muted">{{if .ErrorMessage}}{{truncate .ErrorMessage 80}}{{else}}—{{end}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <div class="panel-empty"><p>No job runs recorded yet.</p></div>
+      {{end}}
+    </section>
+
+    <!-- Manifest Viewer -->
+    <section class="panel">
+      <div class="panel-header-actions">
+        <h2>Manifest<span class="table-count">({{.Stats.ManifestCount}} entries)</span></h2>
+        <div class="panel-actions">
+          <form method="post" action="/admin/push-manifest" class="inline-form">
+            <button type="submit" class="btn-primary-sm">Push to Clients</button>
+          </form>
+        </div>
+      </div>
+      {{if .Manifest}}
+      <div class="search-wrap">
+        <input type="text" class="search-input" id="manifestSearch" placeholder="Search by game title, ID, platform…" oninput="filterManifest()">
+      </div>
+      <div class="table-wrap">
+        <table class="data-table" id="manifestTable">
+          <thead>
+            <tr>
+              <th>Game Title</th>
+              <th>Game ID</th>
+              <th>Platform</th>
+              <th>Path Template</th>
+              <th>Type</th>
+              <th>Source</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Manifest}}
+            <tr>
+              <td class="cell-primary">{{.GameTitle}}</td>
+              <td class="cell-muted">{{.GameID}}</td>
+              <td><span class="os-badge os-{{.Platform}}">{{.Platform}}</span></td>
+              <td class="cell-muted" style="max-width:20rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{.PathTemplate}}">{{.PathTemplate}}</td>
+              <td>{{if .IsConfig}}<span class="pill-yes">config</span>{{else}}<span class="pill-no">save</span>{{end}}</td>
+              <td class="cell-muted">{{.Source}}</td>
+              <td class="cell-muted">{{formatTime .UpdatedAt}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <div class="panel-empty"><p>No manifest entries. Run the PCGW sync job to populate.</p></div>
+      {{end}}
+    </section>
+
+    <!-- Manifest Fetches -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Recent Manifest Fetches</h2>
+      </div>
+      {{if .Fetches}}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Client</th>
+              <th>User</th>
+              <th>Entries</th>
+              <th>Fetched</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Fetches}}
+            <tr>
+              <td class="cell-primary">{{if .ClientName}}{{.ClientName}}{{else}}<span class="cell-muted">anonymous</span>{{end}}</td>
+              <td>{{if .Username}}{{.Username}}{{else}}<span class="cell-muted">—</span>{{end}}</td>
+              <td class="cell-size">{{.EntriesCount}}</td>
+              <td class="cell-muted">{{formatTime .FetchedAt}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <div class="panel-empty"><p>No manifest fetches recorded yet.</p></div>
+      {{end}}
     </section>
 
     <!-- Users -->
@@ -154,5 +294,16 @@
       {{end}}
     </section>
   </main>
+
+  <script>
+  function filterManifest() {
+    var q = document.getElementById('manifestSearch').value.toLowerCase();
+    var rows = document.querySelectorAll('#manifestTable tbody tr');
+    for (var i = 0; i < rows.length; i++) {
+      var text = rows[i].textContent.toLowerCase();
+      rows[i].style.display = text.indexOf(q) !== -1 ? '' : 'none';
+    }
+  }
+  </script>
 </body>
 </html>

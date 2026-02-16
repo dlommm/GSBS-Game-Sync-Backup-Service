@@ -39,7 +39,7 @@ func runList() {
 	// Load manifest (server or cache)
 	ctx := context.Background()
 	manifestEntries := LoadManifestFromDisk()
-	if entries, err := FetchManifest(ctx, cfg.ServerURL, ""); err == nil {
+	if entries, err := FetchManifest(ctx, cfg.ServerURL, cfg.Token, ""); err == nil {
 		manifestEntries = entries
 		if err := SaveManifestToDisk(entries); err != nil {
 			fmt.Fprintln(os.Stderr, "save manifest cache:", err)

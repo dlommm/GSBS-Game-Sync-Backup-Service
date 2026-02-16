@@ -1,14 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/gsbs/gsbs/pkg/paths"
 	"github.com/gsbs/gsbs/pkg/types"
@@ -20,7 +24,8 @@ type manifestResponse struct {
 }
 
 // FetchManifest downloads the manifest from the server. If since is non-empty, requests delta.
-func FetchManifest(ctx context.Context, baseURL, since string) ([]types.GameSaveLocation, error) {
+// If token is non-empty, it is sent as a Bearer token for server-side fetch tracking.
+func FetchManifest(ctx context.Context, baseURL, token, since string) ([]types.GameSaveLocation, error) {
 	url := baseURL + "/api/manifest"
 	if since != "" {
 		url += "?since=" + since
@@ -28,6 +33,9 @@ func FetchManifest(ctx context.Context, baseURL, since string) ([]types.GameSave
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -84,6 +92,88 @@ func SaveManifestToDisk(entries []types.GameSaveLocation) error {
 func PathKeyForManifestEntry(gameID, pathTemplate string) string {
 	h := sha256.Sum256([]byte(gameID + "\x00" + pathTemplate))
 	return hex.EncodeToString(h[:])[:16]
+}
+
+// ListenSSE connects to the server SSE endpoint and calls onEvent for each received event type.
+// It auto-reconnects with exponential backoff on disconnect. Blocks until ctx is cancelled.
+func ListenSSE(ctx context.Context, baseURL, token string, onEvent func(eventType string)) {
+	const (
+		minBackoff = 2 * time.Second
+		maxBackoff = 60 * time.Second
+		// If connection lasted longer than this, reset backoff (was a healthy connection).
+		healthyThreshold = 30 * time.Second
+	)
+	backoff := minBackoff
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		start := time.Now()
+		err := connectSSE(ctx, baseURL, token, onEvent)
+		if ctx.Err() != nil {
+			return
+		}
+		// Reset backoff if the connection was healthy (lasted a while before dropping).
+		if time.Since(start) >= healthyThreshold {
+			backoff = minBackoff
+		}
+		if err != nil {
+			log.Printf("sse: connection error: %v (retrying in %s)", err, backoff)
+		} else {
+			log.Printf("sse: disconnected (retrying in %s)", backoff)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
+}
+
+func connectSSE(ctx context.Context, baseURL, token string, onEvent func(eventType string)) error {
+	url := baseURL + "/api/events"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	req.Header.Set("Accept", "text/event-stream")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("sse: %s", resp.Status)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	var eventType string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			eventType = strings.TrimPrefix(line, "event: ")
+		} else if strings.HasPrefix(line, "data: ") {
+			if eventType != "" {
+				log.Printf("sse: received event: %s", eventType)
+				onEvent(eventType)
+			}
+			eventType = ""
+		} else if line == "" {
+			eventType = ""
+		}
+	}
+	return scanner.Err()
 }
 
 // ManifestToWatchPaths converts manifest entries to watch paths for the current OS.

@@ -73,9 +73,28 @@ func (s *sqliteStore) migrate() error {
 			source TEXT NOT NULL,
 			UNIQUE(game_id, platform, path_template)
 		);
+		CREATE TABLE IF NOT EXISTS job_runs (
+			id TEXT PRIMARY KEY,
+			job_name TEXT NOT NULL,
+			started_at TEXT NOT NULL,
+			finished_at TEXT,
+			status TEXT NOT NULL,
+			error_message TEXT,
+			entries_count INTEGER NOT NULL DEFAULT 0
+		);
+		CREATE TABLE IF NOT EXISTS manifest_fetches (
+			id TEXT PRIMARY KEY,
+			client_id TEXT,
+			client_name TEXT,
+			username TEXT,
+			entries_count INTEGER NOT NULL DEFAULT 0,
+			fetched_at TEXT NOT NULL
+		);
 		CREATE INDEX IF NOT EXISTS idx_clients_token ON clients(token);
 		CREATE INDEX IF NOT EXISTS idx_saves_user ON saves(user_id);
 		CREATE INDEX IF NOT EXISTS idx_manifest_updated ON game_save_locations(updated_at);
+		CREATE INDEX IF NOT EXISTS idx_job_runs_name ON job_runs(job_name, started_at);
+		CREATE INDEX IF NOT EXISTS idx_manifest_fetches_at ON manifest_fetches(fetched_at);
 	`)
 	return err
 }
@@ -406,6 +425,95 @@ func (s *sqliteStore) ListAllClients(ctx context.Context) ([]ClientInfoWithUser,
 			return nil, err
 		}
 		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// LogJobStart records the start of a job run and returns the run ID.
+func (s *sqliteStore) LogJobStart(ctx context.Context, jobName string) (string, error) {
+	id := genID()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO job_runs (id, job_name, started_at, status, entries_count) VALUES (?, ?, ?, 'running', 0)`,
+		id, jobName, now,
+	)
+	return id, err
+}
+
+// LogJobFinish records the completion of a job run.
+func (s *sqliteStore) LogJobFinish(ctx context.Context, runID, status, errorMsg string, entriesCount int) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE job_runs SET finished_at = ?, status = ?, error_message = ?, entries_count = ? WHERE id = ?`,
+		now, status, errorMsg, entriesCount, runID,
+	)
+	return err
+}
+
+// ListJobRuns returns the most recent runs for a job.
+func (s *sqliteStore) ListJobRuns(ctx context.Context, jobName string, limit int) ([]JobRun, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, job_name, started_at, COALESCE(finished_at, ''), status, COALESCE(error_message, ''), entries_count
+		 FROM job_runs WHERE job_name = ? ORDER BY started_at DESC LIMIT ?`, jobName, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []JobRun
+	for rows.Next() {
+		var j JobRun
+		if err := rows.Scan(&j.ID, &j.JobName, &j.StartedAt, &j.FinishedAt, &j.Status, &j.ErrorMessage, &j.EntriesCount); err != nil {
+			return nil, err
+		}
+		out = append(out, j)
+	}
+	return out, rows.Err()
+}
+
+// GetLatestJobRun returns the most recent run for a job, or nil if none.
+func (s *sqliteStore) GetLatestJobRun(ctx context.Context, jobName string) (*JobRun, error) {
+	var j JobRun
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, job_name, started_at, COALESCE(finished_at, ''), status, COALESCE(error_message, ''), entries_count
+		 FROM job_runs WHERE job_name = ? ORDER BY started_at DESC LIMIT 1`, jobName,
+	).Scan(&j.ID, &j.JobName, &j.StartedAt, &j.FinishedAt, &j.Status, &j.ErrorMessage, &j.EntriesCount)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &j, nil
+}
+
+// LogManifestFetch records a manifest download.
+func (s *sqliteStore) LogManifestFetch(ctx context.Context, clientID, clientName, username string, entriesCount int) error {
+	id := genID()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO manifest_fetches (id, client_id, client_name, username, entries_count, fetched_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		id, clientID, clientName, username, entriesCount, now,
+	)
+	return err
+}
+
+// ListManifestFetches returns the most recent manifest fetches.
+func (s *sqliteStore) ListManifestFetches(ctx context.Context, limit int) ([]ManifestFetchRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, COALESCE(client_id, ''), COALESCE(client_name, ''), COALESCE(username, ''), entries_count, fetched_at
+		 FROM manifest_fetches ORDER BY fetched_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ManifestFetchRow
+	for rows.Next() {
+		var f ManifestFetchRow
+		if err := rows.Scan(&f.ID, &f.ClientID, &f.ClientName, &f.Username, &f.EntriesCount, &f.FetchedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
 	}
 	return out, rows.Err()
 }

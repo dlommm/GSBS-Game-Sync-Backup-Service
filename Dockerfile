@@ -11,7 +11,12 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=1 go build -o /gsbs-server ./server
+ARG VERSION=dev
+ARG BUILD_DATE=
+ARG COMMIT=
+RUN CGO_ENABLED=1 go build \
+  -ldflags "-X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.Commit=${COMMIT}" \
+  -o /gsbs-server ./server
 
 # Runtime image (Alpine for small size; SQLite binary may link against libsqlite3)
 FROM alpine:3.19

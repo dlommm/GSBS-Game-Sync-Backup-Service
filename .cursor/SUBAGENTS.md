@@ -17,8 +17,8 @@ Keep skills and subagents in sync when the codebase or plan changes; see rule **
 
 ## Role summaries
 
-- **Server agent**: Adds or changes API routes, store methods, auth, WebUI pages, or the PCGW sync job. Keeps manifest and save APIs consistent with `pkg/types` and the folder-exists rule on the client.
-- **Client agent**: Adds or changes sync behavior, watch logic, config shape, list output, or tray. Never writes pulled saves when the target directory does not exist; uses `pkg/paths` for resolution.
+- **Server agent**: Adds or changes API routes, store methods, auth, WebUI pages, SSE hub, job runner, or the PCGW sync job. Keeps manifest and save APIs consistent with `pkg/types` and the folder-exists rule on the client. Admin page: stats, jobs dashboard, manifest viewer, fetch log, users, clients. SSE push to clients via `server/sse/hub.go`. Job tracking via `server/job/runner.go` and `job_runs` table.
+- **Client agent**: Adds or changes sync behavior, watch logic, config shape, list output, SSE listener, or tray. Never writes pulled saves when the target directory does not exist; uses `pkg/paths` for resolution. SSE listener auto-reconnects and re-fetches manifest on `manifest-updated` events.
 - **PCGW/paths agent**: Adds placeholders, fixes path parsing, improves wikitext parsing, or extends manifest/sync job. Keeps placeholder names in sync between PCGW output, DB, and `pkg/paths.Resolve`.
 - **Release agent**: Cuts releases, updates version/ldflags, maintains Docker and release docs. Ensures server and client version info and artifacts are correct.
 
