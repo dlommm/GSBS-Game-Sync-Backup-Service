@@ -37,6 +37,10 @@ const syncTimeout = 5 * time.Minute
 // If useCompression is true, push body is gzip-compressed and pull requests Accept-Encoding: gzip.
 // If verbose is true, extra detail is logged (e.g. per-file sync).
 func NewClient(baseURL, token string, resolver *paths.Resolver, currentOS paths.OS, maxKbps int, useCompression bool, verbose bool) (*Client, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return nil, fmt.Errorf("token is required for sync") // avoid sending "Bearer " and getting 401 missing token
+	}
 	var transport http.RoundTripper = http.DefaultTransport.(*http.Transport).Clone()
 	if maxKbps > 0 {
 		transport = &rateLimitTransport{
@@ -44,15 +48,24 @@ func NewClient(baseURL, token string, resolver *paths.Resolver, currentOS paths.
 			limiter: rate.NewLimiter(rate.Limit(maxKbps*1024), maxKbps*1024*2), // bytes per second, burst 2x
 		}
 	}
-	return &Client{
+	httpClient := &http.Client{Timeout: syncTimeout, Transport: transport}
+	c := &Client{
 		baseURL:        baseURL,
-		token:          strings.TrimSpace(token),
+		token:          token,
 		resolver:       resolver,
 		currentOS:      currentOS,
-		http:           &http.Client{Timeout: syncTimeout, Transport: transport},
+		http:           httpClient,
 		useCompression: useCompression,
 		verbose:        verbose,
-	}, nil
+	}
+	// Preserve Authorization on redirect: Go's client strips it when following redirects to another host.
+	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if c.token != "" {
+			req.Header.Set("Authorization", "Bearer "+c.token)
+		}
+		return nil
+	}
+	return c, nil
 }
 
 // rateLimitTransport throttles request and response body reads/writes.
