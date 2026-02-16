@@ -41,6 +41,19 @@ docker run -d \
 
 Create the named volume if needed (Docker creates it on first use). The SQLite file will be stored in `gsbs-data` and persist across container restarts.
 
+### Data persistence: DB and manifest
+
+All server state lives in a single SQLite database:
+
+- **Users and clients** — accounts, tokens, last-seen
+- **Saves** — uploaded save blobs (per user/game/path_key)
+- **Manifest (game save locations)** — table `game_save_locations`, filled by the PCGW sync job or manual import; served at `GET /api/manifest`
+- **Job runs and manifest fetch log** — for the admin UI
+
+There is no separate “manifest file” on disk: the manifest is stored in the DB. As long as `GSBS_DB` points to a path **on a mounted volume** (e.g. `GSBS_DB=/app/data/gsbs.db` with `-v gsbs-data:/app/data`), everything persists across container restarts and recreates. You do **not** need to re-download or re-sync the manifest when you recreate the container; clients will get the same manifest from the same DB.
+
+**Summary:** Use one volume for `/app/data`, set `GSBS_DB=/app/data/gsbs.db`, and all user data, saves, and manifest stay intact when you replace the container.
+
 ---
 
 ## Pushing to Docker Hub
@@ -81,6 +94,9 @@ docker run -d -p 8080:8080 -e GSBS_SESSION_SECRET=xxx -v gsbs-data:/app/data -e 
 | `GSBS_DB` | `gsbs.db` | Path to the SQLite database file. Use a path under a mounted volume for persistence. |
 | `GSBS_SESSION_SECRET` | (insecure default) | Secret used to sign WebUI session cookies. **Set in production.** |
 | `GSBS_ADMIN_USERNAME` | (empty) | If set, only this user can access the `/admin` page (stats and revoke client tokens). |
+| `GSBS_MAX_STORAGE_BYTES` | (unlimited) | Global storage limit in bytes; 0 or unset = unlimited. |
+| `GSBS_READ_ONLY` | `false` | Set to `true` or `1` to disable push and delete (pull and read still work). |
+| `GSBS_PCGW_CRON` | `0 3 * * 0` | Cron expression for PCGW sync (e.g. `0 0 * * *` for daily at midnight). |
 
 Example with all options:
 
@@ -166,18 +182,16 @@ Use `--restart unless-stopped` (or Compose `restart: unless-stopped`) so the con
 
 ### Health check (optional)
 
-You can add a health check so the orchestrator knows the server is up:
+The image includes `wget`. You can add a health check so the orchestrator knows the server is up (use the no-auth `/api/health` endpoint). For Kubernetes, use `GET /api/health` for liveness and `GET /api/health?ready=1` for readiness (checks DB with a 2s timeout; returns 503 if the store is down or slow). The health response includes `version` when the server is built with version ldflags.
 
 ```yaml
 healthcheck:
-  test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/login"]
+  test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/api/health"]
   interval: 30s
   timeout: 5s
   retries: 3
   start_period: 5s
 ```
-
-(Install `wget` in the image if needed, or use a small Go health endpoint and `curl`.)
 
 ### Data backup
 

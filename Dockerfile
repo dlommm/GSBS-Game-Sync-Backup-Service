@@ -20,7 +20,7 @@ RUN CGO_ENABLED=1 go build \
 
 # Runtime image (Alpine for small size; SQLite binary may link against libsqlite3)
 FROM alpine:3.19
-RUN apk add --no-cache ca-certificates sqlite-libs
+RUN apk add --no-cache ca-certificates sqlite-libs wget
 # Optional: add user for non-root run (uncomment if desired)
 # RUN adduser -D -g '' appuser
 # USER appuser

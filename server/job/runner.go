@@ -16,8 +16,9 @@ type Runner struct {
 	store store.Store
 	hub   *sse.Hub
 
-	mu      sync.Mutex
-	running map[string]bool // job name -> is running
+	mu             sync.Mutex
+	running        map[string]bool // job name -> is running
+	progressPages  int             // pages processed by current pcgw_sync run (when running)
 }
 
 // NewRunner creates a Runner. hub may be nil if SSE is not needed.
@@ -34,6 +35,16 @@ func (r *Runner) IsRunning(jobName string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.running[jobName]
+}
+
+// ProgressPages returns the number of pages processed so far by the current pcgw_sync run (0 if not running).
+func (r *Runner) ProgressPages(jobName string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if jobName != "pcgw_sync" {
+		return 0
+	}
+	return r.progressPages
 }
 
 // RunPCGWSync runs the PCGW sync job with tracking and dedup.
@@ -53,9 +64,11 @@ func (r *Runner) RunPCGWSync(ctx context.Context) bool {
 		defer func() {
 			r.mu.Lock()
 			r.running[jobName] = false
+			r.progressPages = 0
 			r.mu.Unlock()
 		}()
 
+		log.Printf("job: %s started", jobName)
 		jobCtx, cancel := context.WithTimeout(ctx, 24*time.Hour)
 		defer cancel()
 
@@ -65,7 +78,12 @@ func (r *Runner) RunPCGWSync(ctx context.Context) bool {
 		}
 
 		pcgwClient := pcgw.NewClient()
-		count, syncErr := PCGWSync(jobCtx, r.store, pcgwClient)
+		progressFn := func(pages int) {
+			r.mu.Lock()
+			r.progressPages = pages
+			r.mu.Unlock()
+		}
+		count, syncErr := PCGWSync(jobCtx, r.store, pcgwClient, progressFn)
 
 		status := "success"
 		errMsg := ""
@@ -84,7 +102,12 @@ func (r *Runner) RunPCGWSync(ctx context.Context) bool {
 		}
 
 		if r.hub != nil {
-			r.hub.Broadcast(sse.Event{Type: "manifest-updated", Data: "{}"})
+			r.hub.Broadcast(sse.Event{Type: "job-finished", Data: `{"job":"pcgw_sync","status":"` + status + `"}`})
+			// Only notify clients of manifest update on success; failed syncs
+			// leave the manifest unchanged and would cause unnecessary re-fetches.
+			if status == "success" {
+				r.hub.Broadcast(sse.Event{Type: "manifest-updated", Data: "{}"})
+			}
 		}
 	}()
 	return true

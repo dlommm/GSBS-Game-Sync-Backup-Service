@@ -14,10 +14,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/gen2brain/beeep"
 	"github.com/getlantern/systray"
 	"github.com/skratchdot/open-golang/open"
 )
@@ -76,6 +78,7 @@ func restartSync(cfg *config) {
 	refreshManifestCh = make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	syncCancel = cancel
+	log.Printf("tray: sync started server=%s", cfg.ServerURL)
 	go func() {
 		if err := runSync(ctx, cfg, syncNowCh, refreshManifestCh); err != nil {
 			log.Println("sync:", err)
@@ -109,9 +112,76 @@ func triggerManifestRefresh() {
 	}
 }
 
+func lastSyncTooltip() string {
+	if d := GetNextRetryIn(); d > 0 {
+		sec := int(d.Round(time.Second).Seconds())
+		return fmt.Sprintf("GSBS — Last sync failed; retrying in %ds", sec)
+	}
+	at, err := getLastSync()
+	if at.IsZero() {
+		return "Game Sync & Backup Service"
+	}
+	ago := time.Since(at)
+	var agoStr string
+	if ago < time.Minute {
+		agoStr = "just now"
+	} else if ago < time.Hour {
+		agoStr = fmt.Sprintf("%.0fm ago", ago.Minutes())
+	} else if ago < 24*time.Hour {
+		agoStr = fmt.Sprintf("%.1fh ago", ago.Hours())
+	} else {
+		agoStr = fmt.Sprintf("%.0fd ago", ago.Hours()/24)
+	}
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	return fmt.Sprintf("GSBS — Last sync: %s (%s)", agoStr, status)
+}
+
+// showSyncNotification displays a Windows toast and updates tray icon state.
+func showSyncNotification(success bool, errMsg string) {
+	// Update tray icon: idle (normal) or error (red)
+	if len(iconData) > 0 {
+		if success {
+			systray.SetIcon(iconData)
+		} else {
+			systray.SetIcon(iconError)
+		}
+	}
+	// Toast
+	title := "GSBS"
+	var msg string
+	if success {
+		msg = "Sync complete."
+	} else {
+		msg = "Sync failed."
+		if errMsg != "" {
+			if len(errMsg) > 80 {
+				msg = msg + " " + strings.TrimSpace(errMsg[:77]) + "..."
+			} else {
+				msg = msg + " " + strings.TrimSpace(errMsg)
+			}
+		}
+	}
+	if err := beeep.Notify(title, msg, ""); err != nil {
+		log.Printf("tray: notify: %v", err)
+	}
+}
+
+// showSyncStart sets the tray icon to "syncing" (blue).
+func showSyncStart() {
+	if len(iconSyncing) > 0 {
+		systray.SetIcon(iconSyncing)
+	}
+}
+
 func onReady() {
 	systray.SetTitle("GSBS")
-	systray.SetTooltip("Game Sync & Backup Service")
+	systray.SetTooltip(lastSyncTooltip())
+	// Register sync start/result for icon state and toast.
+	OnSyncStart = showSyncStart
+	OnSyncResult = showSyncNotification
 	// Set icon after a delay so the tray is ready (systray may log a false-positive error but the icon still shows).
 	if len(iconData) > 0 {
 		go func() {
@@ -123,12 +193,35 @@ func onReady() {
 	mServer := systray.AddMenuItem("Server: (not set)", "Current server URL")
 	mServer.Disable()
 
+	mSyncInterval := systray.AddMenuItem("Sync every 5m", "Current sync interval")
+	mSyncInterval.Disable()
+	mLastSync := systray.AddMenuItem("Last sync: —", "Last sync time and status")
+	mLastSync.Disable()
+
+	// Update tooltip and status menu periodically
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			systray.SetTooltip(lastSyncTooltip())
+			updateLastSyncLabel(mLastSync)
+		}
+	}()
+
+	// Quick actions at top: Sync now, Open server (most common).
+	mSyncNow := systray.AddMenuItem("Sync now", "Run a sync immediately")
 	mOpenServer := systray.AddMenuItem("Open server in browser", "Open server URL in default browser")
-	mLogin := systray.AddMenuItem("Login / Setup...", "Open setup page in browser (server URL, username, password, client name)")
+	mPauseResume := systray.AddMenuItem(pauseResumeMenuTitle(SyncPaused.Load()), "Pause or resume syncing")
+	systray.AddSeparator()
+	mLogin := systray.AddMenuItem("Login...", "Connect to server (native dialog)")
+	mLoginBrowser := systray.AddMenuItem("Login (browser)...", "Open setup page in browser")
 	mLoginConsole := systray.AddMenuItem("Login (console)...", "Open a console window to log in")
 	mEditConfig := systray.AddMenuItem("Edit config file", "Open config in Notepad")
-	mSyncNow := systray.AddMenuItem("Sync now", "Run a sync immediately")
+	mDetectLaunchers := systray.AddMenuItem("Detect launcher paths", "Auto-detect Ubisoft, GOG, Epic, Xbox paths and merge into config")
 	mRefreshManifest := systray.AddMenuItem("Refresh manifest", "Re-fetch game save locations from server")
+	mRunAtStartup := systray.AddMenuItemCheckbox("Run at Windows startup", "Start GSBS when Windows starts", RunAtStartupEnabled())
+	mViewLog := systray.AddMenuItem("View log", "Open gsbs.log in default editor")
+	mOpenDataFolder := systray.AddMenuItem("Open data folder", "Open GSBS data folder in Explorer")
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("Quit", "Exit GSBS")
 
@@ -137,6 +230,8 @@ func onReady() {
 		cfg = blankConfig()
 	}
 	updateServerLabel(mServer, cfg.ServerURL)
+	updateSyncIntervalLabel(mSyncInterval, cfg.SyncInterval)
+	updateLastSyncLabel(mLastSync)
 
 	// currentCfg is used by menu handlers; protected by syncMu.
 	currentCfg := cfg
@@ -146,14 +241,36 @@ func onReady() {
 
 	restartSync(currentCfg)
 
+	// Optional config validation in background (log and one balloon if issues).
+	go func() {
+		syncMu.Lock()
+		cfg := currentCfg
+		syncMu.Unlock()
+		if cfg == nil || (cfg.ServerURL == "" && cfg.Token == "") {
+			return
+		}
+		warnings := ValidateConfig(cfg)
+		if len(warnings) > 0 {
+			for _, w := range warnings {
+				log.Printf("config validation: %s", w)
+			}
+			msg := "Config issues: " + strings.Join(warnings, "; ")
+			if len(msg) > 120 {
+				msg = msg[:117] + "..."
+			}
+			_ = beeep.Alert("GSBS", msg, "")
+		}
+	}()
+
 	// First run: if not logged in, open the setup page in the browser after a short delay.
 	go func() {
 		syncMu.Lock()
 		needSetup := currentCfg.ServerURL == "" || currentCfg.Token == ""
 		syncMu.Unlock()
-		if needSetup && setupURL != "" {
+				if needSetup && setupURL != "" {
 			time.Sleep(800 * time.Millisecond)
 			open.Run(setupURL)
+			log.Printf("tray: setup page opened in browser")
 			// Poll for config change so we can update tray and restart sync when user logs in via browser
 			for i := 0; i < 60; i++ {
 				time.Sleep(2 * time.Second)
@@ -162,6 +279,8 @@ func onReady() {
 					currentCfg = reload
 					syncMu.Unlock()
 					updateServerLabel(mServer, reload.ServerURL)
+					updateSyncIntervalLabel(mSyncInterval, reload.SyncInterval)
+					log.Printf("tray: config reloaded (browser login), sync restarted")
 					restartSync(reload)
 					return
 				}
@@ -181,19 +300,34 @@ func onReady() {
 				}
 				open.Run(url)
 			case <-mLogin.ClickedCh:
-				// Open setup page in browser (reliable on Windows; no dialogs or console).
+				// Native login dialog (primary on Windows).
+				syncMu.Lock()
+				url, name := currentCfg.ServerURL, currentCfg.ClientName
+				syncMu.Unlock()
+				newCfg, err := showLoginDialog(url, name)
+				if err == nil && newCfg != nil {
+					syncMu.Lock()
+					currentCfg = newCfg
+					syncMu.Unlock()
+					updateServerLabel(mServer, newCfg.ServerURL)
+					updateSyncIntervalLabel(mSyncInterval, newCfg.SyncInterval)
+					log.Printf("tray: config reloaded (native login), sync restarted")
+					restartSync(newCfg)
+				}
+			case <-mLoginBrowser.ClickedCh:
 				if url := GetSetupURL(); url != "" {
 					open.Run(url)
 				}
-				// After a short delay, reload config in case user just logged in in the browser
 				go func() {
 					time.Sleep(3 * time.Second)
 					if reload, _ := loadConfig(); reload != nil && reload.Token != "" {
 						syncMu.Lock()
 						currentCfg = reload
 						syncMu.Unlock()
-						updateServerLabel(mServer, reload.ServerURL)
-						restartSync(reload)
+					updateServerLabel(mServer, reload.ServerURL)
+					updateSyncIntervalLabel(mSyncInterval, reload.SyncInterval)
+					log.Printf("tray: config reloaded (browser), sync restarted")
+					restartSync(reload)
 					}
 				}()
 			case <-mLoginConsole.ClickedCh:
@@ -212,14 +346,83 @@ func onReady() {
 					currentCfg = reload
 					syncMu.Unlock()
 					updateServerLabel(mServer, reload.ServerURL)
+					updateSyncIntervalLabel(mSyncInterval, reload.SyncInterval)
+					log.Printf("tray: config reloaded (console login), sync restarted")
 					restartSync(reload)
 				}
 			case <-mEditConfig.ClickedCh:
 				openConfigInEditor()
+			case <-mDetectLaunchers.ClickedCh:
+				detected := DetectLauncherPaths()
+				syncMu.Lock()
+				cfg := currentCfg
+				syncMu.Unlock()
+				if cfg == nil {
+					cfg, _ = loadConfig()
+				}
+				if cfg == nil {
+					cfg = blankConfig()
+				}
+				merged := false
+				if detected.UbisoftConnect != "" && cfg.UbisoftConnectFolder == "" {
+					cfg.UbisoftConnectFolder = detected.UbisoftConnect
+					merged = true
+				}
+				if detected.GOGGalaxy != "" && cfg.GOGGalaxyFolder == "" {
+					cfg.GOGGalaxyFolder = detected.GOGGalaxy
+					merged = true
+				}
+				if detected.EpicGames != "" && cfg.EpicGamesFolder == "" {
+					cfg.EpicGamesFolder = detected.EpicGames
+					merged = true
+				}
+				if detected.XboxApp != "" && cfg.XboxAppFolder == "" {
+					cfg.XboxAppFolder = detected.XboxApp
+					merged = true
+				}
+				if merged {
+					_ = saveConfig(cfg)
+					syncMu.Lock()
+					currentCfg = cfg
+					syncMu.Unlock()
+					log.Printf("tray: detected launcher paths merged into config")
+				}
+				openConfigInEditor()
 			case <-mSyncNow.ClickedCh:
+				log.Printf("tray: sync now triggered")
 				triggerSyncNow()
 			case <-mRefreshManifest.ClickedCh:
+				log.Printf("tray: refresh manifest triggered")
 				triggerManifestRefresh()
+			case <-mRunAtStartup.ClickedCh:
+				enabled := !RunAtStartupEnabled()
+				if err := SetRunAtStartup(enabled); err != nil {
+					log.Printf("tray: run at startup: %v", err)
+				} else {
+					if enabled {
+						mRunAtStartup.Check()
+					} else {
+						mRunAtStartup.Uncheck()
+					}
+				}
+			case <-mViewLog.ClickedCh:
+				path := ClientLogPath()
+				if path != "" {
+					_ = open.Run(path)
+				}
+			case <-mOpenDataFolder.ClickedCh:
+				dir := ClientDataDir()
+				if dir != "" {
+					_ = exec.Command("explorer", dir).Start()
+				}
+			case <-mPauseResume.ClickedCh:
+				paused := !SyncPaused.Load()
+				SyncPaused.Store(paused)
+				if cfg, _ := loadConfig(); cfg != nil {
+					cfg.SyncPaused = paused
+					_ = saveConfig(cfg)
+				}
+				mPauseResume.SetTitle(pauseResumeMenuTitle(paused))
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 				return
@@ -234,6 +437,45 @@ func onExit() {
 	if syncCancel != nil {
 		syncCancel()
 	}
+}
+
+func pauseResumeMenuTitle(paused bool) string {
+	if paused {
+		return "Resume syncing"
+	}
+	return "Pause syncing"
+}
+
+func updateSyncIntervalLabel(m *systray.MenuItem, d Duration) {
+	interval := d.Duration()
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
+	m.SetTitle("Sync every " + interval.String())
+}
+
+func updateLastSyncLabel(m *systray.MenuItem) {
+	at, err := getLastSync()
+	if at.IsZero() {
+		m.SetTitle("Last sync: —")
+		return
+	}
+	ago := time.Since(at)
+	var agoStr string
+	if ago < time.Minute {
+		agoStr = "just now"
+	} else if ago < time.Hour {
+		agoStr = fmt.Sprintf("%.0fm ago", ago.Minutes())
+	} else if ago < 24*time.Hour {
+		agoStr = fmt.Sprintf("%.1fh ago", ago.Hours())
+	} else {
+		agoStr = fmt.Sprintf("%.0fd ago", ago.Hours()/24)
+	}
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	m.SetTitle(fmt.Sprintf("Last sync: %s (%s)", agoStr, status))
 }
 
 func updateServerLabel(m *systray.MenuItem, url string) {
@@ -256,6 +498,23 @@ func openConfigInEditor() {
 		cfg := defaultConfig(path)
 		_ = saveConfig(cfg)
 	}
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = os.Getenv("VISUAL")
+	}
+	if editor != "" {
+		parts := strings.Fields(editor)
+		if len(parts) > 0 {
+			cmd := exec.Command(parts[0], append(parts[1:], path)...)
+			_ = cmd.Start()
+			return
+		}
+	}
+	// Try VS Code if in PATH, else default handler (e.g. Notepad).
+	if codePath, err := exec.LookPath("code"); err == nil {
+		_ = exec.Command(codePath, path).Start()
+		return
+	}
 	_ = open.Run(path)
 }
 
@@ -264,6 +523,12 @@ var iconPNG []byte
 
 // iconData is ICO bytes for the tray (from embedded icon_32.png).
 var iconData = makeTrayIcon()
+
+// iconSyncing and iconError are programmatic 16x16 icons for tray state.
+var (
+	iconSyncing = makeMinimalIconWithColor(0x33, 0x99, 0xff) // blue
+	iconError   = makeMinimalIconWithColor(0xe0, 0x40, 0x40) // red
+)
 
 func makeTrayIcon() []byte {
 	if len(iconPNG) == 0 {
@@ -315,6 +580,11 @@ func pngToICO(img image.Image) []byte {
 }
 
 func makeMinimalIcon() []byte {
+	return makeMinimalIconWithColor(0xf1, 0x66, 0x63)
+}
+
+// makeMinimalIconWithColor returns a 16x16 ICO with the given RGB (0-255).
+func makeMinimalIconWithColor(r, g, b byte) []byte {
 	ico := make([]byte, 0, 62+16*16*4)
 	ico = append(ico,
 		0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x10, 0x10, 0x00, 0x00, 0x01, 0x00, 0x20, 0x00,
@@ -323,7 +593,6 @@ func makeMinimalIcon() []byte {
 		0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	)
-	const b, g, r = 0xf1, 0x66, 0x63
 	for i := 0; i < 16*16; i++ {
 		ico = append(ico, b, g, r, 0xff)
 	}

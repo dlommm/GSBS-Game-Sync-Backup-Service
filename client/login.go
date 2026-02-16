@@ -2,14 +2,42 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 )
+
+const loginTimeout = 30 * time.Second
+
+// TestConnection checks whether the server URL is reachable (GET with short timeout).
+func TestConnection(serverURL string) error {
+	serverURL = strings.TrimSpace(serverURL)
+	serverURL = strings.TrimSuffix(serverURL, "/")
+	if serverURL == "" {
+		return fmt.Errorf("server URL is empty")
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/api/manifest", nil)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusUnauthorized {
+		return fmt.Errorf("server returned %s", resp.Status)
+	}
+	return nil
+}
 
 // defaultClientName returns a default name for this client (hostname or "client").
 func defaultClientName() string {
@@ -50,18 +78,27 @@ func DoLogin(serverURL, username, password, clientName string) (*config, error) 
 		"client_os":   clientOS,
 	}
 	jsonBody, _ := json.Marshal(body)
-	resp, err := http.Post(serverURL+"/api/login", "application/json", strings.NewReader(string(jsonBody)))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, serverURL+"/api/login", bytes.NewReader(jsonBody))
 	if err != nil {
+		return nil, fmt.Errorf("request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: loginTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("client login: failed server=%s username=%q: %v", serverURL, username, err)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("client login: failed server=%s username=%q: %s", serverURL, username, resp.Status)
 		return nil, fmt.Errorf("login failed: %s", resp.Status)
 	}
 	var out struct {
 		Token string `json:"token"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		log.Printf("client login: failed server=%s username=%q: invalid response: %v", serverURL, username, err)
 		return nil, fmt.Errorf("invalid response: %w", err)
 	}
 	cfg := &config{
@@ -72,8 +109,10 @@ func DoLogin(serverURL, username, password, clientName string) (*config, error) 
 		WatchPaths:   []watchPath{},
 	}
 	if err := saveConfig(cfg); err != nil {
+		log.Printf("client login: save config failed server=%s username=%q: %v", serverURL, username, err)
 		return nil, fmt.Errorf("save config: %w", err)
 	}
+	log.Printf("client login: ok server=%s username=%q client_name=%q", serverURL, username, clientName)
 	return cfg, nil
 }
 

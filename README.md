@@ -44,7 +44,12 @@ A server-based game save syncing system. **Windows** and **Linux** clients sync 
 - `server/` — GSBS server (API, auth, save storage).
 - `client/` — Windows and Linux client (watch, upload, pull, path resolution).
 - `pkg/` — Shared code: path resolution, protocol types, PCGW client.
+- `cmd/` — Standalone tools: `pcgw-fetch` (fetch save locations for one game), `pcgw-sync` (one-off PCGW sync into server DB), `write-ico`, `resize-icon`.
 - `docs/` — Design and API notes.
+
+## Prerequisites
+
+- **Go 1.24+** (see `go.mod`). Build the server with CGO enabled for SQLite (`CGO_ENABLED=1`).
 
 ## Quick start
 
@@ -54,6 +59,8 @@ go mod tidy && go build -o gsbs-server ./server && go build -o gsbs-client ./cli
 ./gsbs-server &
 ./gsbs-client login   # then run ./gsbs-client
 ```
+
+**Docker:** See [docs/DOCKER.md](docs/DOCKER.md) for building and running the server image.
 
 1. **Server**  
    ```bash
@@ -65,6 +72,10 @@ go mod tidy && go build -o gsbs-server ./server && go build -o gsbs-client ./cli
    - `GSBS_SESSION_SECRET` — Secret for signing WebUI session cookies; **set a strong value in production** (otherwise a warning is logged).
    - `GSBS_ALLOW_REGISTER` — Set to `false` or `0` to disable public registration.
    - `GSBS_ADMIN_USERNAME` — If set, only this user can access the `/admin` page (stats, revoke client tokens).
+   - `GSBS_MAX_STORAGE_BYTES` — Global storage limit in bytes (0 or unset = unlimited). Rejects push when total storage would exceed this.
+   - `GSBS_READ_ONLY` — Set to `true` or `1` to disable push and delete (pull and WebUI read still work).
+   - `GSBS_PCGW_CRON` — Cron expression for the weekly PCGW manifest sync (default `0 3 * * 0` = Sunday 03:00). Example: `0 0 * * *` for daily at midnight.
+   - `GSBS_RATE_LIMIT_MANIFEST` — Optional rate limit for manifest fetches (e.g. `60,1m` = 60 per minute by IP or user).
 
    See `server/README.md` for API details.
 
@@ -72,10 +83,11 @@ go mod tidy && go build -o gsbs-server ./server && go build -o gsbs-client ./cli
    ```bash
    cd client && go build -o gsbs-client . && ./gsbs-client login
    ```
-   Then add `watch_paths` in config and run `./gsbs-client`.
+   Then add `watch_paths` in config and run `./gsbs-client`.  
+   **Client data and logs**: Config, manifest cache, and log file live in one directory per OS — see [docs/CLIENT.md](docs/CLIENT.md) for paths (e.g. Windows `%APPDATA%\gsbs\gsbs.log`, Linux `~/.config/gsbs/gsbs.log`).
 
 3. **Game data**  
-   Save locations come from PCGamingWiki. The client (or a one-off job) can use the PCGW API and/or parsed game pages to populate a local cache of paths per game and OS.
+   Save locations come from PCGamingWiki. The server runs a weekly PCGW sync job (or use `go run ./cmd/pcgw-sync` with `GSBS_DB` set). To fetch save-location templates for a single game by Steam App ID: `go run ./cmd/pcgw-fetch 311560` (or build `pcgw-fetch` and run `./pcgw-fetch 311560`). See [docs/EXAMPLE_CONFIG.md](docs/EXAMPLE_CONFIG.md).
 
 ## PCGamingWiki
 

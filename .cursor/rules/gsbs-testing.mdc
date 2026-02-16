@@ -1,0 +1,18 @@
+---
+description: Run tests after changing server or client code; point to CONTRIBUTING for how
+globs: "**/*.go"
+alwaysApply: false
+---
+
+# GSBS testing
+
+When you change code under **server/** or **pkg/** (or client/ if tests are added there):
+
+1. **Run tests** from the repo root:
+   ```bash
+   go test ./server/... ./pkg/...
+   ```
+2. Use an **in-memory SQLite** DB (`:memory:`) in tests where possible.
+3. Full build/test and skill mapping: see **CONTRIBUTING.md**.
+
+Suggest running the test command after implementing or modifying server or shared code.

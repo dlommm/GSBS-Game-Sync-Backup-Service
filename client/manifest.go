@@ -23,12 +23,22 @@ type manifestResponse struct {
 	Entries []types.GameSaveLocation `json:"entries"`
 }
 
+const manifestFetchTimeout = 60 * time.Second
+
 // FetchManifest downloads the manifest from the server. If since is non-empty, requests delta.
+// include is "saves", "config", or "both" (default) to filter manifest content.
 // If token is non-empty, it is sent as a Bearer token for server-side fetch tracking.
-func FetchManifest(ctx context.Context, baseURL, token, since string) ([]types.GameSaveLocation, error) {
+func FetchManifest(ctx context.Context, baseURL, token, since, include string) ([]types.GameSaveLocation, error) {
 	url := baseURL + "/api/manifest"
+	params := []string{}
 	if since != "" {
-		url += "?since=" + since
+		params = append(params, "since="+since)
+	}
+	if include != "" && include != "both" {
+		params = append(params, "include="+include)
+	}
+	if len(params) > 0 {
+		url += "?" + strings.Join(params, "&")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -37,7 +47,8 @@ func FetchManifest(ctx context.Context, baseURL, token, since string) ([]types.G
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: manifestFetchTimeout}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -75,9 +86,11 @@ func LoadManifestFromDisk() []types.GameSaveLocation {
 	return f.Entries
 }
 
-// SaveManifestToDisk writes the full manifest to disk (merge with existing if doing delta is caller's job).
+// SaveManifestToDisk writes the full manifest to disk atomically (write to temp file, then rename).
+// Merge with existing if doing delta is caller's job.
 func SaveManifestToDisk(entries []types.GameSaveLocation) error {
-	dir := filepath.Dir(manifestPath())
+	target := manifestPath()
+	dir := filepath.Dir(target)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
@@ -85,7 +98,26 @@ func SaveManifestToDisk(entries []types.GameSaveLocation) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(manifestPath(), data, 0644)
+	// Write to a temp file in the same directory then rename for atomicity.
+	tmp, err := os.CreateTemp(dir, ".manifest-*.json.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, target); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return nil
 }
 
 // PathKeyForManifestEntry returns a stable path key for (gameID, pathTemplate).

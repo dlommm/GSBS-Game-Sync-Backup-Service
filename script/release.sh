@@ -10,10 +10,12 @@
 # Artifacts:
 #   - gsbs-server-windows-amd64.exe, gsbs-client-windows-amd64.exe
 #   - gsbs-server-linux-amd64, gsbs-client-linux-amd64
+#   - (optional) BUILD_DARWIN=1: gsbs-server-darwin-amd64, gsbs-client-darwin-amd64, gsbs-server-darwin-arm64, gsbs-client-darwin-arm64
 #   - Docker image: $DOCKERHUB_IMAGE:$VERSION and $DOCKERHUB_IMAGE:latest
 
 set -e
 cd "$(dirname "$0")/.."
+HOST_GOOS=$(go env GOOS)
 
 # Version: from arg, or latest tag, or prompt
 VERSION="${1:-}"
@@ -58,8 +60,27 @@ export GOARCH=amd64
 go build -ldflags "$LDFLAGS" -o gsbs-server-linux-amd64 ./server
 echo "Built gsbs-server-linux-amd64"
 
-go build -ldflags "$LDFLAGS" -o gsbs-client-linux-amd64 ./client
-echo "Built gsbs-client-linux-amd64"
+# Client: systray does not cross-compile to Linux from non-Linux; build only on Linux host
+if [ "$HOST_GOOS" = "linux" ]; then
+  go build -ldflags "$LDFLAGS" -o gsbs-client-linux-amd64 ./client
+  echo "Built gsbs-client-linux-amd64"
+  HAVE_LINUX_CLIENT=1
+else
+  echo "Skipping gsbs-client-linux-amd64 (systray does not cross-compile to Linux from $HOST_GOOS); run this script on Linux to build it)"
+  HAVE_LINUX_CLIENT=
+fi
+
+# --- Optional: macOS (darwin) amd64 + arm64 for local/dev ---
+if [ "${BUILD_DARWIN:-0}" = "1" ]; then
+  for arch in amd64 arm64; do
+    export GOOS=darwin
+    export GOARCH=$arch
+    go build -ldflags "$LDFLAGS" -o "gsbs-server-darwin-${arch}" ./server
+    echo "Built gsbs-server-darwin-${arch}"
+    go build -ldflags "$LDFLAGS" -o "gsbs-client-darwin-${arch}" ./client
+    echo "Built gsbs-client-darwin-${arch}"
+  done
+fi
 
 # Tag if not already
 if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
@@ -68,7 +89,11 @@ if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
 fi
 
 # Create or update release and upload all assets
-ASSETS=(gsbs-server-windows-amd64.exe gsbs-client-windows-amd64.exe gsbs-server-linux-amd64 gsbs-client-linux-amd64)
+ASSETS=(gsbs-server-windows-amd64.exe gsbs-client-windows-amd64.exe gsbs-server-linux-amd64)
+[ -n "${HAVE_LINUX_CLIENT:-}" ] && [ -f gsbs-client-linux-amd64 ] && ASSETS+=(gsbs-client-linux-amd64)
+if [ "${BUILD_DARWIN:-0}" = "1" ]; then
+  ASSETS+=("gsbs-server-darwin-amd64" "gsbs-client-darwin-amd64" "gsbs-server-darwin-arm64" "gsbs-client-darwin-arm64")
+fi
 if gh release view "$VERSION" >/dev/null 2>&1; then
   echo "Release $VERSION exists; uploading assets only."
   gh release upload "$VERSION" "${ASSETS[@]}" --clobber

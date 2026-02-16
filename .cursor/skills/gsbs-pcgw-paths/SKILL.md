@@ -5,6 +5,8 @@ description: Works with PCGamingWiki integration and path resolution: pkg/pcgw (
 
 # GSBS PCGW & Paths
 
+**To keep context low:** For implementation or multi-file work in pkg/pcgw, pkg/paths, or the PCGW job/cmd tools, invoke the **gsbs-pcgw-paths** subagent (`.cursor/agents/gsbs-pcgw-paths.md` or `/gsbs-pcgw-paths`) at the start of the task instead of doing it in the main chat.
+
 ## Scope
 
 - **pkg/pcgw/** — client.go (MediaWiki API, ListGamePages, ParsePageWikitext), parse_wikitext.go (ParseSaveLocationsFromWikitext). Output normalized path templates and platform (windows/linux).

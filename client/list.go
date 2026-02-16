@@ -4,19 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/gsbs/gsbs/pkg/paths"
-	"github.com/gsbs/gsbs/pkg/types"
 )
 
 // runList prints games that can be saved and synced on this machine.
 // The server provides a manifest of known game save locations (from the PCGW sync job).
 // The client resolves each path for the current OS and only lists games where the save directory exists locally.
-func runList() {
+// If dryRunPull is true and token is set, also reports what would be downloaded and written by a pull (without performing it).
+func runList(dryRunPull bool) {
 	cfg, err := loadConfig()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "config:", err)
@@ -31,6 +33,15 @@ func runList() {
 	if cfg.UbisoftConnectFolder != "" {
 		resolver.UbisoftConnect = cfg.UbisoftConnectFolder
 	}
+	if cfg.GOGGalaxyFolder != "" {
+		resolver.GOGGalaxy = cfg.GOGGalaxyFolder
+	}
+	if cfg.EpicGamesFolder != "" {
+		resolver.EpicGames = cfg.EpicGamesFolder
+	}
+	if cfg.XboxAppFolder != "" {
+		resolver.XboxApp = cfg.XboxAppFolder
+	}
 	if cfg.LauncherUserID != "" {
 		resolver.UserID = cfg.LauncherUserID
 	}
@@ -39,17 +50,26 @@ func runList() {
 	// Load manifest (server or cache)
 	ctx := context.Background()
 	manifestEntries := LoadManifestFromDisk()
-	if entries, err := FetchManifest(ctx, cfg.ServerURL, cfg.Token, ""); err == nil {
+	manifestInclude := cfg.ManifestInclude
+	if manifestInclude == "" {
+		manifestInclude = "both"
+	}
+	includeConfig := manifestInclude == "both" || manifestInclude == "config"
+	if entries, err := FetchManifest(ctx, cfg.ServerURL, cfg.Token, "", manifestInclude); err == nil {
 		manifestEntries = entries
+		log.Printf("client list: manifest fetched %d entries", len(entries))
 		if err := SaveManifestToDisk(entries); err != nil {
+			log.Printf("client list: save manifest cache: %v", err)
 			fmt.Fprintln(os.Stderr, "save manifest cache:", err)
 		}
 	} else {
+		log.Printf("client list: fetch manifest: %v", err)
 		fmt.Fprintln(os.Stderr, "fetch manifest:", err)
 		if len(manifestEntries) == 0 {
 			fmt.Fprintln(os.Stderr, "No cached manifest. Ensure server is running and has run the PCGW sync job (game_save_locations).")
 			os.Exit(1)
 		}
+		log.Printf("client list: using cached manifest (%d entries)", len(manifestEntries))
 		fmt.Fprintln(os.Stderr, "Using cached manifest.")
 	}
 
@@ -139,16 +159,20 @@ func runList() {
 		return ti < tj
 	})
 
-	// Optional: which (game_id, path_key) have saves on server
+	// Optional: which (game_id, path_key) have saves on server (use summaries to avoid downloading content)
 	savesOnServer := make(map[string]bool)
 	if cfg.Token != "" {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.ServerURL+"/api/saves", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.ServerURL+"/api/saves?summaries=1", nil)
 		if err == nil {
 			req.Header.Set("Authorization", "Bearer "+cfg.Token)
-			resp, err := http.DefaultClient.Do(req)
+			listHTTP := &http.Client{Timeout: 30 * time.Second}
+			resp, err := listHTTP.Do(req)
 			if err == nil && resp.StatusCode == http.StatusOK {
 				var out struct {
-					Saves []types.SaveEntry `json:"saves"`
+					Saves []struct {
+						GameID   string `json:"game_id"`
+						PathKey  string `json:"path_key"`
+					} `json:"saves"`
 				}
 				if json.NewDecoder(resp.Body).Decode(&out) == nil {
 					for _, s := range out.Saves {
@@ -181,8 +205,74 @@ func runList() {
 		fmt.Printf("  %s  game_id=%s path_key=%s%s%s\n", title, r.GameID, r.PathKey, syncStatus, configNote)
 		fmt.Printf("    %s\n", r.Resolved)
 	}
+	log.Printf("client list: listed %d games", len(rows))
 	if len(rows) == 0 {
 		fmt.Println("  (none — no manifest paths resolved to an existing directory on this OS)")
 		fmt.Println("  Ensure the server has run the PCGW sync job and that game save folders exist locally.")
+	}
+
+	if dryRunPull && cfg.Token != "" {
+		// Report what would be written by a pull (same resolution as sync).
+		effectiveWatchPaths := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig)
+		effectiveWatchPaths = mergeWatchPaths(effectiveWatchPaths, cfg.WatchPaths)
+		resolvePath := func(gameID, pathKey string) string {
+			for _, w := range effectiveWatchPaths {
+				if w.GameID != gameID || w.PathKey != pathKey {
+					continue
+				}
+				for _, t := range w.PathTemplates {
+					resolved := resolver.Resolve(t, currentOS)
+					for _, abs := range resolved {
+						if abs != "" && paths.PathExists(abs) {
+							return abs
+						}
+					}
+				}
+			}
+			return ""
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.ServerURL+"/api/saves?summaries=1", nil)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "dry-run-pull: request:", err)
+			return
+		}
+		req.Header.Set("Authorization", "Bearer "+cfg.Token)
+		listHTTP := &http.Client{Timeout: 30 * time.Second}
+		resp, err := listHTTP.Do(req)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			fmt.Fprintln(os.Stderr, "dry-run-pull: fetch failed")
+			if resp != nil {
+				resp.Body.Close()
+			}
+			return
+		}
+		var out struct {
+			Saves []struct {
+				GameID    string `json:"game_id"`
+				PathKey   string `json:"path_key"`
+				UpdatedAt string `json:"updated_at"`
+			} `json:"saves"`
+		}
+		if json.NewDecoder(resp.Body).Decode(&out) != nil {
+			resp.Body.Close()
+			return
+		}
+		resp.Body.Close()
+		fmt.Println()
+		fmt.Println("Dry-run pull (what would be written):")
+		for _, s := range out.Saves {
+			absPath := resolvePath(s.GameID, s.PathKey)
+			if absPath == "" {
+				continue
+			}
+			if !paths.PathExists(absPath) {
+				// Dir might exist but path might be a file that doesn't exist yet
+				dir := filepath.Dir(absPath)
+				if !paths.PathExists(dir) {
+					continue
+				}
+			}
+			fmt.Printf("  %s  %s  -> %s\n", s.GameID, s.PathKey, absPath)
+		}
 	}
 }

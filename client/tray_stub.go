@@ -1,13 +1,12 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package main
 
 import "os"
 
-// runTray is only implemented on Windows (tray_windows.go). This stub is never
-// called because main only invokes runTray when runtime.GOOS == "windows".
+// runTray is implemented on Windows (tray_windows.go) and Linux (tray_linux.go). This stub is for other OSes.
 func runTray() {
-	panic("tray only on Windows")
+	panic("tray only on Windows and Linux")
 }
 
 // runLoginDialogProcess runs the GUI login dialog; only implemented on Windows.

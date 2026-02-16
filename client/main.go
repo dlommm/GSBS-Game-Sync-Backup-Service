@@ -11,6 +11,24 @@ import (
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "--version", "-version", "-v":
+			printVersion()
+			return
+		}
+	}
+
+	// Init log to file (and optionally stderr) so all client activity is recorded.
+	alsoStderr := runtime.GOOS != "windows" || consoleMode()
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "login", "login-dialog", "list":
+			alsoStderr = true
+		}
+	}
+	InitClientLog(alsoStderr)
+
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
 		case "login":
 			runLogin()
 			return
@@ -18,16 +36,20 @@ func main() {
 			runLoginDialogProcess()
 			return
 		case "list":
-			runList()
-			return
-		case "--version", "-version", "-v":
-			printVersion()
+			dryRunPull := false
+			for _, a := range os.Args[2:] {
+				if a == "--dry-run-pull" {
+					dryRunPull = true
+					break
+				}
+			}
+			runList(dryRunPull)
 			return
 		}
 	}
 
-	// On Windows, run tray (setup/login is via browser; see tray "Login / Setup...").
-	if runtime.GOOS == "windows" && !consoleMode() {
+	// On Windows or Linux, run tray when not in console mode (setup/login via browser or Login menu).
+	if (runtime.GOOS == "windows" || runtime.GOOS == "linux") && !consoleMode() {
 		runTray()
 		return
 	}

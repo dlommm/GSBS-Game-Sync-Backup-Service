@@ -1,3 +1,9 @@
+// Package sync provides the file watcher and sync client.
+//
+// On Windows, the watcher uses fsnotify (ReadDirectoryChangesW). Under very heavy
+// write load, the system buffer can overflow and some events may be dropped; the
+// next periodic pull will still sync state. Reduce watch scope or write frequency
+// if you need every change under load.
 package sync
 
 import (
@@ -5,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +20,7 @@ import (
 )
 
 const debounceDelay = 2 * time.Second
+const pushMaxRetries = 3
 
 // WatchPath describes a path to watch (from config).
 type WatchPath struct {
@@ -30,6 +38,12 @@ type Watcher struct {
 	mu        sync.Mutex
 	pathMap   map[string]pathInfo // watched directory -> gameID, pathKey (events under that dir use this info)
 	timers    map[string]*time.Timer
+	// IsPaused if non-nil is checked before each push; when it returns true the push is skipped.
+	IsPaused func() bool
+	// ExcludePatterns are glob patterns (e.g. "*.tmp", "*.bak"); files matching any pattern are not pushed.
+	ExcludePatterns []string
+	// Verbose when true enables extra log lines per push.
+	Verbose bool
 }
 
 type pathInfo struct {
@@ -112,15 +126,49 @@ func (w *Watcher) Run(ctx context.Context) {
 			gameID := info.GameID
 			pathKey := info.PathKey
 			w.timers[filePath] = time.AfterFunc(debounceDelay, func() {
+				if w.IsPaused != nil && w.IsPaused() {
+					w.mu.Lock()
+					delete(w.timers, filePath)
+					w.mu.Unlock()
+					return
+				}
+				if w.excludeMatch(filePath) {
+					w.mu.Lock()
+					delete(w.timers, filePath)
+					w.mu.Unlock()
+					return
+				}
 				content, err := os.ReadFile(filePath)
 				if err != nil {
 					log.Printf("watcher: read %s: %v", filePath, err)
-				} else if err := w.client.Push(ctx, gameID, pathKey, filePath, content); err != nil {
-					log.Printf("push after watch: %v", err)
 				} else {
-					log.Printf("push: game=%s file=%s size=%d", gameID, filePath, len(content))
+					// Retry push with exponential backoff on failure.
+					pushOK := false
+					backoff := 2 * time.Second
+					for attempt := 1; attempt <= pushMaxRetries; attempt++ {
+						if err := w.client.Push(ctx, gameID, pathKey, filePath, content); err != nil {
+							log.Printf("push attempt %d/%d: %v", attempt, pushMaxRetries, err)
+							if attempt < pushMaxRetries {
+								select {
+								case <-ctx.Done():
+									return
+								case <-time.After(backoff):
+								}
+								backoff *= 2
+							}
+						} else {
+							if w.Verbose {
+								log.Printf("push: game=%s file=%s size=%d", gameID, filePath, len(content))
+							}
+							pushOK = true
+							break
+						}
+					}
+					if !pushOK {
+						log.Printf("push: giving up after %d attempts: game=%s file=%s", pushMaxRetries, gameID, filePath)
+					}
 				}
-				// Remove timer from map so it doesn't grow unbounded
+				// Remove timer from map so it doesn't grow unbounded.
 				w.mu.Lock()
 				delete(w.timers, filePath)
 				w.mu.Unlock()
@@ -132,6 +180,28 @@ func (w *Watcher) Run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// excludeMatch returns true if the file path matches any ExcludePatterns glob.
+func (w *Watcher) excludeMatch(filePath string) bool {
+	if len(w.ExcludePatterns) == 0 {
+		return false
+	}
+	base := filepath.Base(filePath)
+	for _, pat := range w.ExcludePatterns {
+		pat = strings.TrimSpace(pat)
+		if pat == "" {
+			continue
+		}
+		ok, err := filepath.Match(pat, base)
+		if err != nil {
+			continue
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (w *Watcher) Close() error {

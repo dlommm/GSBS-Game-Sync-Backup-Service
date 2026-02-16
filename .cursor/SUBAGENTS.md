@@ -1,8 +1,10 @@
 # GSBS Subagents & Skills
 
-Use these **roles** to scope work and apply the right **project skill** and **subagent**. Each domain has a matching skill (`.cursor/skills/<name>/SKILL.md`) and subagent (`.cursor/agents/<name>.md`). Skills give quick reference; subagents get their own context and are good for multi-file or parallel work. When a task spans multiple areas, use the relevant skill/subagent in order (e.g. add a new API endpoint → gsbs-server; then if the client must call it → gsbs-client).
+Use these **roles** to scope work and apply the right **project skill** and **subagent**. Each domain has a matching skill (`.cursor/skills/<name>/SKILL.md`) and subagent (`.cursor/agents/<name>.md`). Skills give quick reference; subagents get their own context and are good for multi-file or parallel work. **Prefer subagents whenever a task fits a domain** — this keeps context usage low (the subagent only loads its area). When a task spans multiple areas, invoke the relevant subagent first (e.g. add a new API endpoint → gsbs-server; then if the client must call it → gsbs-client). Do not do the work in the main chat first.
 
-**Invoke subagents**: `/gsbs-server`, `/gsbs-client`, `/gsbs-pcgw-paths`, `/gsbs-release` in chat, or ask the agent to use the appropriate subagent.
+**Invoke subagents** at the start of the task: `/gsbs-server`, `/gsbs-client`, `/gsbs-pcgw-paths`, `/gsbs-release` in chat, or rely on the rule **use-subagents-when-needed.mdc** so the agent delegates without being asked.
+
+**Path-scoped rules** (`.cursor/rules/delegate-*.mdc`): When you are editing files under `server/`, `client/`, `pkg/`, `script/`, or `cmd/`, or files like `**/version.go` or `Dockerfile`, the matching rule is applied and reminds you to delegate to the corresponding subagent. Use them together with the table above. Full list: `.cursor/README.md`.
 
 ## When to use which skill / subagent
 

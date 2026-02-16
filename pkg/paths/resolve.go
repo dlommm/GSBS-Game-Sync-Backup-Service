@@ -23,10 +23,13 @@ func CurrentOS() OS {
 	return Linux
 }
 
-// Resolver holds known roots (Steam, Ubisoft, etc.) for placeholder expansion.
+// Resolver holds known roots (Steam, Ubisoft, GOG, Epic, Xbox, etc.) for placeholder expansion.
 type Resolver struct {
 	SteamLibraries   []string // Steam library roots (e.g. C:\Program Files (x86)\Steam, /home/user/.steam/steam)
 	UbisoftConnect   string   // Ubisoft Connect install path
+	GOGGalaxy        string   // GOG Galaxy install path (e.g. C:\Program Files (x86)\GOG Galaxy)
+	EpicGames        string   // Epic Games Store install path (e.g. C:\Program Files\Epic Games)
+	XboxApp          string   // Xbox App / Game Pass root (e.g. C:\XboxGames or %LOCALAPPDATA%\Packages)
 	UserID           string   // Launcher user ID if applicable
 	Home             string   // $HOME or %USERPROFILE%
 	LocalAppData     string   // %LOCALAPPDATA% or ~/.local/share
@@ -52,11 +55,40 @@ func NewResolver() *Resolver {
 		appData = filepath.Join(home, ".config")
 	}
 	return &Resolver{
-		Home:         home,
-		LocalAppData: localAppData,
-		AppData:      appData,
-		SteamLibraries: getSteamLibraryRoots(home),
+		Home:             home,
+		LocalAppData:     localAppData,
+		AppData:          appData,
+		SteamLibraries:   getSteamLibraryRoots(home),
+		GOGGalaxy:        getDefaultGOGGalaxy(home),
+		EpicGames:        getDefaultEpicGames(home),
+		XboxApp:          getDefaultXboxApp(localAppData),
 	}
+}
+
+func getDefaultGOGGalaxy(home string) string {
+	if runtime.GOOS == "windows" {
+		pf := os.Getenv("ProgramFiles(x86)")
+		if pf == "" {
+			pf = filepath.Join(os.Getenv("ProgramFiles"), "..", "Program Files (x86)")
+		}
+		return filepath.Join(pf, "GOG Galaxy")
+	}
+	return filepath.Join(home, "GOG Games")
+}
+
+func getDefaultEpicGames(home string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(os.Getenv("ProgramFiles"), "Epic Games")
+	}
+	return filepath.Join(home, ".local", "share", "Epic")
+}
+
+func getDefaultXboxApp(localAppData string) string {
+	if runtime.GOOS == "windows" {
+		// Common Game Pass install location; user can override to C:\XboxGames etc.
+		return filepath.Join(localAppData, "Packages")
+	}
+	return ""
 }
 
 func getSteamLibraryRoots(home string) []string {
@@ -96,6 +128,9 @@ func (r *Resolver) expandOne(template string, targetOS OS) string {
 	s = replaceEnv(s, "%APPDATA%", r.AppData)
 	s = replaceEnv(s, "<user-id>", r.UserID)
 	s = replaceEnv(s, "<Ubisoft-Connect-folder>", r.UbisoftConnect)
+	s = replaceEnv(s, "<GOG-Galaxy-folder>", r.GOGGalaxy)
+	s = replaceEnv(s, "<Epic-Games-folder>", r.EpicGames)
+	s = replaceEnv(s, "<Xbox-App-folder>", r.XboxApp)
 	// Steam: first library that exists
 	if strings.Contains(s, "<SteamLibrary-folder>") {
 		for _, root := range r.SteamLibraries {

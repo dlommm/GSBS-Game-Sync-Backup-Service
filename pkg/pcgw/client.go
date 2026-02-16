@@ -3,10 +3,15 @@ package pcgw
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
+
+const max429Retries = 5
+const default429Backoff = 60 * time.Second
 
 const baseURL = "https://www.pcgamingwiki.com"
 
@@ -15,9 +20,42 @@ type Client struct {
 	HTTP *http.Client
 }
 
-// NewClient returns a new PCGW API client.
+// NewClient returns a new PCGW API client with sensible timeouts.
 func NewClient() *Client {
-	return &Client{HTTP: http.DefaultClient}
+	return &Client{HTTP: &http.Client{
+		Timeout: 30 * time.Second,
+	}}
+}
+
+// getWith429Retry performs GET and on HTTP 429 retries with backoff (Retry-After header or default 60s).
+func (c *Client) getWith429Retry(u string) (*http.Response, error) {
+	var lastResp *http.Response
+	for attempt := 0; attempt <= max429Retries; attempt++ {
+		resp, err := c.HTTP.Get(u)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusTooManyRequests {
+			return resp, nil
+		}
+		backoff := default429Backoff
+		if s := resp.Header.Get("Retry-After"); s != "" {
+			if sec, err := strconv.Atoi(s); err == nil && sec > 0 {
+				backoff = time.Duration(sec) * time.Second
+			}
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		lastResp = resp
+		if attempt < max429Retries {
+			time.Sleep(backoff)
+		}
+	}
+	if lastResp != nil {
+		lastResp.Body.Close()
+		return nil, fmt.Errorf("rate limited (429) after %d retries", max429Retries)
+	}
+	return nil, fmt.Errorf("rate limited (429)")
 }
 
 // CargoQuery runs a cargoquery action. See https://www.pcgamingwiki.com/wiki/PCGamingWiki:API
@@ -38,11 +76,15 @@ func (c *Client) CargoQuery(tables, fields, where string, limit, offset int) ([]
 	if offset > 0 {
 		u += "&offset=" + strconv.Itoa(offset)
 	}
-	resp, err := c.HTTP.Get(u)
+	resp, err := c.getWith429Retry(u)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("cargo query: HTTP %d: %s", resp.StatusCode, string(body))
+	}
 	var out struct {
 		CargoQuery []struct {
 			Title map[string]interface{} `json:"title"`
@@ -116,6 +158,10 @@ func (c *Client) ListAllPages(apcontinue string, aplimit int) ([]PageInfo, strin
 		return nil, "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, "", fmt.Errorf("list pages: HTTP %d: %s", resp.StatusCode, string(body))
+	}
 	var out struct {
 		Query struct {
 			AllPages []struct {
@@ -172,11 +218,15 @@ func (c *Client) ListGamePages(limit, offset int) ([]PageInfo, error) {
 // pageID is the numeric page ID from GetPageIDBySteamAppID or similar.
 func (c *Client) ParsePageWikitext(pageID string) (string, error) {
 	u := baseURL + "/w/api.php?action=parse&format=json&pageid=" + url.QueryEscape(pageID) + "&prop=wikitext"
-	resp, err := c.HTTP.Get(u)
+	resp, err := c.getWith429Retry(u)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("parse wikitext: HTTP %d: %s", resp.StatusCode, string(body))
+	}
 	var out struct {
 		Parse struct {
 			Wikitext struct {

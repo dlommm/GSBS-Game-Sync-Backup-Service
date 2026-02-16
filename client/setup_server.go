@@ -7,6 +7,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -25,6 +27,7 @@ func StartSetupServer() string {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleSetupPage)
 	mux.HandleFunc("/login", handleSetupLogin)
+	mux.HandleFunc("/open-log", handleOpenLog)
 
 	for port := setupPortStart; port < setupPortEnd; port++ {
 		addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -94,6 +97,26 @@ func handleSetupLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/?done=1", http.StatusSeeOther)
 }
 
+func handleOpenLog(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	logPath := ClientLogPath()
+	// On Windows, try to open the log file in the default editor.
+	if runtime.GOOS == "windows" {
+		if err := exec.Command("cmd", "/c", "start", "", logPath).Start(); err != nil {
+			log.Printf("setup: open log: %v", err)
+		}
+	} else {
+		if err := exec.Command("xdg-open", logPath).Start(); err != nil {
+			log.Printf("setup: open log: %v", err)
+		}
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<html><head><title>Log</title></head><body><p>Opening log file.</p><p>Path: %s</p><p><a href="/">Back to setup</a></p></body></html>`, htmlEsc(logPath))
+}
+
 func writeSetupHTML(w http.ResponseWriter, serverURL, clientName, errMsg string, success, done bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	status := ""
@@ -115,22 +138,39 @@ func writeSetupHTML(w http.ResponseWriter, serverURL, clientName, errMsg string,
     .err { color: #c00; }
     .ok { color: #080; }
     button { margin-top: 14px; padding: 8px 16px; }
+    .hint { font-size: 0.9em; color: #666; margin-top: 2px; }
   </style>
 </head>
 <body>
   <h1>GSBS — Setup &amp; Login</h1>
+  <p class="hint"><strong>Step 1.</strong> Enter server and credentials below. <strong>Step 2.</strong> Click Login. <strong>Step 3.</strong> Close this page; the client runs in the tray.</p>
   %s
-  <form method="post" action="/login">
+  <form method="post" action="/login" id="loginForm" onsubmit="return validateForm(this);">
     <label>Server URL</label>
-    <input type="text" name="server_url" value="%s" placeholder="https://your-server:8080" required>
+    <input type="text" name="server_url" id="server_url" value="%s" placeholder="https://your-server:8080" required>
+    <span class="hint">e.g. https://your-server:8080 or http://localhost:8080</span>
     <label>Username</label>
-    <input type="text" name="username" required>
+    <input type="text" name="username" id="username" required>
     <label>Password</label>
-    <input type="password" name="password" required>
+    <input type="password" name="password" id="password" required>
     <label>Client name</label>
     <input type="text" name="client_name" value="%s" placeholder="(optional, default: this PC name)">
     <button type="submit">Login</button>
   </form>
+  <p style="margin-top: 20px;"><strong>Optional:</strong> <a href="/open-log">Open log file</a> (for troubleshooting). After login, use the tray menu to add launcher paths or edit config.</p>
+  <script>
+    function validateForm(form) {
+      var server = (form.server_url && form.server_url.value) ? form.server_url.value.trim() : '';
+      if (!server) { alert('Please enter the server URL.'); return false; }
+      if (server.indexOf('http://') !== 0 && server.indexOf('https://') !== 0) {
+        alert('Server URL should start with http:// or https://');
+        return false;
+      }
+      if (!form.username.value.trim()) { alert('Please enter username.'); return false; }
+      if (!form.password.value) { alert('Please enter password.'); return false; }
+      return true;
+    }
+  </script>
 </body>
 </html>`, status, htmlEsc(serverURL), htmlEsc(clientName))
 	w.Write([]byte(page))
