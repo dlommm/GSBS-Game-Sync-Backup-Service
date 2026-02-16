@@ -3,7 +3,7 @@
 # and build + push the server Docker image to Docker Hub.
 # Usage: ./script/release.sh [VERSION]
 #   VERSION: e.g. v1.0.4 (default: prompt or derive from latest tag)
-# Requires: go, git, gh (GitHub CLI), docker; clean working tree for tagging; docker login for push.
+# Requires: go, git, gh (GitHub CLI), docker (buildx for multi-platform image); clean working tree for tagging; docker login for push.
 #
 # Env (optional): DOCKERHUB_IMAGE (default: dendlomm/gsbs-server) — image to build and push.
 #
@@ -104,18 +104,22 @@ else
     --notes "Windows amd64 and Linux amd64 builds. Docker image: \`docker pull ${DOCKERHUB_IMAGE:-dendlomm/gsbs-server}:${VERSION_VALUE}\`. Run with \`--version\` or \`-v\` to see version, build date, and commit."
 fi
 
-# Docker: build and push to Docker Hub
+# Docker: multi-platform build and push to Docker Hub (linux/amd64 + linux/arm64)
 DOCKERHUB_IMAGE="${DOCKERHUB_IMAGE:-dendlomm/gsbs-server}"
-echo "Building Docker image ${DOCKERHUB_IMAGE}:${VERSION_VALUE} (and :latest)"
-docker build \
+echo "Building Docker image ${DOCKERHUB_IMAGE}:${VERSION_VALUE} (and :latest) for linux/amd64,linux/arm64"
+# Use a buildx builder that supports multi-platform (default driver often does not)
+if ! docker buildx inspect gsbs-multi >/dev/null 2>&1; then
+  docker buildx create --name gsbs-multi --use
+fi
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
   --build-arg VERSION="${VERSION_VALUE}" \
   --build-arg BUILD_DATE="${BUILD_DATE}" \
   --build-arg COMMIT="${COMMIT}" \
   -t "${DOCKERHUB_IMAGE}:${VERSION_VALUE}" \
   -t "${DOCKERHUB_IMAGE}:latest" \
+  --push \
   .
-docker push "${DOCKERHUB_IMAGE}:${VERSION_VALUE}"
-docker push "${DOCKERHUB_IMAGE}:latest"
 echo "Pushed ${DOCKERHUB_IMAGE}:${VERSION_VALUE} and ${DOCKERHUB_IMAGE}:latest"
 
 echo "Done. Release: $VERSION"

@@ -78,11 +78,12 @@ There is no separate “manifest file” on disk: the manifest is stored in the 
 
 **Releases:** The script `./script/release.sh [VERSION]` builds the four GitHub release binaries and also builds and pushes the server image to Docker Hub (by default `dendlomm/gsbs-server:$VERSION` and `:latest`). Run `docker login` before the script if you are pushing to Docker Hub.
 
-**Pre-built image:** The official image is published at [dendlomm/gsbs-server](https://hub.docker.com/r/dendlomm/gsbs-server) on Docker Hub. Anyone can run:
+**Pre-built image:** The official image is published at [dendlomm/gsbs-server](https://hub.docker.com/r/dendlomm/gsbs-server) on Docker Hub. Releases are built for **linux/amd64** and **linux/arm64**. Anyone can run:
 ```bash
 docker pull dendlomm/gsbs-server:latest
 docker run -d -p 8080:8080 -e GSBS_SESSION_SECRET=xxx -v gsbs-data:/app/data -e GSBS_DB=/app/data/gsbs.db dendlomm/gsbs-server:latest
 ```
+If you see *no matching manifest for linux/amd64* (e.g. an older image was pushed only for one arch), build locally: `docker build -t gsbs-server:latest .` and use `gsbs-server:latest` in your compose or run command.
 
 ---
 
