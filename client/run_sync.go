@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	gosync "sync"
 	"sync/atomic"
 	"time"
@@ -70,7 +71,8 @@ func getLastSync() (at time.Time, err error) {
 // Pass channels you never send on if not needed.
 // Returns nil when ctx is cancelled, or an error if setup fails (e.g. no token).
 func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refreshManifestCh <-chan struct{}) error {
-	if cfg.Token == "" {
+	// Treat whitespace-only or empty token as not logged in (avoids sending "Bearer " with no token and 401 from server).
+	if strings.TrimSpace(cfg.Token) == "" {
 		return errNotLoggedIn
 	}
 	log.Printf("client sync: starting server=%s", cfg.ServerURL)
