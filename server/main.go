@@ -24,6 +24,7 @@ import (
 )
 
 // responseRecorder wraps http.ResponseWriter to capture status code for logging.
+// It implements http.Flusher so SSE and other streaming handlers work through this middleware.
 type responseRecorder struct {
 	http.ResponseWriter
 	status int
@@ -32,6 +33,12 @@ type responseRecorder struct {
 func (r *responseRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *responseRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // draining is set to 1 when the server is shutting down; new requests get 503.
