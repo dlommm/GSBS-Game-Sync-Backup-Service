@@ -186,6 +186,9 @@ func connectSSE(ctx context.Context, baseURL, token string, onEvent func(eventTy
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized {
+			return fmt.Errorf("sse: 401 Unauthorized — token may be invalid or expired; try logging in again from the tray")
+		}
 		return fmt.Errorf("sse: %s", resp.Status)
 	}
 

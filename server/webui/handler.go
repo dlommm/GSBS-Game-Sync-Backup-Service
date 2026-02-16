@@ -757,6 +757,15 @@ type adminData struct {
 	MaxStorageBytes   int64  // 0 = unlimited
 	ReadOnly          bool
 	CSRFToken         string
+	// Manifest pagination (admin manifest viewer)
+	ManifestPage       int   // 1-based current page
+	ManifestPerPage    int   // page size (10, 20, 40, 60, 100)
+	ManifestTotal      int   // total entries
+	ManifestTotalPages int   // total pages
+	ManifestStart      int   // 1-based start index for "X–Y of Z"
+	ManifestEnd        int   // 1-based end index
+	ManifestPrevPage   int   // ManifestPage - 1 for Prev link
+	ManifestNextPage   int   // ManifestPage + 1 for Next link
 }
 
 // adminStats holds global counts shown on the admin page.
@@ -790,7 +799,42 @@ func (h *WebHandler) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	totalBytes, _ := h.store.TotalStorageBytes(ctx)
 	users, _ := h.store.ListUserStats(ctx)
 	clients, _ := h.store.ListAllClients(ctx)
-	manifest, _ := h.store.ListGameSaveLocations(ctx)
+
+	// Manifest pagination: count in [10, 20, 40, 60, 100], page >= 1
+	manifestPerPage := 20
+	if n := r.URL.Query().Get("count"); n != "" {
+		switch n {
+		case "10", "20", "40", "60", "100":
+			fmt.Sscanf(n, "%d", &manifestPerPage)
+		}
+	}
+	manifestPage := 1
+	if p := r.URL.Query().Get("page"); p != "" {
+		var v int
+		if _, err := fmt.Sscanf(p, "%d", &v); err == nil && v >= 1 {
+			manifestPage = v
+		}
+	}
+	manifestTotalPages := (manifestCount + manifestPerPage - 1) / manifestPerPage
+	if manifestTotalPages < 1 {
+		manifestTotalPages = 1
+	}
+	if manifestPage > manifestTotalPages {
+		manifestPage = manifestTotalPages
+	}
+	manifestOffset := (manifestPage - 1) * manifestPerPage
+	manifest, _ := h.store.ListGameSaveLocationsPaginated(ctx, manifestPerPage, manifestOffset)
+
+	manifestStart := 0
+	manifestEnd := 0
+	if manifestCount > 0 {
+		manifestStart = manifestOffset + 1
+		manifestEnd = manifestOffset + len(manifest)
+		if manifestEnd > manifestCount {
+			manifestEnd = manifestCount
+		}
+	}
+
 	fetches, _ := h.store.ListManifestFetches(ctx, 50)
 	auditLog, _ := h.store.ListAuditLog(ctx, 50, "")
 	statsSnapshots, _ := h.store.ListStatsSnapshots(ctx, 30)
@@ -862,7 +906,15 @@ func (h *WebHandler) serveAdmin(w http.ResponseWriter, r *http.Request) {
 		Pushed:           pushed,
 		ManifestPushSent: manifestPushSent,
 		JobStarted:       jobStarted,
-		AllowRegister:    h.allowRegister,
+		ManifestPage:       manifestPage,
+		ManifestPerPage:    manifestPerPage,
+		ManifestTotal:      manifestCount,
+		ManifestTotalPages: manifestTotalPages,
+		ManifestStart:      manifestStart,
+		ManifestEnd:        manifestEnd,
+		ManifestPrevPage:   manifestPage - 1,
+		ManifestNextPage:   manifestPage + 1,
+		AllowRegister:     h.allowRegister,
 		MaxStorageBytes:  h.maxStorageBytes,
 		ReadOnly:         h.readOnly,
 		CSRFToken:        csrfToken,

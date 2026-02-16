@@ -289,6 +289,16 @@ a:focus-visible, button:focus-visible, input:focus-visible {
 /* ─── Table row count ─── */
 .table-count { color:var(--text-muted); font-size:.75rem; font-weight:400; margin-left:.5rem; }
 
+/* ─── Manifest pagination ─── */
+.manifest-count-form { align-items:center; }
+.manifest-per-page-label { color:var(--text-muted); font-size:.8125rem; margin-left:.125rem; }
+.manifest-pagination {
+  display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem;
+  padding:.75rem 1.25rem 1rem; border-top:1px solid var(--border); margin-top:0;
+}
+.manifest-pagination-summary { color:var(--text-secondary); font-size:.8125rem; }
+.manifest-pagination-links { display:flex; gap:.5rem; align-items:center; }
+
 /* ─── Responsive ─── */
 @media (max-width:900px) {
   .stats-row     { grid-template-columns:repeat(2,1fr); }
