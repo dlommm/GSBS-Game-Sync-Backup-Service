@@ -1,0 +1,9 @@
+---
+description: Editing server code — delegate implementation to gsbs-server subagent to keep context low
+globs: "server/**"
+alwaysApply: false
+---
+
+# Server path — use gsbs-server
+
+You are in **server/** (API, auth, store, WebUI, job, SSE). For implementation or multi-file changes here, **invoke the gsbs-server subagent** at the start of the task (`.cursor/agents/gsbs-server.md` or `/gsbs-server`) instead of doing the work in the main chat. This keeps context focused and usage low.

@@ -13,7 +13,7 @@ alwaysApply: true
 - **client/** — Watch, upload, pull, path resolution, systray (Windows). Entry: `client/main.go`. Config: `client/config.go`; sync: `client/sync/`; manifest: `client/manifest.go`.
 - **pkg/** — Shared: `pkg/types` (SaveEntry, SaveBlob, GameSaveLocation, etc.), `pkg/paths` (resolve placeholders, Steam VDF), `pkg/pcgw` (PCGW API, wikitext parsing).
 - **cmd/** — Standalone tools: `cmd/pcgw-sync`, `cmd/pcgw-fetch`, `cmd/write-ico`, `cmd/resize-icon`.
-- **docs/** — `ARCHITECTURE.md` (data model, sync flow, PCGW, DB), `EXAMPLE_CONFIG.md`, `DOCKER.md`.
+- **docs/** — `ARCHITECTURE.md` (data model, sync flow, PCGW, DB), `API.md` (endpoint reference), `EXAMPLE_CONFIG.md` (config shape), `DOCKER.md` (deploy), `CLIENT.md` (client behavior).
 
 ## Key concepts
 
@@ -24,8 +24,12 @@ alwaysApply: true
 ## Where to look
 
 - Auth: `server/auth/auth.go`. WebUI/session: `server/webui/`.
-- API handlers: `server/api/handler.go`. Client HTTP sync: `client/sync/client.go`.
+- API handlers: `server/api/handler.go`. Endpoint reference: `docs/API.md`. Client HTTP sync: `client/sync/client.go`; client behavior: `docs/CLIENT.md`.
 - Path templates and config examples: `docs/EXAMPLE_CONFIG.md` and `client/config.go`.
+
+## Subagents (keep context low)
+
+For implementation or multi-file work in server/, client/, pkg/pcgw, pkg/paths, release, or cmd/: **delegate to the matching subagent** (see rule **use-subagents-when-needed.mdc**) so work runs in a focused context. Invoke at the start of the task. Full index of rules, agents, skills, and key docs: **.cursor/README.md**.
 
 ## Build / run
 

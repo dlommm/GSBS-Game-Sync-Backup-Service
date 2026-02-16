@@ -73,12 +73,24 @@ func parseDurationFlex(s string) (time.Duration, error) {
 }
 
 type config struct {
-	ServerURL            string    `json:"server_url"`
-	Token                string    `json:"token"`
-	ClientName           string    `json:"client_name,omitempty"` // name shown on server for this machine
-	SyncInterval         Duration  `json:"sync_interval"`
-	UbisoftConnectFolder string    `json:"ubisoft_connect_folder,omitempty"` // e.g. C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher
-	LauncherUserID       string    `json:"launcher_user_id,omitempty"`       // launcher user ID for paths like savegames\<user-id>\895
+	ServerURL            string      `json:"server_url"`
+	Token                string      `json:"token"`
+	ClientName           string      `json:"client_name,omitempty"` // name shown on server for this machine
+	SyncInterval         Duration    `json:"sync_interval"`
+	UbisoftConnectFolder string      `json:"ubisoft_connect_folder,omitempty"` // e.g. C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher
+	GOGGalaxyFolder      string      `json:"gog_galaxy_folder,omitempty"`      // e.g. C:\Program Files (x86)\GOG Galaxy
+	EpicGamesFolder      string      `json:"epic_games_folder,omitempty"`     // e.g. C:\Program Files\Epic Games
+	XboxAppFolder        string      `json:"xbox_app_folder,omitempty"`        // e.g. C:\XboxGames
+	LauncherUserID       string      `json:"launcher_user_id,omitempty"`       // launcher user ID for paths like savegames\<user-id>\895
+	BackupOnPull         bool        `json:"backup_on_pull,omitempty"`         // if true, copy existing file to .gsbs.bak before overwriting on pull
+	SkipOverwriteWhenLocalNewer bool `json:"skip_overwrite_when_local_newer,omitempty"` // if true, on pull do not overwrite when local file is newer than server
+	ManifestInclude      string      `json:"manifest_include,omitempty"`       // "saves", "config", or "both" (default) — which manifest entries to fetch
+	MaxSyncKbps          int         `json:"max_sync_kbps,omitempty"`           // optional max sync bandwidth in KiB/s; 0 = no limit
+	SyncPaused           bool        `json:"sync_paused,omitempty"`             // if true, do not run periodic pull or watcher push until resumed
+	SkipSyncWhenMetered  bool        `json:"skip_sync_when_metered,omitempty"` // Windows: skip pull/push when connection is metered
+	WatchExclude         []string    `json:"watch_exclude,omitempty"`          // glob patterns for files to ignore when watching (e.g. "*.tmp", "*.bak")
+	UseCompression       bool        `json:"use_compression,omitempty"`         // use gzip for push/pull request and response bodies
+	VerboseLog           bool        `json:"verbose_log,omitempty"`             // when true, log extra detail (per-file sync, resolved paths)
 	WatchPaths           []watchPath `json:"watch_paths"`
 }
 

@@ -1,0 +1,32 @@
+<!-- Login TOTP: second factor after password. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authenticator code — GSBS</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="auth-page">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <main id="main-content" class="auth-card" role="main" aria-label="Authenticator code">
+    <img src="/static/logo.png" alt="GSBS" class="auth-logo">
+    <h1>Two-factor authentication</h1>
+    <p class="subtitle">Enter the 6-digit code from your authenticator app</p>
+    {{if .Error}}
+    <p class="error" role="alert" aria-live="assertive">{{.Error}}</p>
+    {{end}}
+    <form method="post" action="/login/totp" class="auth-form" aria-label="TOTP code form">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <label for="code">Code</label>
+      <input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" placeholder="000000" aria-required="true" required>
+      <button type="submit">Verify</button>
+    </form>
+    <p class="auth-footer"><a href="/login">Back to sign in</a></p>
+  </main>
+</body>
+</html>

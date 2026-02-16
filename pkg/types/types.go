@@ -30,10 +30,11 @@ type PullResponse struct {
 type GameSaveLocation struct {
 	GameID       string `json:"game_id"`        // e.g. Steam App ID or PCGW page ID
 	PCGWPageID   int64  `json:"pcgw_page_id"`   // PCGamingWiki page ID
-	GameTitle    string `json:"game_title"`      // human-readable title
-	Platform     string `json:"platform"`        // "windows" or "linux"
-	PathTemplate string `json:"path_template"`   // placeholder path, e.g. %APPDATA%\EldenRing\<user-id>
-	IsConfig     bool   `json:"is_config"`      // config file vs save file
+	GameTitle    string `json:"game_title"`     // human-readable title
+	Platform     string `json:"platform"`       // "windows" or "linux"
+	PathTemplate string `json:"path_template"`  // placeholder path, e.g. %APPDATA%\EldenRing\<user-id>
+	IsConfig     bool   `json:"is_config"`     // config file vs save file
 	UpdatedAt    string `json:"updated_at"`
-	Source       string `json:"source"`          // e.g. "pcgw"
+	Source       string `json:"source"`         // e.g. "pcgw"
+	Notes        string `json:"notes,omitempty"` // optional attribution or URL (e.g. PCGW page link)
 }

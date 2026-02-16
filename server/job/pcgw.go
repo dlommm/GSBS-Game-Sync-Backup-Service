@@ -11,10 +11,14 @@ import (
 	"github.com/gsbs/gsbs/server/store"
 )
 
+// ReportProgress is an optional callback to report progress (e.g. pages processed). May be nil.
+type ReportProgress func(pagesProcessed int)
+
 // PCGWSync runs a full sync: list game pages from PCGW (Cargo Infobox_game), fetch wikitext,
 // parse save locations, upsert into store. Rate limits to 1 request per second.
+// If reportProgress is non-nil, it is called with the number of pages processed so far.
 // Returns the number of upserted entries and any error.
-func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client) (int, error) {
+func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client, reportProgress ReportProgress) (int, error) {
 	const rateLimit = time.Second
 	const chunkSize = 100
 	offset := 0
@@ -26,6 +30,9 @@ func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client) (int, er
 		}
 		if len(pages) == 0 {
 			break
+		}
+		if reportProgress != nil {
+			reportProgress(offset + len(pages))
 		}
 		for _, p := range pages {
 			select {
@@ -55,6 +62,7 @@ func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client) (int, er
 						PathTemplate: path,
 						IsConfig:     t.IsConfig,
 						Source:       "pcgw",
+						Notes:        "https://www.pcgamingwiki.com/wiki/?curid=" + strconv.FormatInt(p.PageID, 10),
 					})
 				}
 			}

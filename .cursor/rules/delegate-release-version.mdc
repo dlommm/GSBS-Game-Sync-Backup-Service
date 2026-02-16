@@ -1,0 +1,9 @@
+---
+description: Editing version.go — delegate to gsbs-release for version/ldflags changes
+globs: "**/version.go"
+alwaysApply: false
+---
+
+# Version files — use gsbs-release
+
+You are editing **version.go** (server or client). For version or ldflags changes, **invoke the gsbs-release subagent** (`.cursor/agents/gsbs-release.md` or `/gsbs-release`) at the start of the task. This keeps context focused and usage low.

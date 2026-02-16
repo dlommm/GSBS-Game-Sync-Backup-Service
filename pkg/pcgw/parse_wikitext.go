@@ -9,12 +9,12 @@ import (
 // PCGW uses templates like {{Game data/saves|Windows|{{p|appdata}}\\...}} and table rows.
 // Paths are normalized to resolver placeholders: %APPDATA%, %LOCALAPPDATA%, %USERPROFILE%, <user-id>.
 var (
-	// Match table row with path: | Windows || path here  (capture system and path)
-	pathRowRe = regexp.MustCompile(`(?m)^\|\s*(Windows|Steam Play \(Linux\)|Linux|Ubisoft Connect \(Windows\)|Steam \(Windows\))\s*\|\|\s*([^\n|]+)`)
+	// Match table row with path: | Windows || path here  (capture system and path). Include Steam (Linux), GOG, Epic.
+	pathRowRe = regexp.MustCompile(`(?m)^\|\s*(Windows|Steam Play \(Linux\)|Linux|Steam \(Linux\)|Ubisoft Connect \(Windows\)|Steam \(Windows\)|GOG|Epic)\s*\|\|\s*([^\n|]+)`)
 	// Match inline path in template args (simplified)
 	inlinePathRe = regexp.MustCompile(`(?m)\|\s*[^=]+\s*=\s*([^\n|{}]+(?:%[A-Za-z]+%|[<>][A-Za-z-]+[<>])?[^\n|{}]*)`)
-	// Match start of {{Game data/saves|OS| or {{Game data/config|OS|
-	gameDataTemplateRe = regexp.MustCompile(`\{\{Game data/(saves|config)\|(Windows|Linux|Steam Play \(Linux\))\|`)
+	// Match start of {{Game data/saves|OS| or {{Game data/config|OS| or {{Game data/save|OS| (singular)
+	gameDataTemplateRe = regexp.MustCompile(`\{\{Game data/(saves|config|save)\|(Windows|Linux|Steam Play \(Linux\))\|`)
 )
 
 // NormalizePathTemplate converts PCGW placeholders to resolver-friendly form.
@@ -27,8 +27,13 @@ func NormalizePathTemplate(raw string) string {
 		{"{{p|appdata}}", "%APPDATA%"},
 		{"{{p|localappdata}}", "%LOCALAPPDATA%"},
 		{"{{p|userprofile}}", "%USERPROFILE%"},
+		{"{{p|userprofile\\documents}}", "%USERPROFILE%/Documents"},
+		{"{{p|public}}", "%PUBLIC%"},
+		{"{{p|programdata}}", "%PROGRAMDATA%"},
+		{"{{p|programfiles}}", "%PROGRAMFILES%"},
 		{"{{p|uid}}", "<user-id>"},
-		{"{{p|userprofile}}", "%USERPROFILE%"},
+		{"{{p|steam}}", "<SteamLibrary-folder>"},
+		{"{{p|uplay}}", "<Ubisoft-Connect-folder>"},
 	}
 	for _, r := range replacements {
 		s = strings.ReplaceAll(s, r.from, r.to)
@@ -51,9 +56,9 @@ func NormalizePathTemplate(raw string) string {
 // SystemToPlatform returns "windows" or "linux" for manifest storage.
 func SystemToPlatform(system string) string {
 	switch {
-	case strings.HasPrefix(system, "Windows"), system == "Steam (Windows)", system == "Ubisoft Connect (Windows)":
+	case strings.HasPrefix(system, "Windows"), system == "Steam (Windows)", system == "Ubisoft Connect (Windows)", system == "GOG", system == "Epic":
 		return "windows"
-	case system == "Linux", system == "Steam Play (Linux)":
+	case system == "Linux", system == "Steam Play (Linux)", system == "Steam (Linux)":
 		return "linux"
 	default:
 		return "windows"
@@ -145,7 +150,7 @@ func parseGameDataTemplates(wikitext, gameID string) []SaveLocationTemplate {
 				GameID:   gameID,
 				System:   system,
 				Paths:    []string{pathNorm},
-				IsConfig: kind == "config",
+				IsConfig: kind == "config", // "saves" or "save" -> false
 			})
 		}
 		s = s[end:]
@@ -194,7 +199,8 @@ func splitSections(wikitext string) []section {
 		}
 		title := wikitext[idx[i][2]:idx[i][3]]
 		body := wikitext[start:end]
-		if strings.Contains(title, "Save") || strings.Contains(title, "Configuration") {
+		if strings.Contains(title, "Save") || strings.Contains(title, "Configuration") ||
+			strings.Contains(title, "Additional notes") || strings.Contains(title, "Notes") {
 			out = append(out, section{title: title, body: body})
 		}
 	}

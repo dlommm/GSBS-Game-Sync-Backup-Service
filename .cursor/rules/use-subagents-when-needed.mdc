@@ -1,11 +1,11 @@
 ---
-description: When to delegate to GSBS subagents so work is scoped and context is isolated
+description: When to delegate to GSBS subagents so work is scoped and context usage stays low
 alwaysApply: true
 ---
 
 # Use subagents when the task fits
 
-Delegate to the matching GSBS subagent whenever the user's request clearly falls in one of these areas. Do not wait for the user to ask for a subagent — choose based on what is needed.
+**Prefer subagents whenever a task fits a domain** — delegating keeps the main chat’s context smaller; the subagent only loads what it needs for its area. Do not wait for the user to ask; choose based on what is needed.
 
 ## When to delegate
 
@@ -22,5 +22,6 @@ Delegate to the matching GSBS subagent whenever the user's request clearly falls
 - **Spans two domains** → Delegate to the one that does the majority of the work first, or run both in parallel if independent (e.g. "add endpoint and have client call it" → gsbs-server then gsbs-client, or delegate server and then handle client in main context).
 - **Small or exploratory** (e.g. "where is auth?") → No need to delegate; answer in main context.
 - **Unclear** → Prefer delegating if the change touches multiple files in server/, client/, pkg/pcgw, or pkg/paths so the subagent gets isolated context.
+- **When in doubt** → Delegate. Using a subagent is cheaper on context than loading the whole codebase in the main agent.
 
-Subagents are in `.cursor/agents/` (gsbs-server.md, gsbs-client.md, gsbs-pcgw-paths.md, gsbs-release.md). Invoke the relevant one at the start of the task when the above applies.
+Subagents are in `.cursor/agents/` (gsbs-server.md, gsbs-client.md, gsbs-pcgw-paths.md, gsbs-release.md). **Invoke the relevant one at the start of the task** when the above applies; do not do the work in the main context first.

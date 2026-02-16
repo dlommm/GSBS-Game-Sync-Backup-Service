@@ -32,7 +32,7 @@ Path key ensures the same logical save (e.g. “Assassin’s Creed Rogue – Ubi
 
 - **Placeholders** (from PCGW or config):
   - Windows: `%USERPROFILE%`, `%LOCALAPPDATA%`, `%APPDATA%`, etc.
-  - Both: `<SteamLibrary-folder>`, `<Ubisoft-Connect-folder>`, `<user-id>` (from launcher).
+  - Both: `<SteamLibrary-folder>`, `<Ubisoft-Connect-folder>`, `<GOG-Galaxy-folder>`, `<Epic-Games-folder>`, `<Xbox-App-folder>`, `<user-id>` (from launcher).
 - **Resolution**: Client replaces placeholders from environment and known install paths (Steam library paths, Ubisoft Connect path, etc.). Under Linux, Proton paths: `<SteamLibrary-folder>/steamapps/compatdata/<AppID>/pfx/...`.
 - **Folder-exists rule**: Before writing a pulled save, client checks directory existence; if missing, skip and optionally log “game not installed”.
 
@@ -98,14 +98,16 @@ sequenceDiagram
 
 ## Operational behaviour
 
-- **Health**: `GET /api/health` returns `{"status":"ok"}` (no auth) for load balancers and probes.
+- **Health**: `GET /api/health` returns `{"status":"ok"}` (no auth) for load balancers and probes. For readiness (e.g. Kubernetes), use `GET /api/health?ready=1`: it runs a quick DB check; on success returns 200 `{"status":"ok","db":"ok"}`, on failure returns 503 `{"status":"unhealthy","db":"error"}` so you can distinguish “live” vs “ready”.
 - **Push body limit**: POST `/api/saves` body is limited to 50 MiB to avoid resource exhaustion.
 - **Graceful shutdown**: Server handles SIGINT/SIGTERM, stops accepting new requests, and shuts down within 15 seconds.
 - **SQLite**: WAL mode and a single open connection are used for stability and to avoid “database is locked” under concurrent use.
 
 ## Security
 
+- **Rate limiting**: Optional per-IP rate limits for login/register (`GSBS_RATE_LIMIT_AUTH`, e.g. `60,1m`) and per-user for push (`GSBS_RATE_LIMIT_PUSH`, e.g. `120,1m`). When exceeded, API returns 429. Implemented in handler layer; document in server skill.
 - All API access authenticated (e.g. per-user API token or session).
 - Clients only access their own user’s saves.
-- WebUI uses a signed session cookie (set `GSBS_SESSION_SECRET` in production).
+- WebUI uses a signed session cookie (set `GSBS_SESSION_SECRET` in production). Session and CSRF cookies use the `Secure` flag when the request is over TLS or `X-Forwarded-Proto: https`.
+- WebUI state-changing forms (login, register, logout, admin actions) are protected with CSRF: a signed token is set on GET and validated on POST.
 - Optional TLS for server and client–server communication.

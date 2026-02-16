@@ -1,0 +1,9 @@
+---
+description: Editing pkg/pcgw or pkg/paths — delegate implementation to gsbs-pcgw-paths subagent to keep context low
+globs: "pkg/**"
+alwaysApply: false
+---
+
+# pkg path — use gsbs-pcgw-paths
+
+You are in **pkg/** (types, pcgw, paths). For implementation or multi-file changes in `pkg/pcgw` or `pkg/paths` (placeholders, resolver, PCGW parsing, manifest), **invoke the gsbs-pcgw-paths subagent** at the start of the task (`.cursor/agents/gsbs-pcgw-paths.md` or `/gsbs-pcgw-paths`) instead of doing the work in the main chat. For `pkg/types` only, you may stay in main context if the change is small and shared by server and client. This keeps context focused and usage low.

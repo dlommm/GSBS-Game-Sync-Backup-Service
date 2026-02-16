@@ -12,30 +12,39 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="app-shell">
-  <header class="topbar">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <header class="topbar" role="banner">
     <div class="topbar-left">
       <img src="/static/favicon.png" alt="" class="topbar-icon" aria-hidden="true">
       <span class="topbar-brand">GSBS</span>
     </div>
-    <nav class="topbar-nav">
+    <nav class="topbar-nav" role="navigation" aria-label="Main">
       <a href="/dashboard" class="active">Dashboard</a>
       {{if .IsAdmin}}<a href="/admin">Admin</a>{{end}}
+      <a href="/dashboard/settings">Settings</a>
     </nav>
     <div class="topbar-right">
       <span class="topbar-user">{{.Username}}</span>
       <form method="post" action="/logout" class="inline-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
         <button type="submit" class="btn-ghost">Log out</button>
       </form>
     </div>
   </header>
 
-  <main class="page-content">
+  <main id="main-content" class="page-content" role="main" aria-label="Dashboard">
     {{if .Error}}
-    <div class="alert alert-error">{{.Error}}</div>
+    <div class="alert alert-error" role="alert" aria-live="assertive">{{.Error}}</div>
+    {{end}}
+    {{if .Restored}}
+    <div class="alert alert-success" role="alert">Save version restored successfully.</div>
+    {{end}}
+    {{if .Deleted}}
+    <div class="alert alert-success" role="alert">Save deleted from server.</div>
     {{end}}
 
     <!-- Stats -->
-    <section class="stats-row">
+    <section class="stats-row" aria-label="Statistics">
       <div class="stat-card">
         <div class="stat-value">{{.Stats.ClientCount}}</div>
         <div class="stat-label">Clients</div>
@@ -55,9 +64,9 @@
     </section>
 
     <!-- Clients -->
-    <section class="panel">
+    <section class="panel" aria-labelledby="clients-heading">
       <div class="panel-header">
-        <h2>Your Clients</h2>
+        <h2 id="clients-heading">Your Clients</h2>
       </div>
       {{if .Clients}}
       <div class="table-wrap">
@@ -89,9 +98,9 @@
     </section>
 
     <!-- Synced Saves -->
-    <section class="panel">
+    <section class="panel" aria-labelledby="saves-heading">
       <div class="panel-header">
-        <h2>Synced Saves</h2>
+        <h2 id="saves-heading">Synced Saves</h2>
       </div>
       {{if .Saves}}
       <div class="table-wrap">
@@ -102,6 +111,7 @@
               <th>Path key</th>
               <th>Size</th>
               <th>Last synced</th>
+              <th class="th-action">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -111,6 +121,15 @@
               <td><code class="code-inline">{{truncate .PathKey 16}}</code></td>
               <td class="cell-size">{{formatBytes .SizeBytes}}</td>
               <td class="cell-muted">{{formatTime .UpdatedAt}}</td>
+              <td class="cell-action">
+                <a href="/dashboard/save/versions?game_id={{urlquery .GameID}}&path_key={{urlquery .PathKey}}" class="btn-ghost btn-sm">Versions</a>
+                <form method="post" action="/dashboard/save/delete" class="inline-form" style="display:inline-block; margin-left:0.5rem;" onsubmit="return confirm('Delete this save from the server? It cannot be undone.');">
+                  <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="game_id" value="{{.GameID}}">
+                  <input type="hidden" name="path_key" value="{{.PathKey}}">
+                  <button type="submit" class="btn-danger-sm">Delete</button>
+                </form>
+              </td>
             </tr>
             {{end}}
           </tbody>
@@ -124,5 +143,12 @@
       {{end}}
     </section>
   </main>
+  <script>
+  (function() {
+    setInterval(function() {
+      if (document.visibilityState === 'visible') window.location.reload();
+    }, 60000);
+  })();
+  </script>
 </body>
 </html>

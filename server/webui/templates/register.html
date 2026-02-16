@@ -12,21 +12,23 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="auth-page">
-  <main class="auth-card">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <main id="main-content" class="auth-card" role="main" aria-label="Create account">
     <img src="/static/logo.png" alt="GSBS" class="auth-logo">
     <h1>Create account</h1>
     <p class="subtitle">Register for Game Sync &amp; Backup</p>
     {{if .Error}}
-    <p class="error">{{.Error}}</p>
+    <p class="error" role="alert" aria-live="assertive">{{.Error}}</p>
     {{end}}
     {{if .AllowRegister}}
-    <form method="post" action="/register" class="auth-form">
+    <form method="post" action="/register" class="auth-form" aria-label="Registration form">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <label for="username">Username</label>
-      <input id="username" name="username" type="text" required autocomplete="username">
+      <input id="username" name="username" type="text" required autocomplete="username" aria-required="true">
       <label for="password">Password</label>
-      <input id="password" name="password" type="password" required autocomplete="new-password">
+      <input id="password" name="password" type="password" required autocomplete="new-password" aria-required="true">
       <label for="confirm_password">Confirm password</label>
-      <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password">
+      <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password" aria-required="true">
       <button type="submit">Register</button>
     </form>
     {{else}}

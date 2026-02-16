@@ -12,18 +12,20 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="auth-page">
-  <main class="auth-card">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <main id="main-content" class="auth-card" role="main" aria-label="Sign in">
     <img src="/static/logo.png" alt="GSBS" class="auth-logo">
     <h1>Game Sync &amp; Backup</h1>
     <p class="subtitle">Sign in to your account</p>
     {{if .Error}}
-    <p class="error">{{.Error}}</p>
+    <p class="error" role="alert" aria-live="assertive">{{.Error}}</p>
     {{end}}
-    <form method="post" action="/login" class="auth-form">
+    <form method="post" action="/login" class="auth-form" aria-label="Login form">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <label for="username">Username</label>
-      <input id="username" name="username" type="text" required autocomplete="username">
+      <input id="username" name="username" type="text" required autocomplete="username" aria-required="true">
       <label for="password">Password</label>
-      <input id="password" name="password" type="password" required autocomplete="current-password">
+      <input id="password" name="password" type="password" required autocomplete="current-password" aria-required="true">
       <button type="submit">Sign in</button>
     </form>
     {{if .AllowRegister}}

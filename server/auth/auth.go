@@ -48,10 +48,19 @@ func (s *Service) RegisterUser(ctx context.Context, username, password string) (
 	return s.store.CreateUser(ctx, username, hash)
 }
 
+// isUserDisabled returns true if the user account is disabled.
+func (s *Service) isUserDisabled(ctx context.Context, userID string) bool {
+	ok, err := s.store.IsUserDisabled(ctx, userID)
+	return err == nil && ok
+}
+
 // Login validates username/password and returns a new client token (for a new "client" device).
 func (s *Service) Login(ctx context.Context, username, password, clientName, clientOS string) (userID, clientToken string, err error) {
 	uid, hash, err := s.store.UserByUsername(ctx, username)
 	if err != nil {
+		return "", "", ErrBadCredentials
+	}
+	if s.isUserDisabled(ctx, uid) {
 		return "", "", ErrBadCredentials
 	}
 	if err := CheckPassword(password, hash); err != nil {
@@ -71,14 +80,33 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	if err != nil {
 		return "", ErrBadCredentials
 	}
+	if s.isUserDisabled(ctx, uid) {
+		return "", ErrBadCredentials
+	}
 	if err := CheckPassword(password, hash); err != nil {
 		return "", err
 	}
 	return uid, nil
 }
 
+// ChangePassword updates the user's password. Caller must have verified current password (e.g. via Authenticate).
+func (s *Service) ChangePassword(ctx context.Context, userID, newPassword string) error {
+	hash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	return s.store.UpdateUserPassword(ctx, userID, hash)
+}
+
 // ValidateToken returns userID and clientID if the token is valid.
+// Returns error if the user is disabled.
 func (s *Service) ValidateToken(ctx context.Context, token string) (userID, clientID string, err error) {
 	userID, clientID, _, _, err = s.store.ClientByToken(ctx, token)
-	return userID, clientID, err
+	if err != nil {
+		return "", "", err
+	}
+	if s.isUserDisabled(ctx, userID) {
+		return "", "", ErrBadCredentials
+	}
+	return userID, clientID, nil
 }

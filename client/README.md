@@ -48,12 +48,12 @@ On Windows, double‑click **gsbs-client.exe** (or run it from Start). It runs i
 - **Server URL** — e.g. `http://localhost:8080`, `https://your-server:8080`, or your Docker/remote server URL.
 - **Username** and **Password** — your GSBS account. Click **Login** to save the token and start syncing.
 
-**Tray menu:**
+**Tray menu (quick actions at top):**
 - **Server: (not set)** or **Server: your-url** — shows current server (click **Login** to change).
-- **Open server in browser** — open the server WebUI (only when a server is set).
-- **Login...** — open the login dialog to connect to a server or switch account (server URL, username, password). Sync restarts after a successful login.
-- **Edit config file** — open `%APPDATA%\gsbs\config.json` in Notepad for advanced options (e.g. watch_paths).
-- **Sync now** — run a sync immediately.
+- **Sync now** — run a sync immediately (quick action).
+- **Open server in browser** — open the server WebUI (quick action; only when a server is set).
+- **Login...** — open the login dialog to connect to a server or switch account. Sync restarts after a successful login.
+- **Edit config file** — open `%APPDATA%\gsbs\config.json` (uses EDITOR/VISUAL if set, else tries VS Code, else default app e.g. Notepad).
 - **Quit** — exit the client.
 
 To run with a **console** (e.g. for debugging):  
@@ -74,7 +74,7 @@ To run with a **console** (e.g. for debugging):
    - `path_key` — stable key for this save (e.g. `save_895`)
    - `path_templates` — path templates for your OS (from PCGamingWiki or manual)
 
-   Optional top-level config for path resolution:
+   Optional top-level config: `max_sync_kbps` (KiB/s limit for sync; 0 = no limit), `verbose_log` (extra log detail; restart after change). Path resolution:
    - `ubisoft_connect_folder` — e.g. `C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher` (for `<Ubisoft-Connect-folder>`)
    - `launcher_user_id` — your launcher user ID (for `<user-id>` in paths like `savegames\<user-id>\895`)
 

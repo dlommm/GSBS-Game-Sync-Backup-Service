@@ -32,6 +32,7 @@ type subscriber struct {
 type Hub struct {
 	mu          sync.RWMutex
 	subscribers map[*subscriber]struct{}
+	closed      bool
 }
 
 // NewHub creates a new SSE hub.
@@ -43,12 +44,19 @@ func NewHub() *Hub {
 
 // Subscribe registers a new SSE client. Returns the event channel and an
 // unsubscribe function that MUST be called when the client disconnects.
+// After Shutdown, Subscribe returns an already-closed channel so callers exit quickly.
 func (h *Hub) Subscribe(clientID string) (<-chan Event, func()) {
+	h.mu.Lock()
+	if h.closed {
+		ch := make(chan Event)
+		close(ch)
+		h.mu.Unlock()
+		return ch, func() {}
+	}
 	sub := &subscriber{
 		ch:       make(chan Event, 16),
 		clientID: clientID,
 	}
-	h.mu.Lock()
 	h.subscribers[sub] = struct{}{}
 	h.mu.Unlock()
 	log.Printf("sse: client %s subscribed (%d total)", clientID, h.Count())
@@ -60,6 +68,28 @@ func (h *Hub) Subscribe(clientID string) (<-chan Event, func()) {
 		log.Printf("sse: client %s unsubscribed (%d total)", clientID, h.Count())
 	}
 	return sub.ch, unsub
+}
+
+// Shutdown broadcasts server-shutting-down to all subscribers, then closes their channels
+// so they disconnect gracefully. New Subscribe calls after Shutdown return a closed channel.
+func (h *Hub) Shutdown() {
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return
+	}
+	h.closed = true
+	evt := Event{Type: "server-shutting-down", Data: "{}"}
+	for sub := range h.subscribers {
+		select {
+		case sub.ch <- evt:
+		default:
+		}
+		close(sub.ch)
+	}
+	h.subscribers = make(map[*subscriber]struct{})
+	h.mu.Unlock()
+	log.Printf("sse: hub shut down")
 }
 
 // Broadcast sends an event to all connected subscribers.

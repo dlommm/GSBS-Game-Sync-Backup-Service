@@ -21,6 +21,8 @@ When you change the project in ways that affect how agents should work, update t
 - **Skills** (`.cursor/skills/<name>/SKILL.md`): Keep scope, conventions, and checklists accurate. Preserve frontmatter `name` and `description`; refine `description` if the “when to use” trigger changes.
 - **Subagents** (`.cursor/agents/<name>.md`): Keep the prompt body and scope in sync with the skill. Ensure frontmatter `description` matches when the agent should delegate (e.g. “Use when…” / “Use proactively for…”). Same names as skills (gsbs-server, gsbs-client, gsbs-pcgw-paths, gsbs-release) so the mapping stays 1:1.
 - **SUBAGENTS.md**: Keep the “When to use which skill” table and role summaries aligned with actual skills and subagents. Add a row or role if you add a new skill/subagent pair.
+- **API or endpoint changes**: When adding or changing server API routes, update `docs/API.md` so the endpoint reference stays accurate.
+- **New domain with path-scoped delegation**: If you add a new skill/subagent pair for a directory, add a matching `delegate-<name>.mdc` rule with an appropriate `globs` pattern and update `.cursor/README.md` and SUBAGENTS.md.
 
 ## One-to-one mapping
 
