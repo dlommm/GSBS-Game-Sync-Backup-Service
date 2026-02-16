@@ -350,6 +350,7 @@ func (h *Handler) withAuth(fn func(http.ResponseWriter, *http.Request, string)) 
 		if token == "" {
 			token = r.URL.Query().Get("token")
 		}
+		token = strings.TrimSpace(token)
 		if token == "" {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing token"})
 			return

@@ -175,6 +175,18 @@
       <div class="panel-header-actions">
         <h2>Manifest<span class="table-count">({{.Stats.ManifestCount}} entries)</span></h2>
         <div class="panel-actions">
+          <form method="get" action="/admin" class="inline-form manifest-count-form" style="display:inline-block; margin-right:0.5rem;">
+            <label for="manifest-count" class="sr-only">Per page</label>
+            <select name="count" id="manifest-count" onchange="this.form.submit()" style="padding:0.25rem; margin-right:0.25rem;">
+              <option value="10"  {{if eq .ManifestPerPage 10}}selected{{end}}>10</option>
+              <option value="20"  {{if eq .ManifestPerPage 20}}selected{{end}}>20</option>
+              <option value="40"  {{if eq .ManifestPerPage 40}}selected{{end}}>40</option>
+              <option value="60"  {{if eq .ManifestPerPage 60}}selected{{end}}>60</option>
+              <option value="100" {{if eq .ManifestPerPage 100}}selected{{end}}>100</option>
+            </select>
+            <input type="hidden" name="page" value="1">
+            <span class="manifest-per-page-label">per page</span>
+          </form>
           <form method="get" action="/admin/manifest.csv" class="inline-form" style="display:inline-block; margin-right:0.5rem;">
             <label for="csv-platform" class="sr-only">Platform</label>
             <select name="platform" id="csv-platform" style="padding:0.25rem; margin-right:0.25rem;">
@@ -227,6 +239,23 @@
           </tbody>
         </table>
       </div>
+      {{if gt .ManifestTotalPages 1}}
+      <nav class="manifest-pagination" aria-label="Manifest pagination">
+        <span class="manifest-pagination-summary">Page {{.ManifestPage}} of {{.ManifestTotalPages}}{{if .ManifestTotal}} — {{.ManifestStart}}–{{.ManifestEnd}} of {{.ManifestTotal}} entries{{end}}</span>
+        <div class="manifest-pagination-links">
+          {{if gt .ManifestPage 1}}
+          <a href="/admin?count={{.ManifestPerPage}}&page={{.ManifestPrevPage}}" class="btn-ghost btn-sm">« Prev</a>
+          {{else}}
+          <span class="btn-ghost btn-sm" aria-disabled="true">« Prev</span>
+          {{end}}
+          {{if lt .ManifestPage .ManifestTotalPages}}
+          <a href="/admin?count={{.ManifestPerPage}}&page={{.ManifestNextPage}}" class="btn-ghost btn-sm">Next »</a>
+          {{else}}
+          <span class="btn-ghost btn-sm" aria-disabled="true">Next »</span>
+          {{end}}
+        </div>
+      </nav>
+      {{end}}
       {{else}}
       <div class="panel-empty"><p>No manifest entries. Run the PCGW sync job to populate.</p></div>
       {{end}}

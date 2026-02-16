@@ -676,6 +676,32 @@ func (s *sqliteStore) ListGameSaveLocations(ctx context.Context) ([]types.GameSa
 	return out, rows.Err()
 }
 
+func (s *sqliteStore) ListGameSaveLocationsPaginated(ctx context.Context, limit, offset int) ([]types.GameSaveLocation, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT game_id, pcgw_page_id, game_title, platform, path_template, is_config, updated_at, source, COALESCE(notes, '') FROM game_save_locations ORDER BY game_id, platform LIMIT ? OFFSET ?`, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []types.GameSaveLocation
+	for rows.Next() {
+		var e types.GameSaveLocation
+		var isConfig int
+		if err := rows.Scan(&e.GameID, &e.PCGWPageID, &e.GameTitle, &e.Platform, &e.PathTemplate, &isConfig, &e.UpdatedAt, &e.Source, &e.Notes); err != nil {
+			return nil, err
+		}
+		e.IsConfig = isConfig != 0
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (s *sqliteStore) GetManifestSince(ctx context.Context, since string) ([]types.GameSaveLocation, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT game_id, pcgw_page_id, game_title, platform, path_template, is_config, updated_at, source, COALESCE(notes, '') FROM game_save_locations WHERE updated_at > ? ORDER BY game_id, platform`, since)

@@ -118,6 +118,7 @@ func loadConfig() (*config, error) {
 	if c.ServerURL == "" {
 		c.ServerURL = "http://localhost:8080"
 	}
+	c.Token = strings.TrimSpace(c.Token)
 	return &c, nil
 }
 

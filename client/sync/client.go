@@ -46,7 +46,7 @@ func NewClient(baseURL, token string, resolver *paths.Resolver, currentOS paths.
 	}
 	return &Client{
 		baseURL:        baseURL,
-		token:          token,
+		token:          strings.TrimSpace(token),
 		resolver:       resolver,
 		currentOS:      currentOS,
 		http:           &http.Client{Timeout: syncTimeout, Transport: transport},
@@ -123,6 +123,9 @@ func (c *Client) pullOnce(ctx context.Context) (*PullResponse, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized {
+			return nil, fmt.Errorf("401 Unauthorized — token may be invalid or expired; try logging in again from the tray")
+		}
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
 	var out PullResponse
@@ -270,6 +273,9 @@ func (c *Client) Push(ctx context.Context, gameID, pathKey, filePath string, con
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusUnauthorized {
+			return fmt.Errorf("push: 401 Unauthorized — token may be invalid or expired; try logging in again from the tray")
+		}
 		return fmt.Errorf("push: status %d", resp.StatusCode)
 	}
 	return nil

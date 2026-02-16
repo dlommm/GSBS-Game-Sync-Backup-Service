@@ -83,6 +83,7 @@ type Store interface {
 	// Game save locations (manifest from PCGW)
 	UpsertGameSaveLocations(ctx context.Context, entries []types.GameSaveLocation) error
 	ListGameSaveLocations(ctx context.Context) ([]types.GameSaveLocation, error)
+	ListGameSaveLocationsPaginated(ctx context.Context, limit, offset int) ([]types.GameSaveLocation, error)
 	GetManifestSince(ctx context.Context, since string) ([]types.GameSaveLocation, error)
 
 	// Admin / stats (used by WebUI admin page)

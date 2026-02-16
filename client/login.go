@@ -50,6 +50,7 @@ func defaultClientName() string {
 
 // DoLogin calls the server login API and returns a config with the token set (and saves it).
 // Used by both CLI runLogin and the Windows tray login dialog.
+// Merges server URL, token, and client name into existing config so watch_paths and other settings are preserved.
 // serverURL must be non-empty (e.g. https://your-server:8080). clientName is sent to the server; if empty, defaultClientName() is used.
 func DoLogin(serverURL, username, password, clientName string) (*config, error) {
 	serverURL = strings.TrimSpace(serverURL)
@@ -101,12 +102,20 @@ func DoLogin(serverURL, username, password, clientName string) (*config, error) 
 		log.Printf("client login: failed server=%s username=%q: invalid response: %v", serverURL, username, err)
 		return nil, fmt.Errorf("invalid response: %w", err)
 	}
-	cfg := &config{
-		ServerURL:    serverURL,
-		Token:        out.Token,
-		ClientName:   clientName,
-		SyncInterval: Duration(5 * time.Minute),
-		WatchPaths:   []watchPath{},
+	token := strings.TrimSpace(out.Token)
+	if token == "" {
+		return nil, fmt.Errorf("server did not return a token")
+	}
+	// Merge into existing config so watch_paths and launcher paths are preserved
+	cfg, _ := loadConfig()
+	if cfg == nil {
+		cfg = defaultConfig(serverURL)
+	}
+	cfg.ServerURL = serverURL
+	cfg.Token = token
+	cfg.ClientName = clientName
+	if cfg.SyncInterval == 0 {
+		cfg.SyncInterval = Duration(5 * time.Minute)
 	}
 	if err := saveConfig(cfg); err != nil {
 		log.Printf("client login: save config failed server=%s username=%q: %v", serverURL, username, err)
