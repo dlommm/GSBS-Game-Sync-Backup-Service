@@ -1,6 +1,7 @@
 package api
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -100,6 +101,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.withAuth(h.handleSSE)(w, r)
 	case r.URL.Path == "/api/change-password" && r.Method == http.MethodPost:
 		h.withAuth(h.handleChangePassword)(w, r)
+	case r.URL.Path == "/api/token/refresh" && r.Method == http.MethodPost:
+		h.withAuth(h.handleTokenRefresh)(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -420,7 +423,14 @@ func (h *Handler) handleSaveSummaries(w http.ResponseWriter, r *http.Request, us
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
 		return
 	}
-	resp := map[string]interface{}{"saves": summaries}
+	items := make([]map[string]interface{}, len(summaries))
+	for i, s := range summaries {
+		items[i] = map[string]interface{}{
+			"game_id": s.GameID, "path_key": s.PathKey, "game_title": s.GameTitle,
+			"size_bytes": s.SizeBytes, "updated_at": s.UpdatedAt, "content_hash": s.ContentHash,
+		}
+	}
+	resp := map[string]interface{}{"saves": items}
 	if limit > 0 || offset > 0 {
 		resp["total"] = total
 	}
@@ -522,6 +532,29 @@ type pullSaveItem struct {
 }
 
 func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID string) {
+	gameID := strings.TrimSpace(r.URL.Query().Get("game_id"))
+	pathKey := strings.TrimSpace(r.URL.Query().Get("path_key"))
+	if gameID != "" && pathKey != "" {
+		blob, err := h.store.GetSave(r.Context(), userID, gameID, pathKey)
+		if err != nil {
+			log.Printf("api pull single: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "get failed"})
+			return
+		}
+		if blob == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+			return
+		}
+		items := []pullSaveItem{{
+			GameID:    blob.GameID,
+			PathKey:   blob.PathKey,
+			UpdatedAt: blob.UpdatedAt,
+			Content:   encodeBase64(blob.Content),
+		}}
+		resp := map[string]interface{}{"saves": items}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
 	limit, offset := parseLimitOffset(r)
 	var saves []types.SaveBlob
 	var total int
@@ -553,6 +586,17 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID stri
 	if limit > 0 || offset > 0 {
 		resp["total"] = total
 	}
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusOK)
+		gz := gzip.NewWriter(w)
+		if err := json.NewEncoder(gz).Encode(resp); err != nil {
+			log.Printf("api pull: gzip encode failed user=%s: %v", userID, err)
+		}
+		_ = gz.Close()
+		return
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -580,14 +624,35 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "X-File-Path too long"})
 		return
 	}
-	limited := http.MaxBytesReader(nil, r.Body, MaxSaveSize)
-	content, err := io.ReadAll(limited)
-	if err != nil {
-		if strings.Contains(err.Error(), "request body too large") {
-			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "save too large (max 50 MiB)"})
+	var content []byte
+	if strings.EqualFold(r.Header.Get("Content-Encoding"), "gzip") {
+		gr, err := gzip.NewReader(r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid gzip body"})
 			return
 		}
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body failed"})
+		defer gr.Close()
+		limited := io.LimitReader(gr, MaxSaveSize+1)
+		content, err = io.ReadAll(limited)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body failed"})
+			return
+		}
+	} else {
+		limited := http.MaxBytesReader(nil, r.Body, MaxSaveSize)
+		var err error
+		content, err = io.ReadAll(limited)
+		if err != nil {
+			if strings.Contains(err.Error(), "request body too large") {
+				writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "save too large (max 50 MiB)"})
+				return
+			}
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body failed"})
+			return
+		}
+	}
+	if len(content) > MaxSaveSize {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "save too large (max 50 MiB)"})
 		return
 	}
 	if len(content) == 0 {
@@ -611,10 +676,32 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		}
 	}
 	log.Printf("push: user=%s game=%s path_key=%s file=%s size=%d", userID, gameID, pathKey, filePath, len(content))
-	if err := h.store.UpsertSave(r.Context(), userID, gameID, pathKey, content); err != nil {
+	contentHash := strings.TrimSpace(r.Header.Get("X-Content-Hash"))
+	contentSize, _ := strconv.ParseInt(r.Header.Get("X-Content-Size"), 10, 64)
+	clientID := ""
+	if _, cid, err := h.auth.ValidateToken(r.Context(), getToken(r)); err == nil {
+		clientID = cid
+	}
+	meta := &store.SaveMeta{
+		ContentHash: contentHash,
+		ContentSize: contentSize,
+		ClientID:    clientID,
+	}
+	skipped, err := h.store.UpsertSaveWithMeta(r.Context(), userID, gameID, pathKey, content, meta)
+	if err != nil {
 		log.Printf("api push: upsert failed user=%s game=%s path_key=%s: %v", userID, gameID, pathKey, err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
 		return
+	}
+	if skipped {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "unchanged"})
+		return
+	}
+	if h.hub != nil {
+		h.hub.BroadcastToUser(userID, sse.Event{
+			Type: "save-updated",
+			Data: fmt.Sprintf(`{"game_id":%q,"path_key":%q}`, gameID, pathKey),
+		})
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

@@ -26,6 +26,7 @@ func (e Event) Format() string {
 type subscriber struct {
 	ch       chan Event
 	clientID string
+	userID   string
 }
 
 // Hub manages SSE client connections and broadcasts events.
@@ -42,10 +43,8 @@ func NewHub() *Hub {
 	}
 }
 
-// Subscribe registers a new SSE client. Returns the event channel and an
-// unsubscribe function that MUST be called when the client disconnects.
-// After Shutdown, Subscribe returns an already-closed channel so callers exit quickly.
-func (h *Hub) Subscribe(clientID string) (<-chan Event, func()) {
+// Subscribe registers a new SSE client for userID. Returns the event channel and unsubscribe func.
+func (h *Hub) Subscribe(userID string) (<-chan Event, func()) {
 	h.mu.Lock()
 	if h.closed {
 		ch := make(chan Event)
@@ -55,19 +54,36 @@ func (h *Hub) Subscribe(clientID string) (<-chan Event, func()) {
 	}
 	sub := &subscriber{
 		ch:       make(chan Event, 16),
-		clientID: clientID,
+		clientID: userID,
+		userID:   userID,
 	}
 	h.subscribers[sub] = struct{}{}
 	h.mu.Unlock()
-	log.Printf("sse: client %s subscribed (%d total)", clientID, h.Count())
+	log.Printf("sse: client %s subscribed (%d total)", userID, h.Count())
 
 	unsub := func() {
 		h.mu.Lock()
 		delete(h.subscribers, sub)
 		h.mu.Unlock()
-		log.Printf("sse: client %s unsubscribed (%d total)", clientID, h.Count())
+		log.Printf("sse: client %s unsubscribed (%d total)", userID, h.Count())
 	}
 	return sub.ch, unsub
+}
+
+// BroadcastToUser sends an event to subscribers for the given user only.
+func (h *Hub) BroadcastToUser(userID string, evt Event) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for sub := range h.subscribers {
+		if sub.userID != userID {
+			continue
+		}
+		select {
+		case sub.ch <- evt:
+		default:
+			log.Printf("sse: dropping event for slow client %s", sub.clientID)
+		}
+	}
 }
 
 // Shutdown broadcasts server-shutting-down to all subscribers, then closes their channels

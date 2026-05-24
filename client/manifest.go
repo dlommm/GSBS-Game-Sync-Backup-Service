@@ -68,22 +68,61 @@ func manifestPath() string {
 	return filepath.Join(dir, "gsbs", "manifest.json")
 }
 
-// manifestFile is the on-disk shape (entries + last fetch time for optional ?since=).
+// manifestFile is the on-disk shape (entries + last fetch time for ?since=).
 type manifestFile struct {
-	Entries []types.GameSaveLocation `json:"entries"`
+	Entries       []types.GameSaveLocation `json:"entries"`
+	LastFetchedAt string                   `json:"last_fetched_at,omitempty"` // RFC3339
 }
 
 // LoadManifestFromDisk returns cached manifest entries. Returns nil if file missing or invalid.
 func LoadManifestFromDisk() []types.GameSaveLocation {
+	entries, _ := LoadManifestCache()
+	return entries
+}
+
+// LoadManifestCache returns cached entries and the last fetch timestamp.
+func LoadManifestCache() ([]types.GameSaveLocation, time.Time) {
 	data, err := os.ReadFile(manifestPath())
 	if err != nil {
-		return nil
+		return nil, time.Time{}
 	}
 	var f manifestFile
 	if json.Unmarshal(data, &f) != nil {
-		return nil
+		return nil, time.Time{}
 	}
-	return f.Entries
+	var lastFetched time.Time
+	if f.LastFetchedAt != "" {
+		lastFetched, _ = time.Parse(time.RFC3339, f.LastFetchedAt)
+	}
+	return f.Entries, lastFetched
+}
+
+// MergeManifestDelta merges delta entries into existing by (game_id, platform, path_template).
+func MergeManifestDelta(existing, delta []types.GameSaveLocation) []types.GameSaveLocation {
+	if len(delta) == 0 {
+		return existing
+	}
+	if len(existing) == 0 {
+		return delta
+	}
+	key := func(e types.GameSaveLocation) string {
+		return e.GameID + "\x00" + e.Platform + "\x00" + e.PathTemplate
+	}
+	index := make(map[string]int, len(existing))
+	for i, e := range existing {
+		index[key(e)] = i
+	}
+	out := make([]types.GameSaveLocation, len(existing))
+	copy(out, existing)
+	for _, e := range delta {
+		k := key(e)
+		if i, ok := index[k]; ok {
+			out[i] = e
+		} else {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // SaveManifestToDisk writes the full manifest to disk atomically (write to temp file, then rename).
@@ -94,7 +133,10 @@ func SaveManifestToDisk(entries []types.GameSaveLocation) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(manifestFile{Entries: entries}, "", "  ")
+	data, err := json.MarshalIndent(manifestFile{
+		Entries:       entries,
+		LastFetchedAt: time.Now().UTC().Format(time.RFC3339),
+	}, "", "  ")
 	if err != nil {
 		return err
 	}

@@ -10,7 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/gen2brain/beeep"
 	"github.com/getlantern/systray"
+	"github.com/gsbs/gsbs/client/sync"
 	"github.com/skratchdot/open-golang/open"
 )
 
@@ -29,6 +31,9 @@ func onExitLinux() {
 func onReadyLinux() {
 	systray.SetTitle("GSBS")
 	systray.SetTooltip(lastSyncTooltip())
+	OnDiscoveryResult = func(newGames int) {
+		_ = beeep.Notify("GSBS", fmt.Sprintf("Discovered %d new game(s)", newGames), "")
+	}
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -39,11 +44,20 @@ func onReadyLinux() {
 
 	mServer := systray.AddMenuItem("Server: (not set)", "Current server URL")
 	mServer.Disable()
+	mLastSync := systray.AddMenuItem("Last sync: —", "Last sync time")
+	mLastSync.Disable()
+	mOutbox := systray.AddMenuItem("Pending uploads: 0", "Offline queue")
+	mOutbox.Disable()
+	mConflicts := systray.AddMenuItem("Conflicts: 0", "Sync conflicts")
+	mConflicts.Disable()
 	mOpenServer := systray.AddMenuItem("Open server in browser", "Open server URL in default browser")
-	mLogin := systray.AddMenuItem("Login / Setup...", "Open setup page in browser")
+	mLogin := systray.AddMenuItem("Login / Setup...", "Open setup wizard in browser")
 	mEditConfig := systray.AddMenuItem("Edit config file", "Open config in default editor")
 	mSyncNow := systray.AddMenuItem("Sync now", "Run a sync immediately")
 	mRefreshManifest := systray.AddMenuItem("Refresh manifest", "Re-fetch game save locations from server")
+	mPause := systray.AddMenuItem("Pause sync", "Pause automatic sync")
+	mOpenLog := systray.AddMenuItem("View log", "Open client log file")
+	mOpenData := systray.AddMenuItem("Open data folder", "Open GSBS config folder")
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("Quit", "Exit GSBS")
 
@@ -52,10 +66,25 @@ func onReadyLinux() {
 		cfg = blankConfig()
 	}
 	updateServerLabelLinux(mServer, cfg.ServerURL)
+	updateLastSyncMenuLinux(mLastSync)
+	updateStatusMenusLinux(mOutbox, mConflicts)
 	var currentCfg *config
 	currentCfg = cfg
+	SyncPaused.Store(cfg.SyncPaused)
+	if cfg.SyncPaused {
+		mPause.SetTitle("Resume sync")
+	}
 	setupURL := StartSetupServer()
 	restartSync(currentCfg)
+
+	go func() {
+		statusTicker := time.NewTicker(15 * time.Second)
+		defer statusTicker.Stop()
+		for range statusTicker.C {
+			updateLastSyncMenuLinux(mLastSync)
+			updateStatusMenusLinux(mOutbox, mConflicts)
+		}
+	}()
 
 	go func() {
 		for {
@@ -87,6 +116,25 @@ func onReadyLinux() {
 				triggerSyncNow()
 			case <-mRefreshManifest.ClickedCh:
 				triggerManifestRefresh()
+			case <-mPause.ClickedCh:
+				syncMu.Lock()
+				paused := !SyncPaused.Load()
+				SyncPaused.Store(paused)
+				if currentCfg != nil {
+					currentCfg.SyncPaused = paused
+					_ = saveConfig(currentCfg)
+				}
+				syncMu.Unlock()
+				if paused {
+					mPause.SetTitle("Resume sync")
+				} else {
+					mPause.SetTitle("Pause sync")
+					triggerSyncNow()
+				}
+			case <-mOpenLog.ClickedCh:
+				openLogLinux()
+			case <-mOpenData.ClickedCh:
+				openDataFolderLinux()
 			case <-mQuit.ClickedCh:
 				systray.Quit()
 				return
@@ -99,6 +147,42 @@ func onReadyLinux() {
 			time.Sleep(800 * time.Millisecond)
 			open.Run(setupURL)
 		}()
+	}
+}
+
+func updateLastSyncMenuLinux(m *systray.MenuItem) {
+	at, err := getLastSync()
+	if at.IsZero() {
+		m.SetTitle("Last sync: —")
+		return
+	}
+	status := "ok"
+	if err != nil {
+		status = "failed"
+	}
+	m.SetTitle(fmt.Sprintf("Last sync: %s (%s)", at.Format("15:04"), status))
+}
+
+func updateStatusMenusLinux(outbox, conflicts *systray.MenuItem) {
+	n := sync.OutboxCount()
+	outbox.SetTitle(fmt.Sprintf("Pending uploads: %d", n))
+	c := sync.ConflictCount()
+	conflicts.SetTitle(fmt.Sprintf("Conflicts: %d", c))
+}
+
+func openLogLinux() {
+	path := ClientLogPath()
+	if err := exec.Command("xdg-open", path).Start(); err != nil {
+		log.Printf("tray: open log: %v", err)
+	}
+}
+
+func openDataFolderLinux() {
+	dir, _ := os.UserConfigDir()
+	path := filepath.Join(dir, "gsbs")
+	_ = os.MkdirAll(path, 0755)
+	if err := exec.Command("xdg-open", path).Start(); err != nil {
+		log.Printf("tray: open data: %v", err)
 	}
 }
 

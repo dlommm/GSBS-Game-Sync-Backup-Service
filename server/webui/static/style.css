@@ -57,7 +57,12 @@ a:focus-visible, button:focus-visible, input:focus-visible {
 }
 .auth-form input:focus-visible { outline:2px solid var(--accent); outline-offset:0; box-shadow:0 0 0 3px var(--accent-muted); }
 
-/* ─── Auth Pages (Login / Register) ─── */
+.activity-feed { list-style:none; margin:0; padding:0; }
+.activity-item { padding:.75rem 0; border-bottom:1px solid var(--border); display:flex; flex-wrap:wrap; gap:.5rem 1rem; align-items:baseline; }
+.activity-item:last-child { border-bottom:none; }
+.activity-action { font-weight:600; }
+.activity-time { font-size:.8125rem; min-width:8rem; }
+
 .auth-page {
   display:flex; align-items:center; justify-content:center; min-height:100vh; padding:1.5rem;
   background:radial-gradient(ellipse 80% 50% at 50% -10%,var(--accent-muted) 0%,transparent 60%);

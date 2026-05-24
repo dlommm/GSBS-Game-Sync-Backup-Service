@@ -1,0 +1,34 @@
+services:
+  gsbs-server:
+    image: dendlomm/gsbs-server:latest
+    container_name: gsbs-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      GSBS_ADDR: ":8080"
+      GSBS_DB: /app/data/gsbs.db
+      GSBS_SESSION_SECRET: ${GSBS_SESSION_SECRET:?set GSBS_SESSION_SECRET in .env}
+      GSBS_PCGW_CRON: "0 3 * * 0"
+      GSBS_LOG_LEVEL: info
+    volumes:
+      - gsbs-data:/app/data
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: gsbs-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docs/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - gsbs-server
+
+volumes:
+  gsbs-data:
+  caddy-data:
+  caddy-config:

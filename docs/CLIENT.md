@@ -16,8 +16,25 @@ Inside that directory you will find:
 | File | Description |
 |------|-------------|
 | **config.json** | Server URL, token, client name, sync interval, optional Ubisoft/launcher paths, and `watch_paths`. |
-| **manifest.json** | Cached list of game save locations from the server (from `GET /api/manifest`). Refreshed on sync and when the server pushes an update. |
+| **manifest.json** | Cached list of game save locations from the server (from `GET /api/manifest`). Supports delta fetch via `?since=`. |
+| **discovery.json** | Last game discovery scan (installed games matched to manifest). |
+| **outbox/** | Pending uploads when the server was unreachable. |
+| **conflicts.json** | Detected sync conflicts (local vs server both modified). |
 | **gsbs.log** | Client log file. All client activity (login, sync, pull, push, watcher, tray actions, errors) is written here so you can see what is happening. |
+
+## Auto-discovery
+
+On startup and every `discovery_interval` (default 4h), the client scans Steam, Epic, GOG, Ubisoft, Heroic, Lutris, and Bottles for installed games and matches them against the server manifest. New games trigger a tray notification and manifest refresh.
+
+## Offline outbox
+
+If a push fails after retries, the file is queued in `outbox/` and retried every 2 minutes until success.
+
+## Sync behavior
+
+- **Upload**: File watcher debounces changes (2s) and pushes with SHA256 hash metadata.
+- **Download**: Uses summary + hash comparison to fetch only changed saves; listens for SSE `save-updated` events from other machines.
+- **Conflicts**: When `skip_overwrite_when_local_newer` is enabled and both local and server changed, conflicts are recorded in `conflicts.json` (shown in tray).
 
 ## Log file (gsbs.log)
 

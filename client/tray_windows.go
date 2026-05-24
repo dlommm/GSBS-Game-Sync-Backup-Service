@@ -59,86 +59,6 @@ func runLoginDialogProcess() {
 	os.Exit(0)
 }
 
-var (
-	syncMu             sync.Mutex
-	syncCancel         context.CancelFunc
-	syncNowCh          chan struct{}
-	refreshManifestCh  chan struct{}
-)
-
-// restartSync cancels the current sync loop and starts a new one with the given config.
-// Must be called with syncMu NOT held (it acquires it internally).
-func restartSync(cfg *config) {
-	syncMu.Lock()
-	defer syncMu.Unlock()
-	if syncCancel != nil {
-		syncCancel()
-	}
-	syncNowCh = make(chan struct{})
-	refreshManifestCh = make(chan struct{})
-	ctx, cancel := context.WithCancel(context.Background())
-	syncCancel = cancel
-	log.Printf("tray: sync started server=%s", cfg.ServerURL)
-	go func() {
-		if err := runSync(ctx, cfg, syncNowCh, refreshManifestCh); err != nil {
-			log.Println("sync:", err)
-		}
-	}()
-}
-
-// triggerSyncNow sends on the syncNow channel if a sync loop is running.
-func triggerSyncNow() {
-	syncMu.Lock()
-	ch := syncNowCh
-	syncMu.Unlock()
-	if ch != nil {
-		select {
-		case ch <- struct{}{}:
-		default:
-		}
-	}
-}
-
-// triggerManifestRefresh sends on the refresh channel if a sync loop is running.
-func triggerManifestRefresh() {
-	syncMu.Lock()
-	ch := refreshManifestCh
-	syncMu.Unlock()
-	if ch != nil {
-		select {
-		case ch <- struct{}{}:
-		default:
-		}
-	}
-}
-
-func lastSyncTooltip() string {
-	if d := GetNextRetryIn(); d > 0 {
-		sec := int(d.Round(time.Second).Seconds())
-		return fmt.Sprintf("GSBS — Last sync failed; retrying in %ds", sec)
-	}
-	at, err := getLastSync()
-	if at.IsZero() {
-		return "Game Sync & Backup Service"
-	}
-	ago := time.Since(at)
-	var agoStr string
-	if ago < time.Minute {
-		agoStr = "just now"
-	} else if ago < time.Hour {
-		agoStr = fmt.Sprintf("%.0fm ago", ago.Minutes())
-	} else if ago < 24*time.Hour {
-		agoStr = fmt.Sprintf("%.1fh ago", ago.Hours())
-	} else {
-		agoStr = fmt.Sprintf("%.0fd ago", ago.Hours()/24)
-	}
-	status := "ok"
-	if err != nil {
-		status = "failed"
-	}
-	return fmt.Sprintf("GSBS — Last sync: %s (%s)", agoStr, status)
-}
-
 // showSyncNotification displays a Windows toast and updates tray icon state.
 func showSyncNotification(success bool, errMsg string) {
 	// Update tray icon: idle (normal) or error (red)
@@ -182,6 +102,9 @@ func onReady() {
 	// Register sync start/result for icon state and toast.
 	OnSyncStart = showSyncStart
 	OnSyncResult = showSyncNotification
+	OnDiscoveryResult = func(newGames int) {
+		_ = beeep.Notify("GSBS", fmt.Sprintf("Discovered %d new game(s)", newGames), "")
+	}
 	// Set icon after a delay so the tray is ready (systray may log a false-positive error but the icon still shows).
 	if len(iconData) > 0 {
 		go func() {
