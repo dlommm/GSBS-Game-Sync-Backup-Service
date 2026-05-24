@@ -31,8 +31,9 @@ cp "${ROOT}/client/icon_32.png" "$APPDIR/usr/share/icons/hicolor/32x32/apps/gsbs
 cp "$SCRIPT_DIR/AppRun" "$APPDIR/AppRun"
 chmod +x "$APPDIR/AppRun"
 
-LINUXDEPLOY="${LINUXDEPLOY:-linuxdeploy-x86_64.AppImage}"
-PLUGIN="${LINUXDEPLOY_PLUGIN:-linuxdeploy-plugin-appimage-x86_64.AppImage}"
+DEPLOY_DIR="${ROOT}/${OUT_DIR}"
+LINUXDEPLOY="${DEPLOY_DIR}/linuxdeploy-x86_64.AppImage"
+PLUGIN="${DEPLOY_DIR}/linuxdeploy-plugin-appimage-x86_64.AppImage"
 
 if [ ! -f "$LINUXDEPLOY" ]; then
   curl -fsSL -o "$LINUXDEPLOY" "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
@@ -45,10 +46,9 @@ fi
 
 export ARCH=x86_64
 export VERSION="$VERSION_VALUE"
-cd "$ROOT/${OUT_DIR}"
+cd "$DEPLOY_DIR"
 
-# AppIndicator libraries are expected on the host; bundle only the binary for a lightweight AppImage.
-./"$LINUXDEPLOY" \
+"$LINUXDEPLOY" \
   --appdir "$APPDIR" \
   --desktop-file "$APPDIR/usr/share/applications/gsbs-client.desktop" \
   --icon-file "$APPDIR/usr/share/icons/hicolor/32x32/apps/gsbs-client.png" \
