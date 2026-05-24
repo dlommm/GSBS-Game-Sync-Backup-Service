@@ -1,3 +1,4 @@
+{{define "partials/alerts.html"}}
 {{if .Error}}
 <div class="alert alert-error" role="alert" aria-live="assertive">{{.Error}}</div>
 {{end}}
@@ -9,4 +10,5 @@
 {{end}}
 {{if .Deleted}}
 <div class="alert alert-success" role="alert">Save deleted from server.</div>
+{{end}}
 {{end}}

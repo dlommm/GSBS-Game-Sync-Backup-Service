@@ -61,15 +61,16 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, "dashboard.html", dashboardData{
 		PageData: PageData{
+			PageName:  "dashboard",
 			Username:  username,
 			IsAdmin:   h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken,
 			NavActive: "dashboard",
 			Error:     dashboardErrorMsg(r.URL.Query().Get("error")),
 			Success:   success,
+			Restored:  r.URL.Query().Get("restored") == "1",
+			Deleted:   r.URL.Query().Get("deleted") == "1",
 		},
-		Restored:   r.URL.Query().Get("restored") == "1",
-		Deleted:    r.URL.Query().Get("deleted") == "1",
 		QuotaBytes: quotaBytes,
 	})
 }

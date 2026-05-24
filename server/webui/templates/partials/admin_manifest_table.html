@@ -1,3 +1,4 @@
+{{define "partials/admin_manifest_table.html"}}
 {{if .Manifest}}
 <div class="table-wrap">
   <table class="data-table">
@@ -28,4 +29,5 @@
 {{end}}
 {{else}}
 <div class="panel-empty"><p>{{if .Query}}No manifest entries match your search.{{else}}No manifest entries. Run PCGW sync to populate.{{end}}</p></div>
+{{end}}
 {{end}}

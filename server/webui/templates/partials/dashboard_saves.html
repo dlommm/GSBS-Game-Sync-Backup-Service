@@ -1,3 +1,4 @@
+{{define "partials/dashboard_saves.html"}}
 {{if .Saves}}
 <div class="table-wrap">
   <table class="data-table">
@@ -31,4 +32,5 @@
 <div class="panel-empty">
   <p>{{if .Query}}No saves match your search.{{else}}No saves synced yet.{{end}}</p>
 </div>
+{{end}}
 {{end}}

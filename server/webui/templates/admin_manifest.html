@@ -1,6 +1,6 @@
 {{template "layout" .}}
-{{define "title"}}Admin Manifest — GSBS{{end}}
-{{define "content"}}
+{{define "admin_manifest_title"}}Admin Manifest — GSBS{{end}}
+{{define "admin_manifest_content"}}
 <section class="panel">
   <div class="panel-header-actions">
     <h2>Manifest<span class="table-count">({{.Stats.ManifestCount}} entries)</span></h2>
@@ -40,6 +40,6 @@
   </div>
 </section>
 {{end}}
-{{define "scripts"}}
+{{define "admin_manifest_scripts"}}
 <div hidden sse-swap="manifest-updated" hx-trigger="manifest-updated from:body" hx-get="/admin/partial/manifest" hx-target="#manifest-table" hx-swap="innerHTML"></div>
 {{end}}

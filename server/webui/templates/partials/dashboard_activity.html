@@ -1,3 +1,4 @@
+{{define "partials/dashboard_activity.html"}}
 {{if .Entries}}
 <ul class="timeline">
   {{range .Entries}}
@@ -6,4 +7,5 @@
 </ul>
 {{else}}
 <p class="panel-empty">No recent activity.</p>
+{{end}}
 {{end}}

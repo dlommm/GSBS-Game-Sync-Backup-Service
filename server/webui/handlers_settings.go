@@ -58,7 +58,7 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 	encryptionEnabled, _ := h.store.IsEncryptionEnabled(r.Context(), userID)
 	h.render(w, "settings.html", settingsData{
 		PageData: PageData{
-			Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
+			PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken, NavActive: "settings", Success: success, Error: errorMsg,
 		},
 		Sessions: sessions, CurrentSessionID: GetSessionID(r, h.secret), TOTPEnabled: totpEnabled,
@@ -80,14 +80,14 @@ func (h *WebHandler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if newPassword != confirmPassword {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "settings.html", settingsData{
-			PageData: PageData{Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "New passwords do not match", CSRFToken: csrfToken, NavActive: "settings"},
+			PageData: PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "New passwords do not match", CSRFToken: csrfToken, NavActive: "settings"},
 		})
 		return
 	}
 	if len(newPassword) < 8 {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "settings.html", settingsData{
-			PageData: PageData{Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "New password must be at least 8 characters", CSRFToken: csrfToken, NavActive: "settings"},
+			PageData: PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "New password must be at least 8 characters", CSRFToken: csrfToken, NavActive: "settings"},
 		})
 		return
 	}
@@ -95,14 +95,14 @@ func (h *WebHandler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if err != nil || hash == "" {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "settings.html", settingsData{
-			PageData: PageData{Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Could not verify current password", CSRFToken: csrfToken, NavActive: "settings"},
+			PageData: PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Could not verify current password", CSRFToken: csrfToken, NavActive: "settings"},
 		})
 		return
 	}
 	if err := auth.CheckPassword(r.FormValue("current_password"), hash); err != nil {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "settings.html", settingsData{
-			PageData: PageData{Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Current password is wrong", CSRFToken: csrfToken, NavActive: "settings"},
+			PageData: PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Current password is wrong", CSRFToken: csrfToken, NavActive: "settings"},
 		})
 		return
 	}
@@ -110,7 +110,7 @@ func (h *WebHandler) handleSettings(w http.ResponseWriter, r *http.Request) {
 		log.Printf("webui change password: %v", err)
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "settings.html", settingsData{
-			PageData: PageData{Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Failed to update password", CSRFToken: csrfToken, NavActive: "settings"},
+			PageData: PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Failed to update password", CSRFToken: csrfToken, NavActive: "settings"},
 		})
 		return
 	}
@@ -196,7 +196,7 @@ func (h *WebHandler) serveEnable2FA(w http.ResponseWriter, r *http.Request) {
 		enableError = "Invalid code. Please try again. A new QR code is shown below."
 	}
 	h.render(w, "enable_2fa.html", map[string]interface{}{
-		"Username": username, "IsAdmin": h.isAdminUser(r.Context(), userID, username),
+		"PageName": "enable_2fa", "Username": username, "IsAdmin": h.isAdminUser(r.Context(), userID, username),
 		"CSRFToken": csrfToken, "QRDataURL": qrDataURL, "Secret": secret, "Error": enableError,
 		"NavActive": "settings",
 	})

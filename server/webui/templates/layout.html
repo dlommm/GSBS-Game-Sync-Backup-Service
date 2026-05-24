@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{block "title" .}}GSBS{{end}}</title>
+  <title>{{renderPageBlock .PageName "title" .}}</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,7 +20,7 @@
     {{template "partials/topbar.html" .}}
     <main id="main-content" class="page-content" role="main">
       {{template "partials/alerts.html" .}}
-      {{block "content" .}}{{end}}
+      {{renderPageBlock .PageName "content" .}}
     </main>
   {{end}}
   <script src="/static/htmx.min.js"></script>
@@ -30,7 +30,7 @@
     evt.detail.credentials = 'same-origin';
   });
   </script>
-  {{block "scripts" .}}{{end}}
+  {{renderPageBlock .PageName "scripts" .}}
 </body>
 </html>
 {{end}}
