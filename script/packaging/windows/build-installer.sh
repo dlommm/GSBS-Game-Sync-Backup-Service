@@ -21,15 +21,19 @@ if [ ! -f "$CLIENT_BIN" ]; then
 fi
 
 ISCC_PATH=""
-if command -v iscc >/dev/null 2>&1; then
-  ISCC_PATH="$(command -v iscc)"
-elif [ -x "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ]; then
-  ISCC_PATH="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
-elif [ -x "/c/Program Files/Inno Setup 6/ISCC.exe" ]; then
-  ISCC_PATH="/c/Program Files/Inno Setup 6/ISCC.exe"
-elif [ -n "${PROGRAMFILES(x86):-}" ] && [ -x "${PROGRAMFILES(x86)}/Inno Setup 6/ISCC.exe" ]; then
+for candidate in \
+  "$(command -v iscc 2>/dev/null || true)" \
+  "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" \
+  "/c/Program Files/Inno Setup 6/ISCC.exe"; do
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+    ISCC_PATH="$candidate"
+    break
+  fi
+done
+if [ -z "$ISCC_PATH" ] && [ -n "${PROGRAMFILES(x86):-}" ] && [ -x "${PROGRAMFILES(x86)}/Inno Setup 6/ISCC.exe" ]; then
   ISCC_PATH="${PROGRAMFILES(x86)}/Inno Setup 6/ISCC.exe"
-else
+fi
+if [ -z "$ISCC_PATH" ]; then
   echo "Inno Setup compiler (iscc) not found" >&2
   exit 1
 fi
@@ -39,13 +43,11 @@ rm -rf "$WORK"
 mkdir -p "$WORK"
 cp "$CLIENT_BIN" "$WORK/gsbs-client-windows-amd64.exe"
 
-if [[ "${RUNNER_OS:-}" == "Windows" ]] || [[ "$OSTYPE" == msys* ]]; then
-  WORK_WIN=$(cygpath -w "$WORK" 2>/dev/null || echo "$WORK" | sed 's|/|\\|g')
-  OUT_WIN=$(cygpath -w "${ROOT}/${OUT_DIR}" 2>/dev/null || echo "${ROOT}/${OUT_DIR}" | sed 's|/|\\|g')
-  ISS_WIN=$(cygpath -w "$SCRIPT_DIR/gsbs-client.iss" 2>/dev/null || echo "$SCRIPT_DIR/gsbs-client.iss" | sed 's|/|\\|g')
-  "$ISCC_PATH" "/DMyAppVersion=${VERSION_VALUE}" "/DSourceDir=${WORK_WIN}" "/O${OUT_WIN}" "$ISS_WIN"
-else
-  "$ISCC_PATH" "/DMyAppVersion=${VERSION_VALUE}" "/DSourceDir=${WORK}" "/O${ROOT}/${OUT_DIR}" "$SCRIPT_DIR/gsbs-client.iss"
-fi
+# GitHub Actions Windows bash accepts mixed paths; keep args as single quoted tokens.
+"$ISCC_PATH" \
+  "/DMyAppVersion=${VERSION_VALUE}" \
+  "/DSourceDir=${WORK}" \
+  "/O${ROOT}/${OUT_DIR}" \
+  "${SCRIPT_DIR}/gsbs-client.iss"
 
 echo "Built ${OUT_DIR}/gsbs-client-setup-${VERSION_VALUE}-windows-amd64.exe"
