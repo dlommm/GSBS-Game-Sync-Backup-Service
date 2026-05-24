@@ -71,7 +71,7 @@ Register on the server WebUI, create an API token, and log in from the client. G
 
 ## Build from source
 
-Requires **Go 1.24+** and **Node.js** (for WebUI CSS).
+Requires **Go 1.25+** and **Node.js** (for WebUI CSS).
 
 ```bash
 go mod tidy
