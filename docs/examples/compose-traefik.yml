@@ -1,0 +1,51 @@
+services:
+  gsbs-server:
+    image: dendlomm/gsbs-server:latest
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      GSBS_ADDR: ":8080"
+      GSBS_DB: /app/data/gsbs.db
+      GSBS_SESSION_SECRET: ${GSBS_SESSION_SECRET:?set GSBS_SESSION_SECRET}
+    volumes:
+      - gsbs-data:/app/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.gsbs.rule=Host(`gsbs.example.com`)
+      - traefik.http.routers.gsbs.entrypoints=websecure
+      - traefik.http.routers.gsbs.tls.certresolver=letsencrypt
+      - traefik.http.services.gsbs.loadbalancer.server.port=8080
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  traefik:
+    image: traefik:v3.3
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?set ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/letsencrypt
+    depends_on:
+      gsbs-server:
+        condition: service_healthy
+
+volumes:
+  gsbs-data:
+  traefik-certs:

@@ -1,0 +1,34 @@
+{{if .Saves}}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Game</th><th>Path key</th><th>Size</th><th>Last synced</th><th class="th-action">Actions</th></tr></thead>
+    <tbody>
+      {{range .Saves}}
+      <tr>
+        <td class="cell-primary">{{.GameTitle}}</td>
+        <td><code class="code-inline">{{truncate .PathKey 16}}</code></td>
+        <td class="cell-size">{{formatBytes .SizeBytes}}</td>
+        <td class="cell-muted">{{formatTime .UpdatedAt}}</td>
+        <td class="cell-action">
+          <div class="actions-stack">
+            <a href="/dashboard/save/versions?game_id={{urlquery .GameID}}&path_key={{urlquery .PathKey}}" class="btn-ghost-sm">Versions</a>
+            {{if not $.ReadOnly}}
+            <form method="post" action="/dashboard/save/delete" class="inline-form" onsubmit="return confirm('Delete this save from the server?');">
+              <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+              <input type="hidden" name="game_id" value="{{.GameID}}">
+              <input type="hidden" name="path_key" value="{{.PathKey}}">
+              <button type="submit" class="btn-danger-sm">Delete</button>
+            </form>
+            {{end}}
+          </div>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="panel-empty">
+  <p>{{if .Query}}No saves match your search.{{else}}No saves synced yet.{{end}}</p>
+</div>
+{{end}}

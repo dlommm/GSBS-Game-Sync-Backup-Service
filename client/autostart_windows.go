@@ -42,7 +42,7 @@ func SetRunAtStartup(enabled bool) error {
 		if err != nil {
 			return fmt.Errorf("abs path: %w", err)
 		}
-		if err := k.SetStringValue(runKeyName, exe); err != nil {
+		if err := k.SetStringValue(runKeyName, fmt.Sprintf(`"%s" --minimized`, exe)); err != nil {
 			return fmt.Errorf("set run key: %w", err)
 		}
 	} else {

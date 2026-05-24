@@ -1,0 +1,34 @@
+# Local development: build server from source instead of pulling Docker Hub image.
+# Usage: docker compose -f docker-compose.dev.yml up --build
+
+services:
+  gsbs-server:
+    build:
+      context: .
+      args:
+        VERSION: dev
+        BUILD_DATE: dev
+        COMMIT: local
+    image: gsbs-server:dev
+    container_name: gsbs-server-dev
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      GSBS_ADDR: ":8080"
+      GSBS_DB: /app/data/gsbs.db
+      GSBS_SESSION_SECRET: ${GSBS_SESSION_SECRET:-dev-change-me-in-production}
+      GSBS_ALLOW_REGISTER: "true"
+      GSBS_PCGW_CRON: "0 3 * * 0"
+      GSBS_LOG_LEVEL: debug
+    volumes:
+      - gsbs-data-dev:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  gsbs-data-dev:

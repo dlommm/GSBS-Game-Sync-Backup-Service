@@ -11,7 +11,24 @@ You must set the resolver’s `UbisoftConnect` and optionally `UserID` (or rely 
 - `%USERPROFILE%`, `%LOCALAPPDATA%`, `%APPDATA%` (Windows)
 - `$HOME`, `~/.local/share`, `~/.config` (Linux)
 - `<SteamLibrary-folder>` → first existing of: `C:\Program Files (x86)\Steam`, `C:\Program Files\Steam`, or `~/.steam/steam` / `~/.local/share/Steam` (Linux)
-- `<Ubisoft-Connect-folder>`, `<GOG-Galaxy-folder>`, `<Epic-Games-folder>`, `<Xbox-App-folder>` → set in config (`ubisoft_connect_folder`, `gog_galaxy_folder`, `epic_games_folder`, `xbox_app_folder`) or use defaults (e.g. GOG: `C:\Program Files (x86)\GOG Galaxy`, Epic: `C:\Program Files\Epic Games`)
+- `<Ubisoft-Connect-folder>`, `<GOG-Galaxy-folder>`, `<Epic-Games-folder>`, `<Xbox-App-folder>`, `<EA-App-folder>`, `<Heroic-folder>`, `<Lutris-folder>`, `<Bottles-folder>`, `<Prism-folder>`, `<Flatpak-Steam-folder>` → auto-detected on startup or set in config
+
+**Near-zero-config example** (auto-watch discovered games, no manual `watch_paths`):
+
+```json
+{
+  "server_url": "https://your-gsbs-server.example.com",
+  "token": "YOUR_TOKEN_FROM_LOGIN",
+  "client_name": "My-Linux-PC",
+  "sync_interval": "5m",
+  "auto_watch_mode": "discovered",
+  "conflict_policy": "last_write_wins",
+  "encryption_passphrase": "your-local-passphrase-if-e2e-enabled",
+  "discovery_interval": "4h"
+}
+```
+
+Existing configs without `auto_watch_mode` keep legacy behavior (watch any manifest path whose directory exists).
 
 To support multiple Steam libraries (e.g. another drive), extend the resolver’s `SteamLibraries` from `libraryfolders.vdf` in the Steam install directory.
 

@@ -76,7 +76,7 @@ There is no separate “manifest file” on disk: the manifest is stored in the 
    docker push YOUR_DOCKERHUB_USERNAME/gsbs-server:v1.0.2   # if you tagged a version
    ```
 
-**Releases:** The script `./script/release.sh [VERSION]` builds the four GitHub release binaries and also builds and pushes the server image to Docker Hub (by default `dendlomm/gsbs-server:$VERSION` and `:latest`). Run `docker login` before the script if you are pushing to Docker Hub.
+**Releases:** Push a git tag `vX.Y.Z` to trigger [.github/workflows/release.yml](../.github/workflows/release.yml) (builds binaries, installer, `.deb`, AppImage, GitHub Release, Docker Hub). Local fallback: `./script/release.sh [VERSION]`. See [docs/RELEASE.md](RELEASE.md).
 
 **Pre-built image:** The official image is published at [dendlomm/gsbs-server](https://hub.docker.com/r/dendlomm/gsbs-server) on Docker Hub. Releases are built for **linux/amd64** and **linux/arm64**. Anyone can run:
 ```bash
@@ -99,6 +99,14 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_READ_ONLY` | `false` | Set to `true` or `1` to disable push and delete (pull and read still work). |
 | `GSBS_SAVE_VERSION_RETENTION` | `8` | Save versions kept per slot (5–10). |
 | `GSBS_LOG_LEVEL` | `info` | Structured log level: `debug`, `info`, `warn`, `error`. |
+| `GSBS_RATE_LIMIT_AUTH` | `20,1m` | Login/register/TOTP rate limit per IP. |
+| `GSBS_RATE_LIMIT_PUSH` | `120,1m` | Push rate limit per user. |
+| `GSBS_RATE_LIMIT_PULL` | `60,1m` | Pull rate limit per user. |
+| `GSBS_RATE_LIMIT_MANIFEST` | `60,1m` | Manifest rate limit. |
+| `GSBS_RATE_LIMIT_GENERAL` | `300,1m` | General API rate limit per user. |
+| `GSBS_TRUST_PROXY` | (unset) | When set, trust `X-Forwarded-For` / `X-Real-IP` for client IP. |
+| `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token age (90 days). |
+| `GSBS_METRICS_TOKEN` | (unset) | Bearer token required for `/metrics` when set. |
 | `GSBS_PCGW_CRON` | `0 3 * * 0` | Cron expression for PCGW sync (e.g. `0 0 * * *` for daily at midnight). |
 
 Example with all options:
@@ -119,47 +127,29 @@ docker run -d \
 
 ## Docker Compose
 
-Save as `docker-compose.yml` in the repo root (or next to your deployment config):
+The repository includes production and development compose files:
 
-```yaml
-services:
-  gsbs:
-    build: .
-    image: gsbs-server:latest
-    container_name: gsbs
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    environment:
-      - GSBS_ADDR=:8080
-      - GSBS_DB=/app/data/gsbs.db
-      - GSBS_SESSION_SECRET=${GSBS_SESSION_SECRET}
-      - GSBS_ADMIN_USERNAME=${GSBS_ADMIN_USERNAME:-}
-    volumes:
-      - gsbs-data:/app/data
+| File | Use case |
+|------|----------|
+| [docker-compose.yml](../docker-compose.yml) | Production: prebuilt image + Caddy TLS |
+| [docker-compose.dev.yml](../docker-compose.dev.yml) | Local dev: build from source, port 8080 |
 
-volumes:
-  gsbs-data:
-```
-
-Create a `.env` file (do not commit secrets):
-
-```env
-GSBS_SESSION_SECRET=your-long-random-secret-here
-GSBS_ADMIN_USERNAME=admin
-```
-
-Then run:
+**Production:**
 
 ```bash
+cp .env.example .env   # set GSBS_SESSION_SECRET
 docker compose up -d
 ```
 
-To rebuild after code changes:
+Edit [docs/Caddyfile](../docs/Caddyfile) with your domain. See [COMPOSE.md](COMPOSE.md) for TLS, health checks, and nginx/Traefik examples.
+
+**Local development:**
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.dev.yml up --build
 ```
+
+Open `http://localhost:8080`.
 
 ---
 

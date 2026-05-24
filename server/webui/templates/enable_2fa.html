@@ -1,56 +1,18 @@
-<!-- Enable 2FA: show QR and secret, user enters code to confirm. -->
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Enable two-factor authentication — GSBS</title>
-  <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body class="app-shell">
-  <a href="#main-content" class="skip-link">Skip to main content</a>
-  <header class="topbar" role="banner">
-    <div class="topbar-left">
-      <img src="/static/favicon.png" alt="" class="topbar-icon" aria-hidden="true">
-      <span class="topbar-brand">GSBS</span>
-    </div>
-    <nav class="topbar-nav" role="navigation" aria-label="Main">
-      <a href="/dashboard">Dashboard</a>
-      {{if .IsAdmin}}<a href="/admin">Admin</a>{{end}}
-      <a href="/dashboard/settings" class="active">Settings</a>
-    </nav>
-    <div class="topbar-right">
-      <span class="topbar-user">{{.Username}}</span>
-      <a href="/dashboard/settings" class="btn-ghost">Cancel</a>
-    </div>
-  </header>
-
-  <main id="main-content" class="page-content" role="main" aria-label="Enable 2FA">
-    <p class="breadcrumb"><a href="/dashboard">Dashboard</a> → <a href="/dashboard/settings">Settings</a> → Enable 2FA</p>
-    {{if .Error}}
-    <div class="alert alert-error" role="alert">{{.Error}}</div>
-    {{end}}
-    <section class="panel" aria-labelledby="enable-2fa-heading">
-      <div class="panel-header">
-        <h2 id="enable-2fa-heading">Enable two-factor authentication</h2>
-      </div>
-      <p>Scan the QR code with your authenticator app (e.g. Google Authenticator, Authy), or enter the secret manually.</p>
-      <div style="margin:1.5rem 0;">
-        <img src="{{.QRDataURL}}" alt="QR code for authenticator" width="200" height="200">
-      </div>
-      <p class="cell-muted">Secret key: <code class="code-inline">{{.Secret}}</code></p>
-      <p>Then enter the 6-digit code from your app to confirm:</p>
-      <form method="post" action="/dashboard/settings/2fa/confirm" class="form-stack">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <label for="code">Code</label>
-        <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" placeholder="000000" required>
-        <button type="submit" class="btn-primary">Enable 2FA</button>
-      </form>
-    </section>
-  </main>
-</body>
-</html>
+{{template "layout" .}}
+{{define "title"}}Enable 2FA — GSBS{{end}}
+{{define "content"}}
+<section class="panel">
+  <div class="panel-header"><h2>Scan QR code</h2></div>
+  <div style="padding:0 1.25rem 1.25rem;text-align:center;">
+    {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
+    <img src="{{.QRDataURL}}" alt="2FA QR code" width="200" height="200" style="margin:0 auto 1rem;display:block;">
+    <p class="cell-muted">Or enter manually: <code class="code-inline">{{.Secret}}</code></p>
+    <form method="post" action="/dashboard/settings/2fa/confirm" class="auth-form" style="max-width:16rem;margin:1.5rem auto 0;">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <label for="code">Verification code</label>
+      <input id="code" name="code" type="text" inputmode="numeric" required autofocus>
+      <button type="submit">Confirm and enable</button>
+    </form>
+  </div>
+</section>
+{{end}}

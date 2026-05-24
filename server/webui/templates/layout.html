@@ -1,0 +1,36 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{block "title" .}}GSBS{{end}}</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="{{if .BodyClass}}{{.BodyClass}}{{else if .AdminNav}}admin-shell{{else}}app-shell{{end}}"
+      {{if not .AdminNav}}hx-ext="sse" sse-connect="/dashboard/events"{{end}}>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  {{if .AdminNav}}
+    {{template "partials/admin_shell.html" .}}
+  {{else}}
+    {{template "partials/topbar.html" .}}
+    <main id="main-content" class="page-content" role="main">
+      {{template "partials/alerts.html" .}}
+      {{block "content" .}}{{end}}
+    </main>
+  {{end}}
+  <script src="/static/htmx.min.js"></script>
+  <script src="/static/ext/sse.js"></script>
+  <script>
+  document.body.addEventListener('htmx:configRequest', function(evt) {
+    evt.detail.credentials = 'same-origin';
+  });
+  </script>
+  {{block "scripts" .}}{{end}}
+</body>
+</html>
+{{end}}

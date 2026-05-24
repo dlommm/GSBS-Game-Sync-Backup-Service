@@ -6,6 +6,8 @@ import (
 	"log"
 	"sync"
 	"time"
+
+	"github.com/getlantern/systray"
 )
 
 var (
@@ -86,4 +88,31 @@ func lastSyncTooltip() string {
 		status = "failed"
 	}
 	return fmt.Sprintf("GSBS — Last sync: %s (%s)", agoStr, status)
+}
+
+func pauseResumeMenuTitle(paused bool) string {
+	if paused {
+		return "Resume syncing"
+	}
+	return "Pause syncing"
+}
+
+func updateSyncIntervalLabel(m *systray.MenuItem, d Duration) {
+	interval := d.Duration()
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
+	m.SetTitle("Sync every " + interval.String())
+}
+
+func updateServerLabel(m *systray.MenuItem, url string) {
+	if url == "" {
+		m.SetTitle("Server: (not set) — click Login to connect")
+		return
+	}
+	label := url
+	if len(label) > 40 {
+		label = label[:37] + "..."
+	}
+	m.SetTitle("Server: " + label)
 }

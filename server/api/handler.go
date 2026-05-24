@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,6 +18,8 @@ import (
 
 	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/gsbs/gsbs/server/auth"
+	"github.com/gsbs/gsbs/server/logx"
+	"github.com/gsbs/gsbs/server/netutil"
 	"github.com/gsbs/gsbs/server/ratelimit"
 	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
@@ -28,19 +29,24 @@ import (
 // MaxSaveSize is the maximum allowed body size for POST /api/saves (50 MiB).
 const MaxSaveSize = 50 * 1024 * 1024
 
+// maxAuthBody is the maximum JSON body size for auth endpoints (1 MiB).
+const maxAuthBody = 1 << 20
+
 // Handler is the HTTP API handler.
 type Handler struct {
-	store            store.Store
-	auth             *auth.Service
-	allowRegister    bool
-	hub              *sse.Hub
-	authLimiter      *ratelimit.Limiter
-	pushLimiter      *ratelimit.Limiter
-	manifestLimiter  *ratelimit.Limiter
-	maxStorageBytes  int64 // 0 = unlimited
-	readOnly         bool  // if true, reject push and delete
-	sessionSecret    string // for signing TOTP step token when 2FA enabled; empty = no API 2FA
-	version          string // server version for health endpoint
+	store           store.Store
+	auth            *auth.Service
+	allowRegister   bool
+	hub             *sse.Hub
+	authLimiter     *ratelimit.Limiter
+	pushLimiter     *ratelimit.Limiter
+	pullLimiter     *ratelimit.Limiter
+	generalLimiter  *ratelimit.Limiter
+	manifestLimiter *ratelimit.Limiter
+	maxStorageBytes int64  // 0 = unlimited
+	readOnly        bool   // if true, reject push and delete
+	sessionSecret   string // for signing TOTP step token when 2FA enabled; empty = no API 2FA
+	version         string // server version for health endpoint
 
 	manifestCache struct {
 		mu      sync.RWMutex
@@ -54,8 +60,8 @@ const manifestCacheTTL = 10 * time.Minute
 // NewHandler creates an API handler. maxStorageBytes 0 = unlimited; readOnly blocks push/delete.
 // sessionSecret is used to sign the TOTP step token when 2FA is enabled; pass the same value as WebUI session secret. Empty = no API 2FA.
 // version is included in the health response when non-empty.
-func NewHandler(st store.Store, authSvc *auth.Service, allowRegister bool, hub *sse.Hub, authLimiter, pushLimiter, manifestLimiter *ratelimit.Limiter, maxStorageBytes int64, readOnly bool, sessionSecret string, version string) *Handler {
-	return &Handler{store: st, auth: authSvc, allowRegister: allowRegister, hub: hub, authLimiter: authLimiter, pushLimiter: pushLimiter, manifestLimiter: manifestLimiter, maxStorageBytes: maxStorageBytes, readOnly: readOnly, sessionSecret: sessionSecret, version: version}
+func NewHandler(st store.Store, authSvc *auth.Service, allowRegister bool, hub *sse.Hub, authLimiter, pushLimiter, pullLimiter, generalLimiter, manifestLimiter *ratelimit.Limiter, maxStorageBytes int64, readOnly bool, sessionSecret string, version string) *Handler {
+	return &Handler{store: st, auth: authSvc, allowRegister: allowRegister, hub: hub, authLimiter: authLimiter, pushLimiter: pushLimiter, pullLimiter: pullLimiter, generalLimiter: generalLimiter, manifestLimiter: manifestLimiter, maxStorageBytes: maxStorageBytes, readOnly: readOnly, sessionSecret: sessionSecret, version: version}
 }
 
 // InvalidateManifestCache clears the in-memory manifest cache so the next
@@ -103,6 +109,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.withAuth(h.handleChangePassword)(w, r)
 	case r.URL.Path == "/api/token/refresh" && r.Method == http.MethodPost:
 		h.withAuth(h.handleTokenRefresh)(w, r)
+	case r.URL.Path == "/api/account" && r.Method == http.MethodGet:
+		h.withAuth(h.handleAccount)(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -157,27 +165,36 @@ type loginResponse struct {
 	TotpToken    string `json:"totp_token,omitempty"`
 }
 
-func clientIP(r *http.Request) string {
-	if x := r.Header.Get("X-Forwarded-For"); x != "" {
-		if i := strings.Index(x, ","); i > 0 {
-			return strings.TrimSpace(x[:i])
-		}
-		return strings.TrimSpace(x)
-	}
-	return r.RemoteAddr
-}
-
 func getToken(r *http.Request) string {
 	token := r.Header.Get("Authorization")
-	if token != "" && len(token) > 7 && token[:7] == "Bearer " {
-		return token[7:]
+	if token != "" && len(token) > 7 && strings.EqualFold(token[:7], "Bearer ") {
+		return strings.TrimSpace(token[7:])
 	}
-	return r.URL.Query().Get("token")
+	if q := r.URL.Query().Get("token"); q != "" {
+		logx.Logger().Warn().
+			Str("path", r.URL.Path).
+			Str("ip", netutil.ClientIP(r)).
+			Msg("token query param auth rejected; use Authorization: Bearer")
+	}
+	return ""
+}
+
+func (h *Handler) rateLimited(w http.ResponseWriter, r *http.Request, limiter *ratelimit.Limiter, key, label string) bool {
+	if limiter != nil && !limiter.Allow(key) {
+		logx.Logger().Warn().
+			Str("path", r.URL.Path).
+			Str("ip", netutil.ClientIP(r)).
+			Str("key", key).
+			Str("limit", label).
+			Msg("rate limit exceeded")
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
+		return true
+	}
+	return false
 }
 
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
-	if h.authLimiter != nil && !h.authLimiter.Allow(clientIP(r)) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
+	if h.rateLimited(w, r, h.authLimiter, netutil.ClientIP(r), "auth") {
 		return
 	}
 	if !h.allowRegister {
@@ -185,7 +202,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req registerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxAuthBody)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
@@ -202,29 +219,40 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
 		return
 	}
+	if len(req.Password) > 72 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too long"})
+		return
+	}
 	_, err := h.auth.RegisterUser(r.Context(), req.Username, req.Password)
 	if err != nil {
-		log.Printf("api register: failed username=%q: %v", req.Username, err)
+		logx.Logger().Warn().Str("username", req.Username).Err(err).Msg("api register failed")
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "username taken or error"})
 		return
 	}
-	log.Printf("api register: ok username=%q", req.Username)
+	logx.Logger().Info().Str("username", req.Username).Msg("api register ok")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	if h.authLimiter != nil && !h.authLimiter.Allow(clientIP(r)) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
+	if h.rateLimited(w, r, h.authLimiter, netutil.ClientIP(r), "auth") {
 		return
 	}
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxAuthBody)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" || req.Password == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username and password required"})
+		return
+	}
+	if len(req.Username) > 128 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username too long"})
+		return
+	}
+	if len(req.Password) < 8 || len(req.Password) > 72 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid password length"})
 		return
 	}
 	if req.ClientOS == "" {
@@ -246,11 +274,11 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	_, token, err := h.auth.Login(r.Context(), req.Username, req.Password, req.ClientName, req.ClientOS)
 	if err != nil {
-		log.Printf("api login: failed username=%q: %v", req.Username, err)
+		logx.Logger().Warn().Str("username", req.Username).Err(err).Msg("api login failed")
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "bad credentials"})
 		return
 	}
-	log.Printf("api login: ok username=%q client=%q os=%q", req.Username, req.ClientName, req.ClientOS)
+	logx.Logger().Info().Str("username", req.Username).Str("client", req.ClientName).Str("os", req.ClientOS).Msg("api login ok")
 	writeJSON(w, http.StatusOK, loginResponse{Token: token})
 }
 
@@ -304,12 +332,11 @@ func (h *Handler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "totp step not supported"})
 		return
 	}
-	if h.authLimiter != nil && !h.authLimiter.Allow(clientIP(r)) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
+	if h.rateLimited(w, r, h.authLimiter, netutil.ClientIP(r), "auth") {
 		return
 	}
 	var req loginTOTPRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxAuthBody)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
@@ -335,7 +362,7 @@ func (h *Handler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 	}
 	token, err := h.store.RegisterClient(r.Context(), userID, req.ClientName, req.ClientOS)
 	if err != nil {
-		log.Printf("api login/totp: register client failed: %v", err)
+		logx.Logger().Error().Err(err).Msg("api login/totp register client failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "login failed"})
 		return
 	}
@@ -346,29 +373,22 @@ func (h *Handler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 // Also updates client last_seen on every authenticated request.
 func (h *Handler) withAuth(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("Authorization")
-		if token != "" && len(token) > 7 && token[:7] == "Bearer " {
-			token = token[7:]
-		}
-		if token == "" {
-			token = r.URL.Query().Get("token")
-		}
-		token = strings.TrimSpace(token)
+		token := getToken(r)
 		if token == "" {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing token"})
 			return
 		}
 		userID, clientID, err := h.auth.ValidateToken(r.Context(), token)
 		if err != nil {
+			logx.Logger().Warn().Str("path", r.URL.Path).Err(err).Msg("api auth failed")
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 			return
 		}
-		// Update last_seen asynchronously (best-effort; use background context so it runs after response).
 		clientIDCopy := clientID
 		go func() {
 			ctx := context.Background()
 			if err := h.store.UpdateClientLastSeen(ctx, clientIDCopy); err != nil {
-				log.Printf("update last_seen for client %s: %v", clientIDCopy, err)
+				logx.Logger().Debug().Str("client_id", clientIDCopy).Err(err).Msg("update last_seen failed")
 			}
 		}()
 		fn(w, r, userID)
@@ -398,7 +418,7 @@ func (h *Handler) handleChangePassword(w http.ResponseWriter, r *http.Request, u
 		return
 	}
 	if err := h.auth.ChangePassword(r.Context(), userID, req.NewPassword); err != nil {
-		log.Printf("api change-password: %v", err)
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api change-password failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
 		return
 	}
@@ -406,6 +426,9 @@ func (h *Handler) handleChangePassword(w http.ResponseWriter, r *http.Request, u
 }
 
 func (h *Handler) handleSaveSummaries(w http.ResponseWriter, r *http.Request, userID string) {
+	if h.rateLimited(w, r, h.pullLimiter, userID, "pull") {
+		return
+	}
 	limit, offset := parseLimitOffset(r)
 	var summaries []store.SaveSummary
 	var total int
@@ -419,7 +442,7 @@ func (h *Handler) handleSaveSummaries(w http.ResponseWriter, r *http.Request, us
 		}
 	}
 	if err != nil {
-		log.Printf("api save summaries: %v", err)
+		logx.Logger().Error().Err(err).Msg("api save summaries failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
 		return
 	}
@@ -428,6 +451,7 @@ func (h *Handler) handleSaveSummaries(w http.ResponseWriter, r *http.Request, us
 		items[i] = map[string]interface{}{
 			"game_id": s.GameID, "path_key": s.PathKey, "game_title": s.GameTitle,
 			"size_bytes": s.SizeBytes, "updated_at": s.UpdatedAt, "content_hash": s.ContentHash,
+			"encrypted": s.Encrypted,
 		}
 	}
 	resp := map[string]interface{}{"saves": items}
@@ -437,10 +461,19 @@ func (h *Handler) handleSaveSummaries(w http.ResponseWriter, r *http.Request, us
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) handleAccount(w http.ResponseWriter, r *http.Request, userID string) {
+	enc, err := h.store.IsEncryptionEnabled(r.Context(), userID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "account lookup failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"encryption_enabled": enc})
+}
+
 func (h *Handler) handleListClients(w http.ResponseWriter, r *http.Request, userID string) {
 	clients, err := h.store.ListClientsByUserID(r.Context(), userID)
 	if err != nil {
-		log.Printf("api list clients: %v", err)
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api list clients failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
 		return
 	}
@@ -460,7 +493,7 @@ func (h *Handler) handleListSaveVersions(w http.ResponseWriter, r *http.Request,
 	}
 	versions, err := h.store.ListSaveVersions(r.Context(), userID, gameID, pathKey, 20)
 	if err != nil {
-		log.Printf("api list save versions: %v", err)
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api list save versions failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
 		return
 	}
@@ -482,7 +515,7 @@ func (h *Handler) handleGetSaveVersion(w http.ResponseWriter, r *http.Request, u
 	}
 	blob, err := h.store.GetSaveVersion(r.Context(), userID, gameID, pathKey, version)
 	if err != nil {
-		log.Printf("api get save version: %v", err)
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api get save version failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed"})
 		return
 	}
@@ -513,7 +546,7 @@ func (h *Handler) handleRestoreSaveVersion(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := h.store.RestoreSaveVersion(r.Context(), userID, req.GameID, req.PathKey, req.Version); err != nil {
-		log.Printf("api restore save version: %v", err)
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api restore save version failed")
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "version not found or restore failed"})
 		return
 	}
@@ -529,15 +562,19 @@ type pullSaveItem struct {
 	PathKey   string `json:"path_key"`
 	UpdatedAt string `json:"updated_at"`
 	Content   string `json:"content"` // base64
+	Encrypted bool   `json:"encrypted,omitempty"`
 }
 
 func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID string) {
+	if h.rateLimited(w, r, h.pullLimiter, userID, "pull") {
+		return
+	}
 	gameID := strings.TrimSpace(r.URL.Query().Get("game_id"))
 	pathKey := strings.TrimSpace(r.URL.Query().Get("path_key"))
 	if gameID != "" && pathKey != "" {
 		blob, err := h.store.GetSave(r.Context(), userID, gameID, pathKey)
 		if err != nil {
-			log.Printf("api pull single: %v", err)
+			logx.Logger().Error().Err(err).Msg("api pull single failed")
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "get failed"})
 			return
 		}
@@ -550,6 +587,7 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID stri
 			PathKey:   blob.PathKey,
 			UpdatedAt: blob.UpdatedAt,
 			Content:   encodeBase64(blob.Content),
+			Encrypted: blob.Encrypted,
 		}}
 		resp := map[string]interface{}{"saves": items}
 		writeJSON(w, http.StatusOK, resp)
@@ -568,11 +606,11 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID stri
 		}
 	}
 	if err != nil {
-		log.Printf("api pull: list failed user=%s: %v", userID, err)
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api pull list failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
 		return
 	}
-	log.Printf("api pull: user=%s saves=%d", userID, len(saves))
+	logx.Logger().Debug().Str("user_id", userID).Int("saves", len(saves)).Msg("api pull")
 	items := make([]pullSaveItem, len(saves))
 	for i := range saves {
 		items[i] = pullSaveItem{
@@ -580,6 +618,7 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID stri
 			PathKey:   saves[i].PathKey,
 			UpdatedAt: saves[i].UpdatedAt,
 			Content:   encodeBase64(saves[i].Content),
+			Encrypted: saves[i].Encrypted,
 		}
 	}
 	resp := map[string]interface{}{"saves": items}
@@ -592,7 +631,7 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID stri
 		w.WriteHeader(http.StatusOK)
 		gz := gzip.NewWriter(w)
 		if err := json.NewEncoder(gz).Encode(resp); err != nil {
-			log.Printf("api pull: gzip encode failed user=%s: %v", userID, err)
+			logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api pull gzip encode failed")
 		}
 		_ = gz.Close()
 		return
@@ -605,8 +644,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "server is in read-only mode"})
 		return
 	}
-	if h.pushLimiter != nil && !h.pushLimiter.Allow(userID) {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
+	if h.rateLimited(w, r, h.pushLimiter, userID, "push") {
 		return
 	}
 	gameID := strings.TrimSpace(r.Header.Get("X-Game-ID"))
@@ -675,9 +713,12 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			return
 		}
 	}
-	log.Printf("push: user=%s game=%s path_key=%s file=%s size=%d", userID, gameID, pathKey, filePath, len(content))
+	logx.Logger().Debug().
+		Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).
+		Str("file", filePath).Int("size", len(content)).Msg("push")
 	contentHash := strings.TrimSpace(r.Header.Get("X-Content-Hash"))
 	contentSize, _ := strconv.ParseInt(r.Header.Get("X-Content-Size"), 10, 64)
+	encrypted := r.Header.Get("X-Encrypted") == "1"
 	clientID := ""
 	if _, cid, err := h.auth.ValidateToken(r.Context(), getToken(r)); err == nil {
 		clientID = cid
@@ -686,10 +727,13 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		ContentHash: contentHash,
 		ContentSize: contentSize,
 		ClientID:    clientID,
+		Encrypted:   encrypted,
 	}
 	skipped, err := h.store.UpsertSaveWithMeta(r.Context(), userID, gameID, pathKey, content, meta)
 	if err != nil {
-		log.Printf("api push: upsert failed user=%s game=%s path_key=%s: %v", userID, gameID, pathKey, err)
+		logx.Logger().Error().
+			Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).
+			Err(err).Msg("api push upsert failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
 		return
 	}
@@ -711,6 +755,9 @@ func (h *Handler) handleDeleteSave(w http.ResponseWriter, r *http.Request, userI
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "server is in read-only mode"})
 		return
 	}
+	if h.rateLimited(w, r, h.generalLimiter, userID, "general") {
+		return
+	}
 	gameID := strings.TrimSpace(r.URL.Query().Get("game_id"))
 	pathKey := strings.TrimSpace(r.URL.Query().Get("path_key"))
 	if gameID == "" || pathKey == "" {
@@ -722,7 +769,7 @@ func (h *Handler) handleDeleteSave(w http.ResponseWriter, r *http.Request, userI
 		return
 	}
 	if err := h.store.DeleteSave(r.Context(), userID, gameID, pathKey); err != nil {
-		log.Printf("api delete save: %v", err)
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api delete save failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "delete failed"})
 		return
 	}
@@ -734,12 +781,11 @@ func (h *Handler) handleDeleteSave(w http.ResponseWriter, r *http.Request, userI
 
 func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request) {
 	if h.manifestLimiter != nil {
-		key := clientIP(r)
+		key := netutil.ClientIP(r)
 		if userID, _, err := h.auth.ValidateToken(r.Context(), getToken(r)); err == nil {
 			key = userID
 		}
-		if !h.manifestLimiter.Allow(key) {
-			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
+		if h.rateLimited(w, r, h.manifestLimiter, key, "manifest") {
 			return
 		}
 	}
@@ -767,7 +813,7 @@ func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		log.Printf("api manifest: list failed: %v", err)
+		logx.Logger().Error().Err(err).Msg("api manifest list failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "manifest failed"})
 		return
 	}
@@ -787,22 +833,16 @@ func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request) {
 		entries = filtered
 	}
 	if since != "" {
-		log.Printf("api manifest: delta since=%s entries=%d", since, len(entries))
+		logx.Logger().Debug().Str("since", since).Int("entries", len(entries)).Msg("api manifest delta")
 	} else {
-		log.Printf("api manifest: full entries=%d (include=%s)", len(entries), include)
+		logx.Logger().Debug().Int("entries", len(entries)).Str("include", include).Msg("api manifest full")
 	}
 
 	// Log the fetch (best-effort). If auth token is present, resolve client info.
 	go func() {
 		ctx := context.Background()
 		clientID, clientName, username := "", "", ""
-		token := r.Header.Get("Authorization")
-		if token != "" && len(token) > 7 && token[:7] == "Bearer " {
-			token = token[7:]
-		}
-		if token == "" {
-			token = r.URL.Query().Get("token")
-		}
+		token := getToken(r)
 		if token != "" {
 			if uid, cid, cname, _, authErr := h.store.ClientByToken(ctx, token); authErr == nil {
 				clientID = cid
@@ -840,6 +880,9 @@ func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request) {
 
 // handleSSE streams server-sent events to an authenticated client.
 func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request, userID string) {
+	if h.rateLimited(w, r, h.generalLimiter, userID, "general") {
+		return
+	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
@@ -886,6 +929,9 @@ func parseLimitOffset(r *http.Request) (limit, offset int) {
 	}
 	if offset < 0 {
 		offset = 0
+	}
+	if limit > 500 {
+		limit = 500
 	}
 	return limit, offset
 }

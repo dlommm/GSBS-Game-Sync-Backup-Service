@@ -1,0 +1,12 @@
+{{if .Error}}
+<div class="alert alert-error" role="alert" aria-live="assertive">{{.Error}}</div>
+{{end}}
+{{if .Success}}
+<div class="alert alert-success" role="alert">{{.Success}}</div>
+{{end}}
+{{if .Restored}}
+<div class="alert alert-success" role="alert">Save version restored successfully.</div>
+{{end}}
+{{if .Deleted}}
+<div class="alert alert-success" role="alert">Save deleted from server.</div>
+{{end}}

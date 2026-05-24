@@ -1,0 +1,12 @@
+# Example Caddy reverse proxy for GSBS (production compose).
+# Replace example.com with your domain and ensure DNS points to this host.
+
+example.com {
+	encode gzip zstd
+	reverse_proxy gsbs-server:8080
+}
+
+# Local HTTP-only testing (no TLS):
+# :8080 {
+# 	reverse_proxy gsbs-server:8080
+# }

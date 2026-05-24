@@ -6,6 +6,9 @@ import (
 )
 
 func (h *Handler) handleTokenRefresh(w http.ResponseWriter, r *http.Request, userID string) {
+	if h.rateLimited(w, r, h.generalLimiter, userID, "general") {
+		return
+	}
 	token := getToken(r)
 	if token == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing token"})

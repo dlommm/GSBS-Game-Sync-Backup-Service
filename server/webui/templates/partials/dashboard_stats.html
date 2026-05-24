@@ -1,0 +1,17 @@
+<section class="stats-row" aria-label="Statistics">
+  <div class="stat-card"><div class="stat-value">{{.Stats.ClientCount}}</div><div class="stat-label">Clients</div></div>
+  <div class="stat-card"><div class="stat-value">{{.Stats.GameCount}}</div><div class="stat-label">Games</div></div>
+  <div class="stat-card"><div class="stat-value">{{.Stats.SaveCount}}</div><div class="stat-label">Synced saves</div></div>
+  <div class="stat-card"><div class="stat-value">{{formatBytes .Stats.TotalBytes}}</div><div class="stat-label">Storage used</div></div>
+</section>
+{{if gt .QuotaBytes 0}}
+<div class="quota-bar-wrap" aria-label="Storage quota">
+  <div class="quota-bar-header">
+    <span>Storage quota</span>
+    <span>{{formatBytes .Stats.TotalBytes}} / {{formatBytes .QuotaBytes}}</span>
+  </div>
+  <div class="quota-bar-track">
+    <div class="quota-bar-fill {{quotaBarClass .Stats.TotalBytes .QuotaBytes}}" style="width:{{printf "%.1f" (percent .Stats.TotalBytes .QuotaBytes)}}%;"></div>
+  </div>
+</div>
+{{end}}

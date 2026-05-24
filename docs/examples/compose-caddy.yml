@@ -1,0 +1,40 @@
+# Production-style compose with Caddy TLS (same as repo root docker-compose.yml).
+# Copy docs/examples/Caddyfile and set your domain before use.
+
+services:
+  gsbs-server:
+    image: dendlomm/gsbs-server:latest
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      GSBS_ADDR: ":8080"
+      GSBS_DB: /app/data/gsbs.db
+      GSBS_SESSION_SECRET: ${GSBS_SESSION_SECRET:?set GSBS_SESSION_SECRET}
+    volumes:
+      - gsbs-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      gsbs-server:
+        condition: service_healthy
+
+volumes:
+  gsbs-data:
+  caddy-data:
+  caddy-config:

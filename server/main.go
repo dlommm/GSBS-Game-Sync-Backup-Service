@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +19,7 @@ import (
 	"github.com/gsbs/gsbs/server/job"
 	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/metrics"
+	"github.com/gsbs/gsbs/server/netutil"
 	"github.com/gsbs/gsbs/server/ratelimit"
 	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
@@ -45,6 +48,17 @@ func (r *responseRecorder) Flush() {
 // draining is set to 1 when the server is shutting down; new requests get 503.
 var draining int32
 
+func requestID(r *http.Request) string {
+	if id := strings.TrimSpace(r.Header.Get("X-Request-ID")); id != "" {
+		return id
+	}
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err == nil {
+		return hex.EncodeToString(b)
+	}
+	return strconv.FormatInt(time.Now().UnixNano(), 36)
+}
+
 // logRequests wraps a handler to log every request, return 503 when draining, and optionally record metrics.
 func logRequests(next http.Handler, mc *metrics.Collector) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -54,6 +68,8 @@ func logRequests(next http.Handler, mc *metrics.Collector) http.Handler {
 			_, _ = w.Write([]byte(`{"status":"unavailable","error":"server shutting down"}`))
 			return
 		}
+		rid := requestID(r)
+		w.Header().Set("X-Request-ID", rid)
 		start := time.Now()
 		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
@@ -64,7 +80,39 @@ func logRequests(next http.Handler, mc *metrics.Collector) http.Handler {
 			mc.Record(r.URL.Path, rec.status)
 			mc.RecordDuration(r.URL.Path, time.Since(start))
 		}
-		log.Printf("request: %s %s -> %d (%s)", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Millisecond))
+		logx.Logger().Info().
+			Str("request_id", rid).
+			Str("method", r.Method).
+			Str("path", r.URL.Path).
+			Int("status", rec.status).
+			Str("ip", netutil.ClientIP(r)).
+			Dur("duration", time.Since(start).Round(time.Millisecond)).
+			Msg("request")
+	})
+}
+
+func rateLimiterFromEnv(envKey string, defaultLimit int, defaultWindow time.Duration) *ratelimit.Limiter {
+	if v := os.Getenv(envKey); v != "" {
+		if limit, window := parseRateLimit(v); limit > 0 && window > 0 {
+			log.Printf("rate limit: %s %d per %s", envKey, limit, window)
+			return ratelimit.New(limit, window)
+		}
+	}
+	log.Printf("rate limit: %s default %d per %s", envKey, defaultLimit, defaultWindow)
+	return ratelimit.New(defaultLimit, defaultWindow)
+}
+
+func metricsAuth(token string, next http.Handler) http.Handler {
+	if token == "" {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimSpace(auth[7:]) != token {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -92,7 +140,6 @@ func main() {
 
 	authSvc := auth.NewService(st)
 
-	// GSBS_ALLOW_REGISTER: "false" disables public registration; default is true.
 	allowRegister := true
 	if v := os.Getenv("GSBS_ALLOW_REGISTER"); strings.EqualFold(v, "false") || v == "0" {
 		allowRegister = false
@@ -107,28 +154,12 @@ func main() {
 	hub := sse.NewHub()
 	runner := job.NewRunner(st, hub)
 
-	var authLimiter, pushLimiter *ratelimit.Limiter
-	if v := os.Getenv("GSBS_RATE_LIMIT_AUTH"); v != "" {
-		if limit, window := parseRateLimit(v); limit > 0 && window > 0 {
-			authLimiter = ratelimit.New(limit, window)
-			log.Printf("rate limit: auth %d per %s (by IP)", limit, window)
-		}
-	}
-	if v := os.Getenv("GSBS_RATE_LIMIT_PUSH"); v != "" {
-		if limit, window := parseRateLimit(v); limit > 0 && window > 0 {
-			pushLimiter = ratelimit.New(limit, window)
-			log.Printf("rate limit: push %d per %s (by user)", limit, window)
-		}
-	}
-	var manifestLimiter *ratelimit.Limiter
-	if v := os.Getenv("GSBS_RATE_LIMIT_MANIFEST"); v != "" {
-		if limit, window := parseRateLimit(v); limit > 0 && window > 0 {
-			manifestLimiter = ratelimit.New(limit, window)
-			log.Printf("rate limit: manifest %d per %s (by IP or user)", limit, window)
-		}
-	}
+	authLimiter := rateLimiterFromEnv("GSBS_RATE_LIMIT_AUTH", 20, time.Minute)
+	pushLimiter := rateLimiterFromEnv("GSBS_RATE_LIMIT_PUSH", 120, time.Minute)
+	pullLimiter := rateLimiterFromEnv("GSBS_RATE_LIMIT_PULL", 60, time.Minute)
+	generalLimiter := rateLimiterFromEnv("GSBS_RATE_LIMIT_GENERAL", 300, time.Minute)
+	manifestLimiter := rateLimiterFromEnv("GSBS_RATE_LIMIT_MANIFEST", 60, time.Minute)
 
-	// GSBS_MAX_STORAGE_BYTES: global limit (0 or unset = unlimited)
 	maxStorageBytes := int64(0)
 	if v := os.Getenv("GSBS_MAX_STORAGE_BYTES"); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
@@ -142,8 +173,8 @@ func main() {
 	if readOnly {
 		log.Println("server is in READ-ONLY mode (push/delete disabled)")
 	}
-	apiHandler := api.NewHandler(st, authSvc, allowRegister, hub, authLimiter, pushLimiter, manifestLimiter, maxStorageBytes, readOnly, sessionSecret, Version)
-	webHandler := webui.NewWebHandler(st, authSvc, sessionSecret, os.Getenv("GSBS_ADMIN_USERNAME"), allowRegister, hub, apiHandler, runner, maxStorageBytes, readOnly)
+	apiHandler := api.NewHandler(st, authSvc, allowRegister, hub, authLimiter, pushLimiter, pullLimiter, generalLimiter, manifestLimiter, maxStorageBytes, readOnly, sessionSecret, Version)
+	webHandler := webui.NewWebHandler(st, authSvc, sessionSecret, os.Getenv("GSBS_ADMIN_USERNAME"), allowRegister, hub, apiHandler, runner, maxStorageBytes, readOnly, authLimiter)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiHandler)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(webui.StaticFiles())))
@@ -151,12 +182,16 @@ func main() {
 	var metricsCollector *metrics.Collector
 	if os.Getenv("GSBS_METRICS") == "1" {
 		metricsCollector = metrics.NewCollector(st, hub)
-		mux.Handle("/metrics", metricsCollector)
-		log.Println("metrics: enabled at GET /metrics")
+		metricsHandler := metricsAuth(os.Getenv("GSBS_METRICS_TOKEN"), metricsCollector)
+		mux.Handle("/metrics", metricsHandler)
+		if os.Getenv("GSBS_METRICS_TOKEN") != "" {
+			log.Println("metrics: enabled at GET /metrics (Bearer token required)")
+		} else {
+			log.Println("metrics: enabled at GET /metrics")
+		}
 	}
 	handler := logRequests(mux, metricsCollector)
 
-	// PCGW sync: schedule from GSBS_PCGW_CRON (default Sunday 03:00); daily stats snapshot (00:00)
 	pcgwCron := os.Getenv("GSBS_PCGW_CRON")
 	if pcgwCron == "" {
 		pcgwCron = "0 3 * * 0"

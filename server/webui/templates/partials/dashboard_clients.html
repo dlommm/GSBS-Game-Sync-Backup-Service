@@ -1,0 +1,25 @@
+{{if .Clients}}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Name</th><th>Platform</th><th>Last active</th><th class="th-action"></th></tr></thead>
+    <tbody>
+      {{range .Clients}}
+      <tr>
+        <td class="cell-primary">{{.Name}}</td>
+        <td><span class="os-badge os-{{.OS}}">{{.OS}}</span></td>
+        <td class="cell-muted">{{formatTime .LastSeen}}</td>
+        <td class="cell-action">
+          <form method="post" action="/dashboard/clients/revoke" class="inline-form" onsubmit="return confirm('Revoke this client token? You must run gsbs-client login again.');">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <input type="hidden" name="client_id" value="{{.ID}}">
+            <button type="submit" class="btn-danger-sm">Revoke</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="panel-empty"><p>No clients registered yet.</p><p class="hint">Run <code>gsbs-client login</code> on your PC to connect it.</p></div>
+{{end}}

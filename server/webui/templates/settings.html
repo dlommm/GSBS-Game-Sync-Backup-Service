@@ -1,131 +1,89 @@
-<!-- Settings: account (password change), future: security (2FA, sessions), preferences. -->
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Settings — GSBS</title>
-  <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body class="app-shell">
-  <a href="#main-content" class="skip-link">Skip to main content</a>
-  <header class="topbar" role="banner">
-    <div class="topbar-left">
-      <img src="/static/favicon.png" alt="" class="topbar-icon" aria-hidden="true">
-      <span class="topbar-brand">GSBS</span>
-    </div>
-    <nav class="topbar-nav" role="navigation" aria-label="Main">
-      <a href="/dashboard">Dashboard</a>
-      {{if .IsAdmin}}<a href="/admin">Admin</a>{{end}}
-      <a href="/dashboard/settings" class="active">Settings</a>
-    </nav>
-    <div class="topbar-right">
-      <span class="topbar-user">{{.Username}}</span>
-      <form method="post" action="/logout" class="inline-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <button type="submit" class="btn-ghost">Log out</button>
-      </form>
-    </div>
-  </header>
+{{template "layout" .}}
+{{define "title"}}Settings — GSBS{{end}}
+{{define "content"}}
+<section class="panel">
+  <div class="panel-header"><h2>Change password</h2></div>
+  <form method="post" action="/dashboard/settings" class="auth-form" style="max-width:24rem;padding:0 1.25rem 1.25rem;">
+    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+    <label for="current_password">Current password</label>
+    <input id="current_password" name="current_password" type="password" required autocomplete="current-password">
+    <label for="new_password">New password</label>
+    <input id="new_password" name="new_password" type="password" required autocomplete="new-password">
+    <label for="confirm_password">Confirm new password</label>
+    <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password">
+    <button type="submit">Update password</button>
+  </form>
+</section>
 
-  <main id="main-content" class="page-content" role="main" aria-label="Settings">
-    {{if .Error}}
-    <div class="alert alert-error" role="alert" aria-live="assertive">{{.Error}}</div>
+<section class="panel">
+  <div class="panel-header"><h2>End-to-end encryption</h2></div>
+  <div style="padding:0 1.25rem 1.25rem;">
+    <p class="cell-muted">When enabled, clients encrypt save data before upload. The server stores ciphertext only.</p>
+    <form method="post" action="/dashboard/settings/encryption" class="auth-form" style="max-width:24rem;padding:0;">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <label style="display:flex;align-items:center;gap:0.5rem;margin:0.75rem 0;">
+        <input type="checkbox" name="encryption_enabled" value="1" {{if .EncryptionEnabled}}checked{{end}}>
+        Enable E2E encryption for my account
+      </label>
+      <button type="submit">Save encryption setting</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header"><h2>Two-factor authentication</h2></div>
+  <div style="padding:0 1.25rem 1.25rem;">
+    {{if .TOTPEnabled}}
+    <p class="cell-muted">2FA is enabled on your account.</p>
+    <form method="post" action="/dashboard/settings/2fa/disable" class="auth-form" style="max-width:24rem;padding:0;">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required>
+      <label for="code">Authenticator code</label>
+      <input id="code" name="code" type="text" inputmode="numeric" required>
+      <button type="submit" class="btn-danger-sm" style="width:100%;margin-top:1rem;">Disable 2FA</button>
+    </form>
+    {{else}}
+    <p class="cell-muted">Add an extra layer of security to your account.</p>
+    <a href="/dashboard/settings/2fa/enable" class="btn-primary-sm">Enable 2FA</a>
     {{end}}
-    {{if .Success}}
-    <div class="alert alert-success" role="alert">{{.Success}}</div>
-    {{end}}
+  </div>
+</section>
 
-    <section class="panel" aria-labelledby="account-heading">
-      <div class="panel-header">
-        <h2 id="account-heading">Account</h2>
-      </div>
-      <h3 style="margin-top:0; font-size:1rem;">Change password</h3>
-      <form method="post" action="/dashboard/settings" class="form-stack">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <label for="current_password">Current password</label>
-        <input type="password" id="current_password" name="current_password" autocomplete="current-password" required>
-        <label for="new_password">New password</label>
-        <input type="password" id="new_password" name="new_password" autocomplete="new-password" minlength="8" required>
-        <label for="confirm_password">Confirm new password</label>
-        <input type="password" id="confirm_password" name="confirm_password" autocomplete="new-password" minlength="8" required>
-        <button type="submit" class="btn-primary">Update password</button>
-      </form>
-    </section>
-
-    <section class="panel" aria-labelledby="security-heading">
-      <div class="panel-header">
-        <h2 id="security-heading">Security</h2>
-      </div>
-      <h3 style="margin-top:0; font-size:1rem;">Two-factor authentication (2FA)</h3>
-      {{if .TOTPEnabled}}
-      <p>2FA is enabled. Your account requires an authenticator code when signing in.</p>
-      <form method="post" action="/dashboard/settings/2fa/disable" class="form-stack">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <label for="disable_password">Your password</label>
-        <input type="password" id="disable_password" name="password" autocomplete="current-password" required>
-        <label for="disable_code">Authenticator code</label>
-        <input type="text" id="disable_code" name="code" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" placeholder="000000" required>
-        <button type="submit" class="btn-ghost">Disable 2FA</button>
-      </form>
-      {{else}}
-      <p>2FA is disabled. Enable it to require an authenticator code when signing in.</p>
-      <p><a href="/dashboard/settings/2fa/enable" class="btn-primary">Enable 2FA</a></p>
-      {{end}}
-    </section>
-
-    <section class="panel" aria-labelledby="sessions-heading">
-      <div class="panel-header">
-        <h2 id="sessions-heading">Sessions</h2>
-      </div>
-      <p class="cell-muted">Active browser sessions. Revoking a session logs that device out. "Log out everywhere" ends all sessions and logs you out.</p>
-      {{if .Sessions}}
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Created</th>
-              <th>Last seen</th>
-              <th>User agent</th>
-              <th></th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {{range .Sessions}}
-            <tr>
-              <td>{{.CreatedAt}}</td>
-              <td>{{.LastSeen}}</td>
-              <td><span class="truncate" style="max-width:20rem;" title="{{.UserAgent}}">{{.UserAgent}}</span></td>
-              <td>{{if eq .ID $.CurrentSessionID}}<strong>Current session</strong>{{end}}</td>
-              <td>
-                {{if ne .ID $.CurrentSessionID}}
-                <form method="post" action="/dashboard/settings/sessions/revoke" class="inline-form" style="display:inline-block;" onsubmit="return confirm('Revoke this session? That device will be logged out.');">
-                  <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-                  <input type="hidden" name="session_id" value="{{.ID}}">
-                  <button type="submit" class="btn-ghost btn-sm">Revoke</button>
-                </form>
-                {{end}}
-              </td>
-            </tr>
+<section class="panel">
+  <div class="panel-header"><h2>Active sessions</h2></div>
+  {{if .Sessions}}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Created</th><th>Last seen</th><th>Device</th><th class="th-action"></th></tr></thead>
+      <tbody>
+        {{range .Sessions}}
+        <tr>
+          <td class="cell-muted">{{formatTime .CreatedAt}}</td>
+          <td class="cell-muted">{{formatTime .LastSeen}}</td>
+          <td class="cell-muted">{{truncate .UserAgent 60}}</td>
+          <td class="cell-action">
+            {{if eq .ID $.CurrentSessionID}}<span class="badge-success">current</span>{{else}}
+            <form method="post" action="/dashboard/settings/sessions/revoke" class="inline-form">
+              <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+              <input type="hidden" name="session_id" value="{{.ID}}">
+              <button type="submit" class="btn-ghost-sm">Revoke</button>
+            </form>
             {{end}}
-          </tbody>
-        </table>
-      </div>
-      {{if gt (len .Sessions) 1}}
-      <form method="post" action="/dashboard/settings/sessions/revoke-all" class="form-stack" style="margin-top:1rem;" onsubmit="return confirm('Log out all sessions? You will be logged out and must sign in again.');">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <button type="submit" class="btn-ghost">Log out everywhere</button>
-      </form>
-      {{end}}
-      {{else}}
-      <p class="cell-muted">No sessions.</p>
-      {{end}}
-    </section>
-  </main>
-</body>
-</html>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <div style="padding:0 1.25rem 1.25rem;">
+    <form method="post" action="/dashboard/settings/sessions/revoke-all" class="inline-form" onsubmit="return confirm('Revoke all sessions including this one?');">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <button type="submit" class="btn-danger-sm">Revoke all sessions</button>
+    </form>
+  </div>
+  {{else}}
+  <div class="panel-empty"><p>No other sessions.</p></div>
+  {{end}}
+</section>
+{{end}}

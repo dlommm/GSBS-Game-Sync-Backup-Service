@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/paths"
+	"github.com/gsbs/gsbs/pkg/retry"
 	"github.com/gsbs/gsbs/pkg/types"
 )
 
@@ -171,13 +172,8 @@ func PathKeyForManifestEntry(gameID, pathTemplate string) string {
 // ListenSSE connects to the server SSE endpoint and calls onEvent for each received event type.
 // It auto-reconnects with exponential backoff on disconnect. Blocks until ctx is cancelled.
 func ListenSSE(ctx context.Context, baseURL, token string, onEvent func(eventType string)) {
-	const (
-		minBackoff = 2 * time.Second
-		maxBackoff = 60 * time.Second
-		// If connection lasted longer than this, reset backoff (was a healthy connection).
-		healthyThreshold = 30 * time.Second
-	)
-	backoff := minBackoff
+	const healthyThreshold = 30 * time.Second
+	bo := retry.SSEBackoff()
 
 	for {
 		select {
@@ -190,23 +186,19 @@ func ListenSSE(ctx context.Context, baseURL, token string, onEvent func(eventTyp
 		if ctx.Err() != nil {
 			return
 		}
-		// Reset backoff if the connection was healthy (lasted a while before dropping).
 		if time.Since(start) >= healthyThreshold {
-			backoff = minBackoff
+			bo.Reset()
 		}
+		delay := bo.Next()
 		if err != nil {
-			log.Printf("sse: connection error: %v (retrying in %s)", err, backoff)
+			log.Printf("sse: connection error: %v (retrying in %s)", err, delay)
 		} else {
-			log.Printf("sse: disconnected (retrying in %s)", backoff)
+			log.Printf("sse: disconnected (retrying in %s)", delay)
 		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(backoff):
-		}
-		backoff *= 2
-		if backoff > maxBackoff {
-			backoff = maxBackoff
+		case <-time.After(delay):
 		}
 	}
 }
@@ -255,10 +247,15 @@ func connectSSE(ctx context.Context, baseURL, token string, onEvent func(eventTy
 
 // ManifestToWatchPaths converts manifest entries to watch paths for the current OS.
 // Only includes entries where the resolved path exists. Skips config-only if we only want saves.
-func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Resolver, currentOS paths.OS, includeConfig bool) []watchPath {
+// When mode is "discovered", only includes entries for game IDs in activeGameIDs.
+func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Resolver, currentOS paths.OS, includeConfig bool, activeGameIDs map[string]bool, mode string) []watchPath {
 	var out []watchPath
 	seen := make(map[string]bool)
+	discoveredMode := mode == "discovered" && len(activeGameIDs) > 0
 	for _, e := range entries {
+		if discoveredMode && !activeGameIDs[e.GameID] {
+			continue
+		}
 		platform := e.Platform
 		if platform != string(currentOS) {
 			continue
@@ -266,17 +263,12 @@ func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Reso
 		if e.IsConfig && !includeConfig {
 			continue
 		}
-		resolved := resolver.Resolve(e.PathTemplate, currentOS)
+		resolved := resolver.ResolveAll(e.PathTemplate, currentOS)
 		for _, abs := range resolved {
 			if abs == "" {
 				continue
 			}
-			// Resolver may return a file path; we need the directory to exist for watching
-			dir := abs
-			if info, err := os.Stat(abs); err == nil && !info.IsDir() {
-				dir = filepath.Dir(abs)
-			}
-			if _, err := os.Stat(dir); err != nil {
+			if !paths.WatchDirExists(abs) {
 				continue
 			}
 			pathKey := PathKeyForManifestEntry(e.GameID, e.PathTemplate)
@@ -293,4 +285,45 @@ func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Reso
 		}
 	}
 	return out
+}
+
+// resolveSavePath finds the local absolute path for a save slot.
+func resolveSavePath(gameID, pathKey string, manifestEntries []types.GameSaveLocation, watchPaths []watchPath, resolver *paths.Resolver, currentOS paths.OS, pullCtx paths.PullContext) string {
+	for _, w := range watchPaths {
+		if w.GameID != gameID || w.PathKey != pathKey {
+			continue
+		}
+		for _, t := range w.PathTemplates {
+			for _, abs := range resolver.ResolveAll(t, currentOS) {
+				if abs == "" {
+					continue
+				}
+				if paths.WatchDirExists(abs) {
+					return abs
+				}
+				elig := paths.EvaluatePullEligibility(abs, gameID, pullCtx)
+				if elig == paths.ApplyReady || elig == paths.ApplyCreateDir {
+					return abs
+				}
+			}
+		}
+	}
+	for _, e := range manifestEntries {
+		if e.GameID != gameID {
+			continue
+		}
+		if PathKeyForManifestEntry(e.GameID, e.PathTemplate) != pathKey {
+			continue
+		}
+		for _, abs := range resolver.ResolveAll(e.PathTemplate, currentOS) {
+			if abs == "" {
+				continue
+			}
+			elig := paths.EvaluatePullEligibility(abs, gameID, pullCtx)
+			if elig == paths.ApplyReady || elig == paths.ApplyCreateDir {
+				return abs
+			}
+		}
+	}
+	return ""
 }

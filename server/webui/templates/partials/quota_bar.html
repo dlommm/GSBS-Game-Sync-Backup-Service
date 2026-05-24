@@ -1,0 +1,11 @@
+{{if gt .QuotaBytes 0}}
+<div class="quota-bar-wrap" aria-label="Storage quota">
+  <div class="quota-bar-header">
+    <span>Storage used</span>
+    <span>{{formatBytes .Stats.TotalBytes}} / {{formatBytes .QuotaBytes}} ({{printf "%.0f" (percent .Stats.TotalBytes .QuotaBytes)}}%)</span>
+  </div>
+  <div class="quota-bar-track">
+    <div class="quota-bar-fill {{quotaBarClass .Stats.TotalBytes .QuotaBytes}}" style="width:{{printf "%.1f" (percent .Stats.TotalBytes .QuotaBytes)}}%;"></div>
+  </div>
+</div>
+{{end}}

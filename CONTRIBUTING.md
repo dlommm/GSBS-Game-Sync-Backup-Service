@@ -12,12 +12,23 @@ go build -o gsbs-server ./server
 go build -o gsbs-client ./client
 ```
 
+### WebUI assets
+
+The server embeds compiled CSS and static JS. After changing templates or `server/webui/static/src/input.css`, rebuild assets:
+
+```bash
+./script/build-webui.sh   # requires Node.js (npx tailwindcss)
+go run ./cmd/resize-icon  # regenerates favicon.png and logo.png from docs/images/
+```
+
+`script/release.sh` runs `build-webui.sh` automatically before building server binaries.
+
 The server needs CGO enabled for SQLite (`CGO_ENABLED=1`, which is the default). See [README.md](README.md) and [docs/DOCKER.md](docs/DOCKER.md) for run instructions and environment variables.
 
 ## Running tests
 
 ```bash
-go test ./server/... ./pkg/...
+go test ./server/... ./pkg/... ./client/...
 ```
 
 Tests live under `server/` (e.g. `server/auth/auth_test.go`, `server/store/sqlite_test.go`, `server/api/handler_test.go`). Use an in-memory SQLite DB (`:memory:`) in tests where possible.

@@ -1,0 +1,74 @@
+# Release workflow
+
+GSBS releases are automated via GitHub Actions when you push a semver tag. Local `./script/release.sh` remains a fallback for maintainers.
+
+## Primary path: tag push
+
+1. **Update [CHANGELOG.md](../CHANGELOG.md)** with the new version section.
+2. **Merge to `main`** — CI must be green.
+3. **Create and push a tag:**
+   ```bash
+   git tag -a v1.0.14 -m "Release v1.0.14"
+   git push origin v1.0.14
+   ```
+4. **Monitor** the [Release workflow](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/release.yml).
+5. **Verify** the GitHub Release contains:
+   - `gsbs-server-windows-amd64.exe`, `gsbs-client-windows-amd64.exe`
+   - `gsbs-server-linux-amd64`, `gsbs-client-linux-amd64`
+   - `gsbs-client-setup-X.Y.Z-windows-amd64.exe` (Inno Setup)
+   - `gsbs-client_X.Y.Z_amd64.deb`
+   - `gsbs-client-X.Y.Z-x86_64.AppImage`
+   - `SHA256SUMS`, `latest-client.json`
+6. **Smoke test:** `docker pull dendlomm/gsbs-server:X.Y.Z`, Windows installer, Linux `.deb`, client **Check for updates**.
+
+## Manual workflow dispatch
+
+For testing the pipeline without a tag:
+
+```bash
+gh workflow run release.yml -f version=v1.0.14-rc1
+```
+
+Note: Docker push only runs on tag push events, not manual dispatch.
+
+## GitHub secrets
+
+Configure in repository **Settings → Secrets and variables → Actions**:
+
+| Secret | Purpose |
+|--------|---------|
+| `DOCKERHUB_USERNAME` | Docker Hub login for server image push |
+| `DOCKERHUB_TOKEN` | Docker Hub access token |
+| `GITHUB_TOKEN` | Provided automatically for release upload |
+
+## Local fallback
+
+```bash
+./script/release.sh v1.0.14
+```
+
+Requires: `go`, `git`, `gh`, `docker` (buildx), `docker login`, and a Linux host for the Linux client binary (or use CI).
+
+Build only (no release upload):
+
+```bash
+./script/build.sh v1.0.14 dist
+./script/release-assets.sh v1.0.14 dist
+```
+
+## Version policy
+
+- Tags: `vMAJOR.MINOR.PATCH` (semver).
+- Pre-releases: `vX.Y.Z-rc.N` — clients skip these unless explicitly supported later.
+- `latest-client.json` on each release drives client auto-update checksums.
+
+## Artifact naming contract
+
+Client auto-update expects these asset names:
+
+| Platform | Binary |
+|----------|--------|
+| Windows amd64 | `gsbs-client-windows-amd64.exe` |
+| Linux amd64 | `gsbs-client-linux-amd64` |
+
+Do not rename these without updating `client/update.go` and this document.

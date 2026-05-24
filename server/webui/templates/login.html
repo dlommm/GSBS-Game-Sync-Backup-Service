@@ -1,4 +1,3 @@
-<!-- Login: session form; redirects to dashboard if already logged in. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,29 +7,25 @@
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
 </head>
 <body class="auth-page">
   <a href="#main-content" class="skip-link">Skip to main content</a>
-  <main id="main-content" class="auth-card" role="main" aria-label="Sign in">
+  <main id="main-content" class="auth-card" role="main">
     <img src="/static/logo.png" alt="GSBS" class="auth-logo">
     <h1>Game Sync &amp; Backup</h1>
     <p class="subtitle">Sign in to your account</p>
-    {{if .Error}}
-    <p class="error" role="alert" aria-live="assertive">{{.Error}}</p>
-    {{end}}
-    <form method="post" action="/login" class="auth-form" aria-label="Login form">
+    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+    <form method="post" action="/login" class="auth-form">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <label for="username">Username</label>
-      <input id="username" name="username" type="text" required autocomplete="username" aria-required="true">
+      <input id="username" name="username" type="text" required autocomplete="username">
       <label for="password">Password</label>
-      <input id="password" name="password" type="password" required autocomplete="current-password" aria-required="true">
+      <input id="password" name="password" type="password" required autocomplete="current-password">
       <button type="submit">Sign in</button>
     </form>
-    {{if .AllowRegister}}
-    <p class="auth-footer">Don't have an account? <a href="/register">Register</a></p>
-    {{end}}
+    {{if .AllowRegister}}<p class="auth-footer">Don't have an account? <a href="/register">Register</a></p>{{end}}
   </main>
 </body>
 </html>

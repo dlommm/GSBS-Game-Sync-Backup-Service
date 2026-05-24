@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	iphlpapi     = syscall.NewLazyDLL("iphlpapi.dll")
+	iphlpapi            = syscall.NewLazyDLL("iphlpapi.dll")
 	getConnectivityHint = iphlpapi.NewProc("GetNetworkConnectivityHint")
 )
 

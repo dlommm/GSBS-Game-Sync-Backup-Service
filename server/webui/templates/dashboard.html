@@ -1,173 +1,52 @@
-<!-- Dashboard: stats, clients, synced saves with game titles and sizes. -->
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard — GSBS</title>
-  <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body class="app-shell">
-  <a href="#main-content" class="skip-link">Skip to main content</a>
-  <header class="topbar" role="banner">
-    <div class="topbar-left">
-      <img src="/static/favicon.png" alt="" class="topbar-icon" aria-hidden="true">
-      <span class="topbar-brand">GSBS</span>
+{{template "layout" .}}
+{{define "title"}}Dashboard — GSBS{{end}}
+{{define "content"}}
+<section id="dashboard-stats"
+         hx-get="/dashboard/partial/stats"
+         hx-trigger="load, save-updated from:body"
+         hx-swap="innerHTML">
+  <p class="cell-muted">Loading stats…</p>
+</section>
+
+<section class="panel" aria-labelledby="clients-heading">
+  <div class="panel-header"><h2 id="clients-heading">Your Clients</h2></div>
+  <div id="clients-table"
+       hx-get="/dashboard/partial/clients"
+       hx-trigger="load, save-updated from:body"
+       hx-swap="innerHTML">
+    <p class="panel-empty">Loading clients…</p>
+  </div>
+</section>
+
+<section class="panel" aria-labelledby="activity-heading">
+  <div class="panel-header"><h2 id="activity-heading">Recent Activity</h2></div>
+  <div id="activity-feed"
+       hx-get="/dashboard/partial/activity"
+       hx-trigger="load, save-updated from:body"
+       hx-swap="innerHTML">
+    <p class="panel-empty">Loading activity…</p>
+  </div>
+</section>
+
+<section class="panel" aria-labelledby="saves-heading">
+  <div class="panel-header-actions">
+    <h2 id="saves-heading">Synced Saves</h2>
+    <div class="search-wrap" style="padding:0;">
+      <input type="search" class="search-input" name="q" placeholder="Search saves…"
+             hx-get="/dashboard/partial/saves"
+             hx-trigger="keyup changed delay:300ms, search"
+             hx-target="#saves-table"
+             hx-include="this">
     </div>
-    <nav class="topbar-nav" role="navigation" aria-label="Main">
-      <a href="/dashboard" class="active">Dashboard</a>
-      {{if .IsAdmin}}<a href="/admin">Admin</a>{{end}}
-      <a href="/dashboard/settings">Settings</a>
-    </nav>
-    <div class="topbar-right">
-      <span class="topbar-user">{{.Username}}</span>
-      <form method="post" action="/logout" class="inline-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <button type="submit" class="btn-ghost">Log out</button>
-      </form>
-    </div>
-  </header>
-
-  <main id="main-content" class="page-content" role="main" aria-label="Dashboard">
-    {{if .Error}}
-    <div class="alert alert-error" role="alert" aria-live="assertive">{{.Error}}</div>
-    {{end}}
-    {{if .Restored}}
-    <div class="alert alert-success" role="alert">Save version restored successfully.</div>
-    {{end}}
-    {{if .Deleted}}
-    <div class="alert alert-success" role="alert">Save deleted from server.</div>
-    {{end}}
-
-    <!-- Stats -->
-    <section class="stats-row" aria-label="Statistics">
-      <div class="stat-card">
-        <div class="stat-value">{{.Stats.ClientCount}}</div>
-        <div class="stat-label">Clients</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">{{.Stats.GameCount}}</div>
-        <div class="stat-label">Games</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">{{.Stats.SaveCount}}</div>
-        <div class="stat-label">Synced saves</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value">{{formatBytes .Stats.TotalBytes}}</div>
-        <div class="stat-label">Storage used</div>
-      </div>
-    </section>
-
-    <!-- Clients -->
-    <section class="panel" aria-labelledby="clients-heading">
-      <div class="panel-header">
-        <h2 id="clients-heading">Your Clients</h2>
-      </div>
-      {{if .Clients}}
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Platform</th>
-              <th>Last active</th>
-            </tr>
-          </thead>
-          <tbody>
-            {{range .Clients}}
-            <tr>
-              <td class="cell-primary">{{.Name}}</td>
-              <td><span class="os-badge os-{{.OS}}">{{.OS}}</span></td>
-              <td class="cell-muted">{{formatTime .LastSeen}}</td>
-            </tr>
-            {{end}}
-          </tbody>
-        </table>
-      </div>
-      {{else}}
-      <div class="panel-empty">
-        <p>No clients registered yet.</p>
-        <p class="hint">Run <code>gsbs-client login</code> on your PC to connect it.</p>
-      </div>
-      {{end}}
-    </section>
-
-    <!-- Activity feed -->
-    <section class="panel" aria-labelledby="activity-heading">
-      <div class="panel-header">
-        <h2 id="activity-heading">Recent Activity</h2>
-      </div>
-      <div id="activity-feed"
-           hx-get="/dashboard/partial/activity"
-           hx-trigger="load, save-updated from:body"
-           hx-swap="innerHTML">
-        <p class="panel-empty">Loading activity…</p>
-      </div>
-    </section>
-
-    <!-- Synced Saves -->
-    <section class="panel" aria-labelledby="saves-heading">
-      <div class="panel-header">
-        <h2 id="saves-heading">Synced Saves</h2>
-      </div>
-      <div id="saves-table"
-           hx-get="/dashboard/partial/saves"
-           hx-trigger="load, save-updated from:body"
-           hx-swap="innerHTML">
-      {{if .Saves}}
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Game</th>
-              <th>Path key</th>
-              <th>Size</th>
-              <th>Last synced</th>
-              <th class="th-action">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {{range .Saves}}
-            <tr>
-              <td class="cell-primary">{{.GameTitle}}</td>
-              <td><code class="code-inline">{{truncate .PathKey 16}}</code></td>
-              <td class="cell-size">{{formatBytes .SizeBytes}}</td>
-              <td class="cell-muted">{{formatTime .UpdatedAt}}</td>
-              <td class="cell-action">
-                <a href="/dashboard/save/versions?game_id={{urlquery .GameID}}&path_key={{urlquery .PathKey}}" class="btn-ghost btn-sm">Versions</a>
-                <form method="post" action="/dashboard/save/delete" class="inline-form" style="display:inline-block; margin-left:0.5rem;" onsubmit="return confirm('Delete this save from the server? It cannot be undone.');">
-                  <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-                  <input type="hidden" name="game_id" value="{{.GameID}}">
-                  <input type="hidden" name="path_key" value="{{.PathKey}}">
-                  <button type="submit" class="btn-danger-sm">Delete</button>
-                </form>
-              </td>
-            </tr>
-            {{end}}
-          </tbody>
-        </table>
-      </div>
-      {{else}}
-      <div class="panel-empty">
-        <p>No saves synced yet.</p>
-        <p class="hint">Install games that are in the manifest, or add custom watch paths in your client config.</p>
-      </div>
-      {{end}}
-      </div>
-    </section>
-  </main>
-  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
-  <script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/sse.js"></script>
-  <script>
-  document.body.addEventListener('htmx:configRequest', function(evt) {
-    evt.detail.credentials = 'same-origin';
-  });
-  </script>
-  <div hx-ext="sse" sse-connect="/dashboard/events" sse-swap="save-updated" hx-trigger="save-updated" hx-get="/dashboard/partial/saves" hx-target="#saves-table" hx-swap="innerHTML" hidden></div>
-</body>
-</html>
+  </div>
+  <div id="saves-table"
+       hx-get="/dashboard/partial/saves"
+       hx-trigger="load, save-updated from:body"
+       hx-swap="innerHTML">
+    <p class="panel-empty">Loading saves…</p>
+  </div>
+</section>
+{{end}}
+{{define "scripts"}}
+<div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>
+{{end}}
