@@ -3,9 +3,12 @@ package store
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,18 +17,25 @@ import (
 )
 
 type sqliteStore struct {
-	db *sql.DB
+	db               *sql.DB
+	versionRetention int
 }
 
 // NewSQLite creates a SQLite-backed store.
 func NewSQLite(path string) (Store, error) {
+	retention := 8
+	if s := os.Getenv("GSBS_SAVE_VERSION_RETENTION"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n >= 5 && n <= 10 {
+			retention = n
+		}
+	}
 	// WAL mode improves concurrent read performance; single connection avoids "database is locked" under concurrent writes.
 	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on&_journal_mode=WAL")
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &sqliteStore{db: db}
+	s := &sqliteStore{db: db, versionRetention: retention}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -181,6 +191,17 @@ func (s *sqliteStore) migrate() error {
 	_, err = s.db.Exec(`ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0`)
 	if err != nil && !strings.Contains(err.Error(), "duplicate") {
 		return err
+	}
+	for _, stmt := range []string{
+		`ALTER TABLE saves ADD COLUMN content_hash TEXT`,
+		`ALTER TABLE saves ADD COLUMN content_size INTEGER`,
+		`ALTER TABLE saves ADD COLUMN client_id TEXT`,
+		`ALTER TABLE save_versions ADD COLUMN content_hash TEXT`,
+	} {
+		_, err = s.db.Exec(stmt)
+		if err != nil && !strings.Contains(err.Error(), "duplicate") {
+			return err
+		}
 	}
 	return nil
 }
@@ -435,39 +456,100 @@ func (s *sqliteStore) RegenerateClientToken(ctx context.Context, clientID string
 	return err
 }
 
-const saveVersionRetention = 5
+func (s *sqliteStore) RefreshClientToken(ctx context.Context, currentToken string) (string, error) {
+	newToken := genID()
+	res, err := s.db.ExecContext(ctx, `UPDATE clients SET token = ? WHERE token = ?`, newToken, currentToken)
+	if err != nil {
+		return "", err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return "", fmt.Errorf("client not found")
+	}
+	return newToken, nil
+}
+
+const saveVersionRetentionDefault = 5
+
+func hashContent(content []byte) string {
+	h := sha256.Sum256(content)
+	return hex.EncodeToString(h[:])
+}
 
 func (s *sqliteStore) UpsertSave(ctx context.Context, userID, gameID, pathKey string, content []byte) error {
+	_, err := s.UpsertSaveWithMeta(ctx, userID, gameID, pathKey, content, nil)
+	return err
+}
+
+func (s *sqliteStore) GetSaveHash(ctx context.Context, userID, gameID, pathKey string) (string, error) {
+	var hash sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT content_hash FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+		userID, gameID, pathKey,
+	).Scan(&hash)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return hash.String, nil
+}
+
+func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pathKey string, content []byte, meta *SaveMeta) (skipped bool, err error) {
+	retention := s.versionRetention
+	if retention < 5 {
+		retention = saveVersionRetentionDefault
+	}
+	contentHash := hashContent(content)
+	contentSize := int64(len(content))
+	clientID := ""
+	if meta != nil {
+		if meta.ContentHash != "" {
+			contentHash = meta.ContentHash
+		}
+		if meta.ContentSize > 0 {
+			contentSize = meta.ContentSize
+		}
+		clientID = meta.ClientID
+		existing, _ := s.GetSaveHash(ctx, userID, gameID, pathKey)
+		if existing != "" && existing == contentHash {
+			return true, nil
+		}
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO saves (user_id, game_id, path_key, content, updated_at) VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT(user_id, game_id, path_key) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
-		userID, gameID, pathKey, content, now,
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO saves (user_id, game_id, path_key, content, updated_at, content_hash, content_size, client_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(user_id, game_id, path_key) DO UPDATE SET
+		   content = excluded.content, updated_at = excluded.updated_at,
+		   content_hash = excluded.content_hash, content_size = excluded.content_size,
+		   client_id = excluded.client_id`,
+		userID, gameID, pathKey, content, now, contentHash, contentSize, nullIfEmpty(clientID),
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
-	// Append to save_versions (version = next seq for this slot), then prune to last N.
 	var nextVer int
 	err = s.db.QueryRowContext(ctx,
 		`SELECT COALESCE(MAX(version), 0) + 1 FROM save_versions WHERE user_id = ? AND game_id = ? AND path_key = ?`,
 		userID, gameID, pathKey,
 	).Scan(&nextVer)
 	if err != nil {
-		return err
+		return false, err
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO save_versions (user_id, game_id, path_key, version, content, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		userID, gameID, pathKey, nextVer, content, now,
+		`INSERT INTO save_versions (user_id, game_id, path_key, version, content, updated_at, content_hash)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		userID, gameID, pathKey, nextVer, content, now, contentHash,
 	)
 	if err != nil {
-		return err
+		return false, err
 	}
-	// Keep only last saveVersionRetention versions: find 5th-newest version and delete older.
 	var cutoff sql.NullInt64
 	_ = s.db.QueryRowContext(ctx,
 		`SELECT version FROM save_versions WHERE user_id = ? AND game_id = ? AND path_key = ? ORDER BY version DESC LIMIT 1 OFFSET ?`,
-		userID, gameID, pathKey, saveVersionRetention-1,
+		userID, gameID, pathKey, retention-1,
 	).Scan(&cutoff)
 	if cutoff.Valid {
 		_, _ = s.db.ExecContext(ctx,
@@ -475,7 +557,14 @@ func (s *sqliteStore) UpsertSave(ctx context.Context, userID, gameID, pathKey st
 			userID, gameID, pathKey, cutoff.Int64,
 		)
 	}
-	return nil
+	return false, nil
+}
+
+func nullIfEmpty(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func (s *sqliteStore) ListSaves(ctx context.Context, userID string) ([]types.SaveBlob, error) {
@@ -782,7 +871,8 @@ func (s *sqliteStore) UpdateClientLastSeen(ctx context.Context, clientID string)
 func (s *sqliteStore) ListSaveSummaries(ctx context.Context, userID string) ([]SaveSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.game_id, s.path_key, LENGTH(s.content) AS size_bytes, s.updated_at,
-		       COALESCE(g.game_title, s.game_id) AS game_title
+		       COALESCE(g.game_title, s.game_id) AS game_title,
+		       COALESCE(s.content_hash, '') AS content_hash
 		FROM saves s
 		LEFT JOIN (SELECT DISTINCT game_id, game_title FROM game_save_locations) g
 		  ON s.game_id = g.game_id
@@ -795,7 +885,7 @@ func (s *sqliteStore) ListSaveSummaries(ctx context.Context, userID string) ([]S
 	var out []SaveSummary
 	for rows.Next() {
 		var ss SaveSummary
-		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle); err != nil {
+		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle, &ss.ContentHash); err != nil {
 			return nil, err
 		}
 		out = append(out, ss)
@@ -820,7 +910,8 @@ func (s *sqliteStore) ListSaveSummariesPaginated(ctx context.Context, userID str
 	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.game_id, s.path_key, LENGTH(s.content) AS size_bytes, s.updated_at,
-		       COALESCE(g.game_title, s.game_id) AS game_title
+		       COALESCE(g.game_title, s.game_id) AS game_title,
+		       COALESCE(s.content_hash, '') AS content_hash
 		FROM saves s
 		LEFT JOIN (SELECT DISTINCT game_id, game_title FROM game_save_locations) g ON s.game_id = g.game_id
 		WHERE s.user_id = ?
@@ -832,7 +923,7 @@ func (s *sqliteStore) ListSaveSummariesPaginated(ctx context.Context, userID str
 	var out []SaveSummary
 	for rows.Next() {
 		var ss SaveSummary
-		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle); err != nil {
+		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle, &ss.ContentHash); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, ss)

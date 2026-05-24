@@ -34,6 +34,10 @@ type Resolver struct {
 	Home             string   // $HOME or %USERPROFILE%
 	LocalAppData     string   // %LOCALAPPDATA% or ~/.local/share
 	AppData          string   // %APPDATA% or ~/.config
+	Heroic           string   // Heroic Games Launcher config root
+	Lutris           string   // Lutris config root
+	ProgramData      string   // %PROGRAMDATA%
+	ProgramFiles     string   // %PROGRAMFILES%
 }
 
 // NewResolver builds a resolver with current environment.
@@ -54,15 +58,44 @@ func NewResolver() *Resolver {
 		localAppData = filepath.Join(home, ".local", "share")
 		appData = filepath.Join(home, ".config")
 	}
-	return &Resolver{
+	programData := ""
+	programFiles := ""
+	if runtime.GOOS == "windows" {
+		programData = os.Getenv("PROGRAMDATA")
+		if programData == "" {
+			programData = filepath.Join(os.Getenv("SystemDrive")+"\\", "ProgramData")
+		}
+		programFiles = os.Getenv("ProgramFiles")
+	}
+	r := &Resolver{
 		Home:             home,
 		LocalAppData:     localAppData,
 		AppData:          appData,
+		ProgramData:      programData,
+		ProgramFiles:     programFiles,
 		SteamLibraries:   getSteamLibraryRoots(home),
 		GOGGalaxy:        getDefaultGOGGalaxy(home),
 		EpicGames:        getDefaultEpicGames(home),
 		XboxApp:          getDefaultXboxApp(localAppData),
+		Heroic:           filepath.Join(appData, "heroic"),
+		Lutris:           filepath.Join(appData, "lutris"),
 	}
+	r.UbisoftConnect = getDefaultUbisoftConnect()
+	return r
+}
+
+func getDefaultUbisoftConnect() string {
+	if runtime.GOOS == "windows" {
+		pf := os.Getenv("ProgramFiles(x86)")
+		if pf == "" {
+			pf = filepath.Join(os.Getenv("ProgramFiles"), "..", "Program Files (x86)")
+		}
+		p := filepath.Join(pf, "Ubisoft", "Ubisoft Game Launcher")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
 }
 
 func getDefaultGOGGalaxy(home string) string {
@@ -126,11 +159,15 @@ func (r *Resolver) expandOne(template string, targetOS OS) string {
 	s = replaceEnv(s, "%USERPROFILE%", r.Home)
 	s = replaceEnv(s, "%LOCALAPPDATA%", r.LocalAppData)
 	s = replaceEnv(s, "%APPDATA%", r.AppData)
+	s = replaceEnv(s, "%PROGRAMDATA%", r.ProgramData)
+	s = replaceEnv(s, "%PROGRAMFILES%", r.ProgramFiles)
 	s = replaceEnv(s, "<user-id>", r.UserID)
 	s = replaceEnv(s, "<Ubisoft-Connect-folder>", r.UbisoftConnect)
 	s = replaceEnv(s, "<GOG-Galaxy-folder>", r.GOGGalaxy)
 	s = replaceEnv(s, "<Epic-Games-folder>", r.EpicGames)
 	s = replaceEnv(s, "<Xbox-App-folder>", r.XboxApp)
+	s = replaceEnv(s, "<Heroic-folder>", r.Heroic)
+	s = replaceEnv(s, "<Lutris-folder>", r.Lutris)
 	// Steam: first library that exists
 	if strings.Contains(s, "<SteamLibrary-folder>") {
 		for _, root := range r.SteamLibraries {

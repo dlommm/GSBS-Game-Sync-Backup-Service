@@ -15,6 +15,7 @@ import (
 	"github.com/gsbs/gsbs/server/api"
 	"github.com/gsbs/gsbs/server/auth"
 	"github.com/gsbs/gsbs/server/job"
+	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/metrics"
 	"github.com/gsbs/gsbs/server/ratelimit"
 	"github.com/gsbs/gsbs/server/sse"
@@ -72,6 +73,7 @@ func main() {
 		printVersion()
 		return
 	}
+	logx.Init()
 	dbPath := os.Getenv("GSBS_DB")
 	if dbPath == "" {
 		dbPath = "gsbs.db"

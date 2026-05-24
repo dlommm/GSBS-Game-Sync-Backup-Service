@@ -190,6 +190,10 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	case path == "/dashboard/events" && r.Method == http.MethodGet:
 		h.serveDashboardEvents(w, r)
+	case path == "/dashboard/partial/saves" && r.Method == http.MethodGet:
+		h.serveDashboardSavesPartial(w, r)
+	case path == "/dashboard/partial/activity" && r.Method == http.MethodGet:
+		h.serveDashboardActivityPartial(w, r)
 	case path == "/logout":
 		if r.Method == http.MethodPost {
 			if !ValidateCSRF(r, h.secret) {
@@ -302,7 +306,7 @@ func (h *WebHandler) serveDashboardEvents(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	ch, unsub := h.hub.Subscribe("web-" + userID)
+	ch, unsub := h.hub.Subscribe(userID)
 	defer unsub()
 
 	fmt.Fprint(w, ": heartbeat\n\n")
@@ -569,6 +573,42 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 		Restored:  restored,
 		Deleted:   deleted,
 		CSRFToken: csrfToken,
+	})
+}
+
+func (h *WebHandler) serveDashboardSavesPartial(w http.ResponseWriter, r *http.Request) {
+	userID, _ := h.getSessionUser(r)
+	if userID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	saves, err := h.store.ListSaveSummaries(r.Context(), userID)
+	if err != nil {
+		http.Error(w, "Failed to load saves", http.StatusInternalServerError)
+		return
+	}
+	csrfToken := SetCSRFToken(w, r, h.secret)
+	h.templates.ExecuteTemplate(w, "dashboard_saves_partial.html", map[string]interface{}{
+		"Saves": saves, "CSRFToken": csrfToken,
+	})
+}
+
+func (h *WebHandler) serveDashboardActivityPartial(w http.ResponseWriter, r *http.Request) {
+	userID, _ := h.getSessionUser(r)
+	if userID == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	username, _ := h.store.UsernameByID(r.Context(), userID)
+	entries, _ := h.store.ListAuditLog(r.Context(), 20, "")
+	var userEntries []store.AuditRow
+	for _, e := range entries {
+		if e.ActorUsername == username {
+			userEntries = append(userEntries, e)
+		}
+	}
+	h.templates.ExecuteTemplate(w, "dashboard_activity_partial.html", map[string]interface{}{
+		"Entries": userEntries,
 	})
 }
 

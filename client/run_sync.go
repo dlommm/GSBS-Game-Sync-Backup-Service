@@ -93,6 +93,12 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	if cfg.LauncherUserID != "" {
 		resolver.UserID = cfg.LauncherUserID
 	}
+	if cfg.HeroicFolder != "" {
+		resolver.Heroic = cfg.HeroicFolder
+	}
+	if cfg.LutrisFolder != "" {
+		resolver.Lutris = cfg.LutrisFolder
+	}
 	currentOS := paths.CurrentOS()
 
 	SyncPaused.Store(cfg.SyncPaused)
@@ -116,15 +122,27 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		manifestInclude = "both"
 	}
 	includeConfig := manifestInclude == "both" || manifestInclude == "config"
-	manifestEntries := LoadManifestFromDisk()
-	if entries, err := FetchManifest(ctx, cfg.ServerURL, cfg.Token, "", manifestInclude); err == nil {
-		manifestEntries = entries
-		log.Printf("manifest: fetched %d entries from server", len(manifestEntries))
-		if err := SaveManifestToDisk(entries); err != nil {
+	manifestEntries, lastManifestFetch := LoadManifestCache()
+	since := ""
+	if !lastManifestFetch.IsZero() {
+		since = lastManifestFetch.UTC().Format(time.RFC3339)
+	}
+	if entries, err := FetchManifest(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
+		if since != "" && len(manifestEntries) > 0 {
+			manifestEntries = MergeManifestDelta(manifestEntries, entries)
+		} else {
+			manifestEntries = entries
+		}
+		log.Printf("manifest: fetched %d entries from server (since=%q)", len(entries), since)
+		if err := SaveManifestToDisk(manifestEntries); err != nil {
 			log.Println("save manifest cache:", err)
 		}
 	} else {
 		log.Printf("fetch manifest (using cache with %d entries): %v", len(manifestEntries), err)
+	}
+
+	if n := runDiscovery(manifestGameIDSet(manifestEntries)); n > 0 {
+		log.Printf("discovery: %d new game(s) detected", n)
 	}
 
 	effectiveWatchPaths := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig)
@@ -192,12 +210,33 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 	go watcher.Run(ctx)
 
+	// Process any pending outbox entries from previous sessions.
+	if n := sync.ProcessOutbox(ctx, client); n > 0 {
+		log.Printf("outbox: sent %d pending upload(s) on startup", n)
+	}
+	outboxTicker := time.NewTicker(2 * time.Minute)
+	defer outboxTicker.Stop()
+
+	discoveryInterval := cfg.DiscoveryInterval.Duration()
+	if discoveryInterval <= 0 {
+		discoveryInterval = 4 * time.Hour
+	}
+	discoveryTicker := time.NewTicker(discoveryInterval)
+	defer discoveryTicker.Stop()
+
 	// SSE listener: re-fetch manifest and trigger a pull when server pushes an update.
 	sseRefreshCh := make(chan struct{}, 1)
+	ssePullCh := make(chan struct{}, 1)
 	go ListenSSE(ctx, cfg.ServerURL, cfg.Token, func(eventType string) {
-		if eventType == "manifest-updated" {
+		switch eventType {
+		case "manifest-updated":
 			select {
 			case sseRefreshCh <- struct{}{}:
+			default:
+			}
+		case "save-updated":
+			select {
+			case ssePullCh <- struct{}{}:
 			default:
 			}
 		}
@@ -212,10 +251,19 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 
 	doManifestRefresh := func(reason string) {
 		log.Printf("manifest refresh (%s): starting", reason)
-		if fresh, err := FetchManifest(ctx, cfg.ServerURL, cfg.Token, "", manifestInclude); err == nil {
-			manifestEntries = fresh
+		cached, lastFetch := LoadManifestCache()
+		since := ""
+		if !lastFetch.IsZero() {
+			since = lastFetch.UTC().Format(time.RFC3339)
+		}
+		if fresh, err := FetchManifest(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
+			if since != "" && len(cached) > 0 {
+				manifestEntries = MergeManifestDelta(cached, fresh)
+			} else {
+				manifestEntries = fresh
+			}
 			log.Printf("manifest refresh (%s): fetched %d entries", reason, len(fresh))
-			_ = SaveManifestToDisk(fresh)
+			_ = SaveManifestToDisk(manifestEntries)
 			newWP := ManifestToWatchPaths(fresh, resolver, currentOS, includeConfig)
 			newWP = mergeWatchPaths(newWP, cfg.WatchPaths)
 			wpMu.Lock()
@@ -287,10 +335,36 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 				log.Println("sync now: complete")
 				setLastSync(time.Now(), nil)
 			}
+		case <-ssePullCh:
+			if SyncPaused.Load() {
+				continue
+			}
+			if cfg.SkipSyncWhenMetered && IsMeteredConnection() {
+				continue
+			}
+			if OnSyncStart != nil {
+				OnSyncStart()
+			}
+			if err := client.PullAndApplyWithResolver(ctx, resolvePath, cfg.BackupOnPull, cfg.SkipOverwriteWhenLocalNewer, onRetryIn); err != nil {
+				log.Println("sse pull:", err)
+				setLastSync(time.Now(), err)
+			} else {
+				log.Println("sse pull: complete")
+				setLastSync(time.Now(), nil)
+			}
 		case <-sseRefreshCh:
 			doManifestRefresh("sse push")
 		case <-refreshManifestCh:
 			doManifestRefresh("manual")
+		case <-outboxTicker.C:
+			if n := sync.ProcessOutbox(ctx, client); n > 0 {
+				log.Printf("outbox: sent %d pending upload(s)", n)
+			}
+		case <-discoveryTicker.C:
+			if n := runDiscovery(manifestGameIDSet(manifestEntries)); n > 0 {
+				log.Printf("discovery: periodic scan found %d new game(s)", n)
+				doManifestRefresh("discovery")
+			}
 		}
 	}
 }

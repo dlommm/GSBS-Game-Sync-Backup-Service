@@ -17,13 +17,18 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 
 ## Saves (authenticated)
 
-- **Pull all saves**: `GET /api/saves` — returns JSON `{"saves":[{"game_id","path_key","updated_at","content"}]}`. `content` is base64-encoded.
-- **Save summaries only**: `GET /api/saves?summaries=1` — returns `{"saves":[{"game_id","path_key","game_title","size_bytes","updated_at"}]}` (no content). Use for list/dry-run.
-- **Push a save**: `POST /api/saves` with body = raw file bytes. Headers: `X-Game-ID`, `X-Path-Key` (required), `X-File-Path` (optional). Max body 50 MiB. Returns 200 `{"status":"ok"}` or 4xx.
+- **Pull all saves**: `GET /api/saves` — returns JSON `{"saves":[{"game_id","path_key","updated_at","content"}]}`. `content` is base64-encoded. Supports gzip when `Accept-Encoding: gzip`.
+- **Pull single save**: `GET /api/saves?game_id=...&path_key=...` — returns one save in the same format.
+- **Save summaries only**: `GET /api/saves?summaries=1` — returns `{"saves":[{"game_id","path_key","game_title","size_bytes","updated_at","content_hash"}]}` (no content). Use for conditional sync.
+- **Push a save**: `POST /api/saves` with body = raw file bytes (optional `Content-Encoding: gzip`). Headers: `X-Game-ID`, `X-Path-Key` (required), `X-File-Path` (optional), `X-Content-Hash` (SHA256 hex), `X-Content-Size`. Max body 50 MiB. Returns 200 `{"status":"ok"}`, `{"status":"unchanged"}` if hash matches, or 4xx.
 - **Delete a save**: `DELETE /api/saves?game_id=...&path_key=...`. Returns 200 `{"status":"ok"}` or 4xx.
 - **List versions**: `GET /api/saves/versions?game_id=...&path_key=...` — returns `{"versions":[{"version","updated_at","size_bytes"}]}`.
 - **Get a version**: `GET /api/saves/versions/download?game_id=...&path_key=...&version=N` — returns JSON with `content` (base64).
 - **Restore version**: `POST /api/saves/versions/restore` with JSON `{"game_id","path_key","version"}`. Returns 200 `{"status":"ok"}` or 404.
+
+## Token refresh (authenticated)
+
+- **Refresh client token**: `POST /api/token/refresh` — returns `{"token":"...","expires_in":7776000}`. Old token is invalidated.
 
 ## Clients (authenticated)
 

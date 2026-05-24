@@ -1,0 +1,38 @@
+{{if .Saves}}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Game</th>
+        <th>Path key</th>
+        <th>Size</th>
+        <th>Last synced</th>
+        <th class="th-action">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Saves}}
+      <tr>
+        <td class="cell-primary">{{.GameTitle}}</td>
+        <td><code class="code-inline">{{truncate .PathKey 16}}</code></td>
+        <td class="cell-size">{{formatBytes .SizeBytes}}</td>
+        <td class="cell-muted">{{formatTime .UpdatedAt}}</td>
+        <td class="cell-action">
+          <a href="/dashboard/save/versions?game_id={{urlquery .GameID}}&path_key={{urlquery .PathKey}}" class="btn-ghost btn-sm">Versions</a>
+          <form method="post" action="/dashboard/save/delete" class="inline-form" style="display:inline-block; margin-left:0.5rem;" onsubmit="return confirm('Delete this save from the server?');">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <input type="hidden" name="game_id" value="{{.GameID}}">
+            <input type="hidden" name="path_key" value="{{.PathKey}}">
+            <button type="submit" class="btn-danger-sm">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="panel-empty">
+  <p>No saves synced yet.</p>
+</div>
+{{end}}

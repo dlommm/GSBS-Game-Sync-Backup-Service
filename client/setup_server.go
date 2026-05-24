@@ -142,8 +142,8 @@ func writeSetupHTML(w http.ResponseWriter, serverURL, clientName, errMsg string,
   </style>
 </head>
 <body>
-  <h1>GSBS — Setup &amp; Login</h1>
-  <p class="hint"><strong>Step 1.</strong> Enter server and credentials below. <strong>Step 2.</strong> Click Login. <strong>Step 3.</strong> Close this page; the client runs in the tray.</p>
+  <h1>GSBS — Setup Wizard</h1>
+  <p class="hint"><strong>Step 1.</strong> Server URL &amp; login. <strong>Step 2.</strong> After login, the client auto-discovers installed games. <strong>Step 3.</strong> Close this page — sync runs from the tray.</p>
   %s
   <form method="post" action="/login" id="loginForm" onsubmit="return validateForm(this);">
     <label>Server URL</label>

@@ -91,6 +91,9 @@ type config struct {
 	WatchExclude         []string    `json:"watch_exclude,omitempty"`          // glob patterns for files to ignore when watching (e.g. "*.tmp", "*.bak")
 	UseCompression       bool        `json:"use_compression,omitempty"`         // use gzip for push/pull request and response bodies
 	VerboseLog           bool        `json:"verbose_log,omitempty"`             // when true, log extra detail (per-file sync, resolved paths)
+	HeroicFolder         string      `json:"heroic_folder,omitempty"`
+	LutrisFolder         string      `json:"lutris_folder,omitempty"`
+	DiscoveryInterval    Duration    `json:"discovery_interval,omitempty"` // default 4h; re-scan installed games
 	WatchPaths           []watchPath `json:"watch_paths"`
 }
 

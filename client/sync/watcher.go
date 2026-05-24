@@ -165,7 +165,10 @@ func (w *Watcher) Run(ctx context.Context) {
 						}
 					}
 					if !pushOK {
-						log.Printf("push: giving up after %d attempts: game=%s file=%s", pushMaxRetries, gameID, filePath)
+						log.Printf("push: giving up after %d attempts: game=%s file=%s — queuing to outbox", pushMaxRetries, gameID, filePath)
+						if err := EnqueueOutbox(gameID, pathKey, filePath, content); err != nil {
+							log.Printf("outbox: enqueue failed: %v", err)
+						}
 					}
 				}
 				// Remove timer from map so it doesn't grow unbounded.

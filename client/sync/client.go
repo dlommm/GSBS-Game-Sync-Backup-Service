@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -108,6 +110,21 @@ func (r *rateLimitReader) Close() error {
 	return nil
 }
 
+// FileHash returns SHA256 hex of file content.
+func FileHash(content []byte) string {
+	h := sha256.Sum256(content)
+	return hex.EncodeToString(h[:])
+}
+
+// SummaryResponse is the decoded summaries API response.
+type SummaryResponse struct {
+	Saves []struct {
+		GameID      string `json:"game_id"`
+		PathKey     string `json:"path_key"`
+		UpdatedAt   string `json:"updated_at"`
+		ContentHash string `json:"content_hash"`
+	} `json:"saves"`
+}
 // PullResponse is the decoded pull API response.
 type PullResponse struct {
 	Saves []struct {
@@ -120,6 +137,61 @@ type PullResponse struct {
 
 // maxPullRetries is the number of retries on transient errors (5xx, timeouts).
 const maxPullRetries = 4
+
+func (c *Client) pullSummaries(ctx context.Context) (*SummaryResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/saves?summaries=1", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("summaries: status %d", resp.StatusCode)
+	}
+	var out SummaryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) pullSingle(ctx context.Context, gameID, pathKey string) (*PullResponse, error) {
+	url := fmt.Sprintf("%s/api/saves?game_id=%s&path_key=%s", c.baseURL, gameID, pathKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	if c.useCompression {
+		req.Header.Set("Accept-Encoding", "gzip")
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("pull single: status %d", resp.StatusCode)
+	}
+	body := io.Reader(resp.Body)
+	if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+		gr, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		defer gr.Close()
+		body = gr
+	}
+	var out PullResponse
+	if err := json.NewDecoder(body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
 
 func (c *Client) pullOnce(ctx context.Context) (*PullResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/saves", nil)
@@ -141,8 +213,17 @@ func (c *Client) pullOnce(ctx context.Context) (*PullResponse, error) {
 		}
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
+	body := io.Reader(resp.Body)
+	if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+		gr, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("gzip decode: %w", err)
+		}
+		defer gr.Close()
+		body = gr
+	}
 	var out PullResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(body).Decode(&out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -156,13 +237,57 @@ func isRetryablePullError(err error, statusCode int) bool {
 	return statusCode >= 500 && statusCode < 600
 }
 
-// PullAndApplyWithResolver fetches all saves and writes using the given path resolver.
-// resolvePath returns the absolute path for this client for (gameID, pathKey), or "" if not applicable.
-// If backupBeforeOverwrite is true, an existing file at the target path is copied to <path>.gsbs.bak before overwriting.
-// If skipOverwriteWhenLocalNewer is true, a file is not overwritten when the local file is newer than the server's updated_at.
-// On transient HTTP errors (5xx, timeouts) retries with exponential backoff (2s, 4s, 8s).
-// If onRetryIn is non-nil, it is called with the delay before each retry wait and with 0 when done (success or final failure).
+// PullAndApplyWithResolver fetches saves and writes using the given path resolver.
+// Uses summary-based conditional fetch when possible (hash comparison).
 func (c *Client) PullAndApplyWithResolver(ctx context.Context, resolvePath func(gameID, pathKey string) string, backupBeforeOverwrite, skipOverwriteWhenLocalNewer bool, onRetryIn func(time.Duration)) error {
+	summaries, sumErr := c.pullSummaries(ctx)
+	if sumErr == nil && len(summaries.Saves) > 0 {
+		return c.applyFromSummaries(ctx, summaries, resolvePath, backupBeforeOverwrite, skipOverwriteWhenLocalNewer)
+	}
+	if sumErr != nil {
+		log.Printf("pull: summaries failed, falling back to full pull: %v", sumErr)
+	}
+	return c.pullAndApplyFull(ctx, resolvePath, backupBeforeOverwrite, skipOverwriteWhenLocalNewer, onRetryIn)
+}
+
+func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryResponse, resolvePath func(gameID, pathKey string) string, backupBeforeOverwrite, skipOverwriteWhenLocalNewer bool) error {
+	for _, s := range summaries.Saves {
+		absPath := resolvePath(s.GameID, s.PathKey)
+		if absPath == "" || !paths.PathExists(absPath) {
+			continue
+		}
+		localHash := ""
+		if data, err := os.ReadFile(absPath); err == nil {
+			localHash = FileHash(data)
+			if s.ContentHash != "" && localHash == s.ContentHash {
+				continue
+			}
+			if skipOverwriteWhenLocalNewer {
+				if fi, err := os.Stat(absPath); err == nil {
+					serverTime, err := time.Parse(time.RFC3339, s.UpdatedAt)
+					if err == nil && fi.ModTime().After(serverTime) && s.ContentHash != "" && localHash != s.ContentHash {
+						RecordConflict(s.GameID, s.PathKey, absPath)
+						log.Printf("pull: conflict game=%s path=%s", s.GameID, absPath)
+						continue
+					}
+				}
+			}
+		}
+		out, err := c.pullSingle(ctx, s.GameID, s.PathKey)
+		if err != nil {
+			log.Printf("pull single: game=%s path_key=%s: %v", s.GameID, s.PathKey, err)
+			continue
+		}
+		for _, item := range out.Saves {
+			if err := c.applyOneSave(item.GameID, item.PathKey, item.UpdatedAt, item.Content, absPath, backupBeforeOverwrite, skipOverwriteWhenLocalNewer); err != nil {
+				log.Printf("pull apply: %v", err)
+			}
+		}
+	}
+	return nil
+}
+
+func (c *Client) pullAndApplyFull(ctx context.Context, resolvePath func(gameID, pathKey string) string, backupBeforeOverwrite, skipOverwriteWhenLocalNewer bool, onRetryIn func(time.Duration)) error {
 	var out *PullResponse
 	var lastErr error
 	backoff := 2 * time.Second
@@ -207,55 +332,56 @@ func (c *Client) PullAndApplyWithResolver(ctx context.Context, resolvePath func(
 		return fmt.Errorf("pull: %w", lastErr)
 	}
 	for _, s := range out.Saves {
-		content, err := base64.StdEncoding.DecodeString(s.Content)
-		if err != nil {
-			log.Printf("pull: decode game=%s path_key=%s: %v", s.GameID, s.PathKey, err)
-			continue
-		}
 		absPath := resolvePath(s.GameID, s.PathKey)
 		if absPath == "" {
 			continue
 		}
-		if !paths.PathExists(absPath) {
-			// Folder does not exist = game not installed; do not write
-			continue
-		}
-		if skipOverwriteWhenLocalNewer {
-			if fi, err := os.Stat(absPath); err == nil && !fi.IsDir() {
-				serverTime, err := time.Parse(time.RFC3339, s.UpdatedAt)
-				if err == nil && fi.ModTime().After(serverTime) {
-					log.Printf("pull: skip (local newer) game=%s path=%s", s.GameID, absPath)
-					continue
-				}
-			}
-		}
-		if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
-			log.Printf("pull: mkdir game=%s path=%s: %v", s.GameID, absPath, err)
-			continue
-		}
-		if backupBeforeOverwrite {
-			if _, err := os.Stat(absPath); err == nil {
-				backupPath := absPath + ".gsbs.bak"
-				if data, err := os.ReadFile(absPath); err == nil {
-					if err := os.WriteFile(backupPath, data, 0644); err != nil {
-						log.Printf("pull: backup game=%s path=%s: %v", s.GameID, absPath, err)
-					}
-				}
-			}
-		}
-		if err := os.WriteFile(absPath, content, 0644); err != nil {
-			log.Printf("pull: write game=%s path=%s: %v", s.GameID, absPath, err)
-			continue
-		}
-		if c.verbose {
-			log.Printf("pull: wrote game=%s path=%s size=%d", s.GameID, absPath, len(content))
+		if err := c.applyOneSave(s.GameID, s.PathKey, s.UpdatedAt, s.Content, absPath, backupBeforeOverwrite, skipOverwriteWhenLocalNewer); err != nil {
+			log.Printf("pull apply: %v", err)
 		}
 	}
 	return nil
 }
 
-// Push uploads a save file.
+func (c *Client) applyOneSave(gameID, pathKey, updatedAt, contentB64, absPath string, backupBeforeOverwrite, skipOverwriteWhenLocalNewer bool) error {
+	content, err := base64.StdEncoding.DecodeString(contentB64)
+	if err != nil {
+		return fmt.Errorf("decode game=%s: %w", gameID, err)
+	}
+	if !paths.PathExists(absPath) {
+		return nil
+	}
+	if skipOverwriteWhenLocalNewer {
+		if fi, err := os.Stat(absPath); err == nil && !fi.IsDir() {
+			serverTime, err := time.Parse(time.RFC3339, updatedAt)
+			if err == nil && fi.ModTime().After(serverTime) {
+				log.Printf("pull: skip (local newer) game=%s path=%s", gameID, absPath)
+				return nil
+			}
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+		return err
+	}
+	if backupBeforeOverwrite {
+		if _, err := os.Stat(absPath); err == nil {
+			if data, err := os.ReadFile(absPath); err == nil {
+				_ = os.WriteFile(absPath+".gsbs.bak", data, 0644)
+			}
+		}
+	}
+	if err := os.WriteFile(absPath, content, 0644); err != nil {
+		return err
+	}
+	if c.verbose {
+		log.Printf("pull: wrote game=%s path=%s size=%d", gameID, absPath, len(content))
+	}
+	return nil
+}
+
+// Push uploads a save file with content hash metadata.
 func (c *Client) Push(ctx context.Context, gameID, pathKey, filePath string, content []byte) error {
+	hash := FileHash(content)
 	var body io.Reader = bytes.NewReader(content)
 	if c.useCompression {
 		var buf bytes.Buffer
@@ -274,6 +400,8 @@ func (c *Client) Push(ctx context.Context, gameID, pathKey, filePath string, con
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("X-Content-Hash", hash)
+	req.Header.Set("X-Content-Size", fmt.Sprintf("%d", len(content)))
 	if c.useCompression {
 		req.Header.Set("Content-Encoding", "gzip")
 	}
@@ -290,6 +418,53 @@ func (c *Client) Push(ctx context.Context, gameID, pathKey, filePath string, con
 			return fmt.Errorf("push: 401 Unauthorized — token may be invalid or expired; try logging in again from the tray")
 		}
 		return fmt.Errorf("push: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// ListVersions returns version history for a save slot.
+func (c *Client) ListVersions(ctx context.Context, gameID, pathKey string) ([]map[string]interface{}, error) {
+	url := fmt.Sprintf("%s/api/saves/versions?game_id=%s&path_key=%s", c.baseURL, gameID, pathKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("versions: status %d", resp.StatusCode)
+	}
+	var out struct {
+		Versions []map[string]interface{} `json:"versions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return out.Versions, nil
+}
+
+// RestoreVersion restores a previous save version on the server.
+func (c *Client) RestoreVersion(ctx context.Context, gameID, pathKey string, version int) error {
+	body, _ := json.Marshal(map[string]interface{}{
+		"game_id": gameID, "path_key": pathKey, "version": version,
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/saves/versions/restore", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("restore: status %d", resp.StatusCode)
 	}
 	return nil
 }

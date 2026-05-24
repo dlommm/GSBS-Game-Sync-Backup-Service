@@ -1,0 +1,12 @@
+# Example Caddy reverse proxy for GSBS.
+# Replace example.com with your domain and ensure DNS points to this host.
+
+example.com {
+	encode gzip
+	reverse_proxy gsbs-server:8080
+}
+
+# For local testing without TLS:
+# :80 {
+# 	reverse_proxy gsbs-server:8080
+# }

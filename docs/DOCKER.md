@@ -97,6 +97,8 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_ADMIN_USERNAME` | (empty) | If set, only this user can access the `/admin` page (stats and revoke client tokens). |
 | `GSBS_MAX_STORAGE_BYTES` | (unlimited) | Global storage limit in bytes; 0 or unset = unlimited. |
 | `GSBS_READ_ONLY` | `false` | Set to `true` or `1` to disable push and delete (pull and read still work). |
+| `GSBS_SAVE_VERSION_RETENTION` | `8` | Save versions kept per slot (5–10). |
+| `GSBS_LOG_LEVEL` | `info` | Structured log level: `debug`, `info`, `warn`, `error`. |
 | `GSBS_PCGW_CRON` | `0 3 * * 0` | Cron expression for PCGW sync (e.g. `0 0 * * *` for daily at midnight). |
 
 Example with all options:

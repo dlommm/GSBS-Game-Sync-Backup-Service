@@ -56,11 +56,16 @@ type Store interface {
 	ListClientsByUserID(ctx context.Context, userID string) ([]ClientInfo, error)
 	// RegenerateClientToken issues a new token for the client; the old token is invalidated (client must re-login).
 	RegenerateClientToken(ctx context.Context, clientID string) error
+	// RefreshClientToken rotates token for the authenticated client; old token stops working.
+	RefreshClientToken(ctx context.Context, currentToken string) (newToken string, err error)
 	// UpdateClientLastSeen updates the last_seen timestamp for a client (called on push/pull).
 	UpdateClientLastSeen(ctx context.Context, clientID string) error
 
 	// Save
 	UpsertSave(ctx context.Context, userID, gameID, pathKey string, content []byte) error
+	// UpsertSaveWithMeta upserts with optional hash/size/client; skips write if hash matches existing.
+	UpsertSaveWithMeta(ctx context.Context, userID, gameID, pathKey string, content []byte, meta *SaveMeta) (skipped bool, err error)
+	GetSaveHash(ctx context.Context, userID, gameID, pathKey string) (hash string, err error)
 	ListSaves(ctx context.Context, userID string) ([]types.SaveBlob, error)
 	// ListSavesPaginated returns a page of saves and total count. limit/offset 0 means no pagination (returns all).
 	ListSavesPaginated(ctx context.Context, userID string, limit, offset int) ([]types.SaveBlob, int, error)
@@ -127,7 +132,13 @@ type SaveRecord struct {
 	UpdatedAt time.Time
 }
 
-// ClientInfo is a client row for listing (dashboard).
+// SaveMeta optional metadata for upsert (hash dedup, client tracking).
+type SaveMeta struct {
+	ContentHash string
+	ContentSize int64
+	ClientID    string
+}
+
 type ClientInfo struct {
 	ID       string
 	Name     string
@@ -137,11 +148,12 @@ type ClientInfo struct {
 
 // SaveSummary is a lightweight save entry for dashboard display (no content blob).
 type SaveSummary struct {
-	GameID    string
-	PathKey   string
-	GameTitle string // from game_save_locations join; falls back to game_id
-	SizeBytes int64
-	UpdatedAt string
+	GameID      string
+	PathKey     string
+	GameTitle   string // from game_save_locations join; falls back to game_id
+	SizeBytes   int64
+	UpdatedAt   string
+	ContentHash string
 }
 
 // UserInfo is a user row for admin listing.

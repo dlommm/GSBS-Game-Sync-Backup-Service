@@ -40,7 +40,7 @@ func main() {
 	defer timeoutCancel()
 
 	client := pcgw.NewClient()
-	count, err := job.PCGWSync(ctx, st, client)
+	count, err := job.PCGWSync(ctx, st, client, nil)
 	if err != nil && ctx.Err() == nil {
 		log.Fatal(err)
 	}

@@ -2,9 +2,11 @@ package types
 
 // SaveEntry identifies a single logical save (game + path key).
 type SaveEntry struct {
-	GameID   string `json:"game_id"`   // e.g. PCGW page name or Steam App ID
-	PathKey  string `json:"path_key"`  // stable key for this path (same across OSes)
-	UpdatedAt string `json:"updated_at,omitempty"`
+	GameID      string `json:"game_id"`   // e.g. PCGW page name or Steam App ID
+	PathKey     string `json:"path_key"`  // stable key for this path (same across OSes)
+	UpdatedAt   string `json:"updated_at,omitempty"`
+	ContentHash string `json:"content_hash,omitempty"` // SHA256 hex of content
+	ContentSize int64  `json:"content_size,omitempty"`
 }
 
 // SaveBlob is a save file plus metadata for push/pull.

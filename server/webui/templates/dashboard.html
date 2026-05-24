@@ -97,11 +97,28 @@
       {{end}}
     </section>
 
+    <!-- Activity feed -->
+    <section class="panel" aria-labelledby="activity-heading">
+      <div class="panel-header">
+        <h2 id="activity-heading">Recent Activity</h2>
+      </div>
+      <div id="activity-feed"
+           hx-get="/dashboard/partial/activity"
+           hx-trigger="load, save-updated from:body"
+           hx-swap="innerHTML">
+        <p class="panel-empty">Loading activity…</p>
+      </div>
+    </section>
+
     <!-- Synced Saves -->
     <section class="panel" aria-labelledby="saves-heading">
       <div class="panel-header">
         <h2 id="saves-heading">Synced Saves</h2>
       </div>
+      <div id="saves-table"
+           hx-get="/dashboard/partial/saves"
+           hx-trigger="load, save-updated from:body"
+           hx-swap="innerHTML">
       {{if .Saves}}
       <div class="table-wrap">
         <table class="data-table">
@@ -141,14 +158,16 @@
         <p class="hint">Install games that are in the manifest, or add custom watch paths in your client config.</p>
       </div>
       {{end}}
+      </div>
     </section>
   </main>
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/ext/sse.js"></script>
   <script>
-  (function() {
-    setInterval(function() {
-      if (document.visibilityState === 'visible') window.location.reload();
-    }, 60000);
-  })();
+  document.body.addEventListener('htmx:configRequest', function(evt) {
+    evt.detail.credentials = 'same-origin';
+  });
   </script>
+  <div hx-ext="sse" sse-connect="/dashboard/events" sse-swap="save-updated" hx-trigger="save-updated" hx-get="/dashboard/partial/saves" hx-target="#saves-table" hx-swap="innerHTML" hidden></div>
 </body>
 </html>

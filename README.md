@@ -8,6 +8,8 @@ A server-based game save syncing system. **Windows** and **Linux** clients sync 
 
 - **Multi-user**: Many users, each with multiple clients (e.g. desktop + laptop).
 - **Auto-upload**: Clients watch save locations and upload changed files to the server.
+- **Auto-discovery**: Clients scan Steam, Epic, GOG, Ubisoft, Heroic, Lutris, and more; match against the PCGW manifest every 4 hours.
+- **Offline queue**: Failed uploads are persisted and retried automatically.
 - **Pull on new client**: New client pulls all saves for the user; only applies saves when the target folder exists (game installed).
 - **OS-aware paths**: Resolves Windows vs Linux paths (e.g. `%USERPROFILE%`, `<SteamLibrary-folder>`, Proton `compatdata`).
 - **Game save locations**: Uses [PCGamingWiki](https://www.pcgamingwiki.com/wiki/) (API + page data) for save/config paths.
@@ -60,7 +62,7 @@ go mod tidy && go build -o gsbs-server ./server && go build -o gsbs-client ./cli
 ./gsbs-client login   # then run ./gsbs-client
 ```
 
-**Docker:** See [docs/DOCKER.md](docs/DOCKER.md) for building and running the server image.
+**Docker:** See [docs/DOCKER.md](docs/DOCKER.md) for the server image, or [docs/COMPOSE.md](docs/COMPOSE.md) for Docker Compose with Caddy TLS.
 
 1. **Server**  
    ```bash
@@ -76,8 +78,10 @@ go mod tidy && go build -o gsbs-server ./server && go build -o gsbs-client ./cli
    - `GSBS_READ_ONLY` — Set to `true` or `1` to disable push and delete (pull and WebUI read still work).
    - `GSBS_PCGW_CRON` — Cron expression for the weekly PCGW manifest sync (default `0 3 * * 0` = Sunday 03:00). Example: `0 0 * * *` for daily at midnight.
    - `GSBS_RATE_LIMIT_MANIFEST` — Optional rate limit for manifest fetches (e.g. `60,1m` = 60 per minute by IP or user).
+   - `GSBS_SAVE_VERSION_RETENTION` — Save versions kept per slot (5–10, default 8).
+   - `GSBS_LOG_LEVEL` — Structured log level: `debug`, `info`, `warn`, `error` (default `info`).
 
-   See `server/README.md` for API details.
+   See [docs/API.md](docs/API.md) for the full API reference.
 
 2. **Client**  
    ```bash
