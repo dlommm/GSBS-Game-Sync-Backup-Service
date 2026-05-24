@@ -52,7 +52,6 @@ cd "$DEPLOY_DIR"
   --appdir "$APPDIR" \
   --desktop-file "$APPDIR/usr/share/applications/gsbs-client.desktop" \
   --icon-file "$APPDIR/usr/share/icons/hicolor/32x32/apps/gsbs-client.png" \
-  --plugin "appimage" \
   --output appimage
 
 mv gsbs-client-*-x86_64.AppImage "gsbs-client-${VERSION_VALUE}-x86_64.AppImage" 2>/dev/null || true

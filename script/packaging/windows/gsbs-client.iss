@@ -1,5 +1,5 @@
-# GSBS client — Inno Setup script
-# Build via script/packaging/windows/build-installer.sh
+; GSBS client — Inno Setup script
+; Build via script/packaging/windows/build-installer.sh
 
 #define MyAppName "GSBS Client"
 #define MyAppPublisher "GSBS"
