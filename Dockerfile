@@ -15,7 +15,7 @@ ARG VERSION=dev
 ARG BUILD_DATE=
 ARG COMMIT=
 # WebUI embedded assets (Tailwind CSS, favicon)
-RUN apk add --no-cache nodejs npm \
+RUN apk add --no-cache nodejs npm bash \
   && go run ./cmd/resize-icon \
   && ./script/build-webui.sh
 RUN CGO_ENABLED=1 go build \
