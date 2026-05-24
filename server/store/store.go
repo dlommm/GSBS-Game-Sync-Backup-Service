@@ -41,6 +41,10 @@ type Store interface {
 	GetTOTPSecret(ctx context.Context, userID string) (string, error)
 	SetTOTPSecret(ctx context.Context, userID string, secret string) error
 	SetTOTPEnabled(ctx context.Context, userID string, enabled bool) error
+	// IsEncryptionEnabled reports whether the user has E2E encryption enabled.
+	IsEncryptionEnabled(ctx context.Context, userID string) (bool, error)
+	// SetEncryptionEnabled toggles E2E encryption for the user.
+	SetEncryptionEnabled(ctx context.Context, userID string, enabled bool) error
 
 	// Web sessions (cookie-backed; session ID stored in signed cookie, row in DB)
 	CreateSession(ctx context.Context, userID, userAgent string) (sessionID string, err error)
@@ -56,6 +60,8 @@ type Store interface {
 	ListClientsByUserID(ctx context.Context, userID string) ([]ClientInfo, error)
 	// RegenerateClientToken issues a new token for the client; the old token is invalidated (client must re-login).
 	RegenerateClientToken(ctx context.Context, clientID string) error
+	// ClientUserID returns the owning user ID for a client, or error if not found.
+	ClientUserID(ctx context.Context, clientID string) (string, error)
 	// RefreshClientToken rotates token for the authenticated client; old token stops working.
 	RefreshClientToken(ctx context.Context, currentToken string) (newToken string, err error)
 	// UpdateClientLastSeen updates the last_seen timestamp for a client (called on push/pull).
@@ -78,6 +84,8 @@ type Store interface {
 
 	// ListSaveSummaries returns lightweight save info (no content blob) with game title from manifest.
 	ListSaveSummaries(ctx context.Context, userID string) ([]SaveSummary, error)
+	// ListSaveSummariesFiltered returns saves matching query (game title, game_id, path_key).
+	ListSaveSummariesFiltered(ctx context.Context, userID, query string) ([]SaveSummary, error)
 	// ListSaveSummariesPaginated returns a page of summaries and total count. limit/offset 0 means no pagination.
 	ListSaveSummariesPaginated(ctx context.Context, userID string, limit, offset int) ([]SaveSummary, int, error)
 	// UserStorageBytes returns total bytes of save content for a user.
@@ -89,6 +97,8 @@ type Store interface {
 	UpsertGameSaveLocations(ctx context.Context, entries []types.GameSaveLocation) error
 	ListGameSaveLocations(ctx context.Context) ([]types.GameSaveLocation, error)
 	ListGameSaveLocationsPaginated(ctx context.Context, limit, offset int) ([]types.GameSaveLocation, error)
+	// SearchGameSaveLocations searches manifest entries by game title, ID, platform, or path template.
+	SearchGameSaveLocations(ctx context.Context, query string, limit, offset int) ([]types.GameSaveLocation, int, error)
 	GetManifestSince(ctx context.Context, since string) ([]types.GameSaveLocation, error)
 
 	// Admin / stats (used by WebUI admin page)
@@ -97,9 +107,9 @@ type Store interface {
 	CountSaves(ctx context.Context) (int, error)
 	CountGameSaveLocations(ctx context.Context) (int, error)
 	TotalStorageBytes(ctx context.Context) (int64, error)
-	ListUsers(ctx context.Context) ([]UserInfo, error)                 // All users for admin listing
-	ListUserStats(ctx context.Context) ([]UserStatRow, error)          // All users with per-user stats
-	ListAllClients(ctx context.Context) ([]ClientInfoWithUser, error)  // All clients with owner username
+	ListUsers(ctx context.Context) ([]UserInfo, error)                // All users for admin listing
+	ListUserStats(ctx context.Context) ([]UserStatRow, error)         // All users with per-user stats
+	ListAllClients(ctx context.Context) ([]ClientInfoWithUser, error) // All clients with owner username
 
 	// Job tracking (admin jobs dashboard)
 	LogJobStart(ctx context.Context, jobName string) (runID string, err error)
@@ -114,6 +124,8 @@ type Store interface {
 	// Audit log (admin actions and sensitive user actions)
 	AppendAudit(ctx context.Context, actorUserID, actorUsername, action, targetID, details string) error
 	ListAuditLog(ctx context.Context, limit int, sinceID string) ([]AuditRow, error)
+	// ListAuditLogByUser returns recent audit entries for a specific actor username.
+	ListAuditLogByUser(ctx context.Context, userID string, limit int) ([]AuditRow, error)
 
 	// Stats snapshots (time-series for admin)
 	AppendStatsSnapshot(ctx context.Context) error
@@ -137,6 +149,7 @@ type SaveMeta struct {
 	ContentHash string
 	ContentSize int64
 	ClientID    string
+	Encrypted   bool
 }
 
 type ClientInfo struct {
@@ -154,6 +167,7 @@ type SaveSummary struct {
 	SizeBytes   int64
 	UpdatedAt   string
 	ContentHash string
+	Encrypted   bool
 }
 
 // UserInfo is a user row for admin listing.

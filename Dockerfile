@@ -14,6 +14,10 @@ COPY . .
 ARG VERSION=dev
 ARG BUILD_DATE=
 ARG COMMIT=
+# WebUI embedded assets (Tailwind CSS, favicon)
+RUN apk add --no-cache nodejs npm \
+  && go run ./cmd/resize-icon \
+  && ./script/build-webui.sh
 RUN CGO_ENABLED=1 go build \
   -ldflags "-X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.Commit=${COMMIT}" \
   -o /gsbs-server ./server

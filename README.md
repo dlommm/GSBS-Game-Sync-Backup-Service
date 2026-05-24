@@ -1,107 +1,112 @@
 # GSBS — Game Sync & Backup Service
 
-![GSBS logo](docs/images/gsbs-logo.png)
+[![CI](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Docker Hub](https://img.shields.io/badge/Docker-dendlomm%2Fgsbs--server-blue)](https://hub.docker.com/r/dendlomm/gsbs-server)
+[![Latest release](https://img.shields.io/github/v/release/dlommm/GSBS--Game-Sync---Backup-Service-)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest)
 
-A server-based game save syncing system. **Windows** and **Linux** clients sync game saves to a central server with multi-user support. Multiple clients per user stay in sync; new clients pull all saves and only write where the game is installed (folder exists).
+![GSBS logo](docs/images/gsbs-logo-sm.png)
+
+**Sync game saves across Windows and Linux.** Run a central server, install clients on each PC, and GSBS keeps saves in sync — only writing pulled files where the game is actually installed.
+
+| Dashboard | System tray |
+|-----------|-------------|
+| ![Dashboard](docs/images/screenshots/dashboard.png) | ![Tray menu](docs/images/screenshots/tray-menu.png) |
+
+## Quick install
+
+### 1. Server (Docker Compose — recommended)
+
+```bash
+git clone https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-.git
+cd GSBS--Game-Sync---Backup-Service-
+cp .env.example .env
+# Edit .env — set GSBS_SESSION_SECRET (openssl rand -hex 32)
+docker compose up -d
+```
+
+Open `https://your-domain` (via Caddy) or use [docker-compose.dev.yml](docker-compose.dev.yml) for local HTTP on port 8080. See [docs/COMPOSE.md](docs/COMPOSE.md) and [docs/INSTALL.md](docs/INSTALL.md).
+
+### 2. Client
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest):
+
+| Platform | Install |
+|----------|---------|
+| **Windows** | Run `gsbs-client-setup-X.Y.Z-windows-amd64.exe` |
+| **Linux (Debian/Ubuntu)** | `sudo dpkg -i gsbs-client_X.Y.Z_amd64.deb` |
+| **Linux (portable)** | `chmod +x gsbs-client-X.Y.Z-x86_64.AppImage && ./gsbs-client-*.AppImage` |
+
+Sign in via the tray menu (**Login…**), point at your server URL, and syncing starts automatically. Clients check for updates daily from GitHub Releases.
+
+### 3. First sync
+
+Register on the server WebUI, create an API token, and log in from the client. GSBS discovers installed games, watches save folders, and uploads changes. New machines pull existing saves when the target folder exists.
 
 ## Features
 
-- **Multi-user**: Many users, each with multiple clients (e.g. desktop + laptop).
-- **Auto-upload**: Clients watch save locations and upload changed files to the server.
-- **Auto-discovery**: Clients scan Steam, Epic, GOG, Ubisoft, Heroic, Lutris, and more; match against the PCGW manifest every 4 hours.
-- **Offline queue**: Failed uploads are persisted and retried automatically.
-- **Pull on new client**: New client pulls all saves for the user; only applies saves when the target folder exists (game installed).
-- **OS-aware paths**: Resolves Windows vs Linux paths (e.g. `%USERPROFILE%`, `<SteamLibrary-folder>`, Proton `compatdata`).
-- **Game save locations**: Uses [PCGamingWiki](https://www.pcgamingwiki.com/wiki/) (API + page data) for save/config paths.
+- **Multi-user** — many users, each with multiple clients (desktop + laptop).
+- **Auto-upload** — watches save locations and uploads on change.
+- **Auto-discovery** — scans Steam, Epic, GOG, Ubisoft, Heroic, Lutris, and more against the PCGW manifest.
+- **Offline queue** — failed uploads persist and retry automatically.
+- **Pull on new client** — only writes saves where the game folder exists.
+- **OS-aware paths** — `%USERPROFILE%`, Steam libraries, Proton `compatdata`, etc.
+- **WebUI + admin** — dashboard, save versions, activity, admin overview.
+- **Client auto-update** — checks GitHub Releases; install from the tray menu.
+
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [docs/INSTALL.md](docs/INSTALL.md) | Install server and client on each platform |
+| [docs/COMPOSE.md](docs/COMPOSE.md) | Docker Compose + TLS (Caddy) |
+| [docs/DOCKER.md](docs/DOCKER.md) | Docker image, env vars, production tips |
+| [docs/CLIENT.md](docs/CLIENT.md) | Client behavior, tray, paths, auto-update |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Data model, sync flow, PCGW, security |
+| [docs/API.md](docs/API.md) | REST API reference |
+| [docs/EXAMPLE_CONFIG.md](docs/EXAMPLE_CONFIG.md) | Client config JSON examples |
+| [docs/RELEASE.md](docs/RELEASE.md) | Maintainer release workflow |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Build from source, tests, conventions |
+| [SECURITY.md](SECURITY.md) | Security policy |
+
+## Build from source
+
+Requires **Go 1.24+** and **Node.js** (for WebUI CSS).
+
+```bash
+go mod tidy
+./script/build-webui.sh
+go build -o gsbs-server ./server
+go build -o gsbs-client ./client
+```
+
+Run tests: `go test ./server/... ./pkg/... ./client/...`
 
 ## Architecture
 
 ```
                     ┌─────────────────────────────────────────┐
                     │              GSBS Server                 │
-                    │  • Auth (users, API tokens)             │
-                    │  • Per-user save storage (by game/key)  │
-                    │  • REST/API: push save, list, pull      │
+                    │  Auth · WebUI · Save storage · PCGW job │
                     └─────────────────────────────────────────┘
                                       ▲
-                    ┌─────────────────┼─────────────────┐
-                    │                 │                 │
-              ┌─────┴─────┐     ┌─────┴─────┐     ┌─────┴─────┐
-              │  Client 1 │     │  Client 2 │     │  Client N │
-              │ (Windows) │     │  (Linux)  │     │ (any OS)  │
-              └───────────┘     └───────────┘     └───────────┘
-                    │                 │                 │
-              Watch local       Watch local       Watch local
-              save paths        save paths        save paths
-              → upload          → upload          → upload
-              ← pull (if dir    ← pull (if dir    ← pull (if dir
-                 exists)          exists)           exists)
+              ┌───────────────────────┼───────────────────────┐
+              │                       │                       │
+        ┌─────┴─────┐           ┌─────┴─────┐           ┌─────┴─────┐
+        │  Client   │           │  Client   │           │  Client   │
+        │ (Windows) │           │  (Linux)  │           │    …      │
+        └───────────┘           └───────────┘           └───────────┘
 ```
-
-- **Server**: Stores saves per user and per “game slot” (game id + path key). Clients push by path key and pull all for user; server does not need to know OS.
-- **Client**: Discovers OS (Windows vs Linux), loads game save locations (from PCGW or local DB), resolves placeholders (`%USERPROFILE%`, `<SteamLibrary-folder>`, etc.), watches only existing directories. On change → upload; on first run or manual “sync” → pull and write only where directory exists.
 
 ## Repository layout
 
-- `server/` — GSBS server (API, auth, save storage).
-- `client/` — Windows and Linux client (watch, upload, pull, path resolution).
-- `pkg/` — Shared code: path resolution, protocol types, PCGW client.
-- `cmd/` — Standalone tools: `pcgw-fetch` (fetch save locations for one game), `pcgw-sync` (one-off PCGW sync into server DB), `write-ico`, `resize-icon`.
-- `docs/` — Design and API notes.
-
-## Prerequisites
-
-- **Go 1.24+** (see `go.mod`). Build the server with CGO enabled for SQLite (`CGO_ENABLED=1`).
-
-## Quick start
-
-**Build and run (from repo root):**
-```bash
-go mod tidy && go build -o gsbs-server ./server && go build -o gsbs-client ./client
-./gsbs-server &
-./gsbs-client login   # then run ./gsbs-client
-```
-
-**Docker:** See [docs/DOCKER.md](docs/DOCKER.md) for the server image, or [docs/COMPOSE.md](docs/COMPOSE.md) for Docker Compose with Caddy TLS.
-
-1. **Server**  
-   ```bash
-   cd server && go build -o gsbs-server . && ./gsbs-server
-   ```
-   **Server environment variables** (all optional):
-   - `GSBS_ADDR` — Listen address (default `:8080`).
-   - `GSBS_DB` — SQLite database path (default `gsbs.db`).
-   - `GSBS_SESSION_SECRET` — Secret for signing WebUI session cookies; **set a strong value in production** (otherwise a warning is logged).
-   - `GSBS_ALLOW_REGISTER` — Set to `false` or `0` to disable public registration.
-   - `GSBS_ADMIN_USERNAME` — If set, only this user can access the `/admin` page (stats, revoke client tokens).
-   - `GSBS_MAX_STORAGE_BYTES` — Global storage limit in bytes (0 or unset = unlimited). Rejects push when total storage would exceed this.
-   - `GSBS_READ_ONLY` — Set to `true` or `1` to disable push and delete (pull and WebUI read still work).
-   - `GSBS_PCGW_CRON` — Cron expression for the weekly PCGW manifest sync (default `0 3 * * 0` = Sunday 03:00). Example: `0 0 * * *` for daily at midnight.
-   - `GSBS_RATE_LIMIT_MANIFEST` — Optional rate limit for manifest fetches (e.g. `60,1m` = 60 per minute by IP or user).
-   - `GSBS_SAVE_VERSION_RETENTION` — Save versions kept per slot (5–10, default 8).
-   - `GSBS_LOG_LEVEL` — Structured log level: `debug`, `info`, `warn`, `error` (default `info`).
-
-   See [docs/API.md](docs/API.md) for the full API reference.
-
-2. **Client**  
-   ```bash
-   cd client && go build -o gsbs-client . && ./gsbs-client login
-   ```
-   Then add `watch_paths` in config and run `./gsbs-client`.  
-   **Client data and logs**: Config, manifest cache, and log file live in one directory per OS — see [docs/CLIENT.md](docs/CLIENT.md) for paths (e.g. Windows `%APPDATA%\gsbs\gsbs.log`, Linux `~/.config/gsbs/gsbs.log`).
-
-3. **Game data**  
-   Save locations come from PCGamingWiki. The server runs a weekly PCGW sync job (or use `go run ./cmd/pcgw-sync` with `GSBS_DB` set). To fetch save-location templates for a single game by Steam App ID: `go run ./cmd/pcgw-fetch 311560` (or build `pcgw-fetch` and run `./pcgw-fetch 311560`). See [docs/EXAMPLE_CONFIG.md](docs/EXAMPLE_CONFIG.md).
-
-## PCGamingWiki
-
-- **API**: [PCGamingWiki:API](https://www.pcgamingwiki.com/wiki/PCGamingWiki:API) — MediaWiki API + Cargo (e.g. `Infobox_game`, `Cloud`).
-- **Redirects**: `https://www.pcgamingwiki.com/api/appid.php?appid=STEAM_APPID` for Steam → wiki page.
-- **Save locations**: Typically in the “Game data” section of each game page (e.g. “Save game data location”, “Configuration file(s) location”). Not always in Cargo; we use the API to get page IDs/titles and optionally parse wikitext or cache parsed results in the DB.
+- `server/` — API, auth, WebUI, PCGW cron job
+- `client/` — Windows/Linux tray client (watch, sync, auto-update)
+- `pkg/` — shared types, path resolution, PCGW client
+- `cmd/` — `pcgw-sync`, `pcgw-fetch`, icon tools
+- `script/` — build, release, packaging (Inno Setup, `.deb`, AppImage)
+- `docs/` — guides and examples
 
 ## License
 
-MIT (or your choice).
-
-
-Testing
+[MIT](LICENSE)

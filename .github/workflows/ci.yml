@@ -14,12 +14,50 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
       - name: Test
         run: go test ./server/... ./pkg/... ./client/...
+      - name: Build WebUI CSS
+        run: ./script/build-webui.sh
       - name: Build server
         run: go build -o gsbs-server ./server
       - name: Build client
         run: go build -o gsbs-client ./client
+
+  build-matrix:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build WebUI CSS
+        shell: bash
+        run: ./script/build-webui.sh
+      - name: Build release binaries
+        shell: bash
+        env:
+          VERSION: ci-${{ github.sha }}
+          COMMIT: ${{ github.sha }}
+          BUILD_DATE: "1970-01-01T00:00:00Z"
+          BUILD_WEBUI: "0"
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            ./script/build.sh "$VERSION" dist windows-amd64
+          else
+            ./script/build.sh "$VERSION" dist linux-amd64
+          fi
 
   lint:
     runs-on: ubuntu-latest
@@ -28,6 +66,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
+          cache: true
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:

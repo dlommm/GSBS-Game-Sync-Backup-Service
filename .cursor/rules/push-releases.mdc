@@ -1,5 +1,5 @@
 ---
-description: Run the release script and push all server/client builds to GitHub Releases and the Docker image to Docker Hub when the user asks for a new version or release.
+description: Run the release workflow and push all server/client builds to GitHub Releases and the Docker image to Docker Hub when the user asks for a new version or release.
 alwaysApply: true
 ---
 
@@ -7,19 +7,24 @@ alwaysApply: true
 
 When the user says **"push new version"**, **"push new releases"**, or similar (e.g. "release a new version", "cut a release", "publish release"), do the following:
 
-1. **Run the release script** from the repo root:
-   ```bash
-   ./script/release.sh [VERSION]
-   ```
-   - Pass a version if the user gave one (e.g. `v1.0.5`). Otherwise run without args and the script will prompt, or determine the next version from the latest tag (e.g. after `v1.0.4` use `v1.0.5`) and run `./script/release.sh v1.0.5`.
-   - Requires: `go`, `git`, `gh` (GitHub CLI), `docker`; `gh auth login` and `docker login` (Docker Hub) done. Working tree should be committed (no uncommitted changes if tagging).
+1. **Primary path — push a git tag** (CI builds and publishes):
+   - Update [CHANGELOG.md](CHANGELOG.md) for the version.
+   - Ensure `main` is committed and CI is green.
+   - Create and push tag (next semver after latest, e.g. `v1.0.14`):
+     ```bash
+     git tag -a v1.0.14 -m "Release v1.0.14"
+     git push origin v1.0.14
+     ```
+   - Monitor [.github/workflows/release.yml](.github/workflows/release.yml). Requires GitHub secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
 
-2. **What gets built and pushed**
-   - **GitHub Release** (four binaries):
-     - **Windows server** — `gsbs-server-windows-amd64.exe`
-     - **Windows client** — `gsbs-client-windows-amd64.exe`
-     - **Linux server** — `gsbs-server-linux-amd64`
-     - **Linux client** — `gsbs-client-linux-amd64`
-   - **Docker Hub**: Server image `dendlomm/gsbs-server:$VERSION` and `dendlomm/gsbs-server:latest` (override with env `DOCKERHUB_IMAGE`).
+2. **What CI publishes**
+   - **GitHub Release** assets:
+     - Raw: `gsbs-server-windows-amd64.exe`, `gsbs-client-windows-amd64.exe`, `gsbs-server-linux-amd64`, `gsbs-client-linux-amd64`
+     - Windows installer: `gsbs-client-setup-X.Y.Z-windows-amd64.exe` (Inno Setup)
+     - Linux: `gsbs-client_X.Y.Z_amd64.deb`, `gsbs-client-X.Y.Z-x86_64.AppImage`
+     - Manifests: `SHA256SUMS`, `latest-client.json`
+   - **Docker Hub**: `dendlomm/gsbs-server:$VERSION` and `:latest`
 
-3. The script creates a git tag, pushes the tag, creates/updates the GitHub release with the four assets, then builds and pushes the Docker image. Do not commit or push other code unless the user asked for that too; this rule is only for running the release script and pushing the resulting release.
+3. **Local fallback** — `./script/release.sh [VERSION]` from repo root when CI is unavailable. Requires `go`, `git`, `gh`, `docker`; Linux host for Linux client binary. See [docs/RELEASE.md](docs/RELEASE.md).
+
+Do not commit or push other code unless the user asked; this rule is for cutting and publishing releases.

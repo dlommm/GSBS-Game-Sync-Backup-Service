@@ -1,0 +1,9 @@
+{{if .Entries}}
+<ul class="timeline">
+  {{range .Entries}}
+  {{template "partials/timeline_item.html" .}}
+  {{end}}
+</ul>
+{{else}}
+<p class="panel-empty">No recent activity.</p>
+{{end}}

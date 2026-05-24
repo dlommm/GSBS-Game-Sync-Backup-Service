@@ -18,7 +18,7 @@ func TestHandler_Health(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	h := NewHandler(st, auth.NewService(st), true, sse.NewHub(), nil, nil, nil, 0, false, "", "")
+	h := NewHandler(st, auth.NewService(st), true, sse.NewHub(), nil, nil, nil, nil, nil, 0, false, "", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	rec := httptest.NewRecorder()
@@ -43,7 +43,7 @@ func TestHandler_Register_Login_Pull(t *testing.T) {
 	}
 	defer st.Close()
 	authSvc := auth.NewService(st)
-	h := NewHandler(st, authSvc, true, sse.NewHub(), nil, nil, nil, 0, false, "", "")
+	h := NewHandler(st, authSvc, true, sse.NewHub(), nil, nil, nil, nil, nil, 0, false, "", "")
 
 	// Register
 	regBody, _ := json.Marshal(map[string]string{"username": "testuser", "password": "password1234"})
@@ -96,7 +96,7 @@ func TestHandler_Register_Login_Pull(t *testing.T) {
 func TestHandler_RegisterDisabled(t *testing.T) {
 	st, _ := store.NewSQLite(":memory:")
 	defer st.Close()
-	h := NewHandler(st, auth.NewService(st), false, sse.NewHub(), nil, nil, nil, 0, false, "", "")
+	h := NewHandler(st, auth.NewService(st), false, sse.NewHub(), nil, nil, nil, nil, nil, 0, false, "", "")
 
 	regBody, _ := json.Marshal(map[string]string{"username": "u", "password": "password1234"})
 	req := httptest.NewRequest(http.MethodPost, "/api/register", bytes.NewReader(regBody))
@@ -111,7 +111,7 @@ func TestHandler_RegisterDisabled(t *testing.T) {
 func TestHandler_PullUnauthorized(t *testing.T) {
 	st, _ := store.NewSQLite(":memory:")
 	defer st.Close()
-	h := NewHandler(st, auth.NewService(st), true, sse.NewHub(), nil, nil, nil, 0, false, "", "")
+	h := NewHandler(st, auth.NewService(st), true, sse.NewHub(), nil, nil, nil, nil, nil, 0, false, "", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/saves", nil)
 	rec := httptest.NewRecorder()

@@ -75,10 +75,10 @@ func runList(dryRunPull bool) {
 
 	// Build list of games where the save path exists on this machine
 	type row struct {
-		GameID    string
-		GameTitle string
-		PathKey   string
-		Resolved  string
+		GameID     string
+		GameTitle  string
+		PathKey    string
+		Resolved   string
 		FromConfig bool
 	}
 	var rows []row
@@ -170,8 +170,8 @@ func runList(dryRunPull bool) {
 			if err == nil && resp.StatusCode == http.StatusOK {
 				var out struct {
 					Saves []struct {
-						GameID   string `json:"game_id"`
-						PathKey  string `json:"path_key"`
+						GameID  string `json:"game_id"`
+						PathKey string `json:"path_key"`
 					} `json:"saves"`
 				}
 				if json.NewDecoder(resp.Body).Decode(&out) == nil {
@@ -213,7 +213,7 @@ func runList(dryRunPull bool) {
 
 	if dryRunPull && cfg.Token != "" {
 		// Report what would be written by a pull (same resolution as sync).
-		effectiveWatchPaths := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig)
+		effectiveWatchPaths := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, nil, "legacy")
 		effectiveWatchPaths = mergeWatchPaths(effectiveWatchPaths, cfg.WatchPaths)
 		resolvePath := func(gameID, pathKey string) string {
 			for _, w := range effectiveWatchPaths {

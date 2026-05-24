@@ -81,7 +81,12 @@ sequenceDiagram
 - **Hub**: `server/sse/hub.go` manages a set of connected SSE clients. Supports Subscribe (returns event channel + unsubscribe func), Broadcast (non-blocking fan-out), and Count.
 - **Endpoint**: `GET /api/events` (auth required). Clients connect with their Bearer token and receive a long-lived SSE stream. Events are typed (e.g. `manifest-updated`).
 - **Push manifest**: Admin can push a `manifest-updated` event to all connected clients via `POST /admin/push-manifest` in the WebUI. This also invalidates the server's manifest cache.
-- **Client listener**: `ListenSSE()` in `client/manifest.go` connects to SSE, auto-reconnects with exponential backoff (2s-60s). On `manifest-updated`, the sync loop re-fetches the manifest, updates watch paths, and triggers a pull.
+- **Client listener**: `ListenSSE()` in `client/manifest.go` connects to SSE, auto-reconnects with shared exponential backoff (`pkg/retry`, 2s–60s cap). On `manifest-updated`, the sync loop re-fetches the manifest, updates watch paths, and triggers a pull.
+
+## Watcher and retry
+
+- **Watcher supervisor**: `RunWatcherSupervisor` in `client/sync/` restarts the fsnotify watcher on channel close or repeated errors, removes stale watch paths on manifest refresh, and exposes health via `WatcherHealthy`.
+- **Network retry**: Shared `pkg/retry` backoff for pull, push, manifest fetch, SSE, and outbox (outbox uses longer delays and drops entries after 7 days).
 
 ## Job Runner
 
@@ -90,11 +95,17 @@ sequenceDiagram
 
 ## Admin WebUI
 
-- **Stats**: User count, client count, save count, storage, manifest entries, SSE clients.
-- **Jobs panel**: Shows recent job runs (status, duration, entries, errors) with a "Run Now" button.
-- **Manifest viewer**: Searchable table of all `game_save_locations` entries with a "Push to Clients" button.
-- **Manifest fetch log**: Recent downloads with client name, username, entry count, timestamp.
-- **Users and Clients**: Tables with stats and revoke action.
+Premium WebUI under `server/webui/`: Tailwind-compiled `static/app.css`, embedded HTMX 2.0.4 + SSE extension, shared `templates/layout.html`, and HTMX partials for live updates.
+
+- **Dashboard** (`GET /dashboard`): Stats quota bar, clients (with user revoke via `POST /dashboard/clients/revoke`), searchable saves, activity timeline. SSE on `GET /dashboard/events`; partials refresh on `save-updated`.
+- **Admin routes** (session + admin role / `GSBS_ADMIN_USERNAME`):
+  - `GET /admin` — overview with SVG charts from `stats_snapshots`, global stats, server config
+  - `GET /admin/users` — users table with client-count bars, all clients with revoke
+  - `GET /admin/manifest` — server-side search (`q`), pagination; `GET /admin/partial/manifest` HTMX partial
+  - `GET /admin/activity` — jobs (`GET /admin/partial/jobs`), manifest fetches, audit log, stats snapshots
+- **Admin POST**: `POST /admin/revoke`, `/admin/push-manifest`, `/admin/run-job`, user disable/enable/delete/quota (unchanged paths).
+- **Assets**: Run `./script/build-webui.sh` before server build (also in `script/release.sh`). Icons via `go run ./cmd/resize-icon`.
+- **Handler layout**: `server/webui/router.go`, `handlers_*.go`, `render.go` (template funcs: `chartLineSVG`, `auditLabel`).
 
 ## Operational behaviour
 
@@ -105,7 +116,10 @@ sequenceDiagram
 
 ## Security
 
-- **Rate limiting**: Optional per-IP rate limits for login/register (`GSBS_RATE_LIMIT_AUTH`, e.g. `60,1m`) and per-user for push (`GSBS_RATE_LIMIT_PUSH`, e.g. `120,1m`). When exceeded, API returns 429. Implemented in handler layer; document in server skill.
+- **Rate limiting**: Defaults apply when env is unset (override with `GSBS_RATE_LIMIT_*`): auth 20/min per IP, push 120/min per user, pull 60/min, manifest 60/min, general API 300/min. Returns 429 when exceeded; denials are logged via structured logging.
+- **Token storage**: Client API tokens are stored as SHA-256 hashes in SQLite. Tokens expire after `GSBS_TOKEN_MAX_AGE` (default 90 days). Use `Authorization: Bearer` only (query-string tokens are rejected).
+- **Optional E2E encryption**: Users enable encryption in WebUI settings (`users.encryption_enabled`). Clients encrypt saves locally with `encryption_passphrase` in config (never sent to server). Server stores ciphertext; per-save `encrypted` flag supports mixed plaintext during migration (existing saves stay plaintext until re-uploaded).
+- **Structured logging**: Server uses zerolog (`GSBS_LOG_LEVEL`); client uses slog with the same env var. Request IDs are returned in `X-Request-ID`.
 - All API access authenticated (e.g. per-user API token or session).
 - Clients only access their own user’s saves.
 - WebUI uses a signed session cookie (set `GSBS_SESSION_SECRET` in production). Session and CSRF cookies use the `Secure` flag when the request is over TLS or `X-Forwarded-Proto: https`.

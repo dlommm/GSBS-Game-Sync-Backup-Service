@@ -11,6 +11,8 @@ import (
 
 	"github.com/gsbs/gsbs/client/sync"
 	"github.com/gsbs/gsbs/pkg/paths"
+	"github.com/gsbs/gsbs/pkg/retry"
+	"github.com/gsbs/gsbs/pkg/types"
 )
 
 var errNotLoggedIn = errors.New("not logged in: run 'gsbs-client login' or use Login from the tray menu")
@@ -31,6 +33,9 @@ var OnSyncStart func()
 
 // SyncPaused is the global pause state for sync (pull and watcher push). Tray and run_sync both use it.
 var SyncPaused atomic.Bool
+
+// WatcherHealthy indicates the file watcher supervisor is running normally.
+var WatcherHealthy atomic.Bool
 
 // NextRetryAt is when the next pull retry is scheduled (for tray tooltip). Zero means no retry pending.
 var NextRetryAt atomic.Value // time.Time
@@ -77,29 +82,19 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 	log.Printf("client sync: starting server=%s", cfg.ServerURL)
 
-	resolver := paths.NewResolver()
-	if cfg.UbisoftConnectFolder != "" {
-		resolver.UbisoftConnect = cfg.UbisoftConnectFolder
-	}
-	if cfg.GOGGalaxyFolder != "" {
-		resolver.GOGGalaxy = cfg.GOGGalaxyFolder
-	}
-	if cfg.EpicGamesFolder != "" {
-		resolver.EpicGames = cfg.EpicGamesFolder
-	}
-	if cfg.XboxAppFolder != "" {
-		resolver.XboxApp = cfg.XboxAppFolder
-	}
-	if cfg.LauncherUserID != "" {
-		resolver.UserID = cfg.LauncherUserID
-	}
-	if cfg.HeroicFolder != "" {
-		resolver.Heroic = cfg.HeroicFolder
-	}
-	if cfg.LutrisFolder != "" {
-		resolver.Lutris = cfg.LutrisFolder
+	initDiscoveryState()
+	// Restore discovery state from cache for watch filtering before first scan.
+	if cached := loadDiscoveryCache(); len(cached.MatchedGameIDs) > 0 {
+		for _, id := range cached.MatchedGameIDs {
+			discoveryState.MatchedGameIDs[id] = true
+		}
+		for _, id := range cached.DisabledGameIDs {
+			discoveryState.DisabledGameIDs[id] = true
+		}
+		discoveryState.InstalledSteam = installedSteamAppIDs(cached.InstalledGames)
 	}
 	currentOS := paths.CurrentOS()
+	watchMode := cfg.effectiveAutoWatchMode()
 
 	SyncPaused.Store(cfg.SyncPaused)
 	NextRetryAt.Store(time.Time{})
@@ -112,11 +107,6 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		}
 	}
 
-	client, err := sync.NewClient(cfg.ServerURL, cfg.Token, resolver, currentOS, cfg.MaxSyncKbps, cfg.UseCompression, cfg.VerboseLog)
-	if err != nil {
-		return err
-	}
-
 	manifestInclude := cfg.ManifestInclude
 	if manifestInclude == "" {
 		manifestInclude = "both"
@@ -127,7 +117,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	if !lastManifestFetch.IsZero() {
 		since = lastManifestFetch.UTC().Format(time.RFC3339)
 	}
-	if entries, err := FetchManifest(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
+	if entries, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
 		if since != "" && len(manifestEntries) > 0 {
 			manifestEntries = MergeManifestDelta(manifestEntries, entries)
 		} else {
@@ -141,65 +131,96 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		log.Printf("fetch manifest (using cache with %d entries): %v", len(manifestEntries), err)
 	}
 
-	if n := runDiscovery(manifestGameIDSet(manifestEntries)); n > 0 {
+	if n := runDiscovery(manifestEntries); n > 0 {
 		log.Printf("discovery: %d new game(s) detected", n)
 	}
 
-	effectiveWatchPaths := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig)
+	resolver := configureResolverFromConfig(cfg)
+	pullOpts := sync.PullOptions{
+		BackupBeforeOverwrite: cfg.BackupOnPull,
+		ConflictPolicy:        cfg.effectiveConflictPolicy(),
+		PullContext:           buildPullContext(cfg),
+	}
+
+	client, err := sync.NewClient(cfg.ServerURL, cfg.Token, resolver, currentOS, cfg.MaxSyncKbps, cfg.UseCompression, cfg.VerboseLog)
+	if err != nil {
+		return err
+	}
+	if enc, err := client.FetchAccountSettings(ctx); err == nil {
+		client.SetEncryption(enc, cfg.EncryptionPassphrase)
+	} else {
+		log.Printf("account settings: %v (encryption disabled)", err)
+		client.SetEncryption(false, cfg.EncryptionPassphrase)
+	}
+	SetSyncClient(client)
+	setupTrayCallbacks()
+	wireSyncTrayHooks()
+
+	activeIDs := activeGameIDSet()
+	effectiveWatchPaths := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode)
 	effectiveWatchPaths = mergeWatchPaths(effectiveWatchPaths, cfg.WatchPaths)
-	log.Printf("sync: %d active watch paths", len(effectiveWatchPaths))
+	log.Printf("sync: %d active watch paths (mode=%s)", len(effectiveWatchPaths), watchMode)
 
 	// Mutex protects effectiveWatchPaths, which is read by resolvePath (called
 	// from the pull resolver) and written by doManifestRefresh. Although both
 	// currently run in the select loop goroutine, the mutex makes this safe if
 	// a future change introduces concurrency.
 	var wpMu gosync.RWMutex
+	var manifestMu gosync.RWMutex
 
 	resolvePath := func(gameID, pathKey string) string {
 		wpMu.RLock()
 		wp := effectiveWatchPaths
 		wpMu.RUnlock()
-		for _, w := range wp {
-			if w.GameID != gameID || w.PathKey != pathKey {
-				continue
-			}
-			for _, t := range w.PathTemplates {
-				resolved := resolver.Resolve(t, currentOS)
-				for _, abs := range resolved {
-					if abs != "" && paths.PathExists(abs) {
-						return abs
-					}
-				}
-			}
-		}
-		return ""
+		manifestMu.RLock()
+		entries := manifestEntries
+		manifestMu.RUnlock()
+		return resolveSavePath(gameID, pathKey, entries, wp, resolver, currentOS, pullOpts.PullContext)
 	}
 
-	if !SyncPaused.Load() && !(cfg.SkipSyncWhenMetered && IsMeteredConnection()) {
+	doPull := func(label string) {
+		if SyncPaused.Load() || (cfg.SkipSyncWhenMetered && IsMeteredConnection()) {
+			return
+		}
 		if OnSyncStart != nil {
 			OnSyncStart()
 		}
-		if err := client.PullAndApplyWithResolver(ctx, resolvePath, cfg.BackupOnPull, cfg.SkipOverwriteWhenLocalNewer, onRetryIn); err != nil {
-			log.Println("initial pull:", err)
-			setLastSync(time.Now(), err)
+		UpdateFromSyncStart("Pulling saves", 0)
+		var pullErr error
+		if err := client.PullAndApplyWithResolver(ctx, resolvePath, pullOpts, onRetryIn); err != nil {
+			log.Printf("%s: %v", label, err)
+			pullErr = err
 		} else {
-			log.Println("initial pull: complete")
-			setLastSync(time.Now(), nil)
+			log.Printf("%s: complete", label)
 		}
+		UpdateFromSyncEnd(pullErr, SyncEndStats{})
+		setLastSync(time.Now(), pullErr)
+	}
+
+	if !SyncPaused.Load() && !(cfg.SkipSyncWhenMetered && IsMeteredConnection()) {
+		doPull("initial pull")
+	}
+
+	getSyncWatchPaths := func() []sync.WatchPath {
+		wpMu.RLock()
+		wp := effectiveWatchPaths
+		wpMu.RUnlock()
+		out := make([]sync.WatchPath, len(wp))
+		for i := range wp {
+			out[i] = sync.WatchPath{
+				GameID:        wp[i].GameID,
+				PathKey:       wp[i].PathKey,
+				PathTemplates: wp[i].PathTemplates,
+			}
+		}
+		return out
 	}
 
 	watcher, err := sync.NewWatcher(resolver, currentOS, client)
 	if err != nil {
 		return err
 	}
-	watchPaths := make([]sync.WatchPath, len(effectiveWatchPaths))
-	for i := range effectiveWatchPaths {
-		watchPaths[i] = sync.WatchPath{
-			GameID:        effectiveWatchPaths[i].GameID,
-			PathKey:       effectiveWatchPaths[i].PathKey,
-			PathTemplates: effectiveWatchPaths[i].PathTemplates,
-		}
-	}
+	watchPaths := getSyncWatchPaths()
 	if err := watcher.AddPaths(watchPaths); err != nil {
 		log.Println("watch paths:", err)
 	}
@@ -208,7 +229,10 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	watcher.IsPaused = func() bool {
 		return SyncPaused.Load() || (cfg.SkipSyncWhenMetered && IsMeteredConnection())
 	}
-	go watcher.Run(ctx)
+	WatcherHealthy.Store(true)
+	go sync.RunWatcherSupervisor(ctx, watcher, getSyncWatchPaths, func(ok bool) {
+		WatcherHealthy.Store(ok)
+	})
 
 	// Process any pending outbox entries from previous sessions.
 	if n := sync.ProcessOutbox(ctx, client); n > 0 {
@@ -256,44 +280,36 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		if !lastFetch.IsZero() {
 			since = lastFetch.UTC().Format(time.RFC3339)
 		}
-		if fresh, err := FetchManifest(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
+		if fresh, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
 			if since != "" && len(cached) > 0 {
 				manifestEntries = MergeManifestDelta(cached, fresh)
 			} else {
 				manifestEntries = fresh
 			}
+			manifestMu.Lock()
+			// manifestEntries updated in outer scope
+			manifestMu.Unlock()
 			log.Printf("manifest refresh (%s): fetched %d entries", reason, len(fresh))
 			_ = SaveManifestToDisk(manifestEntries)
-			newWP := ManifestToWatchPaths(fresh, resolver, currentOS, includeConfig)
+			if reason == "discovery" || reason == "sse push" || reason == "manual" {
+				runDiscovery(manifestEntries)
+				refreshResolver(cfg, resolver)
+				pullOpts.PullContext = buildPullContext(cfg)
+			}
+			activeIDs := activeGameIDSet()
+			newWP := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode)
 			newWP = mergeWatchPaths(newWP, cfg.WatchPaths)
 			wpMu.Lock()
 			effectiveWatchPaths = newWP
 			wpMu.Unlock()
-			newSyncWP := make([]sync.WatchPath, len(newWP))
-			for i := range newWP {
-				newSyncWP[i] = sync.WatchPath{
-					GameID:        newWP[i].GameID,
-					PathKey:       newWP[i].PathKey,
-					PathTemplates: newWP[i].PathTemplates,
-				}
-			}
+			newSyncWP := getSyncWatchPaths()
 			_ = watcher.AddPaths(newSyncWP)
+			watcher.RemoveStalePaths(newSyncWP)
 			log.Printf("manifest refresh (%s): %d active watch paths", reason, len(newWP))
 		} else {
 			log.Printf("manifest refresh (%s): fetch failed: %v", reason, err)
 		}
-		if !SyncPaused.Load() && !(cfg.SkipSyncWhenMetered && IsMeteredConnection()) {
-			if OnSyncStart != nil {
-				OnSyncStart()
-			}
-			if err := client.PullAndApplyWithResolver(ctx, resolvePath, cfg.BackupOnPull, cfg.SkipOverwriteWhenLocalNewer, onRetryIn); err != nil {
-				log.Printf("manifest refresh pull (%s): %v", reason, err)
-				setLastSync(time.Now(), err)
-			} else {
-				log.Printf("manifest refresh pull (%s): complete", reason)
-				setLastSync(time.Now(), nil)
-			}
-		}
+		doPull("manifest refresh pull (" + reason + ")")
 	}
 
 	for {
@@ -302,56 +318,11 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 			_ = watcher.Close()
 			return nil
 		case <-ticker.C:
-			if SyncPaused.Load() {
-				continue
-			}
-			if cfg.SkipSyncWhenMetered && IsMeteredConnection() {
-				continue
-			}
-			if OnSyncStart != nil {
-				OnSyncStart()
-			}
-			if err := client.PullAndApplyWithResolver(ctx, resolvePath, cfg.BackupOnPull, cfg.SkipOverwriteWhenLocalNewer, onRetryIn); err != nil {
-				log.Println("periodic pull:", err)
-				setLastSync(time.Now(), err)
-			} else {
-				log.Println("periodic pull: complete")
-				setLastSync(time.Now(), nil)
-			}
+			doPull("periodic pull")
 		case <-syncNowCh:
-			if SyncPaused.Load() {
-				continue
-			}
-			if cfg.SkipSyncWhenMetered && IsMeteredConnection() {
-				continue
-			}
-			if OnSyncStart != nil {
-				OnSyncStart()
-			}
-			if err := client.PullAndApplyWithResolver(ctx, resolvePath, cfg.BackupOnPull, cfg.SkipOverwriteWhenLocalNewer, onRetryIn); err != nil {
-				log.Println("sync now:", err)
-				setLastSync(time.Now(), err)
-			} else {
-				log.Println("sync now: complete")
-				setLastSync(time.Now(), nil)
-			}
+			doPull("sync now")
 		case <-ssePullCh:
-			if SyncPaused.Load() {
-				continue
-			}
-			if cfg.SkipSyncWhenMetered && IsMeteredConnection() {
-				continue
-			}
-			if OnSyncStart != nil {
-				OnSyncStart()
-			}
-			if err := client.PullAndApplyWithResolver(ctx, resolvePath, cfg.BackupOnPull, cfg.SkipOverwriteWhenLocalNewer, onRetryIn); err != nil {
-				log.Println("sse pull:", err)
-				setLastSync(time.Now(), err)
-			} else {
-				log.Println("sse pull: complete")
-				setLastSync(time.Now(), nil)
-			}
+			doPull("sse pull")
 		case <-sseRefreshCh:
 			doManifestRefresh("sse push")
 		case <-refreshManifestCh:
@@ -359,12 +330,32 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		case <-outboxTicker.C:
 			if n := sync.ProcessOutbox(ctx, client); n > 0 {
 				log.Printf("outbox: sent %d pending upload(s)", n)
+				refreshTrayCounts()
+				notifyTrayState()
 			}
 		case <-discoveryTicker.C:
-			if n := runDiscovery(manifestGameIDSet(manifestEntries)); n > 0 {
+			if n := runDiscovery(manifestEntries); n > 0 {
 				log.Printf("discovery: periodic scan found %d new game(s)", n)
 				doManifestRefresh("discovery")
+			} else {
+				// Rebuild watch paths in case save dirs appeared without new games
+				activeIDs := activeGameIDSet()
+				newWP := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode)
+				newWP = mergeWatchPaths(newWP, cfg.WatchPaths)
+				wpMu.Lock()
+				effectiveWatchPaths = newWP
+				wpMu.Unlock()
 			}
 		}
 	}
+}
+
+func fetchManifestWithRetry(ctx context.Context, baseURL, token, since, include string) ([]types.GameSaveLocation, error) {
+	var entries []types.GameSaveLocation
+	err := retry.Do(ctx, retry.DefaultBackoff(), 3, func() error {
+		var err error
+		entries, err = FetchManifest(ctx, baseURL, token, since, include)
+		return err
+	})
+	return entries, err
 }

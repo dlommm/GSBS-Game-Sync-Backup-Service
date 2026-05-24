@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	clientlogx "github.com/gsbs/gsbs/client/logx"
 )
 
 // MaxLogBytes is the size at which the client log is rotated (keep one .old file).
@@ -55,5 +57,6 @@ func InitClientLog(alsoStderr bool) {
 	}
 	log.SetOutput(w)
 	log.SetFlags(log.Ldate | log.Ltime)
+	clientlogx.Init(w)
 	log.Printf("client log: writing to %s", path)
 }

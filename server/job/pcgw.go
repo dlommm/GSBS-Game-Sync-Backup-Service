@@ -63,6 +63,10 @@ func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client, reportPr
 						IsConfig:     t.IsConfig,
 						Source:       "pcgw",
 						Notes:        "https://www.pcgamingwiki.com/wiki/?curid=" + strconv.FormatInt(p.PageID, 10),
+						SteamAppIDs:  p.SteamAppIDs,
+						GOGID:        p.GOGID,
+						EpicID:       p.EpicID,
+						UbisoftID:    p.UbisoftID,
 					})
 				}
 			}

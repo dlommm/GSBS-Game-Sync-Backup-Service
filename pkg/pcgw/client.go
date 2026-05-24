@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -139,8 +140,12 @@ func (c *Client) RedirectBySteamAppID(steamAppID string) (string, error) {
 
 // PageInfo is a single page from ListAllPages.
 type PageInfo struct {
-	PageID int64
-	Title  string
+	PageID      int64
+	Title       string
+	SteamAppIDs []string
+	GOGID       string
+	EpicID      string
+	UbisoftID   string
 }
 
 // ListAllPages returns a chunk of wiki pages. Use apcontinue to paginate.
@@ -191,7 +196,7 @@ func (c *Client) ListGamePages(limit, offset int) ([]PageInfo, error) {
 	}
 	rows, err := c.CargoQuery(
 		"Infobox_game",
-		"Infobox_game._pageID=PageID,Infobox_game._pageName=Title",
+		"Infobox_game._pageID=PageID,Infobox_game._pageName=Title,Infobox_game.Steam_AppID=SteamAppID,Infobox_game.GOG_com_id=GOGID,Infobox_game.Epic_Games_Store=EpicID,Infobox_game.Ubisoft_Connect=UbisoftID",
 		"",
 		limit, offset,
 	)
@@ -209,9 +214,48 @@ func (c *Client) ListGamePages(limit, offset int) ([]PageInfo, error) {
 		if err != nil {
 			continue
 		}
-		pages = append(pages, PageInfo{PageID: id, Title: title})
+		pages = append(pages, PageInfo{
+			PageID:      id,
+			Title:       title,
+			SteamAppIDs: parseCargoMultiValue(r["SteamAppID"]),
+			GOGID:       parseCargoSingleValue(r["GOGID"]),
+			EpicID:      parseCargoSingleValue(r["EpicID"]),
+			UbisoftID:   parseCargoSingleValue(r["UbisoftID"]),
+		})
 	}
 	return pages, nil
+}
+
+// parseCargoSingleValue extracts a string from a Cargo field (string or nested map).
+func parseCargoSingleValue(v interface{}) string {
+	switch val := v.(type) {
+	case string:
+		return strings.TrimSpace(val)
+	case map[string]interface{}:
+		if s, ok := val["fulltext"].(string); ok {
+			return strings.TrimSpace(s)
+		}
+		if s, ok := val["value"].(string); ok {
+			return strings.TrimSpace(s)
+		}
+	}
+	return ""
+}
+
+// parseCargoMultiValue extracts multiple IDs (comma-separated or array) from Cargo.
+func parseCargoMultiValue(v interface{}) []string {
+	s := parseCargoSingleValue(v)
+	if s == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // ParsePageWikitext returns the raw wikitext of a page (for parsing save locations).

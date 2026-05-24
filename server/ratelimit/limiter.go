@@ -28,15 +28,32 @@ func (l *Limiter) Allow(key string) bool {
 	now := time.Now()
 	cutoff := now.Add(-l.window)
 	list := l.times[key]
-	// Prune old
 	i := 0
 	for i < len(list) && list[i].Before(cutoff) {
 		i++
 	}
 	list = list[i:]
 	if len(list) >= l.limit {
+		l.times[key] = list
+		l.pruneIdleLocked(now)
 		return false
 	}
 	l.times[key] = append(list, now)
+	l.pruneIdleLocked(now)
 	return true
+}
+
+// pruneIdleLocked removes keys with no timestamps within 2x the window.
+func (l *Limiter) pruneIdleLocked(now time.Time) {
+	idleCutoff := now.Add(-2 * l.window)
+	for k, ts := range l.times {
+		if len(ts) == 0 {
+			delete(l.times, k)
+			continue
+		}
+		last := ts[len(ts)-1]
+		if last.Before(idleCutoff) {
+			delete(l.times, k)
+		}
+	}
 }

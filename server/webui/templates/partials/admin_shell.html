@@ -1,0 +1,23 @@
+{{define "partials/admin_shell.html"}}
+<nav class="admin-mobile-nav" aria-label="Admin">
+  <a href="/admin" {{if eq .AdminNav "overview"}}class="active"{{end}}>Overview</a>
+  <a href="/admin/users" {{if eq .AdminNav "users"}}class="active"{{end}}>Users</a>
+  <a href="/admin/manifest" {{if eq .AdminNav "manifest"}}class="active"{{end}}>Manifest</a>
+  <a href="/admin/activity" {{if eq .AdminNav "activity"}}class="active"{{end}}>Activity</a>
+</nav>
+<aside class="admin-sidebar" aria-label="Admin navigation">
+  <div class="topbar-brand" style="padding:0.5rem 0.75rem;margin-bottom:0.5rem;">GSBS Admin</div>
+  <a href="/admin" {{if eq .AdminNav "overview"}}class="active"{{end}}>Overview</a>
+  <a href="/admin/users" {{if eq .AdminNav "users"}}class="active"{{end}}>Users &amp; Clients</a>
+  <a href="/admin/manifest" {{if eq .AdminNav "manifest"}}class="active"{{end}}>Manifest</a>
+  <a href="/admin/activity" {{if eq .AdminNav "activity"}}class="active"{{end}}>Activity &amp; Jobs</a>
+  <hr style="border:0;border-top:1px solid var(--border);margin:0.75rem 0;">
+  <a href="/dashboard">← Dashboard</a>
+</aside>
+<div class="admin-main" hx-ext="sse" sse-connect="/dashboard/events">
+  <main id="main-content" class="page-content" role="main">
+    {{template "partials/alerts.html" .}}
+    {{block "content" .}}{{end}}
+  </main>
+</div>
+{{end}}

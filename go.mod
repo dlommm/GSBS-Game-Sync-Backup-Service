@@ -1,6 +1,6 @@
 module github.com/gsbs/gsbs
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/fsnotify/fsnotify v1.7.0
@@ -14,6 +14,7 @@ require (
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 	golang.org/x/crypto v0.17.0
 	golang.org/x/image v0.36.0
+	golang.org/x/mod v0.36.0
 	golang.org/x/sys v0.30.0
 	golang.org/x/time v0.14.0
 )

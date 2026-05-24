@@ -24,7 +24,7 @@ func Init() {
 	log.Logger = zerolog.New(os.Stdout).With().Timestamp().Logger().Level(level)
 }
 
-// Logger returns the global zerolog logger.
-func Logger() zerolog.Logger {
-	return log.Logger
+// Logger returns a pointer to the global zerolog logger (required for chained methods).
+func Logger() *zerolog.Logger {
+	return &log.Logger
 }

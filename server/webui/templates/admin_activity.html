@@ -1,0 +1,81 @@
+{{template "layout" .}}
+{{define "title"}}Admin Activity — GSBS{{end}}
+{{define "content"}}
+<section class="panel" id="admin-jobs-panel"
+         hx-get="/admin/partial/jobs"
+         hx-trigger="load, job-finished from:body, job-progress from:body"
+         hx-swap="innerHTML">
+  {{template "partials/admin_jobs.html" .}}
+</section>
+
+<section class="panel">
+  <div class="panel-header"><h2>Recent Manifest Fetches</h2></div>
+  {{if .Fetches}}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Client</th><th>User</th><th>Entries</th><th>Fetched</th></tr></thead>
+      <tbody>
+        {{range .Fetches}}
+        <tr>
+          <td class="cell-primary">{{if .ClientName}}{{.ClientName}}{{else}}<span class="cell-muted">anonymous</span>{{end}}</td>
+          <td>{{if .Username}}{{.Username}}{{else}}—{{end}}</td>
+          <td class="cell-size">{{.EntriesCount}}</td>
+          <td class="cell-muted">{{formatTime .FetchedAt}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}<div class="panel-empty"><p>No manifest fetches recorded.</p></div>{{end}}
+</section>
+
+<section class="panel" id="audit-log-panel">
+  <div class="panel-header"><h2>Audit log</h2></div>
+  {{if .AuditLog}}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th></tr></thead>
+      <tbody>
+        {{range .AuditLog}}
+        <tr>
+          <td class="cell-muted">{{formatTime .At}}</td>
+          <td>{{.ActorUsername}}</td>
+          <td>{{auditLabel .Action}}</td>
+          <td class="cell-muted">{{.TargetID}}</td>
+          <td class="cell-muted">{{.Details}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}<div class="panel-empty"><p>No audit entries yet.</p></div>{{end}}
+</section>
+
+<section class="panel">
+  <div class="panel-header"><h2>Stats snapshots</h2></div>
+  {{if .StatsSnapshots}}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Time</th><th>Users</th><th>Clients</th><th>Saves</th><th>Storage</th></tr></thead>
+      <tbody>
+        {{range .StatsSnapshots}}
+        <tr>
+          <td class="cell-muted">{{formatTime .At}}</td>
+          <td>{{.UserCount}}</td>
+          <td>{{.ClientCount}}</td>
+          <td>{{.SaveCount}}</td>
+          <td class="cell-size">{{formatBytes .StorageBytes}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}<div class="panel-empty"><p>No snapshots yet (recorded daily at midnight).</p></div>{{end}}
+</section>
+{{end}}
+{{define "scripts"}}
+<div hidden
+     sse-swap="job-finished,job-progress"
+     hx-trigger="job-finished,job-progress from:body"
+     hx-get="/admin/partial/jobs" hx-target="#admin-jobs-panel" hx-swap="innerHTML"></div>
+{{end}}

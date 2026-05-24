@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -16,9 +17,9 @@ type Runner struct {
 	store store.Store
 	hub   *sse.Hub
 
-	mu             sync.Mutex
-	running        map[string]bool // job name -> is running
-	progressPages  int             // pages processed by current pcgw_sync run (when running)
+	mu            sync.Mutex
+	running       map[string]bool // job name -> is running
+	progressPages int             // pages processed by current pcgw_sync run (when running)
 }
 
 // NewRunner creates a Runner. hub may be nil if SSE is not needed.
@@ -80,8 +81,12 @@ func (r *Runner) RunPCGWSync(ctx context.Context) bool {
 		pcgwClient := pcgw.NewClient()
 		progressFn := func(pages int) {
 			r.mu.Lock()
+			prev := r.progressPages
 			r.progressPages = pages
 			r.mu.Unlock()
+			if r.hub != nil && pages > 0 && pages%5 == 0 && pages != prev {
+				r.hub.Broadcast(sse.Event{Type: "job-progress", Data: fmt.Sprintf(`{"job":"pcgw_sync","pages":%d}`, pages)})
+			}
 		}
 		count, syncErr := PCGWSync(jobCtx, r.store, pcgwClient, progressFn)
 

@@ -7,13 +7,15 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+
+	"github.com/gsbs/gsbs/pkg/paths"
 )
 
 // InstalledGame represents a game detected on the local machine.
 type InstalledGame struct {
-	GameID   string `json:"game_id"`   // primary ID (Steam app ID, etc.)
+	GameID   string `json:"game_id"` // primary ID (Steam app ID, etc.)
 	Title    string `json:"title,omitempty"`
-	Launcher string `json:"launcher"`  // steam, epic, gog, ubisoft, heroic, lutris, bottles, flatpak
+	Launcher string `json:"launcher"` // steam, epic, gog, ubisoft, heroic, lutris, bottles, flatpak
 }
 
 // ScanInstalledGames returns all games detected across supported launchers.
@@ -52,6 +54,12 @@ func ScanInstalledGames() []InstalledGame {
 	for _, g := range scanBottles() {
 		add(g)
 	}
+	for _, g := range scanEA() {
+		add(g)
+	}
+	for _, g := range scanPrism() {
+		add(g)
+	}
 	return out
 }
 
@@ -61,18 +69,7 @@ var steamNameRe = regexp.MustCompile(`(?m)"name"\s+"(.+)"`)
 func scanSteam() []InstalledGame {
 	var out []InstalledGame
 	home, _ := os.UserHomeDir()
-	var libraries []string
-	if runtime.GOOS == "windows" {
-		libraries = append(libraries,
-			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Steam"),
-			filepath.Join(os.Getenv("ProgramFiles"), "Steam"),
-		)
-	} else {
-		libraries = append(libraries,
-			filepath.Join(home, ".steam", "steam"),
-			filepath.Join(home, ".local", "share", "Steam"),
-		)
-	}
+	libraries := paths.GetSteamLibraryRoots(home)
 	for _, lib := range libraries {
 		steamapps := filepath.Join(lib, "steamapps")
 		matches, _ := filepath.Glob(filepath.Join(steamapps, "appmanifest_*.acf"))
@@ -123,9 +120,9 @@ func scanEpic() []InstalledGame {
 				continue
 			}
 			var meta struct {
-				AppName          string `json:"AppName"`
-				DisplayName      string `json:"DisplayName"`
-				MainGameAppName  string `json:"MainGameAppName"`
+				AppName         string `json:"AppName"`
+				DisplayName     string `json:"DisplayName"`
+				MainGameAppName string `json:"MainGameAppName"`
 			}
 			if json.Unmarshal(data, &meta) != nil {
 				continue
@@ -285,31 +282,71 @@ func scanBottles() []InstalledGame {
 		if !e.IsDir() {
 			continue
 		}
+		yml := filepath.Join(bottlesDir, e.Name(), "bottle.yml")
+		title := e.Name()
+		if data, err := os.ReadFile(yml); err == nil {
+			if nm := regexp.MustCompile(`(?m)^Name:\s*(.+)$`).FindStringSubmatch(string(data)); len(nm) >= 2 {
+				title = strings.TrimSpace(nm[1])
+			}
+		}
 		out = append(out, InstalledGame{
 			GameID:   e.Name(),
-			Title:    e.Name(),
+			Title:    title,
 			Launcher: "bottles",
 		})
 	}
 	return out
 }
 
-// MatchManifest filters manifest game IDs against installed games.
-// Returns installed game IDs that appear in the manifest (by game_id or title match).
-func MatchManifest(installed []InstalledGame, manifestGameIDs map[string]bool) []InstalledGame {
-	var matched []InstalledGame
-	for _, g := range installed {
-		if manifestGameIDs[g.GameID] {
-			matched = append(matched, g)
+func scanEA() []InstalledGame {
+	var out []InstalledGame
+	var roots []string
+	home, _ := os.UserHomeDir()
+	if runtime.GOOS == "windows" {
+		roots = append(roots, filepath.Join(os.Getenv("ProgramData"), "Electronic Arts", "EA Desktop", "InstallCache"))
+	} else {
+		roots = append(roots, filepath.Join(home, ".local", "share", "Electronic Arts", "EA Desktop", "InstallCache"))
+	}
+	for _, root := range roots {
+		entries, err := os.ReadDir(root)
+		if err != nil {
 			continue
 		}
-		// Title-based fuzzy match for GOG folder names vs manifest titles
-		for id := range manifestGameIDs {
-			if strings.EqualFold(g.Title, id) || strings.Contains(strings.ToLower(id), strings.ToLower(g.GameID)) {
-				matched = append(matched, g)
-				break
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
 			}
+			out = append(out, InstalledGame{
+				GameID:   e.Name(),
+				Title:    e.Name(),
+				Launcher: "ea",
+			})
 		}
 	}
-	return matched
+	return out
+}
+
+func scanPrism() []InstalledGame {
+	var out []InstalledGame
+	home, _ := os.UserHomeDir()
+	instancesDir := filepath.Join(home, ".local", "share", "PrismLauncher", "instances")
+	matches, _ := filepath.Glob(filepath.Join(instancesDir, "*/instance.cfg"))
+	for _, cfgPath := range matches {
+		data, err := os.ReadFile(cfgPath)
+		if err != nil {
+			continue
+		}
+		text := string(data)
+		id := filepath.Base(filepath.Dir(cfgPath))
+		title := id
+		if nm := regexp.MustCompile(`(?m)^name=(.+)$`).FindStringSubmatch(text); len(nm) >= 2 {
+			title = strings.TrimSpace(nm[1])
+		}
+		out = append(out, InstalledGame{
+			GameID:   id,
+			Title:    title,
+			Launcher: "prism",
+		})
+	}
+	return out
 }

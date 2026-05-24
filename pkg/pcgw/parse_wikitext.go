@@ -34,6 +34,8 @@ func NormalizePathTemplate(raw string) string {
 		{"{{p|uid}}", "<user-id>"},
 		{"{{p|steam}}", "<SteamLibrary-folder>"},
 		{"{{p|uplay}}", "<Ubisoft-Connect-folder>"},
+		{"{{p|ea}}", "<EA-App-folder>"},
+		{"{{p|origin}}", "<EA-App-folder>"},
 	}
 	for _, r := range replacements {
 		s = strings.ReplaceAll(s, r.from, r.to)
@@ -131,7 +133,7 @@ func parseGameDataTemplates(wikitext, gameID string) []SaveLocationTemplate {
 			s = s[idx[1]:]
 			continue
 		}
-		kind, system := sub[1], sub[2] // saves|config, Windows|Linux|...
+		kind, system := sub[1], sub[2]   // saves|config, Windows|Linux|...
 		pathStart := start + len(sub[0]) // after the second |
 		end := findTemplateEnd(s, pathStart)
 		if end < 0 {

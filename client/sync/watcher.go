@@ -8,6 +8,8 @@ package sync
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -17,10 +19,15 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gsbs/gsbs/pkg/paths"
+	"github.com/gsbs/gsbs/pkg/retry"
 )
 
-const debounceDelay = 2 * time.Second
-const pushMaxRetries = 3
+const (
+	debounceDelay        = 2 * time.Second
+	maxConsecutiveErrors = 5
+)
+
+var errWatcherClosed = errors.New("watcher: events channel closed")
 
 // WatchPath describes a path to watch (from config).
 type WatchPath struct {
@@ -31,19 +38,17 @@ type WatchPath struct {
 
 // Watcher watches local paths and uploads changes to the server.
 type Watcher struct {
-	resolver  *paths.Resolver
-	currentOS paths.OS
-	client    *Client
-	fw        *fsnotify.Watcher
-	mu        sync.Mutex
-	pathMap   map[string]pathInfo // watched directory -> gameID, pathKey (events under that dir use this info)
-	timers    map[string]*time.Timer
-	// IsPaused if non-nil is checked before each push; when it returns true the push is skipped.
-	IsPaused func() bool
-	// ExcludePatterns are glob patterns (e.g. "*.tmp", "*.bak"); files matching any pattern are not pushed.
+	resolver        *paths.Resolver
+	currentOS       paths.OS
+	client          *Client
+	fw              *fsnotify.Watcher
+	mu              sync.Mutex
+	pathMap         map[string]pathInfo
+	timers          map[string]*time.Timer
+	consecErr       int
+	IsPaused        func() bool
 	ExcludePatterns []string
-	// Verbose when true enables extra log lines per push.
-	Verbose bool
+	Verbose         bool
 }
 
 type pathInfo struct {
@@ -57,25 +62,22 @@ func NewWatcher(resolver *paths.Resolver, currentOS paths.OS, client *Client) (*
 	if err != nil {
 		return nil, err
 	}
-	w := &Watcher{
+	return &Watcher{
 		resolver:  resolver,
 		currentOS: currentOS,
 		client:    client,
 		fw:        fw,
 		pathMap:   make(map[string]pathInfo),
 		timers:    make(map[string]*time.Timer),
-	}
-	return w, nil
+	}, nil
 }
 
-// AddPaths registers path templates for watching. Resolves templates for current OS and only adds if directory exists.
-func (w *Watcher) AddPaths(watchPaths []WatchPath) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+// resolvedDirs returns the set of directories that should be watched for watchPaths.
+func (w *Watcher) resolvedDirs(watchPaths []WatchPath) map[string]pathInfo {
+	out := make(map[string]pathInfo)
 	for _, wp := range watchPaths {
 		for _, template := range wp.PathTemplates {
-			resolved := w.resolver.Resolve(template, w.currentOS)
-			for _, abs := range resolved {
+			for _, abs := range w.resolver.ResolveAll(template, w.currentOS) {
 				if abs == "" {
 					continue
 				}
@@ -86,102 +88,166 @@ func (w *Watcher) AddPaths(watchPaths []WatchPath) error {
 				if _, err := os.Stat(dir); err != nil {
 					continue
 				}
-				if err := w.fw.Add(dir); err != nil {
-					log.Println("watch add:", dir, err)
-					continue
-				}
-				w.pathMap[dir] = pathInfo{GameID: wp.GameID, PathKey: wp.PathKey}
+				out[dir] = pathInfo{GameID: wp.GameID, PathKey: wp.PathKey}
 			}
 		}
+	}
+	return out
+}
+
+// AddPaths registers path templates for watching. Resolves templates for current OS and only adds if directory exists.
+func (w *Watcher) AddPaths(watchPaths []WatchPath) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	want := w.resolvedDirs(watchPaths)
+	for dir, info := range want {
+		if _, ok := w.pathMap[dir]; ok {
+			continue
+		}
+		if err := w.fw.Add(dir); err != nil {
+			log.Printf("watch add: %s: %v", dir, err)
+			continue
+		}
+		w.pathMap[dir] = info
 	}
 	log.Printf("watching %d directories", len(w.pathMap))
 	return nil
 }
 
-// Run starts the watch loop and uploads on write/create/rename events with per-file debouncing.
-func (w *Watcher) Run(ctx context.Context) {
+// RemoveStalePaths removes fsnotify watches for directories no longer in watchPaths.
+func (w *Watcher) RemoveStalePaths(watchPaths []WatchPath) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	want := w.resolvedDirs(watchPaths)
+	for dir := range w.pathMap {
+		if _, ok := want[dir]; ok {
+			continue
+		}
+		_ = w.fw.Remove(dir)
+		delete(w.pathMap, dir)
+	}
+}
+
+// Recreate closes the current fsnotify watcher and opens a new one, re-adding all paths.
+func (w *Watcher) Recreate() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	oldPaths := make(map[string]pathInfo, len(w.pathMap))
+	for k, v := range w.pathMap {
+		oldPaths[k] = v
+	}
+	if w.fw != nil {
+		_ = w.fw.Close()
+	}
+	fw, err := fsnotify.NewWatcher()
+	if err != nil {
+		return err
+	}
+	w.fw = fw
+	w.pathMap = make(map[string]pathInfo)
+	w.consecErr = 0
+	for dir, info := range oldPaths {
+		if _, err := os.Stat(dir); err != nil {
+			continue
+		}
+		if err := w.fw.Add(dir); err != nil {
+			log.Printf("watch recreate add: %s: %v", dir, err)
+			continue
+		}
+		w.pathMap[dir] = info
+	}
+	log.Printf("watch recreated: %d directories", len(w.pathMap))
+	return nil
+}
+
+// Run starts the watch loop. Returns a retriable error if the fsnotify channel closes.
+func (w *Watcher) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case ev, ok := <-w.fw.Events:
 			if !ok {
-				return
+				return errWatcherClosed
 			}
-			if ev.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename) == 0 {
-				continue
-			}
-			dir := filepath.Dir(ev.Name)
-			w.mu.Lock()
-			info, ok := w.pathMap[dir]
+			w.consecErr = 0
+			w.handleEvent(ctx, ev)
+		case err, ok := <-w.fw.Errors:
 			if !ok {
-				w.mu.Unlock()
-				continue
+				return errWatcherClosed
 			}
-			// Reset or create a debounce timer for this file.
-			if t, exists := w.timers[ev.Name]; exists {
-				t.Stop()
-			}
-			filePath := ev.Name
-			gameID := info.GameID
-			pathKey := info.PathKey
-			w.timers[filePath] = time.AfterFunc(debounceDelay, func() {
-				if w.IsPaused != nil && w.IsPaused() {
-					w.mu.Lock()
-					delete(w.timers, filePath)
-					w.mu.Unlock()
-					return
-				}
-				if w.excludeMatch(filePath) {
-					w.mu.Lock()
-					delete(w.timers, filePath)
-					w.mu.Unlock()
-					return
-				}
-				content, err := os.ReadFile(filePath)
-				if err != nil {
-					log.Printf("watcher: read %s: %v", filePath, err)
-				} else {
-					// Retry push with exponential backoff on failure.
-					pushOK := false
-					backoff := 2 * time.Second
-					for attempt := 1; attempt <= pushMaxRetries; attempt++ {
-						if err := w.client.Push(ctx, gameID, pathKey, filePath, content); err != nil {
-							log.Printf("push attempt %d/%d: %v", attempt, pushMaxRetries, err)
-							if attempt < pushMaxRetries {
-								select {
-								case <-ctx.Done():
-									return
-								case <-time.After(backoff):
-								}
-								backoff *= 2
-							}
-						} else {
-							if w.Verbose {
-								log.Printf("push: game=%s file=%s size=%d", gameID, filePath, len(content))
-							}
-							pushOK = true
-							break
-						}
-					}
-					if !pushOK {
-						log.Printf("push: giving up after %d attempts: game=%s file=%s — queuing to outbox", pushMaxRetries, gameID, filePath)
-						if err := EnqueueOutbox(gameID, pathKey, filePath, content); err != nil {
-							log.Printf("outbox: enqueue failed: %v", err)
-						}
-					}
-				}
-				// Remove timer from map so it doesn't grow unbounded.
-				w.mu.Lock()
-				delete(w.timers, filePath)
-				w.mu.Unlock()
-			})
-			w.mu.Unlock()
-		case err := <-w.fw.Errors:
 			if err != nil {
-				log.Println("watcher error:", err)
+				w.consecErr++
+				log.Printf("watcher error: %v (consecutive=%d)", err, w.consecErr)
+				if w.consecErr >= maxConsecutiveErrors {
+					if recErr := w.Recreate(); recErr != nil {
+						return fmt.Errorf("watcher recreate: %w", recErr)
+					}
+				}
 			}
 		}
+	}
+}
+
+func (w *Watcher) handleEvent(ctx context.Context, ev fsnotify.Event) {
+	if ev.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename) == 0 {
+		return
+	}
+	dir := filepath.Dir(ev.Name)
+	w.mu.Lock()
+	info, ok := w.pathMap[dir]
+	if !ok {
+		w.mu.Unlock()
+		return
+	}
+	if t, exists := w.timers[ev.Name]; exists {
+		t.Stop()
+	}
+	filePath := ev.Name
+	gameID := info.GameID
+	pathKey := info.PathKey
+	w.timers[filePath] = time.AfterFunc(debounceDelay, func() {
+		w.pushDebounced(ctx, gameID, pathKey, filePath)
+	})
+	w.mu.Unlock()
+}
+
+func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, filePath string) {
+	defer func() {
+		w.mu.Lock()
+		delete(w.timers, filePath)
+		w.mu.Unlock()
+	}()
+	if w.IsPaused != nil && w.IsPaused() {
+		return
+	}
+	if w.excludeMatch(filePath) {
+		return
+	}
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		log.Printf("watcher: read %s: %v", filePath, err)
+		return
+	}
+	pushErr := w.client.Push(ctx, gameID, pathKey, filePath, content)
+	if pushErr == nil {
+		if w.Verbose {
+			log.Printf("push: game=%s file=%s size=%d", gameID, filePath, len(content))
+		}
+		if OnSaveEvent != nil {
+			OnSaveEvent(gameID, pathKey, "", SaveDirPush, nil)
+		}
+		return
+	}
+	if !retry.IsRetryableError(pushErr) {
+		log.Printf("push: non-retryable error game=%s file=%s: %v", gameID, filePath, pushErr)
+		return
+	}
+	log.Printf("push: giving up after retries: game=%s file=%s — queuing to outbox", gameID, filePath)
+	if err := EnqueueOutbox(gameID, pathKey, filePath, content); err != nil {
+		log.Printf("outbox: enqueue failed: %v", err)
+	} else if OnOutboxEnqueued != nil {
+		OnOutboxEnqueued(gameID, pathKey)
 	}
 }
 
@@ -213,5 +279,8 @@ func (w *Watcher) Close() error {
 		t.Stop()
 	}
 	w.mu.Unlock()
-	return w.fw.Close()
+	if w.fw != nil {
+		return w.fw.Close()
+	}
+	return nil
 }

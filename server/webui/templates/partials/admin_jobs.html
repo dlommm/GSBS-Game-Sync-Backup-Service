@@ -1,0 +1,38 @@
+<div class="panel-header-actions">
+  <h2>Jobs</h2>
+  <div class="panel-actions">
+    {{if .JobRunning}}
+    <span class="badge-running">Running… {{.JobProgressPages}} pages processed</span>
+    {{else}}
+    <form method="post" action="/admin/run-job" class="inline-form">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <button type="submit" class="btn-primary-sm">Run PCGW Sync</button>
+    </form>
+    {{end}}
+  </div>
+</div>
+{{if .RecentJobs}}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Job</th><th>Started</th><th>Duration</th><th>Status</th><th>Entries</th><th>Error</th></tr></thead>
+    <tbody>
+      {{range .RecentJobs}}
+      <tr>
+        <td class="cell-primary">{{.JobName}}</td>
+        <td class="cell-muted">{{formatTime .StartedAt}}</td>
+        <td class="cell-muted">{{formatDuration .StartedAt .FinishedAt}}</td>
+        <td>
+          {{if eq .Status "success"}}<span class="badge-success">success</span>
+          {{else if eq .Status "running"}}<span class="badge-running">running</span>
+          {{else}}<span class="badge-failed">failed</span>{{end}}
+        </td>
+        <td class="cell-size">{{.EntriesCount}}</td>
+        <td class="cell-muted">{{if .ErrorMessage}}{{truncate .ErrorMessage 80}}{{else}}—{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="panel-empty"><p>No job runs recorded yet.</p></div>
+{{end}}

@@ -17,6 +17,14 @@ func main() {
 		}
 	}
 
+	if staged := ParseApplyUpdateFlag(); staged != "" {
+		InitClientLog(true)
+		if err := RunApplyUpdateMode(staged); err != nil {
+			log.Fatal("apply update:", err)
+		}
+		return
+	}
+
 	// Init log to file (and optionally stderr) so all client activity is recorded.
 	alsoStderr := runtime.GOOS != "windows" || consoleMode()
 	if len(os.Args) > 1 {
@@ -80,6 +88,15 @@ func main() {
 func consoleMode() bool {
 	for _, a := range os.Args[1:] {
 		if a == "--console" || a == "-console" {
+			return true
+		}
+	}
+	return false
+}
+
+func minimizedMode() bool {
+	for _, a := range os.Args[1:] {
+		if a == "--minimized" {
 			return true
 		}
 	}

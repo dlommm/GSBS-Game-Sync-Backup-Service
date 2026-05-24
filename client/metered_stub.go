@@ -2,7 +2,7 @@
 
 package main
 
-// IsMeteredConnection is only implemented on Windows. On other platforms it always returns false.
+// IsMeteredConnection returns false on non-Windows platforms.
 func IsMeteredConnection() bool {
 	return false
 }

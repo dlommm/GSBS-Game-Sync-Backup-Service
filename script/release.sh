@@ -6,18 +6,20 @@
 # Requires: go, git, gh (GitHub CLI), docker (buildx for multi-platform image); clean working tree for tagging; docker login for push.
 #
 # Env (optional): DOCKERHUB_IMAGE (default: dendlomm/gsbs-server) — image to build and push.
+#                 BUILD_DARWIN=1 — also build darwin amd64/arm64 (dev/local).
 #
 # Artifacts:
 #   - gsbs-server-windows-amd64.exe, gsbs-client-windows-amd64.exe
 #   - gsbs-server-linux-amd64, gsbs-client-linux-amd64
-#   - (optional) BUILD_DARWIN=1: gsbs-server-darwin-amd64, gsbs-client-darwin-amd64, gsbs-server-darwin-arm64, gsbs-client-darwin-arm64
+#   - SHA256SUMS, latest-client.json
+#   - (optional) BUILD_DARWIN=1: darwin builds
 #   - Docker image: $DOCKERHUB_IMAGE:$VERSION and $DOCKERHUB_IMAGE:latest
+#
+# For CI-driven releases, push a git tag vX.Y.Z instead; see docs/RELEASE.md.
 
-set -e
+set -euo pipefail
 cd "$(dirname "$0")/.."
-HOST_GOOS=$(go env GOOS)
 
-# Version: from arg, or latest tag, or prompt
 VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
   LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
@@ -32,55 +34,17 @@ if [ -z "$VERSION" ]; then
   echo "Need a version (e.g. v1.0.3)"
   exit 1
 fi
-# Strip 'v' for ldflags if present
+
 VERSION_VALUE="${VERSION#v}"
 BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DOCKERHUB_IMAGE="${DOCKERHUB_IMAGE:-dendlomm/gsbs-server}"
+export BUILD_DATE COMMIT RELEASED_AT="$BUILD_DATE"
 
-LDFLAGS="-X main.Version=${VERSION_VALUE} -X main.BuildDate=${BUILD_DATE} -X main.Commit=${COMMIT}"
+echo "Release ${VERSION} (commit ${COMMIT})"
 
-echo "Building with Version=${VERSION_VALUE} BuildDate=${BUILD_DATE} Commit=${COMMIT}"
-
-# --- Windows amd64 ---
-export GOOS=windows
-export GOARCH=amd64
-
-go build -ldflags "$LDFLAGS" -o gsbs-server-windows-amd64.exe ./server
-echo "Built gsbs-server-windows-amd64.exe"
-
-# Client (tray app: -H windowsgui)
-go build -ldflags "-H windowsgui $LDFLAGS" -o gsbs-client-windows-amd64.exe ./client
-echo "Built gsbs-client-windows-amd64.exe"
-
-# --- Linux amd64 ---
-export GOOS=linux
-export GOARCH=amd64
-
-go build -ldflags "$LDFLAGS" -o gsbs-server-linux-amd64 ./server
-echo "Built gsbs-server-linux-amd64"
-
-# Client: systray does not cross-compile to Linux from non-Linux; build only on Linux host
-if [ "$HOST_GOOS" = "linux" ]; then
-  go build -ldflags "$LDFLAGS" -o gsbs-client-linux-amd64 ./client
-  echo "Built gsbs-client-linux-amd64"
-  HAVE_LINUX_CLIENT=1
-else
-  echo "Skipping gsbs-client-linux-amd64 (systray does not cross-compile to Linux from $HOST_GOOS); run this script on Linux to build it)"
-  HAVE_LINUX_CLIENT=
-fi
-
-# --- Optional: macOS (darwin) amd64 + arm64 for local/dev ---
-if [ "${BUILD_DARWIN:-0}" = "1" ]; then
-  for arch in amd64 arm64; do
-    export GOOS=darwin
-    export GOARCH=$arch
-    go build -ldflags "$LDFLAGS" -o "gsbs-server-darwin-${arch}" ./server
-    echo "Built gsbs-server-darwin-${arch}"
-    go build -ldflags "$LDFLAGS" -o "gsbs-client-darwin-${arch}" ./client
-    echo "Built gsbs-client-darwin-${arch}"
-  done
-fi
+./script/build.sh "$VERSION" "$(pwd)"
+./script/release-assets.sh "$VERSION" "$(pwd)"
 
 # Tag if not already
 if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
@@ -88,12 +52,17 @@ if ! git rev-parse "$VERSION" >/dev/null 2>&1; then
   git push origin "$VERSION"
 fi
 
-# Create or update release and upload all assets
-ASSETS=(gsbs-server-windows-amd64.exe gsbs-client-windows-amd64.exe gsbs-server-linux-amd64)
-[ -n "${HAVE_LINUX_CLIENT:-}" ] && [ -f gsbs-client-linux-amd64 ] && ASSETS+=(gsbs-client-linux-amd64)
+ASSETS=(SHA256SUMS latest-client.json gsbs-server-windows-amd64.exe gsbs-client-windows-amd64.exe gsbs-server-linux-amd64)
+[ -f gsbs-client-linux-amd64 ] && ASSETS+=(gsbs-client-linux-amd64)
 if [ "${BUILD_DARWIN:-0}" = "1" ]; then
-  ASSETS+=("gsbs-server-darwin-amd64" "gsbs-client-darwin-amd64" "gsbs-server-darwin-arm64" "gsbs-client-darwin-arm64")
+  for arch in amd64 arm64; do
+    [ -f "gsbs-server-darwin-${arch}" ] && ASSETS+=("gsbs-server-darwin-${arch}")
+    [ -f "gsbs-client-darwin-${arch}" ] && ASSETS+=("gsbs-client-darwin-${arch}")
+  done
 fi
+
+NOTES="Windows amd64 and Linux amd64 builds. Docker image: \`docker pull ${DOCKERHUB_IMAGE}:${VERSION_VALUE}\`. Client auto-update manifest: \`latest-client.json\`. Run with \`--version\` or \`-v\` to see version, build date, and commit."
+
 if gh release view "$VERSION" >/dev/null 2>&1; then
   echo "Release $VERSION exists; uploading assets only."
   gh release upload "$VERSION" "${ASSETS[@]}" --clobber
@@ -101,13 +70,10 @@ else
   gh release create "$VERSION" \
     "${ASSETS[@]}" \
     --title "Release $VERSION" \
-    --notes "Windows amd64 and Linux amd64 builds. Docker image: \`docker pull ${DOCKERHUB_IMAGE:-dendlomm/gsbs-server}:${VERSION_VALUE}\`. Run with \`--version\` or \`-v\` to see version, build date, and commit."
+    --notes "$NOTES"
 fi
 
-# Docker: multi-platform build and push to Docker Hub (linux/amd64 + linux/arm64)
-DOCKERHUB_IMAGE="${DOCKERHUB_IMAGE:-dendlomm/gsbs-server}"
 echo "Building Docker image ${DOCKERHUB_IMAGE}:${VERSION_VALUE} (and :latest) for linux/amd64,linux/arm64"
-# Use a buildx builder that supports multi-platform (default driver often does not)
 if ! docker buildx inspect gsbs-multi >/dev/null 2>&1; then
   docker buildx create --name gsbs-multi --use
 fi

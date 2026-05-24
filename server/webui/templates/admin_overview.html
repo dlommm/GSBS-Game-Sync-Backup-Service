@@ -1,0 +1,46 @@
+{{template "layout" .}}
+{{define "title"}}Admin Overview — GSBS{{end}}
+{{define "content"}}
+<section class="stats-row stats-row-6" aria-label="Global statistics">
+  <div class="stat-card"><div class="stat-value">{{.Stats.UserCount}}</div><div class="stat-label">Users</div></div>
+  <div class="stat-card"><div class="stat-value">{{.Stats.ClientCount}}</div><div class="stat-label">Clients</div></div>
+  <div class="stat-card"><div class="stat-value">{{.Stats.SaveCount}}</div><div class="stat-label">Total saves</div></div>
+  <div class="stat-card"><div class="stat-value">{{formatBytes .Stats.TotalBytes}}</div><div class="stat-label">Storage</div></div>
+  <div class="stat-card"><div class="stat-value">{{.Stats.ManifestCount}}</div><div class="stat-label">Manifest entries</div></div>
+  <div class="stat-card"><div class="stat-value">{{.SSEClients}}</div><div class="stat-label">SSE clients</div></div>
+</section>
+
+<section class="panel panel-compact">
+  <div class="panel-header"><h2>Server Configuration</h2></div>
+  <div class="config-grid">
+    <div class="config-item"><span class="config-key">Registration</span>
+      {{if .AllowRegister}}<span class="badge-success">Open</span>{{else}}<span class="badge-warn">Disabled</span>{{end}}
+    </div>
+    <div class="config-item"><span class="config-key">Admin user</span><span class="config-val">{{.Username}}</span></div>
+    <div class="config-item"><span class="config-key">Global storage limit</span>
+      <span class="config-val">{{if eq .MaxStorageBytes 0}}Unlimited{{else}}{{formatBytes .MaxStorageBytes}}{{end}}</span>
+    </div>
+    <div class="config-item"><span class="config-key">Read-only mode</span>
+      {{if .ReadOnly}}<span class="badge-warn">Yes</span>{{else}}<span class="badge-success">No</span>{{end}}
+    </div>
+  </div>
+</section>
+
+{{if .StatsSnapshots}}
+<section class="panel">
+  <div class="panel-header"><h2>Stats over time</h2></div>
+  <div class="chart-wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem;">
+    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Users</h3>{{chartLineSVG .StatsSnapshots "users" 400 120}}</div>
+    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Clients</h3>{{chartLineSVG .StatsSnapshots "clients" 400 120}}</div>
+    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Saves</h3>{{chartLineSVG .StatsSnapshots "saves" 400 120}}</div>
+    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Storage</h3>{{chartLineSVG .StatsSnapshots "storage" 400 120}}</div>
+  </div>
+</section>
+{{end}}
+{{end}}
+{{define "scripts"}}
+<div id="admin-sse-hooks" hidden
+     sse-swap="job-finished,manifest-updated,audit-updated"
+     hx-trigger="job-finished,manifest-updated,audit-updated from:body"
+     hx-get="/admin/partial/jobs" hx-target="#admin-jobs-panel" hx-swap="innerHTML"></div>
+{{end}}

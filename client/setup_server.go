@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -28,6 +29,7 @@ func StartSetupServer() string {
 	mux.HandleFunc("/", handleSetupPage)
 	mux.HandleFunc("/login", handleSetupLogin)
 	mux.HandleFunc("/open-log", handleOpenLog)
+	mux.HandleFunc("/status", handleSetupStatus)
 
 	for port := setupPortStart; port < setupPortEnd; port++ {
 		addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -97,6 +99,55 @@ func handleSetupLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/?done=1", http.StatusSeeOther)
 }
 
+type setupStatusResponse struct {
+	LoggedIn     bool     `json:"logged_in"`
+	LastScanAt   string   `json:"last_scan_at,omitempty"`
+	MatchedGames int      `json:"matched_games"`
+	GameTitles   []string `json:"game_titles,omitempty"`
+	ServerURL    string   `json:"server_url,omitempty"`
+}
+
+func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
+	cfg, _ := loadConfig()
+	loggedIn := cfg != nil && strings.TrimSpace(cfg.Token) != ""
+	cache := loadDiscoveryCache()
+	titles := make([]string, 0, len(cache.MatchedGameIDs))
+	seen := make(map[string]bool)
+	for _, g := range cache.InstalledGames {
+		key := g.Launcher + ":" + g.GameID
+		mgid := cache.IDMap[key]
+		if mgid == "" {
+			continue
+		}
+		for _, mid := range cache.MatchedGameIDs {
+			if mid == mgid && !seen[mid] {
+				seen[mid] = true
+				name := g.Title
+				if name == "" {
+					name = mid
+				}
+				titles = append(titles, name)
+			}
+		}
+	}
+	if len(titles) == 0 {
+		for _, id := range cache.MatchedGameIDs {
+			titles = append(titles, id)
+		}
+	}
+	resp := setupStatusResponse{
+		LoggedIn:     loggedIn,
+		LastScanAt:   cache.LastScanAt,
+		MatchedGames: len(cache.MatchedGameIDs),
+		GameTitles:   titles,
+	}
+	if cfg != nil {
+		resp.ServerURL = cfg.ServerURL
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
 func handleOpenLog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -123,7 +174,40 @@ func writeSetupHTML(w http.ResponseWriter, serverURL, clientName, errMsg string,
 	if errMsg != "" {
 		status = fmt.Sprintf("<p class=\"err\">%s</p>", htmlEsc(errMsg))
 	} else if done || success {
-		status = "<p class=\"ok\">You are logged in. You can close this page; the GSBS client will keep running in the tray.</p>"
+		status = `<div id="discoveryPanel" class="ok">
+  <p><strong>Step 2 — Discovery</strong></p>
+  <p id="discStatus">Scanning installed games…</p>
+  <ul id="gameList"></ul>
+  <p class="hint">When games appear below, close this page. Sync continues from the tray icon.</p>
+  <p><a id="dashLink" href="#" target="_blank" rel="noopener">Open dashboard</a></p>
+</div>
+<script>
+(function poll() {
+  fetch('/status').then(r => r.json()).then(function(s) {
+    var el = document.getElementById('discStatus');
+    if (!el) return;
+    if (s.matched_games > 0) {
+      el.textContent = 'Found ' + s.matched_games + ' game(s) ready to sync.';
+      var ul = document.getElementById('gameList');
+      if (ul && s.game_titles) {
+        ul.innerHTML = s.game_titles.slice(0, 12).map(function(t) {
+          return '<li>' + t.replace(/</g,'&lt;') + '</li>';
+        }).join('');
+        if (s.matched_games > 12) {
+          ul.innerHTML += '<li>… and ' + (s.matched_games - 12) + ' more</li>';
+        }
+      }
+    } else if (s.logged_in) {
+      el.textContent = 'Logged in — discovery in progress…';
+      setTimeout(poll, 2000);
+    }
+    if (s.server_url) {
+      var dash = document.getElementById('dashLink');
+      if (dash) dash.href = s.server_url.replace(/\/$/, '') + '/dashboard';
+    }
+  }).catch(function() { setTimeout(poll, 3000); });
+})();
+</script>`
 	}
 	page := fmt.Sprintf(`<!DOCTYPE html>
 <html>

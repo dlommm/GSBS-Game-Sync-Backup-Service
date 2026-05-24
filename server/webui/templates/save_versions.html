@@ -1,83 +1,57 @@
-<!-- Save versions: list versions for one save with Restore / Download. -->
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Save versions — {{.GameTitle}} — GSBS</title>
-  <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body class="app-shell">
-  <a href="#main-content" class="skip-link">Skip to main content</a>
-  <header class="topbar" role="banner">
-    <div class="topbar-left">
-      <img src="/static/favicon.png" alt="" class="topbar-icon" aria-hidden="true">
-      <span class="topbar-brand">GSBS</span>
-    </div>
-    <nav class="topbar-nav" role="navigation" aria-label="Main">
-      <a href="/dashboard">Dashboard</a>
-      {{if .IsAdmin}}<a href="/admin">Admin</a>{{end}}
-      <a href="/dashboard/settings">Settings</a>
-    </nav>
-    <div class="topbar-right">
-      <span class="topbar-user">{{.Username}}</span>
-      <form method="post" action="/logout" class="inline-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <button type="submit" class="btn-ghost">Log out</button>
-      </form>
-    </div>
-  </header>
-
-  <main id="main-content" class="page-content" role="main" aria-label="Save versions">
-    <p class="breadcrumb"><a href="/dashboard">Dashboard</a> → Save versions</p>
-    <section class="panel" aria-labelledby="versions-heading">
-      <div class="panel-header">
-        <h2 id="versions-heading">Versions: {{.GameTitle}}</h2>
-      </div>
-      <p class="cell-muted" style="margin-bottom:1rem;"><code class="code-inline">{{.PathKey}}</code></p>
-      {{if .Error}}
-      <div class="alert alert-error" role="alert">{{.Error}}</div>
-      {{end}}
-      {{if .Versions}}
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Version</th>
-              <th>Updated</th>
-              <th>Size</th>
-              <th class="th-action">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {{range .Versions}}
-            <tr>
-              <td class="cell-primary">{{.Version}}</td>
-              <td class="cell-muted">{{formatTime .UpdatedAt}}</td>
-              <td class="cell-size">{{formatBytes .SizeBytes}}</td>
-              <td class="cell-action">
-                <a href="/dashboard/save/versions/download?game_id={{urlquery $.GameID}}&path_key={{urlquery $.PathKey}}&version={{.Version}}" class="btn-ghost btn-sm">Download</a>
-                <form method="post" action="/dashboard/save/versions/restore" class="inline-form" style="display:inline-block; margin-left:0.5rem;" onsubmit="return confirm('Restore this version as the current save?');">
-                  <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-                  <input type="hidden" name="game_id" value="{{$.GameID}}">
-                  <input type="hidden" name="path_key" value="{{$.PathKey}}">
-                  <input type="hidden" name="version" value="{{.Version}}">
-                  <button type="submit" class="btn-primary-sm">Restore</button>
-                </form>
-              </td>
-            </tr>
-            {{end}}
-          </tbody>
-        </table>
-      </div>
-      {{else}}
-      <div class="panel-empty"><p>No versions found for this save.</p></div>
-      {{end}}
-    </section>
-  </main>
-</body>
-</html>
+{{template "layout" .}}
+{{define "title"}}Save versions — {{.GameTitle}} — GSBS{{end}}
+{{define "content"}}
+<p class="breadcrumb"><a href="/dashboard">Dashboard</a> → <span aria-current="page">Save versions</span></p>
+<section class="panel">
+  <div class="panel-header">
+    <h2>Versions: {{.GameTitle}}</h2>
+    <p class="cell-muted"><code class="code-inline">{{.PathKey}}</code></p>
+  </div>
+  {{if .Versions}}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Version</th><th>Updated</th><th>Size</th><th class="th-action">Actions</th></tr></thead>
+      <tbody>
+        {{range .Versions}}
+        <tr{{if eq .Version $.CurrentVersion}} class="current-version"{{end}}>
+          <td class="cell-primary">
+            v{{.Version}}
+            {{if eq .Version $.CurrentVersion}}<span class="badge-success">current</span>{{end}}
+          </td>
+          <td class="cell-muted">{{formatTime .UpdatedAt}}</td>
+          <td class="cell-size">{{formatBytes .SizeBytes}}</td>
+          <td class="cell-action">
+            <div class="actions-stack">
+              <a href="/dashboard/save/versions/download?game_id={{urlquery $.GameID}}&path_key={{urlquery $.PathKey}}&version={{.Version}}" class="btn-ghost-sm">Download</a>
+              {{if ne .Version $.CurrentVersion}}
+              <button type="button" class="btn-primary-sm"
+                      onclick="document.getElementById('restore-dialog-{{.Version}}').showModal()">Restore</button>
+              <dialog id="restore-dialog-{{.Version}}">
+                <div class="dialog-body">
+                  <h3 style="margin-top:0;">Restore version {{.Version}}?</h3>
+                  <p class="cell-muted">This will replace the current save with this older version.</p>
+                </div>
+                <div class="dialog-actions">
+                  <button type="button" class="btn-ghost-sm" onclick="this.closest('dialog').close()">Cancel</button>
+                  <form method="post" action="/dashboard/save/versions/restore" class="inline-form">
+                    <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+                    <input type="hidden" name="game_id" value="{{$.GameID}}">
+                    <input type="hidden" name="path_key" value="{{$.PathKey}}">
+                    <input type="hidden" name="version" value="{{.Version}}">
+                    <button type="submit" class="btn-primary-sm">Restore</button>
+                  </form>
+                </div>
+              </dialog>
+              {{end}}
+            </div>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="panel-empty"><p>No versions found for this save.</p></div>
+  {{end}}
+</section>
+{{end}}

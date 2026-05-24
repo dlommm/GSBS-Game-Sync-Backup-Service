@@ -7,7 +7,8 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 - **Registration**: `POST /api/register` with JSON `{"username":"...","password":"..."}`. Password min 8 chars. Returns `{"status":"ok"}` or 4xx with `{"error":"..."}`. Disabled when `GSBS_ALLOW_REGISTER` is false.
 - **Login**: `POST /api/login` with JSON `{"username":"...","password":"...","client_name":"...","client_os":"windows|linux"}`. Returns `{"token":"..."}`. Use this token for subsequent requests. If the user has two-factor authentication (2FA) enabled, the response is `{"totp_required":true,"totp_token":"..."}` instead; then call `POST /api/login/totp` with that token and the current code.
 - **Login (2FA step)**: `POST /api/login/totp` with JSON `{"totp_token":"...","code":"123456","client_name":"...","client_os":"..."}`. Use the `totp_token` from the login response and the 6-digit code from the user's authenticator app. Returns `{"token":"..."}`. The `totp_token` is short-lived (about 5 minutes).
-- **Auth header**: `Authorization: Bearer <token>` on requests. Alternatively `?token=<token>` query parameter.
+- **Auth header**: `Authorization: Bearer <token>` on requests. Query-string `?token=` is rejected (use Bearer only).
+- **Account settings**: `GET /api/account` — returns `{"encryption_enabled": bool}` for the authenticated user.
 - **Change password**: `POST /api/change-password` (authenticated) with JSON `{"current_password":"...","new_password":"..."}`. New password must be at least 8 characters. Returns 200 `{"status":"ok"}` or 400/401/500 with `{"error":"..."}`.
 
 ## Health and readiness
@@ -17,10 +18,10 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 
 ## Saves (authenticated)
 
-- **Pull all saves**: `GET /api/saves` — returns JSON `{"saves":[{"game_id","path_key","updated_at","content"}]}`. `content` is base64-encoded. Supports gzip when `Accept-Encoding: gzip`.
+- **Pull all saves**: `GET /api/saves` — returns JSON `{"saves":[{"game_id","path_key","updated_at","content","encrypted"}]}`. `content` is base64-encoded. `encrypted` is true when the blob was stored with client-side E2E encryption. Supports gzip when `Accept-Encoding: gzip`.
 - **Pull single save**: `GET /api/saves?game_id=...&path_key=...` — returns one save in the same format.
-- **Save summaries only**: `GET /api/saves?summaries=1` — returns `{"saves":[{"game_id","path_key","game_title","size_bytes","updated_at","content_hash"}]}` (no content). Use for conditional sync.
-- **Push a save**: `POST /api/saves` with body = raw file bytes (optional `Content-Encoding: gzip`). Headers: `X-Game-ID`, `X-Path-Key` (required), `X-File-Path` (optional), `X-Content-Hash` (SHA256 hex), `X-Content-Size`. Max body 50 MiB. Returns 200 `{"status":"ok"}`, `{"status":"unchanged"}` if hash matches, or 4xx.
+- **Save summaries only**: `GET /api/saves?summaries=1` — returns `{"saves":[{"game_id","path_key","game_title","size_bytes","updated_at","content_hash","encrypted"}]}` (no content). Use for conditional sync.
+- **Push a save**: `POST /api/saves` with body = raw file bytes (optional `Content-Encoding: gzip`). Headers: `X-Game-ID`, `X-Path-Key` (required), `X-File-Path` (optional), `X-Content-Hash` (SHA256 hex of wire bytes), `X-Content-Size`, `X-Encrypted: 1` when content is client-encrypted. Max body 50 MiB. Returns 200 `{"status":"ok"}`, `{"status":"unchanged"}` if hash matches, or 4xx.
 - **Delete a save**: `DELETE /api/saves?game_id=...&path_key=...`. Returns 200 `{"status":"ok"}` or 4xx.
 - **List versions**: `GET /api/saves/versions?game_id=...&path_key=...` — returns `{"versions":[{"version","updated_at","size_bytes"}]}`.
 - **Get a version**: `GET /api/saves/versions/download?game_id=...&path_key=...&version=N` — returns JSON with `content` (base64).
@@ -36,7 +37,7 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 
 ## Manifest (public or authenticated)
 
-- **Full manifest**: `GET /api/manifest` — returns `{"entries":[...]}` of `GameSaveLocation` (game_id, platform, path_template, etc.). Cached on server ~10 min.
+- **Full manifest**: `GET /api/manifest` — returns `{"entries":[...]}` of `GameSaveLocation`. Each entry includes `game_id` (PCGW page ID), `game_title`, `platform`, `path_template`, optional launcher IDs (`steam_app_ids`, `gog_id`, `epic_id`, `ubisoft_id`), and metadata. Cached on server ~10 min.
 - **Delta**: `GET /api/manifest?since=<RFC3339>` — returns only entries updated after the given time.
 
 ## Server-Sent Events (authenticated)

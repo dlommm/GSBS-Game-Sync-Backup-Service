@@ -1,0 +1,70 @@
+{{template "layout" .}}
+{{define "title"}}Admin Users — GSBS{{end}}
+{{define "content"}}
+<section class="panel">
+  <div class="panel-header"><h2>Users</h2></div>
+  {{if .Users}}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Username</th><th>Clients</th><th>Saves</th><th>Storage</th><th>Quota</th><th>Status</th><th class="th-action">Actions</th></tr></thead>
+      <tbody>
+        {{range .Users}}
+        <tr>
+          <td class="cell-primary">{{.Username}}</td>
+          <td>
+            <div class="client-bar-wrap">
+              {{.ClientCount}}
+              <div class="client-bar-track"><div class="client-bar-fill" style="width:{{clientBarWidth .ClientCount $.MaxClientCount}}%;"></div></div>
+            </div>
+          </td>
+          <td>{{.SaveCount}}</td>
+          <td class="cell-size">{{formatBytes .StorageBytes}}</td>
+          <td class="cell-size">{{if eq .QuotaBytes 0}}—{{else}}{{formatBytes .QuotaBytes}}{{end}}</td>
+          <td>{{if .Disabled}}<span class="badge-failed">disabled</span>{{else}}<span class="badge-success">active</span>{{end}}</td>
+          <td class="cell-action">
+            {{if ne .ID $.CurrentUserID}}
+            {{if .Disabled}}
+            <form method="post" action="/admin/user/enable" class="inline-form"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-ghost-sm">Enable</button></form>
+            {{else}}
+            <form method="post" action="/admin/user/disable" class="inline-form" onsubmit="return confirm('Disable this user?');"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-ghost-sm">Disable</button></form>
+            {{end}}
+            <form method="post" action="/admin/user/delete" class="inline-form" onsubmit="return confirm('Delete user permanently?');"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-danger-sm">Delete</button></form>
+            {{end}}
+            <form method="post" action="/admin/user/quota" class="inline-form"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><input type="number" name="quota_bytes" value="{{.QuotaBytes}}" min="0" style="width:6rem;padding:0.25rem;"><button type="submit" class="btn-ghost-sm">Quota</button></form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}<div class="panel-empty"><p>No users.</p></div>{{end}}
+</section>
+
+<section class="panel">
+  <div class="panel-header"><h2>All Clients</h2></div>
+  {{if .Clients}}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>User</th><th>Name</th><th>Platform</th><th>Last active</th><th class="th-action"></th></tr></thead>
+      <tbody>
+        {{range .Clients}}
+        <tr>
+          <td>{{.Username}}</td>
+          <td class="cell-primary">{{.Name}}</td>
+          <td><span class="os-badge os-{{.OS}}">{{.OS}}</span></td>
+          <td class="cell-muted">{{formatTime .LastSeen}}</td>
+          <td class="cell-action">
+            <form method="post" action="/admin/revoke" class="inline-form" onsubmit="return confirm('Revoke client token?');">
+              <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+              <input type="hidden" name="client_id" value="{{.ID}}">
+              <button type="submit" class="btn-danger-sm">Revoke</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}<div class="panel-empty"><p>No clients.</p></div>{{end}}
+</section>
+{{end}}

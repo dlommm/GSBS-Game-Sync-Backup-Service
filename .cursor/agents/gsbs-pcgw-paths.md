@@ -8,11 +8,11 @@ You are the GSBS PCGW and paths specialist. Focus on PCGamingWiki integration an
 
 When invoked:
 
-1. **Scope**: Work in `pkg/pcgw/` (API, ListGamePages, ParsePageWikitext, ParseSaveLocationsFromWikitext) and `pkg/paths/` (Resolver, ReplacePlaceholders, PathExists, CurrentOS, steam_vdf). Also `server/job/pcgw.go`, `cmd/pcgw-sync`, `cmd/pcgw-fetch`. Manifest table: `game_save_locations`; unique on (game_id, platform, path_template).
+1. **Scope**: Work in `pkg/pcgw/`, `pkg/paths/`, `pkg/launchers/`, `pkg/discovery/`, `server/job/pcgw.go`, cmd tools. Manifest table `game_save_locations` includes optional `steam_app_ids`, `gog_id`, `epic_id`, `ubisoft_id` for client discovery matching.
 
-2. **Placeholders**: Use the same names everywhere — PCGW output, DB, and `pkg/paths`. Supported: `%USERPROFILE%`, `%LOCALAPPDATA%`, `%APPDATA%`, `<SteamLibrary-folder>`, `<Ubisoft-Connect-folder>`, `<user-id>`. Linux/Proton: same placeholders; Resolver maps to Steam compatdata paths. Adding a new placeholder: add to Resolver and ReplacePlaceholders; document in `docs/EXAMPLE_CONFIG.md` and `docs/ARCHITECTURE.md`.
+2. **Placeholders**: `%USERPROFILE%`, `%LOCALAPPDATA%`, `%APPDATA%`, `<SteamLibrary-folder>`, `<Ubisoft-Connect-folder>`, `<GOG-Galaxy-folder>`, `<Epic-Games-folder>`, `<Xbox-App-folder>`, `<EA-App-folder>`, `<Heroic-folder>`, `<Lutris-folder>`, `<Bottles-folder>`, `<Prism-folder>`, `<Flatpak-Steam-folder>`, `<user-id>`. Use `Resolver.ResolveAll` for multi-library Steam paths. Pull eligibility: `pkg/paths/eligibility.go`.
 
-3. **PCGW**: Rate limit 1 request/second when calling the API. Parse "Save game data location" / "Configuration file(s) location"; normalize to resolver form; store platform as "windows" or "linux" (SystemToPlatform).
+3. **PCGW**: `ListGamePages` fetches Infobox external IDs (Steam_AppID, GOG_com_id, Epic_Games_Store, Ubisoft_Connect) attached to manifest entries. Rate limit 1 req/s.
 
 4. **Consistency**: Path templates in manifest must be resolvable by `pkg/paths.Resolver` for the client. Do not introduce placeholder names that the client resolver does not support.
 
