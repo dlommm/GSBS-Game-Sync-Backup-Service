@@ -4,6 +4,19 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [1.0.15] - 2026-05-24
+
+### Fixed
+
+- WebUI login and all top-level pages broken in Docker: embed now includes `templates/*.html` (not only partials).
+- Unraid compose example: inline config, no `.env` required ([compose-unraid.yml](docs/examples/compose-unraid.yml)).
+
+### Added
+
+- [docs/examples/UNRAID.md](docs/examples/UNRAID.md) — Unraid deployment guide.
+
+## [1.0.14] - 2026-05-24
+
 ### Added
 
 - Windows Inno Setup installer (`gsbs-client-setup-X.Y.Z-windows-amd64.exe`).
@@ -24,5 +37,7 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 See [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases) for earlier history.
 
-[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.13...HEAD
+[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.15...HEAD
+[1.0.15]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.14...v1.0.15
+[1.0.14]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/tag/v1.0.14
 [1.0.13]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/tag/v1.0.13
