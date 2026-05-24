@@ -1,6 +1,6 @@
 {{template "layout" .}}
-{{define "title"}}Dashboard — GSBS{{end}}
-{{define "content"}}
+{{define "dashboard_title"}}Dashboard — GSBS{{end}}
+{{define "dashboard_content"}}
 <section id="dashboard-stats"
          hx-get="/dashboard/partial/stats"
          hx-trigger="load, save-updated from:body"
@@ -47,6 +47,6 @@
   </div>
 </section>
 {{end}}
-{{define "scripts"}}
+{{define "dashboard_scripts"}}
 <div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>
 {{end}}

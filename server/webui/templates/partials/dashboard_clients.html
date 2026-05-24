@@ -1,3 +1,4 @@
+{{define "partials/dashboard_clients.html"}}
 {{if .Clients}}
 <div class="table-wrap">
   <table class="data-table">
@@ -22,4 +23,5 @@
 </div>
 {{else}}
 <div class="panel-empty"><p>No clients registered yet.</p><p class="hint">Run <code>gsbs-client login</code> on your PC to connect it.</p></div>
+{{end}}
 {{end}}

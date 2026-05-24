@@ -1,6 +1,6 @@
 {{template "layout" .}}
-{{define "title"}}Admin Overview — GSBS{{end}}
-{{define "content"}}
+{{define "admin_overview_title"}}Admin Overview — GSBS{{end}}
+{{define "admin_overview_content"}}
 <section class="stats-row stats-row-6" aria-label="Global statistics">
   <div class="stat-card"><div class="stat-value">{{.Stats.UserCount}}</div><div class="stat-label">Users</div></div>
   <div class="stat-card"><div class="stat-value">{{.Stats.ClientCount}}</div><div class="stat-label">Clients</div></div>
@@ -38,7 +38,7 @@
 </section>
 {{end}}
 {{end}}
-{{define "scripts"}}
+{{define "admin_overview_scripts"}}
 <div id="admin-sse-hooks" hidden
      sse-swap="job-finished,manifest-updated,audit-updated"
      hx-trigger="job-finished,manifest-updated,audit-updated from:body"

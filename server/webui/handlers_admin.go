@@ -24,9 +24,9 @@ func (h *WebHandler) loadAdminStats(ctx context.Context) adminStats {
 	}
 }
 
-func (h *WebHandler) adminPageData(w http.ResponseWriter, r *http.Request, userID, username, adminNav string) PageData {
+func (h *WebHandler) adminPageData(w http.ResponseWriter, r *http.Request, userID, username, adminNav, pageName string) PageData {
 	return PageData{
-		Username: username, IsAdmin: true, CSRFToken: SetCSRFToken(w, r, h.secret),
+		PageName: pageName, Username: username, IsAdmin: true, CSRFToken: SetCSRFToken(w, r, h.secret),
 		NavActive: "admin-" + adminNav, AdminNav: adminNav,
 		Success: adminQuerySuccess(r), Error: adminQueryError(r),
 	}
@@ -51,7 +51,7 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 		sseClients = h.hub.Count()
 	}
 	h.render(w, "admin_overview.html", adminOverviewData{
-		PageData:        h.adminPageData(w, r, userID, username, "overview"),
+		PageData:        h.adminPageData(w, r, userID, username, "overview", "admin_overview"),
 		Stats:           h.loadAdminStats(ctx),
 		StatsSnapshots:  statsSnapshots,
 		SSEClients:      sseClients,
@@ -70,7 +70,7 @@ func (h *WebHandler) serveAdminUsers(w http.ResponseWriter, r *http.Request) {
 	users, _ := h.store.ListUserStats(ctx)
 	clients, _ := h.store.ListAllClients(ctx)
 	h.render(w, "admin_users.html", adminUsersData{
-		PageData:       h.adminPageData(w, r, userID, username, "users"),
+		PageData:       h.adminPageData(w, r, userID, username, "users", "admin_users"),
 		CurrentUserID:  userID,
 		Users:          users,
 		Clients:        clients,
@@ -129,7 +129,7 @@ func (h *WebHandler) serveAdminManifest(w http.ResponseWriter, r *http.Request) 
 	}
 	entries, total, page, perPage, totalPages, start, end := h.loadManifestPage(r.Context(), r)
 	h.render(w, "admin_manifest.html", adminManifestData{
-		PageData:           h.adminPageData(w, r, userID, username, "manifest"),
+		PageData:           h.adminPageData(w, r, userID, username, "manifest", "admin_manifest"),
 		Stats:              h.loadAdminStats(r.Context()),
 		Manifest:           entries,
 		Query:              r.URL.Query().Get("q"),
@@ -169,7 +169,7 @@ func (h *WebHandler) serveAdminActivity(w http.ResponseWriter, r *http.Request) 
 	recentJobs, _ := h.store.ListJobRuns(ctx, "pcgw_sync", 10)
 	jobRunning, jobProgress := h.jobStatus()
 	h.render(w, "admin_activity.html", adminActivityData{
-		PageData:         h.adminPageData(w, r, userID, username, "activity"),
+		PageData:         h.adminPageData(w, r, userID, username, "activity", "admin_activity"),
 		Fetches:          fetches,
 		AuditLog:         auditLog,
 		StatsSnapshots:   statsSnapshots,

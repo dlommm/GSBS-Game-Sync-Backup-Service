@@ -1,6 +1,6 @@
 {{template "layout" .}}
-{{define "title"}}Admin Activity — GSBS{{end}}
-{{define "content"}}
+{{define "admin_activity_title"}}Admin Activity — GSBS{{end}}
+{{define "admin_activity_content"}}
 <section class="panel" id="admin-jobs-panel"
          hx-get="/admin/partial/jobs"
          hx-trigger="load, job-finished from:body, job-progress from:body"
@@ -73,7 +73,7 @@
   {{else}}<div class="panel-empty"><p>No snapshots yet (recorded daily at midnight).</p></div>{{end}}
 </section>
 {{end}}
-{{define "scripts"}}
+{{define "admin_activity_scripts"}}
 <div hidden
      sse-swap="job-finished,job-progress"
      hx-trigger="job-finished,job-progress from:body"

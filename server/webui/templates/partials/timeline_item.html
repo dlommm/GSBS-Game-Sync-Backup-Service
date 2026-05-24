@@ -1,6 +1,8 @@
+{{define "partials/timeline_item.html"}}
 <li class="timeline-item">
   <span class="timeline-dot" aria-hidden="true"></span>
   <div class="timeline-time">{{formatTime .At}}</div>
   <div class="timeline-action">{{auditLabel .Action}}</div>
   {{if .Details}}<div class="timeline-details">{{.Details}}</div>{{end}}
 </li>
+{{end}}

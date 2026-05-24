@@ -25,7 +25,7 @@ func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "save_versions.html", saveVersionsData{
 			PageData: PageData{
-				Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
+				PageName: "save_versions", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
 				CSRFToken: csrfToken, NavActive: "dashboard", Error: "Failed to load versions",
 			},
 			GameID: gameID, PathKey: pathKey,
@@ -52,7 +52,7 @@ func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
 	csrfToken := SetCSRFToken(w, r, h.secret)
 	h.render(w, "save_versions.html", saveVersionsData{
 		PageData: PageData{
-			Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
+			PageName: "save_versions", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken, NavActive: "dashboard", Error: errorMsg,
 		},
 		GameID: gameID, PathKey: pathKey, GameTitle: gameTitle,
