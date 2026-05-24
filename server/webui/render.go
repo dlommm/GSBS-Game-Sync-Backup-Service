@@ -131,7 +131,7 @@ func newTemplateFuncs() template.FuncMap {
 }
 
 func parseTemplates() *template.Template {
-	return template.Must(template.New("").Funcs(newTemplateFuncs()).ParseFS(templatesFS, "templates/**/*.html"))
+	return template.Must(template.New("").Funcs(newTemplateFuncs()).ParseFS(templatesFS, "templates/*.html", "templates/**/*.html"))
 }
 
 func (h *WebHandler) renderPartial(w http.ResponseWriter, name string, data interface{}) {

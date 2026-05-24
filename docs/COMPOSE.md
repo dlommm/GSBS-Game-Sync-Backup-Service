@@ -54,6 +54,11 @@ Copy-paste examples in [docs/examples/](examples/):
 | [compose-caddy.yml](examples/compose-caddy.yml) | Caddy (same as root compose) |
 | [compose-nginx.yml](examples/compose-nginx.yml) | nginx |
 | [compose-traefik.yml](examples/compose-traefik.yml) | Traefik v3 + Let's Encrypt |
+| [compose-unraid.yml](examples/compose-unraid.yml) | Unraid — port 8080, no proxy ([UNRAID.md](examples/UNRAID.md)) |
+
+## Unraid
+
+No reverse proxy: use [examples/compose-unraid.yml](examples/compose-unraid.yml) (all settings inline, no `.env`). See [examples/UNRAID.md](examples/UNRAID.md).
 
 ## Environment
 

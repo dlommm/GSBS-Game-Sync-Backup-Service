@@ -1,0 +1,34 @@
+# GSBS on Unraid — single container, no reverse proxy, no .env file.
+#
+# Setup:
+#   1. Copy this file to your stack directory, e.g.
+#      /boot/config/plugins/compose.manager/projects/gsbs/compose-unraid.yml
+#   2. Edit GSBS_SESSION_SECRET below (openssl rand -hex 32)
+#   3. docker compose -f compose-unraid.yml up -d
+#
+# WebUI: http://YOUR_UNRAID_IP:8080
+# Clients: same URL (e.g. http://192.168.1.50:8080)
+
+services:
+  gsbs-server:
+    image: dendlomm/gsbs-server:latest
+    container_name: gsbs-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      GSBS_ADDR: ":8080"
+      GSBS_DB: /app/data/gsbs.db
+      GSBS_SESSION_SECRET: "REPLACE_ME_openssl_rand_hex_32"
+      GSBS_PCGW_CRON: "0 3 * * 0"
+      GSBS_LOG_LEVEL: info
+      GSBS_ALLOW_REGISTER: "true"
+      # GSBS_ADMIN_USERNAME: admin
+    volumes:
+      - /mnt/user/appdata/gsbs-server:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
