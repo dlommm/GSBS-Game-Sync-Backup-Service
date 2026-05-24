@@ -20,15 +20,15 @@ if [ ! -f "$CLIENT_BIN" ]; then
   exit 1
 fi
 
-ISCC=""
+ISCC_PATH=""
 if command -v iscc >/dev/null 2>&1; then
-  ISCC="iscc"
+  ISCC_PATH="$(command -v iscc)"
 elif [ -x "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ]; then
-  ISCC='"/c/Program Files (x86)/Inno Setup 6/ISCC.exe"'
+  ISCC_PATH="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
 elif [ -x "/c/Program Files/Inno Setup 6/ISCC.exe" ]; then
-  ISCC='"/c/Program Files/Inno Setup 6/ISCC.exe"'
+  ISCC_PATH="/c/Program Files/Inno Setup 6/ISCC.exe"
 elif [ -n "${PROGRAMFILES(x86):-}" ] && [ -x "${PROGRAMFILES(x86)}/Inno Setup 6/ISCC.exe" ]; then
-  ISCC="\"${PROGRAMFILES(x86)}/Inno Setup 6/ISCC.exe\""
+  ISCC_PATH="${PROGRAMFILES(x86)}/Inno Setup 6/ISCC.exe"
 else
   echo "Inno Setup compiler (iscc) not found" >&2
   exit 1
@@ -39,14 +39,13 @@ rm -rf "$WORK"
 mkdir -p "$WORK"
 cp "$CLIENT_BIN" "$WORK/gsbs-client-windows-amd64.exe"
 
-# ISCC on Windows needs backslash paths
-if [[ "$OSTYPE" == msys* ]] || [[ "$OSTYPE" == cygwin* ]] || [[ -n "${RUNNER_OS:-}" && "${RUNNER_OS}" == "Windows" ]]; then
+if [[ "${RUNNER_OS:-}" == "Windows" ]] || [[ "$OSTYPE" == msys* ]]; then
   WORK_WIN=$(cygpath -w "$WORK" 2>/dev/null || echo "$WORK" | sed 's|/|\\|g')
   OUT_WIN=$(cygpath -w "${ROOT}/${OUT_DIR}" 2>/dev/null || echo "${ROOT}/${OUT_DIR}" | sed 's|/|\\|g')
   ISS_WIN=$(cygpath -w "$SCRIPT_DIR/gsbs-client.iss" 2>/dev/null || echo "$SCRIPT_DIR/gsbs-client.iss" | sed 's|/|\\|g')
-  eval "$ISCC" "/DMyAppVersion=${VERSION_VALUE}" "/DSourceDir=${WORK_WIN}" "/O${OUT_WIN}" "\"${ISS_WIN}\""
+  "$ISCC_PATH" "/DMyAppVersion=${VERSION_VALUE}" "/DSourceDir=${WORK_WIN}" "/O${OUT_WIN}" "$ISS_WIN"
 else
-  eval "$ISCC" "/DMyAppVersion=${VERSION_VALUE}" "/DSourceDir=${WORK}" "/O${ROOT}/${OUT_DIR}" "$SCRIPT_DIR/gsbs-client.iss"
+  "$ISCC_PATH" "/DMyAppVersion=${VERSION_VALUE}" "/DSourceDir=${WORK}" "/O${ROOT}/${OUT_DIR}" "$SCRIPT_DIR/gsbs-client.iss"
 fi
 
 echo "Built ${OUT_DIR}/gsbs-client-setup-${VERSION_VALUE}-windows-amd64.exe"
