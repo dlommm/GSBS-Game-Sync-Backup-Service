@@ -84,3 +84,9 @@ func openConfigLinux() {
 		log.Printf("tray: xdg-open config: %v", err)
 	}
 }
+
+func runLoginDialogProcess() {
+	runLogin()
+}
+
+func runFirstTimeSetupIfNeeded() {}
