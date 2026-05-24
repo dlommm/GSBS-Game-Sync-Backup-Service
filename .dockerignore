@@ -6,7 +6,9 @@ gsbs.db
 .gitignore
 *.md
 client/
-cmd/
+cmd/pcgw-fetch/
+cmd/pcgw-sync/
+cmd/write-ico/
 pcgw-fetch
 pcgw-sync
 gsbs-client
