@@ -19,7 +19,7 @@
 
 ```bash
 git clone https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-.git
-cd GSBS--Game-Sync---Backup-Service-
+cd GSBS--Game-Sync---Backup-Service-   # folder name matches the GitHub repo name
 cp .env.example .env
 # Edit .env — set GSBS_SESSION_SECRET (openssl rand -hex 32)
 docker compose up -d
@@ -65,6 +65,8 @@ Register on the server WebUI, create an API token, and log in from the client. G
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Data model, sync flow, PCGW, security |
 | [docs/API.md](docs/API.md) | REST API reference |
 | [docs/EXAMPLE_CONFIG.md](docs/EXAMPLE_CONFIG.md) | Client config JSON examples |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common problems and fixes |
+| [docs/UPGRADE.md](docs/UPGRADE.md) | Upgrade server and client |
 | [docs/RELEASE.md](docs/RELEASE.md) | Maintainer release workflow |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Build from source, tests, conventions |
 | [SECURITY.md](SECURITY.md) | Security policy |
@@ -81,6 +83,17 @@ go build -o gsbs-client ./client
 ```
 
 Run tests: `go test ./server/... ./pkg/... ./client/...`
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for lint, coverage, and conventions.
+
+## Troubleshooting
+
+| Symptom | Where to look |
+|---------|---------------|
+| WebUI blank or login fails | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — server section |
+| Client 401 / not syncing | Re-login from tray; check `gsbs.log` — [docs/CLIENT.md](docs/CLIENT.md) |
+| No tray icon (Linux) | AppIndicator packages — [docs/CLIENT.md](docs/CLIENT.md) |
+| Upgrading server or client | [docs/UPGRADE.md](docs/UPGRADE.md) |
 
 ## Architecture
 

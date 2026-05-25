@@ -1,64 +1,86 @@
 {{template "layout" .}}
 {{define "admin_pcgw_title"}}PCGW Games — GSBS Admin{{end}}
 {{define "admin_pcgw_content"}}
-<h1>PCGamingWiki Games</h1>
-<div class="stats-grid" style="margin-bottom:1rem;">
-  <div class="stat-card"><strong>{{.Stats.TotalGames}}</strong><span>Total games</span></div>
-  <div class="stat-card"><strong>{{.Stats.OK}}</strong><span>OK</span></div>
-  <div class="stat-card"><strong>{{.Stats.Partial}}</strong><span>Partial</span></div>
-  <div class="stat-card"><strong>{{.Stats.Failed}}</strong><span>Failed</span></div>
-  <div class="stat-card"><strong>v{{.Stats.ManifestVersion}}</strong><span>Manifest</span></div>
+<section class="stats-row stats-row-5" aria-label="PCGW statistics">
+  <div class="stat-card"><div class="stat-value">{{.Stats.TotalGames}}</div><div class="stat-label">Total games</div></div>
+  <div class="stat-card"><div class="stat-value">{{.Stats.OK}}</div><div class="stat-label">OK</div></div>
+  <div class="stat-card"><div class="stat-value">{{.Stats.Partial}}</div><div class="stat-label">Partial</div></div>
+  <div class="stat-card"><div class="stat-value">{{.Stats.Failed}}</div><div class="stat-label">Failed</div></div>
+  <div class="stat-card"><div class="stat-value">v{{.Stats.ManifestVersion}}</div><div class="stat-label">Manifest</div></div>
+</section>
+
+<div id="job-status">
+  {{template "partials/admin_pcgw_job_status.html" .}}
 </div>
-{{if .JobRunning}}<p class="notice">Sync running… pages: {{.JobProgress}}</p>{{end}}
-<form method="get" action="/admin/pcgw" class="inline-form" style="margin-bottom:1rem;">
-  <input type="search" name="q" value="{{.Query}}" placeholder="Search title…">
-  <select name="status">
-    <option value="">All statuses</option>
-    <option value="ok" {{if eq .FilterStatus "ok"}}selected{{end}}>ok</option>
-    <option value="partial" {{if eq .FilterStatus "partial"}}selected{{end}}>partial</option>
-    <option value="failed" {{if eq .FilterStatus "failed"}}selected{{end}}>failed</option>
-    <option value="pending" {{if eq .FilterStatus "pending"}}selected{{end}}>pending</option>
-  </select>
-  <select name="platform">
-    <option value="">All platforms</option>
-    <option value="windows" {{if eq .FilterPlatform "windows"}}selected{{end}}>windows</option>
-    <option value="linux" {{if eq .FilterPlatform "linux"}}selected{{end}}>linux</option>
-    <option value="macos" {{if eq .FilterPlatform "macos"}}selected{{end}}>macos</option>
-  </select>
-  <button type="submit">Filter</button>
-</form>
-<form method="post" action="/admin/pcgw/sync" class="inline-form">
-  <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-  <button type="submit">Incremental sync</button>
-</form>
-<form method="post" action="/admin/pcgw/sync" class="inline-form">
-  <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-  <input type="hidden" name="full" value="1">
-  <button type="submit">Full resync</button>
-</form>
-<form method="post" action="/admin/pcgw/purge-wikitext" class="inline-form">
-  <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-  <button type="submit">Purge old wikitext</button>
-</form>
-<table class="data-table">
-  <thead><tr><th>Title</th><th>Page ID</th><th>Steam</th><th>Platforms</th><th>Status</th><th>Updated</th></tr></thead>
-  <tbody>
-  {{range .Games}}
-  <tr>
-    <td><a href="/admin/pcgw/{{.PageID}}">{{.Title}}</a></td>
-    <td>{{.PageID}}</td>
-    <td>{{join .SteamAppIDs ", "}}</td>
-    <td>{{join .PlatformsPresent ", "}}</td>
-    <td>{{.ParseStatus}}</td>
-    <td>{{.UpdatedAt}}</td>
-  </tr>
-  {{else}}
-  <tr><td colspan="6">No games yet — run a sync.</td></tr>
-  {{end}}
-  </tbody>
-</table>
-<p>{{.Total}} games</p>
+
+<section class="panel">
+  <div class="panel-header-actions">
+    <h2>Games</h2>
+    <div class="panel-actions actions-stack">
+      <form method="post" action="/admin/pcgw/sync" class="inline-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <button type="submit" class="btn-primary-sm">Incremental sync</button>
+      </form>
+      <form method="post" action="/admin/pcgw/sync" class="inline-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <input type="hidden" name="full" value="1">
+        <button type="submit" class="btn-ghost-sm">Full resync</button>
+      </form>
+      <form method="post" action="/admin/pcgw/purge-wikitext" class="inline-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <button type="submit" class="btn-ghost-sm">Purge old wikitext</button>
+      </form>
+    </div>
+  </div>
+
+  <form id="pcgw-filters" method="get" action="/admin/pcgw" class="filter-toolbar">
+    <input type="search" class="search-input filter-search" name="q" value="{{.Query}}" placeholder="Search title…"
+           hx-get="/admin/partial/pcgw"
+           hx-trigger="keyup changed delay:400ms, search"
+           hx-target="#pcgw-table"
+           hx-include="#pcgw-filters"
+           hx-indicator="#pcgw-table-skeleton">
+    <select name="status" class="filter-select"
+            hx-get="/admin/partial/pcgw"
+            hx-trigger="change"
+            hx-target="#pcgw-table"
+            hx-include="#pcgw-filters"
+            hx-indicator="#pcgw-table-skeleton">
+      <option value="">All statuses</option>
+      <option value="ok" {{if eq .FilterStatus "ok"}}selected{{end}}>ok</option>
+      <option value="partial" {{if eq .FilterStatus "partial"}}selected{{end}}>partial</option>
+      <option value="failed" {{if eq .FilterStatus "failed"}}selected{{end}}>failed</option>
+      <option value="pending" {{if eq .FilterStatus "pending"}}selected{{end}}>pending</option>
+    </select>
+    <select name="platform" class="filter-select"
+            hx-get="/admin/partial/pcgw"
+            hx-trigger="change"
+            hx-target="#pcgw-table"
+            hx-include="#pcgw-filters"
+            hx-indicator="#pcgw-table-skeleton">
+      <option value="">All platforms</option>
+      <option value="windows" {{if eq .FilterPlatform "windows"}}selected{{end}}>windows</option>
+      <option value="linux" {{if eq .FilterPlatform "linux"}}selected{{end}}>linux</option>
+      <option value="macos" {{if eq .FilterPlatform "macos"}}selected{{end}}>macos</option>
+    </select>
+    <button type="submit" class="btn-ghost-sm">Apply</button>
+  </form>
+
+  <div id="pcgw-table-skeleton" class="htmx-indicator loading-skeleton-wrap">
+    {{template "partials/loading_skeleton.html" .}}
+  </div>
+  <div id="pcgw-table"
+       hx-get="/admin/partial/pcgw?q={{urlquery .Query}}&status={{urlquery .FilterStatus}}&platform={{urlquery .FilterPlatform}}&page={{.Page}}"
+       hx-trigger="job-finished from:body"
+       hx-include="#pcgw-filters"
+       hx-swap="innerHTML">
+    {{template "partials/admin_pcgw_table.html" .}}
+  </div>
+</section>
 {{end}}
 {{define "admin_pcgw_scripts"}}
-<div hidden sse-swap="job-progress" hx-trigger="job-progress from:body" hx-get="/admin/partial/jobs" hx-target="#job-status" hx-swap="innerHTML"></div>
+<div hidden
+     sse-swap="job-progress,job-finished"
+     hx-trigger="job-progress from:body"
+     hx-get="/admin/partial/pcgw-job-status" hx-target="#job-status" hx-swap="innerHTML"></div>
 {{end}}

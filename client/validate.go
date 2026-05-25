@@ -1,11 +1,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gsbs/gsbs/pkg/paths"
 )
@@ -21,18 +19,9 @@ func ValidateConfig(cfg *config) []string {
 		return warnings
 	}
 	baseURL := strings.TrimSuffix(cfg.ServerURL, "/")
-	client := &http.Client{Timeout: 5 * time.Second}
 
-	// Server reachable
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+"/api/manifest", nil)
-	if err != nil {
-		warnings = append(warnings, "Invalid server URL: "+err.Error())
-		return warnings
-	}
-	if cfg.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.Token)
-	}
-	resp, err := client.Do(req)
+	// Server reachable (v2 preferred, v1 fallback)
+	resp, err := pingManifestHealth(baseURL, cfg.Token)
 	if err != nil {
 		warnings = append(warnings, "Server unreachable: "+err.Error())
 		return warnings

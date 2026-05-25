@@ -118,6 +118,14 @@ func notifyAuthError(msg string) {
 	_ = beeep.Alert("GSBS", truncateMsg(msg, 120), "")
 }
 
+func notifyQuotaError(msg string) {
+	if msg == "" {
+		msg = "Storage quota exceeded — free space on the server or contact your admin"
+	}
+	_ = beeep.Alert("GSBS", truncateMsg("Upload failed: "+msg, 120), "")
+	log.Printf("tray notify: quota error: %s", msg)
+}
+
 func notifyAlreadyRunning() {
 	_ = beeep.Notify("GSBS", "GSBS is already running in the system tray", "")
 }

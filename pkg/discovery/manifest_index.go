@@ -122,6 +122,7 @@ type MatchedGame struct {
 	GameID         string `json:"game_id"` // launcher-local id
 	Title          string `json:"title,omitempty"`
 	Launcher       string `json:"launcher"`
+	MatchReason    string `json:"match_reason,omitempty"`
 }
 
 // MatchManifestWithIndex matches installed games to manifest entries using the index and optional idMap cache.

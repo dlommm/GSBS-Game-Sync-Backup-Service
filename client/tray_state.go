@@ -47,6 +47,9 @@ const (
 type GameRow struct {
 	GameID        string         `json:"game_id"`
 	Title         string         `json:"title"`
+	Launcher      string         `json:"launcher,omitempty"`
+	MatchReason   string         `json:"match_reason,omitempty"`
+	Disabled      bool           `json:"disabled,omitempty"`
 	LastSyncAt    time.Time      `json:"last_sync_at,omitempty"`
 	LastDirection SaveDirection  `json:"last_direction,omitempty"`
 	Status        GameSaveStatus `json:"status"`
@@ -80,6 +83,7 @@ type TraySnapshot struct {
 	Metered        bool
 	Paused         bool
 	WatcherHealthy bool
+	ManifestAge    time.Duration
 	Games          []GameRow
 	Discovered     []GameRow
 }
@@ -387,13 +391,19 @@ func RecordDiscovery(matched []discovery.MatchedGame, newCount int) {
 			continue
 		}
 		globalTrayState.discovered[id] = &GameRow{
-			GameID: id,
-			Title:  title,
-			Status: GameStatusOK,
+			GameID:      id,
+			Title:       title,
+			Launcher:    g.Launcher,
+			MatchReason: g.MatchReason,
+			Disabled:    isGameDisabled(id),
+			Status:      GameStatusOK,
 		}
 	}
 	for id := range globalTrayState.discovered {
 		if seen[id] {
+			if row := globalTrayState.discovered[id]; row != nil {
+				row.Disabled = isGameDisabled(id)
+			}
 			continue
 		}
 		if _, synced := globalTrayState.games[id]; synced {
@@ -473,6 +483,7 @@ func GetTraySnapshot() TraySnapshot {
 		Metered:        globalTrayState.metered,
 		Paused:         globalTrayState.paused,
 		WatcherHealthy: WatcherHealthy.Load(),
+		ManifestAge:    ManifestETagAge(),
 		Games:          games,
 		Discovered:     discovered,
 	}

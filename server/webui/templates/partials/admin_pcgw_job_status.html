@@ -1,0 +1,5 @@
+{{define "partials/admin_pcgw_job_status.html"}}
+{{if .JobRunning}}
+<p class="notice notice-running"><span class="badge-running">Sync running</span> {{.JobProgress}} pages processed</p>
+{{end}}
+{{end}}

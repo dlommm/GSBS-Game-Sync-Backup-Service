@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/gsbs/gsbs/pkg/types"
 )
@@ -287,5 +288,32 @@ func TestSQLite_EncryptionFlag(t *testing.T) {
 	summaries, err := st.ListSaveSummaries(ctx, userID)
 	if err != nil || len(summaries) != 1 || !summaries[0].Encrypted {
 		t.Fatalf("ListSaveSummaries encrypted: %+v err=%v", summaries, err)
+	}
+}
+
+func TestSQLite_DeleteExpiredSessions(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	userID, _ := st.CreateUser(ctx, "u", "h")
+	if _, err := st.CreateSession(ctx, userID, "browser"); err != nil {
+		t.Fatal(err)
+	}
+	n, err := st.DeleteExpiredSessions(ctx, time.Now().Add(-WebSessionMaxAge))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("expected 0 deleted for fresh session, got %d", n)
+	}
+	n, err = st.DeleteExpiredSessions(ctx, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 deleted for stale session, got %d", n)
 	}
 }

@@ -3,10 +3,10 @@ package webui
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 
+	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/store"
 )
 
@@ -175,11 +175,11 @@ func (h *WebHandler) handleDashboardRevokeClient(w http.ResponseWriter, r *http.
 		return
 	}
 	if err := h.store.RegenerateClientToken(r.Context(), clientID); err != nil {
-		log.Printf("webui dashboard revoke: failed client_id=%s: %v", clientID, err)
+		logx.Logger().Error().Str("client_id", clientID).Err(err).Msg("webui dashboard revoke failed")
 		Redirect(w, r, "/dashboard?error=revoke_failed")
 		return
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "revoke_client", clientID, "")
-	log.Printf("webui dashboard revoke: ok client_id=%s user=%q", clientID, username)
+	logx.Logger().Info().Str("client_id", clientID).Str("username", username).Msg("webui dashboard revoke ok")
 	Redirect(w, r, "/dashboard?revoked=1")
 }

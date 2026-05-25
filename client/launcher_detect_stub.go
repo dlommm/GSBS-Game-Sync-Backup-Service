@@ -10,10 +10,13 @@ import (
 func DetectLauncherPaths() DetectedLauncherPaths {
 	d := launchers.DetectPaths()
 	return DetectedLauncherPaths{
-		GOGGalaxy:    d.GOGGalaxy,
-		EpicGames:    d.EpicGames,
-		HeroicFolder: d.Heroic,
-		LutrisFolder: d.Lutris,
-		EAAppFolder:  d.EAApp,
+		GOGGalaxy:          d.GOGGalaxy,
+		EpicGames:          d.EpicGames,
+		HeroicFolder:       d.Heroic,
+		LutrisFolder:       d.Lutris,
+		EAAppFolder:        d.EAApp,
+		BottlesFolder:      d.Bottles,
+		PrismFolder:        d.Prism,
+		FlatpakSteamFolder: d.FlatpakSteam,
 	}
 }

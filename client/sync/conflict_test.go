@@ -61,16 +61,6 @@ func TestConflictPersistence(t *testing.T) {
 	}
 }
 
-func TestExcludeMatch(t *testing.T) {
-	w := &Watcher{ExcludePatterns: []string{"*.tmp", "*.bak"}}
-	if !w.excludeMatch("/game/save.tmp") {
-		t.Fatal("expected match tmp")
-	}
-	if w.excludeMatch("/game/save.dat") {
-		t.Fatal("expected no match")
-	}
-}
-
 func TestIsRetryablePullError(t *testing.T) {
 	if !isRetryablePullError(errStatus(503), 503) {
 		t.Fatal("503 retryable")

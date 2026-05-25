@@ -1,32 +1,85 @@
 {{template "layout" .}}
 {{define "admin_pcgw_detail_title"}}{{.Game.Title}} — PCGW — GSBS{{end}}
 {{define "admin_pcgw_detail_content"}}
-<p><a href="/admin/pcgw">← PCGW games</a></p>
-<h1>{{.Game.Title}}</h1>
-<p>Page ID {{.Game.PageID}} · Status <strong>{{.Game.ParseStatus}}</strong> · <a href="{{.ExportJSONPath}}">Export JSON</a></p>
-<form method="post" action="/admin/pcgw/{{.Game.PageID}}/refresh" class="inline-form">
-  <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-  <button type="submit">Refresh this game</button>
-</form>
-<details open><summary>Infobox / game row</summary><pre>{{printf "%#v" .Game}}</pre></details>
-<details><summary>Game data ({{len .GameData}} platforms)</summary>
-{{range .GameData}}
-<h3>{{.PlatformKey}} ({{.PlatformRawLabel}})</h3>
-<div class="two-col">
-  <div><h4>Parsed</h4><pre>Saves: {{printf "%#v" .SaveLocations}}
-Config: {{printf "%#v" .ConfigLocations}}</pre></div>
-  <div><h4>Raw wikitext</h4><pre>{{.SectionWikitext}}</pre></div>
-</div>
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/admin/pcgw">PCGW games</a> / {{.Game.Title}}
+</nav>
+
+<section class="panel panel-compact">
+  <div class="panel-header-actions">
+    <div>
+      <h2 style="margin:0;">{{.Game.Title}}</h2>
+      <p class="cell-muted" style="margin:0.35rem 0 0;font-size:0.875rem;">
+        Page ID {{.Game.PageID}} ·
+        {{if eq .Game.ParseStatus "ok"}}<span class="badge-success">ok</span>
+        {{else if eq .Game.ParseStatus "partial"}}<span class="badge-warn">partial</span>
+        {{else if eq .Game.ParseStatus "failed"}}<span class="badge-failed">failed</span>
+        {{else}}<span class="cell-muted">{{.Game.ParseStatus}}</span>{{end}}
+      </p>
+    </div>
+    <div class="panel-actions actions-stack">
+      <a href="{{.ExportJSONPath}}" class="btn-ghost-sm">Export JSON</a>
+      <form method="post" action="/admin/pcgw/{{.Game.PageID}}/refresh" class="inline-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <button type="submit" class="btn-primary-sm">Refresh this game</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+{{if .ParseFailures}}
+<section class="panel">
+  <div class="panel-header"><h2>Parse failures</h2></div>
+  <ul class="detail-list">
+    {{range .ParseFailures}}<li><strong>{{.Section}}</strong>: {{.ErrorMessage}}</li>{{end}}
+  </ul>
+</section>
 {{end}}
+
+{{if .GameData}}
+<section class="panel">
+  <div class="panel-header"><h2>Game data ({{len .GameData}} platforms)</h2></div>
+  {{range .GameData}}
+  <details class="detail-section">
+    <summary>{{.PlatformKey}} <span class="cell-muted">({{.PlatformRawLabel}})</span></summary>
+    <div class="two-col detail-grid">
+      <div><h4>Parsed</h4><pre class="detail-pre">Saves: {{printf "%#v" .SaveLocations}}
+Config: {{printf "%#v" .ConfigLocations}}</pre></div>
+      <div><h4>Raw wikitext</h4><pre class="detail-pre">{{.SectionWikitext}}</pre></div>
+    </div>
+  </details>
+  {{end}}
+</section>
+{{else}}
+<section class="panel"><div class="panel-empty"><p>No parsed platform data for this game.</p></div></section>
+{{end}}
+
+<section class="panel">
+  <div class="panel-header"><h2>Additional sections</h2></div>
+  {{if .Availability}}<details class="detail-section"><summary>Availability</summary><pre class="detail-pre">{{.Availability.SectionWikitext}}</pre></details>{{end}}
+  {{if .Video}}<details class="detail-section"><summary>Video</summary><pre class="detail-pre">{{.Video.SectionWikitext}}</pre></details>{{end}}
+  {{if .Input}}<details class="detail-section"><summary>Input</summary><pre class="detail-pre">{{.Input.SectionWikitext}}</pre></details>{{end}}
+  {{if .Audio}}<details class="detail-section"><summary>Audio</summary><pre class="detail-pre">{{.Audio.SectionWikitext}}</pre></details>{{end}}
+  {{if .Network}}<details class="detail-section"><summary>Network</summary><pre class="detail-pre">{{.Network.SectionWikitext}}</pre></details>{{end}}
+  {{if .Other}}<details class="detail-section"><summary>Other</summary><pre class="detail-pre">{{.Other.SectionWikitext}}</pre></details>{{end}}
+  {{if .Notes}}<details class="detail-section"><summary>Notes</summary><pre class="detail-pre">{{.Notes.SectionWikitext}}</pre></details>{{end}}
+  {{if not (or .Availability .Video .Input .Audio .Network .Other .Notes)}}
+  <div class="panel-empty"><p>No additional sections stored.</p></div>
+  {{end}}
+</section>
+
+<details class="panel panel-compact">
+  <summary class="panel-header" style="cursor:pointer;"><h2 style="display:inline;">Infobox / game row</h2></summary>
+  <pre class="detail-pre" style="margin:0 1.25rem 1rem;">{{printf "%#v" .Game}}</pre>
 </details>
-{{if .Availability}}<details><summary>Availability</summary><pre>{{.Availability.SectionWikitext}}</pre></details>{{end}}
-{{if .Video}}<details><summary>Video</summary><pre>{{.Video.SectionWikitext}}</pre></details>{{end}}
-{{if .Input}}<details><summary>Input</summary><pre>{{.Input.SectionWikitext}}</pre></details>{{end}}
-{{if .Audio}}<details><summary>Audio</summary><pre>{{.Audio.SectionWikitext}}</pre></details>{{end}}
-{{if .Network}}<details><summary>Network</summary><pre>{{.Network.SectionWikitext}}</pre></details>{{end}}
-{{if .Other}}<details><summary>Other</summary><pre>{{.Other.SectionWikitext}}</pre></details>{{end}}
-{{if .Notes}}<details><summary>Notes</summary><pre>{{.Notes.SectionWikitext}}</pre></details>{{end}}
-{{if .Metadata}}<details><summary>Metadata</summary><p>Hash: {{.Metadata.ContentHash}} · Size: {{.Metadata.UncompressedSize}}</p></details>{{end}}
-{{if .ParseFailures}}<details open><summary>Parse failures</summary><ul>{{range .ParseFailures}}<li>{{.Section}}: {{.ErrorMessage}}</li>{{end}}</ul></details>{{end}}
+
+{{if .Metadata}}
+<section class="panel panel-compact">
+  <div class="panel-header"><h2>Metadata</h2></div>
+  <p class="cell-muted" style="margin:0 1.25rem 1rem;font-size:0.875rem;">
+    Hash: <code class="code-inline">{{.Metadata.ContentHash}}</code> · Size: {{.Metadata.UncompressedSize}} bytes
+  </p>
+</section>
+{{end}}
 {{end}}
 {{define "admin_pcgw_detail_scripts"}}{{end}}

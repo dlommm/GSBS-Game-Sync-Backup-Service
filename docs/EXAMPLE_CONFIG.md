@@ -30,6 +30,24 @@ You must set the resolver’s `UbisoftConnect` and optionally `UserID` (or rely 
 
 Existing configs without `auto_watch_mode` keep legacy behavior (watch any manifest path whose directory exists).
 
+**Linux launcher paths** — auto-detected on startup; override when detection fails (Flatpak, custom install locations):
+
+```json
+{
+  "server_url": "https://your-gsbs-server.example.com",
+  "token": "YOUR_TOKEN_FROM_LOGIN",
+  "client_name": "My-Linux-PC",
+  "auto_watch_mode": "discovered",
+  "bottles_folder": "/home/you/.var/app/com.usebottles.bottles/data/bottles",
+  "prism_folder": "/home/you/.local/share/PrismLauncher",
+  "flatpak_steam_folder": "/home/you/.var/app/com.valvesoftware.Steam/.local/share/Steam",
+  "heroic_folder": "/home/you/Games/Heroic",
+  "lutris_folder": "/home/you/Games/lutris"
+}
+```
+
+Use tray **Detect launcher paths** to merge auto-detected values into `config.json`.
+
 To support multiple Steam libraries (e.g. another drive), extend the resolver’s `SteamLibraries` from `libraryfolders.vdf` in the Steam install directory.
 
 **Minimal Windows example** (one save folder, Worldwide):

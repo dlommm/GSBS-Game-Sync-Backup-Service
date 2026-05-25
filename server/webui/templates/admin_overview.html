@@ -26,6 +26,13 @@
   </div>
 </section>
 
+<section class="panel" id="admin-jobs-panel"
+         hx-get="/admin/partial/jobs"
+         hx-trigger="load, job-finished from:body, job-progress from:body"
+         hx-swap="innerHTML">
+  {{template "partials/admin_jobs.html" .}}
+</section>
+
 {{if .StatsSnapshots}}
 <section class="panel">
   <div class="panel-header"><h2>Stats over time</h2></div>
@@ -39,8 +46,8 @@
 {{end}}
 {{end}}
 {{define "admin_overview_scripts"}}
-<div id="admin-sse-hooks" hidden
-     sse-swap="job-finished,manifest-updated,audit-updated"
-     hx-trigger="job-finished,manifest-updated,audit-updated from:body"
+<div hidden
+     sse-swap="job-finished,job-progress"
+     hx-trigger="job-finished,job-progress from:body"
      hx-get="/admin/partial/jobs" hx-target="#admin-jobs-panel" hx-swap="innerHTML"></div>
 {{end}}

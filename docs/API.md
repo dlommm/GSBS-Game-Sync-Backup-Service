@@ -34,6 +34,7 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 ## Clients (authenticated)
 
 - **List my clients**: `GET /api/clients` — returns `{"clients":[{"id","name","os","last_seen"}]}`.
+- **Revoke client token**: `POST /api/clients/revoke` with JSON `{"client_id":"..."}`. Owner-only: revokes the token for one of your registered clients (same as dashboard revoke). Returns 200 `{"status":"ok"}`, 403 if the client is not yours, or 4xx/5xx with `{"error":"..."}`. The revoked client must run `gsbs-client login` again.
 
 ## Manifest (public or authenticated)
 
@@ -51,4 +52,4 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 
 ## Errors
 
-Responses use JSON `{"error":"..."}` with appropriate HTTP status (400 Bad Request, 401 Unauthorized, 404 Not Found, 429 Too Many Requests, 500 Internal Server Error).
+Responses use JSON `{"error":"..."}` with appropriate HTTP status (400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 413 Payload Too Large, 429 Too Many Requests, 500 Internal Server Error). Push may return 413 when a save exceeds size limits or storage quota is exceeded.

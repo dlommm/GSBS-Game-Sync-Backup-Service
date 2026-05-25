@@ -297,21 +297,86 @@
   .manifest-per-page-label { color: var(--text-muted); font-size: 0.8125rem; margin-left: 0.125rem; }
 
   .actions-stack { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-end; }
+
+  .filter-toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;
+    padding: 0.75rem 1.25rem 1rem; border-bottom: 1px solid var(--border);
+  }
+  .filter-search { flex: 1 1 14rem; max-width: none; }
+  .filter-select {
+    padding: 0.5rem 0.75rem; background: var(--bg-raised); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text); font-size: 0.8125rem;
+  }
+  .filter-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-muted); }
+
+  .notice {
+    margin: 0 0 1rem; padding: 0.75rem 1rem; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.875rem;
+  }
+  .notice-running { border-color: rgba(56, 189, 248, 0.35); background: var(--info-muted); }
+
+  .loading-skeleton-wrap { display: none; padding: 1rem 1.25rem; }
+  .loading-skeleton-wrap.htmx-request { display: block; }
+  .loading-skeleton { display: flex; flex-direction: column; gap: 0.625rem; }
+  .skeleton-bar {
+    height: 0.875rem; border-radius: var(--radius-xs);
+    background: linear-gradient(90deg, var(--bg-raised) 25%, var(--surface-hover) 50%, var(--bg-raised) 75%);
+    background-size: 200% 100%; animation: skeleton-shimmer 1.2s ease-in-out infinite;
+  }
+  .skeleton-bar-sm { width: 35%; height: 0.75rem; }
+  .skeleton-bar-md { width: 72%; }
+  @keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .admin-sidebar-brand { padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; }
+  .admin-sidebar-divider { border: 0; border-top: 1px solid var(--border); margin: 0.75rem 0; }
+  .admin-sidebar-back { color: var(--text-muted); }
+  .admin-mobile-dashboard { margin-left: auto; color: var(--text-muted); }
+
+  .topbar-nav-scroll {
+    display: flex; gap: 0.25rem; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .topbar-nav-scroll::-webkit-scrollbar { display: none; }
+
+  .detail-list { margin: 0; padding: 0 1.25rem 1rem 2rem; color: var(--text-secondary); font-size: 0.875rem; }
+  .detail-section { border-top: 1px solid var(--border); padding: 0.75rem 1.25rem; }
+  .detail-section summary { cursor: pointer; font-weight: 600; font-size: 0.875rem; }
+  .detail-grid { padding-top: 0.75rem; }
+  .detail-pre {
+    margin: 0; padding: 0.75rem; background: var(--bg-raised); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); font-family: var(--mono); font-size: 0.75rem;
+    overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+  }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 }
 
 @media (max-width: 900px) {
   .stats-row { grid-template-columns: repeat(2, 1fr); }
   .stats-row-5, .stats-row-6 { grid-template-columns: repeat(3, 1fr); }
+  .admin-shell { flex-direction: column; }
   .admin-sidebar { display: none; }
-  .admin-mobile-nav { display: flex; }
+  .admin-mobile-nav {
+    display: flex; position: sticky; top: 0; z-index: 20; flex-shrink: 0;
+    scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+  }
+  .admin-mobile-nav a { scroll-snap-align: start; flex-shrink: 0; }
+  .admin-mobile-nav a:hover { color: var(--text); background: var(--surface-hover); }
+  .admin-main { min-height: 0; }
 }
 
 @media (max-width: 640px) {
   .topbar { flex-wrap: wrap; gap: 0.5rem; padding: 0.75rem 1rem; }
   .topbar-nav { order: 3; width: 100%; margin-left: 0; }
+  .topbar-right { margin-left: 0; width: 100%; justify-content: space-between; }
   .stats-row, .stats-row-5, .stats-row-6 { grid-template-columns: 1fr 1fr; }
   .page-content { padding: 1rem; }
   .data-table th, .data-table td { padding: 0.5rem 0.75rem; }
   .actions-stack { flex-direction: column; align-items: stretch; }
   .actions-stack form, .actions-stack a { width: 100%; text-align: center; }
+  .filter-toolbar { flex-direction: column; align-items: stretch; }
+  .filter-toolbar .btn-ghost-sm, .filter-toolbar .btn-primary-sm { width: 100%; }
+  .two-col { grid-template-columns: 1fr; }
 }

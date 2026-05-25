@@ -94,6 +94,9 @@ type config struct {
 	HeroicFolder                string      `json:"heroic_folder,omitempty"`
 	LutrisFolder                string      `json:"lutris_folder,omitempty"`
 	EAAppFolder                 string      `json:"ea_app_folder,omitempty"`
+	BottlesFolder               string      `json:"bottles_folder,omitempty"`
+	PrismFolder                 string      `json:"prism_folder,omitempty"`
+	FlatpakSteamFolder          string      `json:"flatpak_steam_folder,omitempty"`
 	DiscoveryInterval           Duration    `json:"discovery_interval,omitempty"`    // default 4h; re-scan installed games
 	AutoWatchMode               string      `json:"auto_watch_mode,omitempty"`       // "legacy" (default) or "discovered"
 	ConflictPolicy              string      `json:"conflict_policy,omitempty"`       // last_write_wins, keep_local, keep_server

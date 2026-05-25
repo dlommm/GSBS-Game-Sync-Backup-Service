@@ -3,10 +3,10 @@ package webui
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 
+	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/sse"
 	"github.com/pquerna/otp/totp"
 )
@@ -68,7 +68,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	userID, err := h.auth.Authenticate(r.Context(), username, password)
 	if err != nil {
-		log.Printf("webui login: failed username=%q", username)
+		logx.Logger().Warn().Str("username", username).Msg("webui login failed")
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
 			"Error":         "Invalid username or password",
@@ -85,7 +85,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionID, err := h.store.CreateSession(r.Context(), userID, r.UserAgent())
 	if err != nil {
-		log.Printf("webui login: create session failed: %v", err)
+		logx.Logger().Error().Err(err).Msg("webui login create session failed")
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
 			"Error":         "Login failed. Please try again.",
@@ -94,7 +94,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	log.Printf("webui login: ok username=%q", username)
+	logx.Logger().Info().Str("username", username).Msg("webui login ok")
 	SetSession(w, r, h.secret, sessionID)
 	Redirect(w, r, "/dashboard")
 }
@@ -147,7 +147,7 @@ func (h *WebHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 	ClearTOTPStepCookie(w)
 	sessionID, err := h.store.CreateSession(r.Context(), userID, r.UserAgent())
 	if err != nil {
-		log.Printf("webui login totp: create session failed: %v", err)
+		logx.Logger().Error().Err(err).Msg("webui login totp create session failed")
 		http.Error(w, "Login failed.", http.StatusInternalServerError)
 		return
 	}
@@ -218,7 +218,7 @@ func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := h.auth.RegisterUser(r.Context(), username, password)
 	if err != nil {
-		log.Printf("webui register: failed username=%q: %v", username, err)
+		logx.Logger().Warn().Str("username", username).Err(err).Msg("webui register failed")
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "register.html", map[string]interface{}{
 			"Error":         "Username already taken",
@@ -227,7 +227,7 @@ func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	log.Printf("webui register: ok username=%q", username)
+	logx.Logger().Info().Str("username", username).Msg("webui register ok")
 	Redirect(w, r, "/login")
 }
 

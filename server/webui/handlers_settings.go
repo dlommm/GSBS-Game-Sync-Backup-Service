@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"image/png"
-	"log"
 	"net/http"
 	"strings"
 
 	"github.com/gsbs/gsbs/server/auth"
+	"github.com/gsbs/gsbs/server/logx"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -107,14 +107,14 @@ func (h *WebHandler) handleSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.auth.ChangePassword(r.Context(), userID, newPassword); err != nil {
-		log.Printf("webui change password: %v", err)
+		logx.Logger().Error().Err(err).Msg("webui change password failed")
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "settings.html", settingsData{
 			PageData: PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Failed to update password", CSRFToken: csrfToken, NavActive: "settings"},
 		})
 		return
 	}
-	log.Printf("webui: password changed for user %q", username)
+	logx.Logger().Info().Str("username", username).Msg("webui password changed")
 	Redirect(w, r, "/dashboard/settings?updated=1")
 }
 
@@ -142,7 +142,7 @@ func (h *WebHandler) handleRevokeSession(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "revoke_session", targetID, "")
-	log.Printf("webui: session %s revoked by user %q", targetID, username)
+	logx.Logger().Info().Str("session_id", targetID).Str("username", username).Msg("webui session revoked")
 	Redirect(w, r, "/dashboard/settings?revoked=1")
 }
 
@@ -160,7 +160,7 @@ func (h *WebHandler) handleRevokeAllSessions(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	ClearSession(w)
-	log.Printf("webui: all sessions revoked for user %s", userID)
+	logx.Logger().Info().Str("user_id", userID).Msg("webui all sessions revoked")
 	Redirect(w, r, "/login")
 }
 
@@ -171,7 +171,7 @@ func (h *WebHandler) serveEnable2FA(w http.ResponseWriter, r *http.Request) {
 	}
 	key, err := totp.Generate(totp.GenerateOpts{Issuer: "GSBS", AccountName: username})
 	if err != nil {
-		log.Printf("webui 2fa enable: generate failed: %v", err)
+		logx.Logger().Error().Err(err).Msg("webui 2fa enable generate failed")
 		Redirect(w, r, "/dashboard/settings?error=2fa_generate_failed")
 		return
 	}
@@ -232,7 +232,7 @@ func (h *WebHandler) handleConfirm2FA(w http.ResponseWriter, r *http.Request) {
 	ClearTOTPPendingCookie(w)
 	username, _ := h.store.UsernameByID(r.Context(), userID)
 	h.appendAuditBroadcast(r.Context(), userID, username, "enable_2fa", "", "")
-	log.Printf("webui: 2FA enabled for user %q", username)
+	logx.Logger().Info().Str("username", username).Msg("webui 2FA enabled")
 	Redirect(w, r, "/dashboard/settings?2fa_enabled=1")
 }
 
@@ -274,7 +274,7 @@ func (h *WebHandler) handleDisable2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "disable_2fa", "", "")
-	log.Printf("webui: 2FA disabled for user %q", username)
+	logx.Logger().Info().Str("username", username).Msg("webui 2FA disabled")
 	Redirect(w, r, "/dashboard/settings?2fa_disabled=1")
 }
 
@@ -289,11 +289,11 @@ func (h *WebHandler) handleEncryptionSettings(w http.ResponseWriter, r *http.Req
 	}
 	enabled := r.FormValue("encryption_enabled") == "1"
 	if err := h.store.SetEncryptionEnabled(r.Context(), userID, enabled); err != nil {
-		log.Printf("webui encryption setting: %v", err)
+		logx.Logger().Error().Err(err).Msg("webui encryption setting failed")
 		Redirect(w, r, "/dashboard/settings?error=encryption_update_failed")
 		return
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "encryption_setting", "", map[bool]string{true: "enabled", false: "disabled"}[enabled])
-	log.Printf("webui: encryption %s for user %q", map[bool]string{true: "enabled", false: "disabled"}[enabled], username)
+	logx.Logger().Info().Str("username", username).Bool("enabled", enabled).Msg("webui encryption setting updated")
 	Redirect(w, r, "/dashboard/settings?encryption_updated=1")
 }

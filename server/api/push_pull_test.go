@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -117,5 +119,101 @@ func TestEncryptedPushPullRoundtrip(t *testing.T) {
 	body := pullRec.Body.Bytes()
 	if !bytes.Contains(body, []byte(`"encrypted":true`)) {
 		t.Fatalf("expected encrypted:true in pull response, got %s", body)
+	}
+	var pullOut struct {
+		Saves []struct {
+			Content string `json:"content"`
+		} `json:"saves"`
+	}
+	if err := json.NewDecoder(bytes.NewReader(body)).Decode(&pullOut); err != nil {
+		t.Fatal(err)
+	}
+	if len(pullOut.Saves) != 1 {
+		t.Fatalf("expected 1 save, got %d", len(pullOut.Saves))
+	}
+	decoded, err := base64.StdEncoding.DecodeString(pullOut.Saves[0].Content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(decoded, ciphertext) {
+		t.Fatalf("content mismatch: got %q want %q", decoded, ciphertext)
+	}
+}
+
+func TestRevokeClientAPI(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := auth.NewService(st)
+	ctx := context.Background()
+	_, _ = svc.RegisterUser(ctx, "owner", "password123")
+	_, token, _ := svc.Login(ctx, "owner", "password123", "laptop", "linux")
+	clients, err := st.ListClientsByUserID(ctx, stMustUserID(t, st, "owner"))
+	if err != nil || len(clients) != 1 {
+		t.Fatalf("list clients: %v len=%d", err, len(clients))
+	}
+	clientID := clients[0].ID
+
+	h := NewHandler(st, svc, false, nil, nil, nil, nil, nil, nil, 0, false, "", "test")
+
+	revokeBody := bytes.NewBufferString(`{"client_id":"` + clientID + `"}`)
+	revokeReq := httptest.NewRequest(http.MethodPost, "/api/clients/revoke", revokeBody)
+	revokeReq.Header.Set("Authorization", "Bearer "+token)
+	revokeReq.Header.Set("Content-Type", "application/json")
+	revokeRec := httptest.NewRecorder()
+	h.ServeHTTP(revokeRec, revokeReq)
+	if revokeRec.Code != http.StatusOK {
+		t.Fatalf("revoke: %d %s", revokeRec.Code, revokeRec.Body.String())
+	}
+
+	pullReq := httptest.NewRequest(http.MethodGet, "/api/saves", nil)
+	pullReq.Header.Set("Authorization", "Bearer "+token)
+	pullRec := httptest.NewRecorder()
+	h.ServeHTTP(pullRec, pullReq)
+	if pullRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 after revoke, got %d", pullRec.Code)
+	}
+}
+
+func stMustUserID(t *testing.T, st store.Store, username string) string {
+	t.Helper()
+	uid, _, err := st.UserByUsername(context.Background(), username)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return uid
+}
+
+func TestPushStorageQuotaExceeded(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := auth.NewService(st)
+	ctx := context.Background()
+	userID, _ := svc.RegisterUser(ctx, "quota-user", "password123")
+	_, token, _ := svc.Login(ctx, "quota-user", "password123", "c", "linux")
+
+	const quota = int64(100)
+	if err := st.SetUserQuota(ctx, userID, quota); err != nil {
+		t.Fatal(err)
+	}
+	_ = st.UpsertSave(ctx, userID, "g1", "pk1", bytes.Repeat([]byte("x"), 80))
+
+	h := NewHandler(st, svc, false, nil, nil, nil, nil, nil, nil, 0, false, "", "test")
+	req := httptest.NewRequest(http.MethodPost, "/api/saves", bytes.NewReader(bytes.Repeat([]byte("y"), 30)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Game-ID", "g1")
+	req.Header.Set("X-Path-Key", "pk2")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 quota exceeded, got %d %s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte("storage quota exceeded")) {
+		t.Fatalf("expected quota error message, got %s", rec.Body.String())
 	}
 }

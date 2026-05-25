@@ -99,6 +99,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleManifestV2(w, r)
 	case r.URL.Path == "/api/clients" && r.Method == http.MethodGet:
 		h.withAuth(h.handleListClients)(w, r)
+	case r.URL.Path == "/api/clients/revoke" && r.Method == http.MethodPost:
+		h.withAuth(h.handleRevokeClient)(w, r)
 	case r.URL.Path == "/api/saves/versions" && r.Method == http.MethodGet:
 		h.withAuth(h.handleListSaveVersions)(w, r)
 	case r.URL.Path == "/api/saves/versions/download" && r.Method == http.MethodGet:

@@ -498,6 +498,15 @@ func (s *sqliteStore) DeleteSessionsByUser(ctx context.Context, userID string) e
 	return err
 }
 
+func (s *sqliteStore) DeleteExpiredSessions(ctx context.Context, cutoff time.Time) (int64, error) {
+	cutoffStr := cutoff.UTC().Format(time.RFC3339)
+	res, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE last_seen < ?`, cutoffStr)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (s *sqliteStore) RegisterClient(ctx context.Context, userID, name, os string) (string, error) {
 	id, err := genID()
 	if err != nil {

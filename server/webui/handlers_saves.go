@@ -2,10 +2,11 @@ package webui
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/gsbs/gsbs/server/logx"
 )
 
 func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +22,7 @@ func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
 	}
 	versions, err := h.store.ListSaveVersions(r.Context(), userID, gameID, pathKey, 20)
 	if err != nil {
-		log.Printf("webui save versions: list failed: %v", err)
+		logx.Logger().Error().Err(err).Msg("webui save versions list failed")
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "save_versions.html", saveVersionsData{
 			PageData: PageData{
@@ -86,12 +87,12 @@ func (h *WebHandler) handleRestoreVersion(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := h.store.RestoreSaveVersion(r.Context(), userID, gameID, pathKey, version); err != nil {
-		log.Printf("webui restore version: %v", err)
+		logx.Logger().Error().Err(err).Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).Int("version", version).Msg("webui restore version failed")
 		Redirect(w, r, "/dashboard/save/versions?game_id="+url.QueryEscape(gameID)+"&path_key="+url.QueryEscape(pathKey)+"&error=restore_failed")
 		return
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "restore_version", "", fmt.Sprintf("game_id=%s path_key=%s version=%d", gameID, pathKey, version))
-	log.Printf("webui restore version: ok user=%s game_id=%s path_key=%s version=%d", userID, gameID, pathKey, version)
+	logx.Logger().Info().Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).Int("version", version).Msg("webui restore version ok")
 	Redirect(w, r, "/dashboard?restored=1")
 }
 
@@ -144,11 +145,11 @@ func (h *WebHandler) handleDeleteSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.DeleteSave(r.Context(), userID, gameID, pathKey); err != nil {
-		log.Printf("webui delete save: %v", err)
+		logx.Logger().Error().Err(err).Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).Msg("webui delete save failed")
 		Redirect(w, r, "/dashboard?error=delete_failed")
 		return
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "delete_save", "", fmt.Sprintf("game_id=%s path_key=%s", gameID, pathKey))
-	log.Printf("webui delete save: ok user=%s game_id=%s path_key=%s", userID, gameID, pathKey)
+	logx.Logger().Info().Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).Msg("webui delete save ok")
 	Redirect(w, r, "/dashboard?deleted=1")
 }

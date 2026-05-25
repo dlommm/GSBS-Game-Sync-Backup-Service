@@ -16,26 +16,13 @@ import (
 
 const loginTimeout = 30 * time.Second
 
-// TestConnection checks whether the server URL is reachable (GET with short timeout).
+// TestConnection checks whether the server URL is reachable (manifest v2, fallback v1).
 func TestConnection(serverURL string) error {
-	serverURL = strings.TrimSpace(serverURL)
-	serverURL = strings.TrimSuffix(serverURL, "/")
-	if serverURL == "" {
-		return fmt.Errorf("server URL is empty")
-	}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/api/manifest", nil)
-	if err != nil {
-		return err
-	}
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := pingManifestHealth(serverURL, "")
 	if err != nil {
 		return err
 	}
 	resp.Body.Close()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusUnauthorized {
-		return fmt.Errorf("server returned %s", resp.Status)
-	}
 	return nil
 }
 
