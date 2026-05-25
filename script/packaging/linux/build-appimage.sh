@@ -19,6 +19,10 @@ if [ ! -f "$CLIENT_BIN" ]; then
   echo "Missing client binary: $CLIENT_BIN" >&2
   exit 1
 fi
+if ! command -v file >/dev/null 2>&1; then
+  echo "file(1) is required for appimagetool (e.g. apt install file)" >&2
+  exit 1
+fi
 
 APPDIR="${ROOT}/${OUT_DIR}/AppDir"
 rm -rf "$APPDIR"
