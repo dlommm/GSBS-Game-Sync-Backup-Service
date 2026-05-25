@@ -213,7 +213,7 @@ func runList(dryRunPull bool) {
 
 	if dryRunPull && cfg.Token != "" {
 		// Report what would be written by a pull (same resolution as sync).
-		effectiveWatchPaths := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, nil, "legacy")
+		effectiveWatchPaths, _ := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, nil, "legacy")
 		effectiveWatchPaths = mergeWatchPaths(effectiveWatchPaths, cfg.WatchPaths)
 		resolvePath := func(gameID, pathKey string) string {
 			for _, w := range effectiveWatchPaths {

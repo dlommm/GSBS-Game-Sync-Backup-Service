@@ -46,13 +46,13 @@ Create the named volume if needed (Docker creates it on first use). The SQLite f
 All server state lives in a single SQLite database:
 
 - **Users and clients** — accounts, tokens, last-seen
-- **Saves** — uploaded save blobs (per user/game/path_key)
+- **Saves** — uploaded save data (per user/game/path_key). With `GSBS_SAVE_ROOT` set, file bytes live under that directory; otherwise they are stored as BLOBs in SQLite.
 - **Manifest (game save locations)** — table `game_save_locations`, filled by the PCGW sync job or manual import; served at `GET /api/manifest`
 - **Job runs and manifest fetch log** — for the admin UI
 
 There is no separate “manifest file” on disk: the manifest is stored in the DB. As long as `GSBS_DB` points to a path **on a mounted volume** (e.g. `GSBS_DB=/app/data/gsbs.db` with `-v gsbs-data:/app/data`), everything persists across container restarts and recreates. You do **not** need to re-download or re-sync the manifest when you recreate the container; clients will get the same manifest from the same DB.
 
-**Summary:** Use one volume for `/app/data`, set `GSBS_DB=/app/data/gsbs.db`, and all user data, saves, and manifest stay intact when you replace the container.
+**Summary:** Use one volume for `/app/data`, set `GSBS_DB=/app/data/gsbs.db`, and (recommended) `GSBS_SAVE_ROOT=/app/data/gamesaves`. User data, saves, and manifest stay intact when you replace the container.
 
 ---
 
@@ -93,6 +93,8 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 |---------|---------|-------------|
 | `GSBS_ADDR` | `:8080` | Listen address inside the container (e.g. `:8080` or `0.0.0.0:8080`). |
 | `GSBS_DB` | `gsbs.db` | Path to the SQLite database file. Use a path under a mounted volume for persistence. |
+| `GSBS_SAVE_ROOT` | (unset) | When set, save file bytes are stored on disk under this directory (metadata stays in SQLite). Recommended: `/app/data/gamesaves` on the same volume as `GSBS_DB`. When unset, saves are stored as BLOBs in the database (legacy behavior). |
+| `GSBS_MIGRATE_BLOBS_TO_FS` | (unset) | Set to `1` on startup to export existing BLOB saves to files under `GSBS_SAVE_ROOT` (requires `GSBS_SAVE_ROOT`). |
 | `GSBS_SESSION_SECRET` | (insecure default) | Secret used to sign WebUI session cookies. **Set in production.** Expired browser sessions are purged automatically on startup and daily (no extra env var). |
 | `GSBS_ADMIN_USERNAME` | (empty) | If set, only this user can access the `/admin` page (stats and revoke client tokens). |
 | `GSBS_MAX_STORAGE_BYTES` | (unlimited) | Global storage limit in bytes; 0 or unset = unlimited. |
@@ -107,7 +109,7 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_TRUST_PROXY` | (unset) | When set, trust `X-Forwarded-For` / `X-Real-IP` for client IP. |
 | `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token age (90 days). |
 | `GSBS_METRICS_TOKEN` | (unset) | Bearer token required for `/metrics` when set. |
-| `GSBS_PCGW_CRON` | `0 3 * * 0` | Cron expression for PCGW incremental sync. |
+| `GSBS_PCGW_CRON` | `0 3 * * 0` | Cron expression for PCGW incremental sync. **Overrides** admin Settings when set (including `""` to disable). When unset, schedule comes from admin Settings (`pcgw_cron`, default weekly Sunday 03:00). |
 | `GSBS_PCGW_FULL_CRON` | (unset) | Optional cron for full PCGW resync. |
 | `GSBS_PCGW_RATE_LIMIT` | `2s` | Delay between PCGW HTTP requests. |
 | `GSBS_PCGW_USER_AGENT` | `GSBS/<version> (+https://github.com/…)` | User-Agent sent to PCGamingWiki. |
@@ -121,6 +123,7 @@ docker run -d \
   -p 8080:8080 \
   -e GSBS_ADDR=":8080" \
   -e GSBS_DB="/app/data/gsbs.db" \
+  -e GSBS_SAVE_ROOT="/app/data/gamesaves" \
   -e GSBS_SESSION_SECRET="your-long-random-secret" \
   -e GSBS_ADMIN_USERNAME="admin" \
   -v gsbs-data:/app/data \
@@ -157,6 +160,16 @@ Open `http://localhost:8080`.
 
 ---
 
+## Image security
+
+The runtime image is based on **`alpine:3.23.4`** with `apk upgrade` applied at build time. Rebuild and push a new tag after Dockerfile changes so Docker Scout reflects fixes.
+
+- **Non-root:** The server runs as user `gsbs` (UID/GID 1000). The entrypoint (`script/docker-entrypoint.sh`) ensures `/app/data` exists and is owned by `gsbs` before dropping privileges — this fixes existing Docker volumes created when the container ran as root.
+- **Go dependencies:** Server binary is built with current `golang.org/x/crypto` and `golang.org/x/sys` (see `go.mod`). Rebuild the image after `go.mod` changes so Scout does not flag stale module versions embedded in the binary.
+- **Health checks:** Use BusyBox `wget` (included in the base image; no separate `wget` package). The Dockerfile includes a `HEALTHCHECK` on `GET /api/health`.
+- **Docker Scout baseline:** After a fresh build with current `go.mod` and Dockerfile, expect **0 Critical / 0 High** from Go modules. One **Medium** BusyBox CVE ([CVE-2025-60876](https://scout.docker.com/v/CVE-2025-60876)) may remain until Alpine ships a fixed `busybox` package — health checks use localhost-only `wget`, so practical exposure is low. Monitor [Alpine security tracker](https://security.alpinelinux.org/).
+- **Published image:** `dendlomm/gsbs-server:latest` on Docker Hub is updated only on release (git tag push). Local Dockerfile changes alone do not update Hub; cut a release to publish fixes.
+
 ## Production tips
 
 ### TLS / HTTPS
@@ -179,7 +192,7 @@ Use `--restart unless-stopped` (or Compose `restart: unless-stopped`) so the con
 
 ### Health check (optional)
 
-The image includes `wget`. You can add a health check so the orchestrator knows the server is up (use the no-auth `/api/health` endpoint). For Kubernetes, use `GET /api/health` for liveness and `GET /api/health?ready=1` for readiness (checks DB with a 2s timeout; returns 503 if the store is down or slow). The health response includes `version` when the server is built with version ldflags.
+The image includes BusyBox `wget` for health checks. You can add a health check so the orchestrator knows the server is up (use the no-auth `/api/health` endpoint). For Kubernetes, use `GET /api/health` for liveness and `GET /api/health?ready=1` for readiness (checks DB with a 2s timeout; returns 503 if the store is down or slow). The health response includes `version` when the server is built with version ldflags.
 
 ```yaml
 healthcheck:

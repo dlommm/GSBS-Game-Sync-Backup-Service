@@ -38,9 +38,10 @@ type PCGWGame struct {
 
 // PCGWPathEntry is a save or config location group.
 type PCGWPathEntry struct {
-	PathTemplates []string `json:"path_templates"`
-	IsConfig      bool     `json:"is_config"`
-	Notes         string   `json:"notes,omitempty"`
+	PathTemplates []string   `json:"path_templates"`
+	SaveRules     []SaveRule `json:"save_rules,omitempty"`
+	IsConfig      bool       `json:"is_config"`
+	Notes         string     `json:"notes,omitempty"`
 }
 
 // PCGWGameData is per-platform Game data section content.
@@ -116,6 +117,8 @@ type PCGWSyncRun struct {
 	GamesSkipped     int    `json:"games_skipped"`
 	AvgParseMs       int    `json:"avg_parse_ms"`
 	ErrorMessage     string `json:"error_message,omitempty"`
+	ResumedFromRunID string `json:"resumed_from_run_id,omitempty"`
+	Notes            string `json:"notes,omitempty"`
 }
 
 // PCGWManifestMeta is singleton manifest generation state.
@@ -129,11 +132,12 @@ type PCGWManifestMeta struct {
 
 // ManifestV2Location is a save/config location in manifest v2.
 type ManifestV2Location struct {
-	Platform         string   `json:"platform"`
-	PlatformRawLabel string   `json:"platform_raw_label,omitempty"`
-	PathTemplates    []string `json:"path_templates"`
-	IsConfig         bool     `json:"is_config"`
-	Notes            string   `json:"notes,omitempty"`
+	Platform         string     `json:"platform"`
+	PlatformRawLabel string     `json:"platform_raw_label,omitempty"`
+	PathTemplates    []string   `json:"path_templates"`
+	SaveRules        []SaveRule `json:"save_rules,omitempty"`
+	IsConfig         bool       `json:"is_config"`
+	Notes            string     `json:"notes,omitempty"`
 }
 
 // ManifestV2Game is one game in manifest v2.

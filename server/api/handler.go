@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/gsbs/gsbs/pkg/savepath"
 	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/gsbs/gsbs/server/auth"
 	"github.com/gsbs/gsbs/server/logx"
@@ -28,6 +30,16 @@ import (
 
 // MaxSaveSize is the maximum allowed body size for POST /api/saves (50 MiB).
 const MaxSaveSize = 50 * 1024 * 1024
+
+const maxGameIDLen = 512
+const maxPathKeyLen = 1024
+
+func saveKeyTooLong(gameID, pathKey string) string {
+	if len(gameID) > maxGameIDLen || len(pathKey) > maxPathKeyLen {
+		return "game_id or path_key too long"
+	}
+	return ""
+}
 
 // maxAuthBody is the maximum JSON body size for auth endpoints (1 MiB).
 const maxAuthBody = 1 << 20
@@ -495,6 +507,10 @@ func (h *Handler) handleListSaveVersions(w http.ResponseWriter, r *http.Request,
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "game_id and path_key required"})
 		return
 	}
+	if msg := saveKeyTooLong(gameID, pathKey); msg != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+		return
+	}
 	versions, err := h.store.ListSaveVersions(r.Context(), userID, gameID, pathKey, 20)
 	if err != nil {
 		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api list save versions failed")
@@ -510,6 +526,10 @@ func (h *Handler) handleGetSaveVersion(w http.ResponseWriter, r *http.Request, u
 	versionStr := strings.TrimSpace(r.URL.Query().Get("version"))
 	if gameID == "" || pathKey == "" || versionStr == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "game_id, path_key and version required"})
+		return
+	}
+	if msg := saveKeyTooLong(gameID, pathKey); msg != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
 		return
 	}
 	var version int
@@ -549,6 +569,10 @@ func (h *Handler) handleRestoreSaveVersion(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "game_id, path_key and version required"})
 		return
 	}
+	if msg := saveKeyTooLong(req.GameID, req.PathKey); msg != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+		return
+	}
 	if err := h.store.RestoreSaveVersion(r.Context(), userID, req.GameID, req.PathKey, req.Version); err != nil {
 		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api restore save version failed")
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "version not found or restore failed"})
@@ -576,6 +600,10 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID stri
 	gameID := strings.TrimSpace(r.URL.Query().Get("game_id"))
 	pathKey := strings.TrimSpace(r.URL.Query().Get("path_key"))
 	if gameID != "" && pathKey != "" {
+		if msg := saveKeyTooLong(gameID, pathKey); msg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
 		blob, err := h.store.GetSave(r.Context(), userID, gameID, pathKey)
 		if err != nil {
 			logx.Logger().Error().Err(err).Msg("api pull single failed")
@@ -658,12 +686,22 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "X-Game-ID and X-Path-Key required"})
 		return
 	}
-	if len(gameID) > 512 || len(pathKey) > 1024 {
+	if msg := saveKeyTooLong(gameID, pathKey); msg != "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "X-Game-ID or X-Path-Key too long"})
 		return
 	}
 	if len(filePath) > 2048 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "X-File-Path too long"})
+		return
+	}
+	relPath := strings.TrimSpace(r.Header.Get("X-Relative-Path"))
+	if relPath != "" {
+		if err := savepath.ValidateRelativePath(relPath); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid X-Relative-Path"})
+			return
+		}
+	} else if strings.TrimSpace(os.Getenv("GSBS_SAVE_ROOT")) != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "X-Relative-Path required"})
 		return
 	}
 	var content []byte
@@ -701,10 +739,12 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "empty content"})
 		return
 	}
+	existingSize, _ := h.store.GetSaveContentSize(r.Context(), userID, gameID, pathKey)
+	delta := int64(len(content)) - existingSize
 	// Global storage quota check (0 = unlimited)
 	if h.maxStorageBytes > 0 {
 		total, _ := h.store.TotalStorageBytes(r.Context())
-		if total+int64(len(content)) > h.maxStorageBytes {
+		if total+delta > h.maxStorageBytes {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "global storage limit exceeded"})
 			return
 		}
@@ -712,7 +752,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 	// Per-user storage quota check (0 = unlimited)
 	if quota, err := h.store.UserQuotaBytes(r.Context(), userID); err == nil && quota > 0 {
 		current, _ := h.store.UserStorageBytes(r.Context(), userID)
-		if current+int64(len(content)) > quota {
+		if current+delta > quota {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "storage quota exceeded"})
 			return
 		}
@@ -728,10 +768,11 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		clientID = cid
 	}
 	meta := &store.SaveMeta{
-		ContentHash: contentHash,
-		ContentSize: contentSize,
-		ClientID:    clientID,
-		Encrypted:   encrypted,
+		ContentHash:  contentHash,
+		ContentSize:  contentSize,
+		ClientID:     clientID,
+		Encrypted:    encrypted,
+		RelativePath: relPath,
 	}
 	skipped, err := h.store.UpsertSaveWithMeta(r.Context(), userID, gameID, pathKey, content, meta)
 	if err != nil {
@@ -768,8 +809,8 @@ func (h *Handler) handleDeleteSave(w http.ResponseWriter, r *http.Request, userI
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "game_id and path_key required"})
 		return
 	}
-	if len(gameID) > 512 || len(pathKey) > 1024 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "game_id or path_key too long"})
+	if msg := saveKeyTooLong(gameID, pathKey); msg != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
 		return
 	}
 	if err := h.store.DeleteSave(r.Context(), userID, gameID, pathKey); err != nil {

@@ -2,7 +2,9 @@ package webui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/gsbs/gsbs/server/job"
 	"github.com/gsbs/gsbs/server/logx"
+	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
 )
 
@@ -156,9 +159,13 @@ func (h *WebHandler) serveAdminPCGWJobStatusPartial(w http.ResponseWriter, r *ht
 	if _, _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
-	jobRunning, jobProgress := h.jobStatus()
+	data := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret))
 	h.renderPartial(w, "partials/admin_pcgw_job_status.html", map[string]interface{}{
-		"JobRunning": jobRunning, "JobProgress": jobProgress,
+		"JobRunning":       data.JobRunning,
+		"JobProgress":      data.JobProgressPages,
+		"JobProgressTotal": data.JobProgressTotal,
+		"JobGamesSkipped":  data.JobGamesSkipped,
+		"CSRFToken":        data.CSRFToken,
 	})
 }
 
@@ -228,10 +235,24 @@ func (h *WebHandler) handleAdminPCGWSync(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	if h.jobRunner != nil {
+		var started bool
+		var err error
 		if full {
-			h.jobRunner.RunPCGWSyncFull(context.Background())
+			started, err = h.jobRunner.RunPCGWSyncFull(context.Background())
 		} else {
-			h.jobRunner.RunPCGWSync(context.Background())
+			started, err = h.jobRunner.RunPCGWSync(context.Background())
+		}
+		if err != nil {
+			if errors.Is(err, job.ErrJobAlreadyRunning) {
+				Redirect(w, r, "/admin/pcgw?error=job_already_running")
+				return
+			}
+			Redirect(w, r, "/admin/pcgw?error=job_start_failed")
+			return
+		}
+		if !started {
+			Redirect(w, r, "/admin/pcgw?error=job_already_running")
+			return
 		}
 	}
 	action := "pcgw_sync"
@@ -270,6 +291,73 @@ func (h *WebHandler) serveAdminPCGWExport(w http.ResponseWriter, r *http.Request
 	_, _ = w.Write(data)
 }
 
+func (h *WebHandler) serveAdminPCGWExportBundle(w http.ResponseWriter, r *http.Request) {
+	if _, _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	data, err := h.store.ExportPCGWManifestBundle(r.Context(), h.gsbsVersion)
+	if err != nil {
+		logx.Logger().Error().Err(err).Msg("pcgw export bundle failed")
+		http.Error(w, "Export failed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", `attachment; filename="gsbs-pcgw-manifest.json.gz"`)
+	_, _ = w.Write(data)
+}
+
+func (h *WebHandler) handleAdminPCGWImport(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if err := r.ParseMultipartForm(256 << 20); err != nil {
+		Redirect(w, r, "/admin/pcgw?error=import_parse_failed")
+		return
+	}
+	mode := strings.TrimSpace(r.FormValue("mode"))
+	if mode != "merge" && mode != "full_replace" {
+		Redirect(w, r, "/admin/pcgw?error=import_invalid_mode")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		Redirect(w, r, "/admin/pcgw?error=import_missing_file")
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, 256<<20))
+	if err != nil {
+		Redirect(w, r, "/admin/pcgw?error=import_read_failed")
+		return
+	}
+
+	result, err := h.store.ImportPCGWManifestBundle(r.Context(), data, mode)
+	if err != nil {
+		logx.Logger().Error().Err(err).Msg("pcgw import bundle failed")
+		Redirect(w, r, "/admin/pcgw?error=import_failed")
+		return
+	}
+
+	validation, _ := h.store.ValidatePCGWImport(r.Context())
+	details := fmt.Sprintf("mode=%s locations=%d games=%d validation_ok=%v",
+		result.Mode, result.GameSaveLocations, result.PCGWGames, validation.SampleOK)
+	h.appendAuditBroadcast(r.Context(), userID, username, "pcgw_import", mode, details)
+
+	if h.apiHandler != nil {
+		h.apiHandler.InvalidateManifestCache()
+	}
+	if h.hub != nil {
+		h.hub.Broadcast(sse.Event{Type: "manifest-updated", Data: "{}"})
+	}
+
+	Redirect(w, r, fmt.Sprintf("/admin/pcgw?imported=1&locations=%d&games=%d", result.GameSaveLocations, result.PCGWGames))
+}
+
 func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool {
 	path := r.URL.Path
 	if path == "/admin/pcgw" && r.Method == http.MethodGet {
@@ -290,6 +378,14 @@ func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool
 	}
 	if path == "/admin/pcgw/purge-wikitext" && r.Method == http.MethodPost {
 		h.handleAdminPCGWPurgeWikitext(w, r)
+		return true
+	}
+	if path == "/admin/pcgw/export/manifest.json.gz" && r.Method == http.MethodGet {
+		h.serveAdminPCGWExportBundle(w, r)
+		return true
+	}
+	if path == "/admin/pcgw/import" && r.Method == http.MethodPost {
+		h.handleAdminPCGWImport(w, r)
 		return true
 	}
 	if strings.HasPrefix(path, "/admin/pcgw/export/") && strings.HasSuffix(path, ".json") && r.Method == http.MethodGet {

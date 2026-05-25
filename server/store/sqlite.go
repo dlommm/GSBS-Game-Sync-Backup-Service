@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ import (
 type sqliteStore struct {
 	db               *sql.DB
 	versionRetention int
+	saveRoot         string // non-empty enables filesystem storage (GSBS_SAVE_ROOT)
 }
 
 // NewSQLite creates a SQLite-backed store.
@@ -36,10 +38,15 @@ func NewSQLite(path string) (Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &sqliteStore{db: db, versionRetention: retention}
+	s := &sqliteStore{db: db, versionRetention: retention, saveRoot: saveRootFromEnv()}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
+	}
+	if os.Getenv("GSBS_MIGRATE_BLOBS_TO_FS") == "1" {
+		if err := s.migrateBlobsToFS(); err != nil {
+			log.Printf("GSBS: blob-to-filesystem migration failed: %v", err)
+		}
 	}
 	return s, nil
 }
@@ -202,6 +209,7 @@ func (s *sqliteStore) migrate() error {
 		`ALTER TABLE game_save_locations ADD COLUMN gog_id TEXT`,
 		`ALTER TABLE game_save_locations ADD COLUMN epic_id TEXT`,
 		`ALTER TABLE game_save_locations ADD COLUMN ubisoft_id TEXT`,
+		`ALTER TABLE game_save_locations ADD COLUMN save_rules_json TEXT`,
 		`ALTER TABLE users ADD COLUMN encryption_enabled INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE saves ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE clients ADD COLUMN token_created_at TEXT`,
@@ -217,7 +225,18 @@ func (s *sqliteStore) migrate() error {
 	if err := s.migratePCGW(); err != nil {
 		return err
 	}
-	return nil
+	if err := s.migrateSaveFilesystem(); err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS admin_settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		)`)
+	if err != nil {
+		return err
+	}
+	return s.seedAdminSettings()
 }
 
 func hashToken(token string) string {
@@ -281,7 +300,13 @@ func (s *sqliteStore) CreateUser(ctx context.Context, username, passwordHash str
 		`INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)`,
 		id, username, passwordHash, time.Now().UTC().Format(time.RFC3339),
 	)
-	return id, err
+	if err != nil {
+		return "", err
+	}
+	if err := s.EnsureUserStorage(ctx, id); err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
 func (s *sqliteStore) UserByUsername(ctx context.Context, username string) (userID, passwordHash string, err error) {
@@ -353,6 +378,24 @@ func (s *sqliteStore) EnableUser(ctx context.Context, userID string) error {
 
 // DeleteUser removes the user and all their clients, saves, and save_versions.
 func (s *sqliteStore) DeleteUser(ctx context.Context, userID string) error {
+	if s.filesystemEnabled() {
+		rows, err := s.db.QueryContext(ctx, `SELECT storage_path FROM saves WHERE user_id = ? AND storage_path IS NOT NULL AND storage_path != ''`, userID)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var p string
+			if err := rows.Scan(&p); err != nil {
+				rows.Close()
+				return err
+			}
+			removeSaveFile(p)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+	}
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM save_versions WHERE user_id = ?`, userID); err != nil {
 		return err
 	}
@@ -362,8 +405,11 @@ func (s *sqliteStore) DeleteUser(ctx context.Context, userID string) error {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM clients WHERE user_id = ?`, userID); err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID)
-	return err
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID); err != nil {
+		return err
+	}
+	s.removeUserStorageDir(userID)
+	return nil
 }
 
 // UserQuotaBytes returns the storage quota in bytes for the user (0 = unlimited).
@@ -635,6 +681,7 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 	contentSize := int64(len(content))
 	clientID := ""
 	encrypted := 0
+	relPath := ""
 	if meta != nil {
 		if meta.ContentHash != "" {
 			contentHash = meta.ContentHash
@@ -646,22 +693,48 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 		if meta.Encrypted {
 			encrypted = 1
 		}
+		relPath = strings.TrimSpace(meta.RelativePath)
 		existing, _ := s.GetSaveHash(ctx, userID, gameID, pathKey)
 		if existing != "" && existing == contentHash {
 			return true, nil
 		}
 	}
+	if s.filesystemEnabled() {
+		if relPath == "" {
+			return false, fmt.Errorf("relative path required when GSBS_SAVE_ROOT is set")
+		}
+	}
+	var storagePath string
+	var dbContent interface{} = content
+	if s.filesystemEnabled() {
+		var oldStorage sql.NullString
+		_ = s.db.QueryRowContext(ctx,
+			`SELECT storage_path FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+			userID, gameID, pathKey,
+		).Scan(&oldStorage)
+		storagePath, err = s.writeSaveToFilesystem(ctx, userID, gameID, relPath, content)
+		if err != nil {
+			return false, err
+		}
+		if oldStorage.Valid && oldStorage.String != "" && oldStorage.String != storagePath {
+			removeSaveFile(oldStorage.String)
+		}
+		dbContent = nil
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO saves (user_id, game_id, path_key, content, updated_at, content_hash, content_size, client_id, encrypted)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO saves (user_id, game_id, path_key, content, relative_path, storage_path, updated_at, content_hash, content_size, client_id, encrypted)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id, game_id, path_key) DO UPDATE SET
-		   content = excluded.content, updated_at = excluded.updated_at,
-		   content_hash = excluded.content_hash, content_size = excluded.content_size,
+		   content = excluded.content, relative_path = excluded.relative_path, storage_path = excluded.storage_path,
+		   updated_at = excluded.updated_at, content_hash = excluded.content_hash, content_size = excluded.content_size,
 		   client_id = excluded.client_id, encrypted = excluded.encrypted`,
-		userID, gameID, pathKey, content, now, contentHash, contentSize, nullIfEmpty(clientID), encrypted,
+		userID, gameID, pathKey, dbContent, nullIfEmpty(relPath), nullIfEmpty(storagePath), now, contentHash, contentSize, nullIfEmpty(clientID), encrypted,
 	)
 	if err != nil {
+		if s.filesystemEnabled() && storagePath != "" {
+			removeSaveFile(storagePath)
+		}
 		return false, err
 	}
 	var nextVer int
@@ -703,7 +776,7 @@ func nullIfEmpty(s string) interface{} {
 
 func (s *sqliteStore) ListSaves(ctx context.Context, userID string) ([]types.SaveBlob, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT game_id, path_key, content, updated_at, COALESCE(encrypted, 0) FROM saves WHERE user_id = ?`, userID,
+		`SELECT game_id, path_key, content, storage_path, updated_at, COALESCE(encrypted, 0) FROM saves WHERE user_id = ?`, userID,
 	)
 	if err != nil {
 		return nil, err
@@ -714,7 +787,13 @@ func (s *sqliteStore) ListSaves(ctx context.Context, userID string) ([]types.Sav
 		var b types.SaveBlob
 		var updatedAt string
 		var enc int
-		if err := rows.Scan(&b.GameID, &b.PathKey, &b.Content, &updatedAt, &enc); err != nil {
+		var rawContent []byte
+		var storagePath sql.NullString
+		if err := rows.Scan(&b.GameID, &b.PathKey, &rawContent, &storagePath, &updatedAt, &enc); err != nil {
+			return nil, err
+		}
+		b.Content, err = s.readSaveContent(storagePath, rawContent)
+		if err != nil {
 			return nil, err
 		}
 		b.UpdatedAt = updatedAt
@@ -740,7 +819,7 @@ func (s *sqliteStore) ListSavesPaginated(ctx context.Context, userID string, lim
 		offset = 0
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT game_id, path_key, content, updated_at, COALESCE(encrypted, 0) FROM saves WHERE user_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+		`SELECT game_id, path_key, content, storage_path, updated_at, COALESCE(encrypted, 0) FROM saves WHERE user_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
 		userID, limit, offset)
 	if err != nil {
 		return nil, 0, err
@@ -751,7 +830,13 @@ func (s *sqliteStore) ListSavesPaginated(ctx context.Context, userID string, lim
 		var b types.SaveBlob
 		var updatedAt string
 		var enc int
-		if err := rows.Scan(&b.GameID, &b.PathKey, &b.Content, &updatedAt, &enc); err != nil {
+		var rawContent []byte
+		var storagePath sql.NullString
+		if err := rows.Scan(&b.GameID, &b.PathKey, &rawContent, &storagePath, &updatedAt, &enc); err != nil {
+			return nil, 0, err
+		}
+		b.Content, err = s.readSaveContent(storagePath, rawContent)
+		if err != nil {
 			return nil, 0, err
 		}
 		b.UpdatedAt = updatedAt
@@ -761,17 +846,42 @@ func (s *sqliteStore) ListSavesPaginated(ctx context.Context, userID string, lim
 	return out, total, rows.Err()
 }
 
+func (s *sqliteStore) GetSaveContentSize(ctx context.Context, userID, gameID, pathKey string) (int64, error) {
+	var contentSize sql.NullInt64
+	var contentLen int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT content_size, COALESCE(LENGTH(content), 0) FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+		userID, gameID, pathKey,
+	).Scan(&contentSize, &contentLen)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if contentSize.Valid && contentSize.Int64 > 0 {
+		return contentSize.Int64, nil
+	}
+	return int64(contentLen), nil
+}
+
 func (s *sqliteStore) GetSave(ctx context.Context, userID, gameID, pathKey string) (*types.SaveBlob, error) {
 	var b types.SaveBlob
 	var updatedAt string
 	var enc int
+	var rawContent []byte
+	var storagePath sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT game_id, path_key, content, updated_at, COALESCE(encrypted, 0) FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+		`SELECT game_id, path_key, content, storage_path, updated_at, COALESCE(encrypted, 0) FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
 		userID, gameID, pathKey,
-	).Scan(&b.GameID, &b.PathKey, &b.Content, &updatedAt, &enc)
+	).Scan(&b.GameID, &b.PathKey, &rawContent, &storagePath, &updatedAt, &enc)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
+	b.Content, err = s.readSaveContent(storagePath, rawContent)
 	if err != nil {
 		return nil, err
 	}
@@ -781,6 +891,14 @@ func (s *sqliteStore) GetSave(ctx context.Context, userID, gameID, pathKey strin
 }
 
 func (s *sqliteStore) DeleteSave(ctx context.Context, userID, gameID, pathKey string) error {
+	var storagePath sql.NullString
+	_ = s.db.QueryRowContext(ctx,
+		`SELECT storage_path FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+		userID, gameID, pathKey,
+	).Scan(&storagePath)
+	if storagePath.Valid && storagePath.String != "" {
+		removeSaveFile(storagePath.String)
+	}
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
 		userID, gameID, pathKey,
@@ -840,7 +958,20 @@ func (s *sqliteStore) RestoreSaveVersion(ctx context.Context, userID, gameID, pa
 	if err != nil || blob == nil {
 		return fmt.Errorf("version not found")
 	}
-	_, err = s.UpsertSaveWithMeta(ctx, userID, gameID, pathKey, blob.Content, nil)
+	meta := &SaveMeta{}
+	if s.filesystemEnabled() {
+		var relPath sql.NullString
+		err := s.db.QueryRowContext(ctx,
+			`SELECT relative_path FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+			userID, gameID, pathKey,
+		).Scan(&relPath)
+		if err == nil && relPath.Valid && relPath.String != "" {
+			meta.RelativePath = relPath.String
+		} else {
+			meta.RelativePath = defaultRelativePath(gameID, pathKey)
+		}
+	}
+	_, err = s.UpsertSaveWithMeta(ctx, userID, gameID, pathKey, blob.Content, meta)
 	return err
 }
 
@@ -863,13 +994,32 @@ func decodeSteamAppIDs(s string) []string {
 	return nil
 }
 
+func encodeSaveRules(rules []types.SaveRule) string {
+	if len(rules) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(rules)
+	return string(b)
+}
+
+func decodeSaveRules(s string) []types.SaveRule {
+	if s == "" {
+		return nil
+	}
+	var rules []types.SaveRule
+	if json.Unmarshal([]byte(s), &rules) == nil {
+		return rules
+	}
+	return nil
+}
+
 func scanGameSaveLocation(scanner interface {
 	Scan(dest ...interface{}) error
 }) (types.GameSaveLocation, error) {
 	var e types.GameSaveLocation
 	var isConfig int
-	var steamJSON, gogID, epicID, ubisoftID sql.NullString
-	err := scanner.Scan(&e.GameID, &e.PCGWPageID, &e.GameTitle, &e.Platform, &e.PathTemplate, &isConfig, &e.UpdatedAt, &e.Source, &e.Notes, &steamJSON, &gogID, &epicID, &ubisoftID)
+	var steamJSON, gogID, epicID, ubisoftID, saveRulesJSON sql.NullString
+	err := scanner.Scan(&e.GameID, &e.PCGWPageID, &e.GameTitle, &e.Platform, &e.PathTemplate, &isConfig, &e.UpdatedAt, &e.Source, &e.Notes, &steamJSON, &gogID, &epicID, &ubisoftID, &saveRulesJSON)
 	if err != nil {
 		return e, err
 	}
@@ -886,11 +1036,14 @@ func scanGameSaveLocation(scanner interface {
 	if ubisoftID.Valid {
 		e.UbisoftID = ubisoftID.String
 	}
+	if saveRulesJSON.Valid {
+		e.SaveRules = decodeSaveRules(saveRulesJSON.String)
+	}
 	return e, nil
 }
 
 const gameSaveLocationSelect = `SELECT game_id, pcgw_page_id, game_title, platform, path_template, is_config, updated_at, source, COALESCE(notes, ''),
-	COALESCE(steam_app_ids, ''), COALESCE(gog_id, ''), COALESCE(epic_id, ''), COALESCE(ubisoft_id, '') FROM game_save_locations`
+	COALESCE(steam_app_ids, ''), COALESCE(gog_id, ''), COALESCE(epic_id, ''), COALESCE(ubisoft_id, ''), COALESCE(save_rules_json, '') FROM game_save_locations`
 
 func (s *sqliteStore) UpsertGameSaveLocations(ctx context.Context, entries []types.GameSaveLocation) error {
 	if len(entries) == 0 {
@@ -904,8 +1057,8 @@ func (s *sqliteStore) UpsertGameSaveLocations(ctx context.Context, entries []typ
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	stmt, err := tx.PrepareContext(ctx,
-		`INSERT INTO game_save_locations (id, game_id, pcgw_page_id, game_title, platform, path_template, is_config, updated_at, source, notes, steam_app_ids, gog_id, epic_id, ubisoft_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO game_save_locations (id, game_id, pcgw_page_id, game_title, platform, path_template, is_config, updated_at, source, notes, steam_app_ids, gog_id, epic_id, ubisoft_id, save_rules_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(game_id, platform, path_template) DO UPDATE SET
 		   pcgw_page_id = excluded.pcgw_page_id,
 		   game_title = excluded.game_title,
@@ -916,7 +1069,8 @@ func (s *sqliteStore) UpsertGameSaveLocations(ctx context.Context, entries []typ
 		   steam_app_ids = excluded.steam_app_ids,
 		   gog_id = excluded.gog_id,
 		   epic_id = excluded.epic_id,
-		   ubisoft_id = excluded.ubisoft_id`)
+		   ubisoft_id = excluded.ubisoft_id,
+		   save_rules_json = excluded.save_rules_json`)
 	if err != nil {
 		return fmt.Errorf("prepare: %w", err)
 	}
@@ -935,7 +1089,7 @@ func (s *sqliteStore) UpsertGameSaveLocations(ctx context.Context, entries []typ
 			e.UpdatedAt = now
 		}
 		if _, err := stmt.ExecContext(ctx, id, e.GameID, e.PCGWPageID, e.GameTitle, e.Platform, e.PathTemplate, isConfig, e.UpdatedAt, e.Source, e.Notes,
-			encodeSteamAppIDs(e.SteamAppIDs), nullIfEmpty(e.GOGID), nullIfEmpty(e.EpicID), nullIfEmpty(e.UbisoftID)); err != nil {
+			encodeSteamAppIDs(e.SteamAppIDs), nullIfEmpty(e.GOGID), nullIfEmpty(e.EpicID), nullIfEmpty(e.UbisoftID), nullIfEmpty(encodeSaveRules(e.SaveRules))); err != nil {
 			return fmt.Errorf("upsert game_save_location game=%s: %w", e.GameID, err)
 		}
 	}
@@ -1023,6 +1177,23 @@ func (s *sqliteStore) SearchGameSaveLocations(ctx context.Context, query string,
 		out = append(out, e)
 	}
 	return out, total, rows.Err()
+}
+
+func (s *sqliteStore) listGameSaveLocationsForGame(ctx context.Context, gameID string) ([]types.GameSaveLocation, error) {
+	rows, err := s.db.QueryContext(ctx, gameSaveLocationSelect+` WHERE game_id = ? ORDER BY platform, path_template`, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []types.GameSaveLocation
+	for rows.Next() {
+		e, err := scanGameSaveLocation(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }
 
 func (s *sqliteStore) GetManifestSince(ctx context.Context, since string) ([]types.GameSaveLocation, error) {
@@ -1205,7 +1376,9 @@ func (s *sqliteStore) ListSaveSummariesFiltered(ctx context.Context, userID, que
 // UserStorageBytes returns total storage in bytes for a user's saves.
 func (s *sqliteStore) UserStorageBytes(ctx context.Context, userID string) (int64, error) {
 	var n int64
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(LENGTH(content)), 0) FROM saves WHERE user_id = ?`, userID).Scan(&n)
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(COALESCE(content_size, LENGTH(content), 0)), 0) FROM saves WHERE user_id = ?`, userID,
+	).Scan(&n)
 	return n, err
 }
 
@@ -1219,7 +1392,9 @@ func (s *sqliteStore) DistinctGameCount(ctx context.Context, userID string) (int
 // TotalStorageBytes returns total storage in bytes across all saves (admin stats).
 func (s *sqliteStore) TotalStorageBytes(ctx context.Context) (int64, error) {
 	var n int64
-	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(LENGTH(content)), 0) FROM saves`).Scan(&n)
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(COALESCE(content_size, LENGTH(content), 0)), 0) FROM saves`,
+	).Scan(&n)
 	return n, err
 }
 
@@ -1229,7 +1404,7 @@ func (s *sqliteStore) ListUserStats(ctx context.Context) ([]UserStatRow, error) 
 		SELECT u.id, u.username, u.created_at,
 		       (SELECT COUNT(*) FROM clients c WHERE c.user_id = u.id) AS client_count,
 		       (SELECT COUNT(*) FROM saves s WHERE s.user_id = u.id) AS save_count,
-		       (SELECT COALESCE(SUM(LENGTH(s.content)), 0) FROM saves s WHERE s.user_id = u.id) AS storage_bytes,
+		       (SELECT COALESCE(SUM(COALESCE(s.content_size, LENGTH(s.content), 0)), 0) FROM saves s WHERE s.user_id = u.id) AS storage_bytes,
 		       COALESCE(u.storage_quota_bytes, 0), COALESCE(u.disabled, 0)
 		FROM users u
 		ORDER BY u.created_at DESC`)
@@ -1321,6 +1496,66 @@ func (s *sqliteStore) GetLatestJobRun(ctx context.Context, jobName string) (*Job
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, job_name, started_at, COALESCE(finished_at, ''), status, COALESCE(error_message, ''), entries_count
 		 FROM job_runs WHERE job_name = ? ORDER BY started_at DESC LIMIT 1`, jobName,
+	).Scan(&j.ID, &j.JobName, &j.StartedAt, &j.FinishedAt, &j.Status, &j.ErrorMessage, &j.EntriesCount)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &j, nil
+}
+
+const staleJobMessage = "server restarted while job was running"
+
+// ReconcileStaleJobRuns marks in-flight job_runs as interrupted (e.g. after crash/restart).
+func (s *sqliteStore) ReconcileStaleJobRuns(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, job_name, started_at FROM job_runs WHERE status = 'running'`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var stale []JobRun
+	for rows.Next() {
+		var j JobRun
+		if err := rows.Scan(&j.ID, &j.JobName, &j.StartedAt); err != nil {
+			return err
+		}
+		stale = append(stale, j)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, j := range stale {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE job_runs SET status = ?, finished_at = ?, error_message = ? WHERE id = ?`,
+			"interrupted", now, staleJobMessage, j.ID); err != nil {
+			return err
+		}
+		log.Printf("reconcile: job_runs id=%s job=%s started=%s -> interrupted", j.ID, j.JobName, j.StartedAt)
+	}
+	return nil
+}
+
+// HasRunningJob reports whether a job has a row with status running.
+func (s *sqliteStore) HasRunningJob(ctx context.Context, jobName string) bool {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM job_runs WHERE job_name = ? AND status = 'running'`, jobName).Scan(&n)
+	return err == nil && n > 0
+}
+
+// GetLatestSuccessfulJobRun returns the most recent successful run for a job, or nil if none.
+func (s *sqliteStore) GetLatestSuccessfulJobRun(ctx context.Context, jobName string) (*JobRun, error) {
+	var j JobRun
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, job_name, started_at, COALESCE(finished_at, ''), status, COALESCE(error_message, ''), entries_count
+		 FROM job_runs WHERE job_name = ? AND status = 'success' ORDER BY started_at DESC LIMIT 1`, jobName,
 	).Scan(&j.ID, &j.JobName, &j.StartedAt, &j.FinishedAt, &j.Status, &j.ErrorMessage, &j.EntriesCount)
 	if err == sql.ErrNoRows {
 		return nil, nil

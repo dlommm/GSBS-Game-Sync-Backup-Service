@@ -121,6 +121,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for lint, coverage, and conventions.
 - `script/` — build, release, packaging (Inno Setup, `.deb`, AppImage)
 - `docs/` — guides and examples
 
+## Server configuration
+
+PCGW sync schedule: set `GSBS_PCGW_CRON` in Docker/compose (default `0 3 * * 0`, weekly Sunday 03:00; use `""` to disable). When the env var is **not** set, admins can configure cron in the WebUI under **Admin → Settings**.
+
+Save storage: set `GSBS_SAVE_ROOT` (e.g. `/app/data/gamesaves` on the same Docker volume as `GSBS_DB`) to store save files on disk instead of SQLite BLOBs. Clients must send `X-Relative-Path` on push when filesystem storage is enabled. See [docs/DOCKER.md](docs/DOCKER.md) for all environment variables.
+
 ## License
 
 [MIT](LICENSE)

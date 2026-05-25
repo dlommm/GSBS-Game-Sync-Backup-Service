@@ -124,12 +124,12 @@ func parseGameDataTemplates(wikitext, gameID string) []SaveLocationTemplate {
 			continue
 		}
 		pathRaw := s[pathStart : end-2]
-		pathNorm := NormalizePathTemplate(pathRaw)
-		if pathNorm != "" {
+		paths := SplitNormalizePathTemplates(pathRaw)
+		if len(paths) > 0 {
 			out = append(out, SaveLocationTemplate{
 				GameID:   gameID,
 				System:   system,
-				Paths:    []string{pathNorm},
+				Paths:    paths,
 				IsConfig: strings.EqualFold(kind, "config"),
 			})
 		}
@@ -149,9 +149,8 @@ func extractPathsFromSection(body string) map[string][]string {
 		if path == "" {
 			continue
 		}
-		path = NormalizePathTemplate(path)
-		if path != "" {
-			pathsBySystem[sys] = append(pathsBySystem[sys], path)
+		for _, p := range SplitNormalizePathTemplates(path) {
+			pathsBySystem[sys] = append(pathsBySystem[sys], p)
 		}
 	}
 	for _, m := range inlinePathRe.FindAllStringSubmatch(body, -1) {
@@ -160,9 +159,8 @@ func extractPathsFromSection(body string) map[string][]string {
 		}
 		path := cleanPath(m[1])
 		if path != "" && (strings.Contains(path, "save") || strings.Contains(path, "Save") || strings.Contains(path, "%") || strings.Contains(path, "<") || strings.Contains(path, "pfx")) {
-			path = NormalizePathTemplate(path)
-			if path != "" {
-				pathsBySystem["Windows"] = append(pathsBySystem["Windows"], path)
+			for _, p := range SplitNormalizePathTemplates(path) {
+				pathsBySystem["Windows"] = append(pathsBySystem["Windows"], p)
 			}
 		}
 	}

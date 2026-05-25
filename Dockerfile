@@ -1,10 +1,11 @@
 # GSBS Server — Docker image
 # Multi-stage: build the Go binary (CGO for SQLite), then run in a minimal image.
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25-alpine3.23 AS builder
 WORKDIR /app
 
 # SQLite driver needs CGO and Alpine build deps
-RUN apk add --no-cache gcc musl-dev sqlite-dev
+RUN apk add --no-cache gcc musl-dev sqlite-dev \
+  && apk upgrade --no-cache
 
 # Copy module files first for better layer caching
 COPY go.mod go.sum ./
@@ -22,17 +23,22 @@ RUN CGO_ENABLED=1 go build \
   -ldflags "-X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.Commit=${COMMIT}" \
   -o /gsbs-server ./server
 
-# Runtime image (Alpine for small size; SQLite binary may link against libsqlite3)
-FROM alpine:3.19
-RUN apk add --no-cache ca-certificates sqlite-libs wget
-# Optional: add user for non-root run (uncomment if desired)
-# RUN adduser -D -g '' appuser
-# USER appuser
+# Runtime: pinned Alpine 3.23.x for current security patches (see Docker Scout / Alpine releases).
+FROM alpine:3.23.4
+RUN apk add --no-cache ca-certificates sqlite-libs su-exec \
+  && apk upgrade --no-cache \
+  && addgroup -S gsbs -g 1000 \
+  && adduser -S gsbs -G gsbs -u 1000
 
 WORKDIR /app
 COPY --from=builder /gsbs-server .
+COPY script/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Default port; override with GSBS_ADDR if needed
 EXPOSE 8080
 
-ENTRYPOINT ["/app/gsbs-server"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/api/health || exit 1
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["/app/gsbs-server"]

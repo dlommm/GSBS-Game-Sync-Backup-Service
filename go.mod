@@ -14,10 +14,10 @@ require (
 	github.com/rs/zerolog v1.35.1
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/crypto v0.17.0
+	golang.org/x/crypto v0.52.0
 	golang.org/x/image v0.36.0
 	golang.org/x/mod v0.36.0
-	golang.org/x/sys v0.30.0
+	golang.org/x/sys v0.45.0
 	golang.org/x/time v0.14.0
 )
 
@@ -44,7 +44,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
 	github.com/sergeymakinen/go-ico v1.0.0-beta.0 // indirect
-	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

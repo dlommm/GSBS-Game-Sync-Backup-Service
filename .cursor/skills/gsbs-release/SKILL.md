@@ -18,7 +18,7 @@ description: Builds and releases GSBS server and client: version ldflags, script
 - **Packaging**:
   - Windows: `script/packaging/windows/gsbs-client.iss`, `build-installer.sh` (Inno Setup)
   - Linux: `script/packaging/linux/nfpm.yaml`, `build-deb.sh`, `build-appimage.sh`
-- **Docker**: `Dockerfile`, `docker-compose.yml`, `docker-compose.dev.yml`, `docs/DOCKER.md`, `docs/COMPOSE.md`, `docs/examples/`
+- **Docker**: `Dockerfile`, `script/docker-entrypoint.sh` (non-root + volume chown), `docker-compose.yml`, `docker-compose.dev.yml`, `docs/DOCKER.md`, `docs/COMPOSE.md`, `docs/examples/`
 - **Rule**: `.cursor/rules/push-releases.mdc` — tag push triggers CI; local script is fallback.
 
 ## Ldflags

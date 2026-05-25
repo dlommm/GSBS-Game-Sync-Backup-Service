@@ -9,6 +9,8 @@ type PullOptions struct {
 	BackupBeforeOverwrite bool
 	ConflictPolicy        string // last_write_wins, keep_local, keep_server
 	PullContext           paths.PullContext
+	// WatchRoot returns the resolved watch directory for a save slot (path safety on pull).
+	WatchRoot func(gameID, pathKey string) string
 }
 
 // DefaultPullOptions returns sensible defaults.

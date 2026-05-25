@@ -48,6 +48,32 @@ func TestNormalizePathTemplate_UnknownPreserved(t *testing.T) {
 	}
 }
 
+func TestSplitNormalizePathTemplates_WitcherPipeGlobs(t *testing.T) {
+	raw := `%USERPROFILE%/Documents/The Witcher 3/gamesaves/*.png|` +
+		`%USERPROFILE%/Documents/The Witcher 3/gamesaves/*.sav`
+	got := SplitNormalizePathTemplates(raw)
+	want := `%USERPROFILE%/Documents/The Witcher 3/gamesaves`
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("SplitNormalizePathTemplates() = %v, want [%q]", got, want)
+	}
+}
+
+func TestSplitNormalizePathTemplates_SingleGlob(t *testing.T) {
+	got := SplitNormalizePathTemplates(`%APPDATA%/Game/saves/*.dat`)
+	want := `%APPDATA%/Game/saves`
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %v, want [%q]", got, want)
+	}
+}
+
+func TestSplitNormalizePathTemplates_Dedupes(t *testing.T) {
+	raw := `%USERPROFILE%/save|%USERPROFILE%/save`
+	got := SplitNormalizePathTemplates(raw)
+	if len(got) != 1 || got[0] != `%USERPROFILE%/save` {
+		t.Fatalf("dedup failed: %v", got)
+	}
+}
+
 func TestNormalizePathTemplate_NonPathTemplatesPreserved(t *testing.T) {
 	in := "prefix {{Game data/saves|Windows|path}} suffix"
 	got := NormalizePathTemplate(in)

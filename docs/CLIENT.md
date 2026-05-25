@@ -102,7 +102,32 @@ On startup and every `discovery_interval` (default 4h), the client scans Steam, 
 - **`auto_watch_mode: "discovered"`** (default for new installs): only watch save paths for installed games matched to the manifest. Per-game opt-out via tray **Discovered games** (stored in `discovery.json` as `disabled_game_ids`).
 - **`auto_watch_mode: "legacy"`** (default when omitted in existing configs): watch any manifest path whose save directory already exists on disk.
 
+When no watch paths are built at startup or after a manifest refresh, the client logs a diagnostic summary with skip counts:
+
+- **discovered** — manifest entries skipped because the game is not in the discovered/installed set
+- **platform** — entry is for another OS (e.g. Windows path on Linux)
+- **missing_dir** — save directory template resolved but the folder does not exist locally yet
+- **malformed** — entry has no usable save rules or path template
+
+Example log line: `sync: no watch paths — skipped discovered=12 platform=40 missing_dir=3 malformed=0`
+
 Optional config: `conflict_policy` (`last_write_wins`, `keep_local`, `keep_server`), launcher folder overrides (`heroic_folder`, `lutris_folder`, `bottles_folder`, `prism_folder`, `flatpak_steam_folder`, `ea_app_folder`), `discovery_interval`.
+
+### Manual watch paths
+
+`watch_paths` in `config.json` can override or supplement manifest paths. Each entry supports:
+
+| Field | Description |
+|-------|-------------|
+| `game_id` | Server game ID |
+| `path_key` | Stable key for this save slot (required for legacy config entries) |
+| `path_templates` | Legacy list of OS-specific path templates |
+| `directory` | Save root directory template (preferred with manifest-style rules) |
+| `include_patterns` | Glob patterns relative to `directory` (e.g. `["*.sav", "profile.dat"]`); omit with `sync_all: true` to upload every file |
+| `sync_all` | When true, watch and push all files under `directory` |
+| `recursive` | When true, watch subdirectories recursively |
+
+Config `watch_paths` are merged first; manifest-derived paths with the same `(game_id, rule_key)` are not duplicated.
 
 ## Offline outbox
 
@@ -114,7 +139,7 @@ Enable **End-to-end encryption** in WebUI **Settings**. Set `encryption_passphra
 
 ## Sync behavior
 
-- **Upload**: File watcher debounces changes (2s) and pushes with SHA256 hash metadata. A supervisor restarts the watcher if fsnotify fails.
+- **Upload**: File watcher debounces changes (2s) and pushes with SHA256 hash metadata. Duplicate content (same hash as the last successful push for that slot) is skipped locally; the server may also respond with `{"status":"unchanged"}`. A supervisor restarts the watcher if fsnotify fails.
 - **Download**: Uses summary + hash comparison to fetch only changed saves; listens for SSE `save-updated` events from other machines. Transient network errors use exponential backoff (`pkg/retry`).
 - **Conflicts**: Default policy is `last_write_wins` (`conflict_policy`). When both local and server changed, conflicts are recorded in `conflicts.json` with hashes and timestamps. Resolve from the tray (keep all local / use all server) or the WebUI dashboard. Legacy `skip_overwrite_when_local_newer: true` maps to `keep_local`.
 - **Versions**: Server keeps last N versions per save (`GSBS_SAVE_VERSION_RETENTION`). Restore from WebUI **Versions** link or tray **Open dashboard**.
@@ -128,7 +153,8 @@ Enable **End-to-end encryption** in WebUI **Settings**. Set `encryption_passphra
   - Startup: log file path, sync start, server URL
   - Login: success/failure (CLI, tray, or browser setup)
   - Manifest: fetch from server, cache save, refresh (SSE or manual)
-  - Sync: initial pull, periodic pull, “sync now”, watch paths count
+  - Sync: initial pull, periodic pull, “sync now”, watch paths count, zero-watch diagnostics
+  - Manifest refresh: watch path diff (+added -removed) after SSE, discovery, or manual refresh
   - Watcher: directory add errors, push after file change, push errors
   - Pull: decode/mkdir/write errors, successful writes per game/path
   - Tray: sync started, config reloaded, menu actions, per-game status updates

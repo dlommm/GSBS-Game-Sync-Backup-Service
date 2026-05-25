@@ -266,6 +266,12 @@ func adminQuerySuccess(r *http.Request) string {
 	if q.Get("job_started") == "1" {
 		return "PCGW sync job started in background."
 	}
+	if q.Get("job_canceled") == "1" {
+		return "PCGW sync cancel requested."
+	}
+	if q.Get("user_created") == "1" {
+		return "User created successfully."
+	}
 	if q.Get("user_disabled") == "1" {
 		return "User disabled. They cannot log in until re-enabled."
 	}
@@ -277,6 +283,13 @@ func adminQuerySuccess(r *http.Request) string {
 	}
 	if q.Get("quota_set") == "1" {
 		return "Storage quota updated."
+	}
+	if q.Get("saved") == "1" {
+		return "Settings saved."
+	}
+	if q.Get("imported") == "1" {
+		return fmt.Sprintf("PCGW import complete (%s locations, %s games).",
+			q.Get("locations"), q.Get("games"))
 	}
 	return ""
 }
@@ -297,6 +310,32 @@ func adminQueryError(r *http.Request) string {
 		return "Missing client ID."
 	case "revoke_failed":
 		return "Failed to revoke client."
+	case "job_already_running":
+		return "PCGW sync is already running."
+	case "job_start_failed":
+		return "Failed to start PCGW sync."
+	case "missing_credentials":
+		return "Username and password are required."
+	case "password_mismatch":
+		return "Passwords do not match."
+	case "username_taken":
+		return "That username is already taken."
+	case "create_user_failed":
+		return "Failed to create user."
+	case "invalid_cron":
+		return "Invalid cron expression."
+	case "invalid_title_excludes", "invalid_path_excludes":
+		return "Filter excludes must be valid JSON arrays."
+	case "save_failed", "cron_reschedule_failed":
+		return "Failed to save settings."
+	case "import_parse_failed", "import_read_failed":
+		return "Could not read import file."
+	case "import_missing_file":
+		return "No import file selected."
+	case "import_invalid_mode":
+		return "Invalid import mode."
+	case "import_failed":
+		return "Import failed. See server log."
 	default:
 		return r.URL.Query().Get("error")
 	}

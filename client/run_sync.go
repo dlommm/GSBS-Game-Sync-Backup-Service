@@ -81,6 +81,18 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 	log.Printf("client sync: starting server=%s", cfg.ServerURL)
 
+	// Startup order (single goroutine until the select loop):
+	//  1. Restore discovery cache → filter manifest watch paths in discovered mode
+	//  2. Fetch manifest (304 uses on-disk cache)
+	//  3. Run discovery scan for newly installed games
+	//  4. Create sync client + account settings (encryption)
+	//  5. Build watch paths from manifest + config merge
+	//  6. Initial pull (unless paused / metered)
+	//  7. Start file watcher + supervisor
+	//  8. Drain outbox from previous session
+	//  9. Start SSE listener, tickers (pull, outbox, discovery)
+	// 10. Event loop: periodic pull, sync-now, SSE, manifest refresh, discovery rebuild
+
 	initDiscoveryState()
 	// Restore discovery state from cache for watch filtering before first scan.
 	if cached := loadDiscoveryCache(); len(cached.MatchedGameIDs) > 0 {
@@ -157,9 +169,12 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	wireSyncTrayHooks()
 
 	activeIDs := activeGameIDSet()
-	effectiveWatchPaths := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode)
-	effectiveWatchPaths = mergeWatchPaths(effectiveWatchPaths, cfg.WatchPaths)
+	manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode)
+	effectiveWatchPaths := mergeWatchPaths(manifestWP, cfg.WatchPaths)
 	log.Printf("sync: %d active watch paths (mode=%s)", len(effectiveWatchPaths), watchMode)
+	if len(effectiveWatchPaths) == 0 {
+		LogZeroWatchPathsSummary(wpStats)
+	}
 
 	// Mutex protects effectiveWatchPaths, which is read by resolvePath (called
 	// from the pull resolver) and written by doManifestRefresh. Although both
@@ -177,6 +192,16 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		manifestMu.RUnlock()
 		return resolveSavePath(gameID, pathKey, entries, wp, resolver, currentOS, pullOpts.PullContext)
 	}
+	watchRoot := func(gameID, pathKey string) string {
+		wpMu.RLock()
+		wp := effectiveWatchPaths
+		wpMu.RUnlock()
+		manifestMu.RLock()
+		entries := manifestEntries
+		manifestMu.RUnlock()
+		return resolveWatchRoot(gameID, pathKey, entries, wp, resolver, currentOS)
+	}
+	pullOpts.WatchRoot = watchRoot
 
 	doPull := func(label string) {
 		if SyncPaused.Load() || (cfg.SkipSyncWhenMetered && IsMeteredConnection()) {
@@ -205,15 +230,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		wpMu.RLock()
 		wp := effectiveWatchPaths
 		wpMu.RUnlock()
-		out := make([]sync.WatchPath, len(wp))
-		for i := range wp {
-			out[i] = sync.WatchPath{
-				GameID:        wp[i].GameID,
-				PathKey:       wp[i].PathKey,
-				PathTemplates: wp[i].PathTemplates,
-			}
-		}
-		return out
+		return mapToSyncWatchPaths(wp)
 	}
 
 	watcher, err := sync.NewWatcher(resolver, currentOS, client)
@@ -302,15 +319,22 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 				pullOpts.PullContext = buildPullContext(cfg)
 			}
 			activeIDs := activeGameIDSet()
-			newWP := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode)
-			newWP = mergeWatchPaths(newWP, cfg.WatchPaths)
+			wpMu.RLock()
+			oldWP := append([]watchPath(nil), effectiveWatchPaths...)
+			wpMu.RUnlock()
+			manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode)
+			newWP := mergeWatchPaths(manifestWP, cfg.WatchPaths)
+			added, removed := watchPathDiff(oldWP, newWP)
 			wpMu.Lock()
 			effectiveWatchPaths = newWP
 			wpMu.Unlock()
 			newSyncWP := getSyncWatchPaths()
 			_ = watcher.AddPaths(newSyncWP)
 			watcher.RemoveStalePaths(newSyncWP)
-			log.Printf("manifest refresh (%s): %d active watch paths", reason, len(newWP))
+			log.Printf("manifest refresh (%s): watch paths +%d -%d (now %d)", reason, added, removed, len(newWP))
+			if len(newWP) == 0 {
+				LogZeroWatchPathsSummary(wpStats)
+			}
 		} else {
 			log.Printf("manifest refresh (%s): fetch failed: %v", reason, err)
 		}
@@ -345,11 +369,24 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 			} else {
 				// Rebuild watch paths in case save dirs appeared without new games
 				activeIDs := activeGameIDSet()
-				newWP := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode)
-				newWP = mergeWatchPaths(newWP, cfg.WatchPaths)
+				wpMu.RLock()
+				oldWP := append([]watchPath(nil), effectiveWatchPaths...)
+				wpMu.RUnlock()
+				manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode)
+				newWP := mergeWatchPaths(manifestWP, cfg.WatchPaths)
+				added, removed := watchPathDiff(oldWP, newWP)
 				wpMu.Lock()
 				effectiveWatchPaths = newWP
 				wpMu.Unlock()
+				newSyncWP := getSyncWatchPaths()
+				_ = watcher.AddPaths(newSyncWP)
+				watcher.RemoveStalePaths(newSyncWP)
+				if added > 0 || removed > 0 {
+					log.Printf("discovery rebuild: watch paths +%d -%d (now %d)", added, removed, len(newWP))
+				}
+				if len(newWP) == 0 {
+					LogZeroWatchPathsSummary(wpStats)
+				}
 			}
 		}
 	}
@@ -370,4 +407,67 @@ func minDuration(a, b time.Duration) time.Duration {
 		return a
 	}
 	return b
+}
+
+func watchPathIdentity(wp watchPath) string {
+	key := wp.PathKey
+	if wp.RuleKey != "" {
+		key = wp.RuleKey
+	}
+	return wp.GameID + "\x00" + key
+}
+
+func watchPathDiff(old, new []watchPath) (added, removed int) {
+	oldSet := make(map[string]bool, len(old))
+	for _, wp := range old {
+		oldSet[watchPathIdentity(wp)] = true
+	}
+	newSet := make(map[string]bool, len(new))
+	for _, wp := range new {
+		id := watchPathIdentity(wp)
+		newSet[id] = true
+		if !oldSet[id] {
+			added++
+		}
+	}
+	for id := range oldSet {
+		if !newSet[id] {
+			removed++
+		}
+	}
+	return added, removed
+}
+
+func mapToSyncWatchPaths(wps []watchPath) []sync.WatchPath {
+	var out []sync.WatchPath
+	for _, wp := range wps {
+		ruleKey := wp.RuleKey
+		if ruleKey == "" {
+			ruleKey = wp.PathKey
+		}
+		if wp.Directory != "" {
+			syncAll := wp.SyncAll
+			if !syncAll && len(wp.IncludePatterns) == 0 {
+				syncAll = true
+			}
+			out = append(out, sync.WatchPath{
+				GameID:          wp.GameID,
+				RuleKey:         ruleKey,
+				Directory:       wp.Directory,
+				IncludePatterns: append([]string(nil), wp.IncludePatterns...),
+				Recursive:       wp.Recursive,
+				SyncAll:         syncAll,
+			})
+			continue
+		}
+		for _, t := range wp.PathTemplates {
+			out = append(out, sync.WatchPath{
+				GameID:    wp.GameID,
+				RuleKey:   ruleKey,
+				Directory: t,
+				SyncAll:   true,
+			})
+		}
+	}
+	return out
 }

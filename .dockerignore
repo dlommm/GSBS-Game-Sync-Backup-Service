@@ -13,3 +13,11 @@ pcgw-fetch
 pcgw-sync
 gsbs-client
 gsbs-server
+coverage.out
+.cursor/
+node_modules/
+.env
+.env.*
+*.log
+.github/
+docs/examples/

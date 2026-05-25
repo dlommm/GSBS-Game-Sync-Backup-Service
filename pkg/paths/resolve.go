@@ -187,10 +187,17 @@ func (r *Resolver) ResolveAll(template string, targetOS OS) []string {
 	return nil
 }
 
+func cleanResolvedPath(p string) string {
+	if p == "" {
+		return ""
+	}
+	return filepath.Clean(p)
+}
+
 func (r *Resolver) expandWithSteamRoot(template, root string, targetOS OS) string {
 	s := template
 	s = replaceEnv(s, "<SteamLibrary-folder>", root)
-	return r.expandOne(s, targetOS)
+	return cleanResolvedPath(r.expandOne(s, targetOS))
 }
 
 // expandOne returns one absolute path from one template.
@@ -225,7 +232,7 @@ func (r *Resolver) expandOne(template string, targetOS OS) string {
 				} else {
 					out = filepath.ToSlash(out)
 				}
-				return out
+				return cleanResolvedPath(out)
 			}
 		}
 		// No library found; use first root as default
@@ -234,13 +241,13 @@ func (r *Resolver) expandOne(template string, targetOS OS) string {
 			if targetOS == Windows {
 				out = filepath.FromSlash(strings.ReplaceAll(out, "/", string(filepath.Separator)))
 			}
-			return out
+			return cleanResolvedPath(out)
 		}
 	}
 	if targetOS == Windows {
 		s = filepath.FromSlash(strings.ReplaceAll(s, "/", string(filepath.Separator)))
 	}
-	return s
+	return cleanResolvedPath(s)
 }
 
 func replaceEnv(s, key, value string) string {

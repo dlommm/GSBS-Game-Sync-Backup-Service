@@ -29,19 +29,30 @@ type PullResponse struct {
 	Saves []SaveBlob `json:"saves"`
 }
 
+// SaveRule describes what to sync under a resolved directory.
+type SaveRule struct {
+	Directory       string   `json:"directory"`
+	IncludePatterns []string `json:"include_patterns,omitempty"`
+	Recursive       bool     `json:"recursive,omitempty"`
+	Platform        string   `json:"platform,omitempty"`
+	IsConfig        bool     `json:"is_config"`
+	SyncAll         bool     `json:"sync_all,omitempty"` // explicit opt-in when IncludePatterns is empty
+}
+
 // GameSaveLocation is a single manifest entry: where a game stores saves/config per platform.
 type GameSaveLocation struct {
-	GameID       string   `json:"game_id"`       // PCGW page ID (canonical save key)
-	PCGWPageID   int64    `json:"pcgw_page_id"`  // PCGamingWiki page ID
-	GameTitle    string   `json:"game_title"`    // human-readable title
-	Platform     string   `json:"platform"`      // "windows" or "linux"
-	PathTemplate string   `json:"path_template"` // placeholder path, e.g. %APPDATA%\EldenRing\<user-id>
-	IsConfig     bool     `json:"is_config"`     // config file vs save file
-	UpdatedAt    string   `json:"updated_at"`
-	Source       string   `json:"source"`          // e.g. "pcgw"
-	Notes        string   `json:"notes,omitempty"` // optional attribution or URL (e.g. PCGW page link)
-	SteamAppIDs  []string `json:"steam_app_ids,omitempty"`
-	GOGID        string   `json:"gog_id,omitempty"`
-	EpicID       string   `json:"epic_id,omitempty"`
-	UbisoftID    string   `json:"ubisoft_id,omitempty"`
+	GameID       string     `json:"game_id"`       // PCGW page ID (canonical save key)
+	PCGWPageID   int64      `json:"pcgw_page_id"`  // PCGamingWiki page ID
+	GameTitle    string     `json:"game_title"`    // human-readable title
+	Platform     string     `json:"platform"`      // "windows" or "linux"
+	PathTemplate string     `json:"path_template"` // placeholder path, e.g. %APPDATA%\EldenRing\<user-id>
+	IsConfig     bool       `json:"is_config"`     // config file vs save file
+	UpdatedAt    string     `json:"updated_at"`
+	Source       string     `json:"source"`          // e.g. "pcgw"
+	Notes        string     `json:"notes,omitempty"` // optional attribution or URL (e.g. PCGW page link)
+	SteamAppIDs  []string   `json:"steam_app_ids,omitempty"`
+	GOGID        string     `json:"gog_id,omitempty"`
+	EpicID       string     `json:"epic_id,omitempty"`
+	UbisoftID    string     `json:"ubisoft_id,omitempty"`
+	SaveRules    []SaveRule `json:"save_rules,omitempty"`
 }

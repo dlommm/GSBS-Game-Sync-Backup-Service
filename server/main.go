@@ -21,6 +21,7 @@ import (
 	"github.com/gsbs/gsbs/server/metrics"
 	"github.com/gsbs/gsbs/server/netutil"
 	"github.com/gsbs/gsbs/server/ratelimit"
+	"github.com/gsbs/gsbs/server/schedule"
 	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
 	"github.com/gsbs/gsbs/server/webui"
@@ -132,7 +133,14 @@ func main() {
 	}
 	defer st.Close()
 	log.Printf("database: opened %s", dbPath)
-	if n, err := st.DeleteExpiredSessions(context.Background(), time.Now().Add(-store.WebSessionMaxAge)); err != nil {
+	ctx := context.Background()
+	if err := st.ReconcileStaleJobRuns(ctx); err != nil {
+		log.Printf("reconcile stale job_runs: %v", err)
+	}
+	if err := st.ReconcileStalePCGWSyncRuns(ctx); err != nil {
+		log.Printf("reconcile stale pcgw_sync_runs: %v", err)
+	}
+	if n, err := st.DeleteExpiredSessions(ctx, time.Now().Add(-store.WebSessionMaxAge)); err != nil {
 		log.Printf("session GC on startup: %v", err)
 	} else if n > 0 {
 		log.Printf("session GC on startup: removed %d expired session(s)", n)
@@ -180,7 +188,9 @@ func main() {
 	}
 	apiHandler := api.NewHandler(st, authSvc, allowRegister, hub, authLimiter, pushLimiter, pullLimiter, generalLimiter, manifestLimiter, maxStorageBytes, readOnly, sessionSecret, Version)
 	runner = job.NewRunner(st, hub, apiHandler)
-	webHandler := webui.NewWebHandler(st, authSvc, sessionSecret, os.Getenv("GSBS_ADMIN_USERNAME"), allowRegister, hub, apiHandler, runner, maxStorageBytes, readOnly, authLimiter)
+	c := cron.New()
+	pcgwCronSched := schedule.NewPCGWCron(c, st, runner)
+	webHandler := webui.NewWebHandler(st, authSvc, sessionSecret, os.Getenv("GSBS_ADMIN_USERNAME"), allowRegister, hub, apiHandler, runner, pcgwCronSched, Version, maxStorageBytes, readOnly, authLimiter)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiHandler)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(webui.StaticFiles())))
@@ -198,19 +208,23 @@ func main() {
 	}
 	handler := logRequests(mux, metricsCollector)
 
-	pcgwCron := os.Getenv("GSBS_PCGW_CRON")
-	if pcgwCron == "" {
-		pcgwCron = "0 3 * * 0"
+	if err := pcgwCronSched.Start(ctx); err != nil {
+		log.Printf("cron: failed to schedule PCGW sync: %v", err)
 	}
-	c := cron.New()
-	id, err := c.AddFunc(pcgwCron, func() {
-		runner.RunPCGWSync(context.Background())
-	})
-	if err != nil {
-		log.Printf("cron: failed to schedule PCGW sync %q: %v", pcgwCron, err)
-	} else {
-		_ = id
-		log.Printf("cron: PCGW sync scheduled %s", pcgwCron)
+	if shouldAutoRunPCGWOnFirstStart(ctx, st) {
+		go func() {
+			started, err := runner.TryRunPCGWSync(context.Background())
+			if err != nil {
+				log.Printf("first-start pcgw sync: %v", err)
+				return
+			}
+			if started {
+				if err := st.SetAdminSetting(context.Background(), store.AdminSettingPCGWFirstRunDone, "true"); err != nil {
+					log.Printf("first-start pcgw sync: set marker: %v", err)
+				}
+				log.Println("first-start pcgw sync started")
+			}
+		}()
 	}
 	if id2, err := c.AddFunc("0 0 * * *", func() {
 		if err := st.AppendStatsSnapshot(context.Background()); err != nil {
@@ -279,4 +293,13 @@ func parseRateLimit(s string) (limit int, window time.Duration) {
 		return 0, 0
 	}
 	return limit, window
+}
+
+func shouldAutoRunPCGWOnFirstStart(ctx context.Context, st store.Store) bool {
+	done, _ := st.GetAdminSetting(ctx, store.AdminSettingPCGWFirstRunDone)
+	if done == "true" {
+		return false
+	}
+	auto, _ := st.GetAdminSetting(ctx, store.AdminSettingPCGWAutoRunFirstStart)
+	return auto == "true" || auto == "1"
 }

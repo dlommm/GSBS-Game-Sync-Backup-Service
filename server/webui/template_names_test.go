@@ -25,6 +25,8 @@ var handlerTemplates = []string{
 	"admin_activity.html",
 	"admin_pcgw.html",
 	"admin_pcgw_detail.html",
+	"admin_settings.html",
+	"admin_analytics.html",
 	"partials/dashboard_stats.html",
 	"partials/dashboard_clients.html",
 	"partials/dashboard_saves.html",
@@ -41,6 +43,7 @@ var nestedTemplateRefs = []string{
 	"partials/alerts.html",
 	"partials/topbar.html",
 	"partials/admin_shell.html",
+	"partials/job_status_badge.html",
 	"partials/timeline_item.html",
 	"partials/loading_skeleton.html",
 }
@@ -52,7 +55,9 @@ var pageBlockTemplates = []string{
 	"enable_2fa_title", "enable_2fa_content",
 	"save_versions_title", "save_versions_content",
 	"admin_overview_title", "admin_overview_content", "admin_overview_scripts",
-	"admin_users_title", "admin_users_content",
+	"admin_users_title", "admin_users_content", "admin_users_scripts",
+	"admin_settings_title", "admin_settings_content", "admin_settings_scripts",
+	"admin_analytics_title", "admin_analytics_content", "admin_analytics_scripts",
 	"admin_manifest_title", "admin_manifest_content", "admin_manifest_scripts",
 	"admin_activity_title", "admin_activity_content", "admin_activity_scripts",
 	"admin_pcgw_title", "admin_pcgw_content", "admin_pcgw_scripts",
@@ -230,8 +235,11 @@ func templateTestData(name string) interface{} {
 			RecentJobs: []store.JobRun{
 				{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
 			},
-			JobRunning:       false,
-			JobProgressPages: 0,
+			JobRunning:           false,
+			JobProgressPages:     0,
+			JobProgressTotal:     0,
+			JobGamesSkipped:      0,
+			LastSuccessfulSyncAt: now,
 		}
 	case "admin_users.html":
 		return adminUsersData{
@@ -241,8 +249,8 @@ func templateTestData(name string) interface{} {
 			CurrentUserID:  "user-admin",
 			MaxClientCount: 3,
 			Users: []store.UserStatRow{
-				{ID: "user-1", Username: "alice", ClientCount: 2, SaveCount: 5, StorageBytes: 1024},
-				{ID: "user-2", Username: "bob", ClientCount: 1, SaveCount: 2, StorageBytes: 512, Disabled: true},
+				{ID: "user-1", Username: "alice", ClientCount: 2, SaveCount: 5, StorageBytes: 1024, QuotaBytes: 10737418240},
+				{ID: "user-2", Username: "bob", ClientCount: 1, SaveCount: 2, StorageBytes: 512, Disabled: true, QuotaBytes: 5368709120},
 			},
 			Clients: []store.ClientInfoWithUser{
 				{ID: "c1", UserID: "user-1", Username: "alice", Name: "PC", OS: "windows", LastSeen: now},
@@ -287,8 +295,11 @@ func templateTestData(name string) interface{} {
 			RecentJobs: []store.JobRun{
 				{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
 			},
-			JobRunning:       false,
-			JobProgressPages: 0,
+			JobRunning:           false,
+			JobProgressPages:     0,
+			JobProgressTotal:     0,
+			JobGamesSkipped:      0,
+			LastSuccessfulSyncAt: now,
 		}
 	case "admin_pcgw.html":
 		return adminPCGWData{
@@ -309,6 +320,31 @@ func templateTestData(name string) interface{} {
 			Game:           &types.PCGWGame{PageID: 123, Title: "Test Game", ParseStatus: "ok"},
 			GameData:       []types.PCGWGameData{{PlatformKey: "windows", PlatformRawLabel: "Windows"}},
 			ExportJSONPath: "/admin/pcgw/export/123.json",
+		}
+	case "admin_settings.html":
+		return adminSettingsData{
+			PageData: PageData{
+				PageName: "admin_settings", Username: "admin", IsAdmin: true, CSRFToken: "csrf-test", AdminNav: "settings",
+			},
+			PCGWCron:              store.DefaultPCGWCron,
+			PCGWCronSource:        "default",
+			PCGWTitleExcludesJSON: "[]",
+			PCGWPathExcludesJSON:  store.DefaultPCGWPathExcludesJSON,
+		}
+	case "admin_analytics.html":
+		return adminAnalyticsData{
+			PageData: PageData{
+				PageName: "admin_analytics", Username: "admin", IsAdmin: true, CSRFToken: "csrf-test", AdminNav: "analytics",
+			},
+			TotalStorage:     2048,
+			ActiveClients24h: 2,
+			SyncVolume7d:     15,
+			ManifestGames:    100,
+			SaveGames:        12,
+			PCGWCoveragePct:  12,
+			StatsSnapshots: []store.StatsSnapshotRow{
+				{At: now, UserCount: 1, ClientCount: 1, SaveCount: 5, StorageBytes: 1024},
+			},
 		}
 	case "partials/dashboard_stats.html":
 		return map[string]interface{}{
@@ -374,7 +410,8 @@ func templateTestData(name string) interface{} {
 		}
 	case "partials/admin_pcgw_job_status.html":
 		return map[string]interface{}{
-			"JobRunning": true, "JobProgress": 42,
+			"JobRunning": true, "JobProgress": 42, "JobProgressTotal": 100, "JobGamesSkipped": 3,
+			"CSRFToken": "csrf-test",
 		}
 	case "partials/loading_skeleton.html":
 		return map[string]interface{}{}

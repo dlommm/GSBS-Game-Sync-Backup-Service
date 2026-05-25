@@ -72,15 +72,18 @@ type adminStats struct {
 
 type adminOverviewData struct {
 	PageData
-	Stats            adminStats
-	StatsSnapshots   []store.StatsSnapshotRow
-	SSEClients       int
-	AllowRegister    bool
-	MaxStorageBytes  int64
-	ReadOnly         bool
-	RecentJobs       []store.JobRun
-	JobRunning       bool
-	JobProgressPages int
+	Stats                adminStats
+	StatsSnapshots       []store.StatsSnapshotRow
+	SSEClients           int
+	AllowRegister        bool
+	MaxStorageBytes      int64
+	ReadOnly             bool
+	RecentJobs           []store.JobRun
+	JobRunning           bool
+	JobProgressPages     int
+	JobProgressTotal     int
+	JobGamesSkipped      int
+	LastSuccessfulSyncAt string
 }
 
 type adminUsersData struct {
@@ -108,12 +111,15 @@ type adminManifestData struct {
 
 type adminActivityData struct {
 	PageData
-	Fetches          []store.ManifestFetchRow
-	AuditLog         []store.AuditRow
-	StatsSnapshots   []store.StatsSnapshotRow
-	RecentJobs       []store.JobRun
-	JobRunning       bool
-	JobProgressPages int
+	Fetches              []store.ManifestFetchRow
+	AuditLog             []store.AuditRow
+	StatsSnapshots       []store.StatsSnapshotRow
+	RecentJobs           []store.JobRun
+	JobRunning           bool
+	JobProgressPages     int
+	JobProgressTotal     int
+	JobGamesSkipped      int
+	LastSuccessfulSyncAt string
 }
 
 func newTemplateFuncs(t *template.Template) template.FuncMap {
@@ -126,6 +132,7 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 		"auditLabel":      auditLabel,
 		"chartLineSVG":    chartLineSVG,
 		"percent":         percent,
+		"percentInt":      percentInt,
 		"minInt":          minInt,
 		"quotaBarClass":   quotaBarClass,
 		"clientBarWidth":  clientBarWidth,
@@ -353,6 +360,17 @@ func clientBarWidth(count, max int) int {
 		return 100
 	}
 	return w
+}
+
+func percentInt(used, total int) float64 {
+	if total <= 0 {
+		return 0
+	}
+	p := float64(used) / float64(total) * 100
+	if p > 100 {
+		return 100
+	}
+	return p
 }
 
 func quotaBarClass(used, quota int64) string {
