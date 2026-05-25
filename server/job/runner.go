@@ -206,7 +206,7 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 			p.ETASeconds = eta
 			r.hub.Broadcast(sse.Event{Type: "job-progress", Data: fmt.Sprintf(
 				`{"job":"pcgw_sync","pages":%d,"total":%d,"phase":%q,"games_skipped":%d,"eta_seconds":%d}`,
-				p.PagesProcessed, p.TotalEstimate, p.Phase, p.GamesSkipped, eta)})
+				p.PagesProcessed, p.TotalEstimate, p.Phase, p.GamesSkipped, p.ETASeconds)})
 		}
 	}
 	count, syncErr := PCGWSyncEx(jobCtx, r.store, pcgwClient, progressFn, reportEx, syncOpts)

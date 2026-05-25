@@ -83,7 +83,6 @@ func (p *PCGWCron) Reschedule(ctx context.Context) error {
 
 func (p *PCGWCron) resolve(ctx context.Context) (expr string, disabled bool, source string, envOverride bool) {
 	if v, ok := os.LookupEnv("GSBS_PCGW_CRON"); ok {
-		envOverride = true
 		if v == "" {
 			return "", true, "env", true
 		}

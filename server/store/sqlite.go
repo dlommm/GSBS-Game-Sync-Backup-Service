@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -875,7 +876,7 @@ func (s *sqliteStore) GetSave(ctx context.Context, userID, gameID, pathKey strin
 		`SELECT game_id, path_key, content, storage_path, updated_at, COALESCE(encrypted, 0) FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
 		userID, gameID, pathKey,
 	).Scan(&b.GameID, &b.PathKey, &rawContent, &storagePath, &updatedAt, &enc)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

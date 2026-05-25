@@ -43,7 +43,7 @@ func NewWebHandler(st store.Store, authSvc *auth.Service, secret, adminUsername 
 		allowRegister: allowRegister, templates: parseTemplates(), hub: hub,
 		apiHandler: apiHandler, jobRunner: jobRunner, pcgwCron: pcgwCron, gsbsVersion: gsbsVersion,
 		maxStorageBytes: maxStorageBytes,
-		readOnly: readOnly, loginLimiter: loginLimiter,
+		readOnly:        readOnly, loginLimiter: loginLimiter,
 	}
 }
 

@@ -19,7 +19,7 @@ import (
 // PCGWSyncOptions configures a sync run.
 type PCGWSyncOptions struct {
 	Full             bool
-	ForceFull        bool // bypass resume checkpoint
+	ForceFull        bool  // bypass resume checkpoint
 	SinglePage       int64 // if >0, sync only this page
 	Offset           int   // resume offset for full/incremental list
 	SyncRunID        string

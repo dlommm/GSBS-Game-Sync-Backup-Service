@@ -951,9 +951,9 @@ func (s *sqliteStore) ReconcileStalePCGWSyncRuns(ctx context.Context) error {
 	}
 	defer rows.Close()
 	type staleRow struct {
-		id       string
-		mode     string
-		started  string
+		id         string
+		mode       string
+		started    string
 		checkpoint int
 	}
 	var stale []staleRow

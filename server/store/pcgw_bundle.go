@@ -15,24 +15,24 @@ import (
 const pcgwBundleSchemaVersion = 1
 
 type pcgwManifestBundle struct {
-	SchemaVersion     int                        `json:"schema_version"`
-	GSBSVersion       string                     `json:"gsbs_version"`
-	ExportedAt        string                     `json:"exported_at"`
-	Counts            pcgwBundleCounts           `json:"counts"`
-	GameSaveLocations []types.GameSaveLocation   `json:"game_save_locations"`
-	Games             []types.PCGWGame           `json:"games"`
-	GameData          []types.PCGWGameData       `json:"game_data"`
-	Metadata          []types.PCGWMetadata       `json:"metadata"`
-	Sections          map[string][]sectionExport `json:"sections"`
+	SchemaVersion      int                           `json:"schema_version"`
+	GSBSVersion        string                        `json:"gsbs_version"`
+	ExportedAt         string                        `json:"exported_at"`
+	Counts             pcgwBundleCounts              `json:"counts"`
+	GameSaveLocations  []types.GameSaveLocation      `json:"game_save_locations"`
+	Games              []types.PCGWGame              `json:"games"`
+	GameData           []types.PCGWGameData          `json:"game_data"`
+	Metadata           []types.PCGWMetadata          `json:"metadata"`
+	Sections           map[string][]sectionExport    `json:"sections"`
 	SystemRequirements []types.PCGWSystemRequirement `json:"system_requirements"`
 }
 
 type pcgwBundleCounts struct {
-	GameSaveLocations int `json:"game_save_locations"`
-	Games             int `json:"games"`
-	GameData          int `json:"game_data"`
-	Metadata          int `json:"metadata"`
-	Sections          int `json:"sections"`
+	GameSaveLocations  int `json:"game_save_locations"`
+	Games              int `json:"games"`
+	GameData           int `json:"game_data"`
+	Metadata           int `json:"metadata"`
+	Sections           int `json:"sections"`
 	SystemRequirements int `json:"system_requirements"`
 }
 
@@ -83,21 +83,21 @@ func (s *sqliteStore) ExportPCGWManifestBundle(ctx context.Context, gsbsVersion 
 	}
 
 	bundle := pcgwManifestBundle{
-		SchemaVersion:     pcgwBundleSchemaVersion,
-		GSBSVersion:       gsbsVersion,
-		ExportedAt:        time.Now().UTC().Format(time.RFC3339),
-		GameSaveLocations: locations,
-		Games:             games,
-		GameData:          gameData,
-		Metadata:          metadata,
-		Sections:          sections,
+		SchemaVersion:      pcgwBundleSchemaVersion,
+		GSBSVersion:        gsbsVersion,
+		ExportedAt:         time.Now().UTC().Format(time.RFC3339),
+		GameSaveLocations:  locations,
+		Games:              games,
+		GameData:           gameData,
+		Metadata:           metadata,
+		Sections:           sections,
 		SystemRequirements: sysReqs,
 		Counts: pcgwBundleCounts{
-			GameSaveLocations: len(locations),
-			Games:             len(games),
-			GameData:          len(gameData),
-			Metadata:          len(metadata),
-			Sections:          sectionCount,
+			GameSaveLocations:  len(locations),
+			Games:              len(games),
+			GameData:           len(gameData),
+			Metadata:           len(metadata),
+			Sections:           sectionCount,
 			SystemRequirements: len(sysReqs),
 		},
 	}
@@ -230,7 +230,7 @@ func gunzipMaybe(data []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer r.Close()
+		defer func() { _ = r.Close() }()
 		var buf bytes.Buffer
 		if _, err := buf.ReadFrom(r); err != nil {
 			return nil, err
@@ -301,7 +301,7 @@ func (s *sqliteStore) listAllPCGWGameData(ctx context.Context) ([]types.PCGWGame
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []types.PCGWGameData
 	for rows.Next() {
 		var row types.PCGWGameData
@@ -332,7 +332,7 @@ func (s *sqliteStore) listAllPCGWMetadata(ctx context.Context) ([]types.PCGWMeta
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []types.PCGWMetadata
 	for rows.Next() {
 		var m types.PCGWMetadata
@@ -355,7 +355,7 @@ func (s *sqliteStore) listAllPCGWSystemRequirements(ctx context.Context) ([]type
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []types.PCGWSystemRequirement
 	for rows.Next() {
 		var r types.PCGWSystemRequirement
@@ -386,7 +386,7 @@ func (s *sqliteStore) exportAllPCGWSections(ctx context.Context) (map[string][]s
 			var data, templates string
 			var wiki sql.NullString
 			if err := rows.Scan(&se.PageID, &data, &templates, &wiki, &se.UpdatedAt); err != nil {
-				rows.Close()
+				_ = rows.Close()
 				return nil, 0, err
 			}
 			se.SectionWikitext = wiki.String
@@ -395,7 +395,9 @@ func (s *sqliteStore) exportAllPCGWSections(ctx context.Context) (map[string][]s
 			out[name] = append(out[name], se)
 			total++
 		}
-		rows.Close()
+		if err := rows.Close(); err != nil {
+			return nil, 0, err
+		}
 		if err := rows.Err(); err != nil {
 			return nil, 0, err
 		}

@@ -149,9 +149,7 @@ func extractPathsFromSection(body string) map[string][]string {
 		if path == "" {
 			continue
 		}
-		for _, p := range SplitNormalizePathTemplates(path) {
-			pathsBySystem[sys] = append(pathsBySystem[sys], p)
-		}
+		pathsBySystem[sys] = append(pathsBySystem[sys], SplitNormalizePathTemplates(path)...)
 	}
 	for _, m := range inlinePathRe.FindAllStringSubmatch(body, -1) {
 		if len(m) < 2 {
@@ -159,9 +157,7 @@ func extractPathsFromSection(body string) map[string][]string {
 		}
 		path := cleanPath(m[1])
 		if path != "" && (strings.Contains(path, "save") || strings.Contains(path, "Save") || strings.Contains(path, "%") || strings.Contains(path, "<") || strings.Contains(path, "pfx")) {
-			for _, p := range SplitNormalizePathTemplates(path) {
-				pathsBySystem["Windows"] = append(pathsBySystem["Windows"], p)
-			}
+			pathsBySystem["Windows"] = append(pathsBySystem["Windows"], SplitNormalizePathTemplates(path)...)
 		}
 	}
 	return pathsBySystem

@@ -9,13 +9,13 @@ import (
 
 type adminAnalyticsData struct {
 	PageData
-	TotalStorage       int64
-	ActiveClients24h   int
-	SyncVolume7d       int
-	ManifestGames      int
-	SaveGames          int
-	PCGWCoveragePct    float64
-	StatsSnapshots     []store.StatsSnapshotRow
+	TotalStorage     int64
+	ActiveClients24h int
+	SyncVolume7d     int
+	ManifestGames    int
+	SaveGames        int
+	PCGWCoveragePct  float64
+	StatsSnapshots   []store.StatsSnapshotRow
 }
 
 func (h *WebHandler) serveAdminAnalytics(w http.ResponseWriter, r *http.Request) {
