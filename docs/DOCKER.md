@@ -76,7 +76,7 @@ There is no separate “manifest file” on disk: the manifest is stored in the 
    docker push YOUR_DOCKERHUB_USERNAME/gsbs-server:v1.0.2   # if you tagged a version
    ```
 
-**Releases:** Push a git tag `vX.Y.Z` to trigger [.github/workflows/release.yml](../.github/workflows/release.yml) (builds binaries, installer, `.deb`, AppImage, GitHub Release, Docker Hub). Local fallback: `./script/release.sh [VERSION]`. See [docs/RELEASE.md](RELEASE.md).
+**Releases:** Push a git tag `vX.Y.Z` to trigger [.github/workflows/release.yml](../.github/workflows/release.yml) (binaries, installer, `.deb`, AppImage, GitHub Release). Docker Hub is updated separately via local build/push or `./script/release.sh [VERSION]`. See [docs/RELEASE.md](RELEASE.md).
 
 **Pre-built image:** The official image is published at [dendlomm/gsbs-server](https://hub.docker.com/r/dendlomm/gsbs-server) on Docker Hub. Releases are built for **linux/amd64** and **linux/arm64**. Anyone can run:
 ```bash

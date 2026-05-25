@@ -19,7 +19,7 @@ GSBS releases are automated via GitHub Actions when you push a semver tag. Local
    - `gsbs-client_X.Y.Z_amd64.deb`
    - `gsbs-client-X.Y.Z-x86_64.AppImage`
    - `SHA256SUMS`, `latest-client.json`
-6. **Smoke test:** `docker pull dendlomm/gsbs-server:X.Y.Z`, Windows installer, Linux `.deb`, client **Check for updates**.
+6. **Smoke test:** Windows installer, Linux `.deb` or AppImage, client **Check for updates**. (Docker Hub is not updated by CI; build and push locally if needed — see [DOCKER.md](DOCKER.md).)
 
 ## Manual workflow dispatch
 
@@ -29,17 +29,9 @@ For testing the pipeline without a tag:
 gh workflow run release.yml -f version=v1.0.14-rc1
 ```
 
-Note: Docker push only runs on tag push events, not manual dispatch.
-
 ## GitHub secrets
 
-Configure in repository **Settings → Secrets and variables → Actions**:
-
-| Secret | Purpose |
-|--------|---------|
-| `DOCKERHUB_USERNAME` | Docker Hub login for server image push |
-| `DOCKERHUB_TOKEN` | Docker Hub access token |
-| `GITHUB_TOKEN` | Provided automatically for release upload |
+`GITHUB_TOKEN` is provided automatically for release upload. No Docker Hub secrets are required for CI (server images are built and pushed locally — see [DOCKER.md](DOCKER.md)).
 
 ## Self-hosted runner (optional)
 
@@ -50,7 +42,7 @@ Resolution runs in `.github/workflows/runner-resolve.yml` at the start of each w
 **Runner setup**
 
 1. Register the runner on the repo with label `self-hosted` (GitHub’s default).
-2. Install on the host: **Docker** (with Buildx for multi-arch release images), **Go 1.25** (or let `setup-go` install it), **Node 20**, and Linux client build deps (`libayatana-appindicator3-dev`, `libgtk-3-dev`, `pkg-config`, `gcc`). Jobs use `sudo apt-get` when deps are missing.
+2. Install on the host: **Go 1.25** (or let `setup-go` install it), **Node 22+**, GitHub Actions runner **≥ 2.327.1** (required for Node 24 action runtimes), and Linux client build deps (`libayatana-appindicator3-dev`, `libgtk-3-dev`, `pkg-config`, `gcc`). Jobs use `sudo apt-get` when deps are missing. AppImage builds use `APPIMAGE_EXTRACT_AND_RUN` (no FUSE required).
 3. Ensure the runner user can run `sudo` non-interactively for apt, or pre-install the packages above.
 4. **Mark the runner online** when it starts (so CI routes Linux jobs here instead of GitHub-hosted):
 
