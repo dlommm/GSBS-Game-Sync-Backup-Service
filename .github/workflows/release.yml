@@ -116,7 +116,7 @@ jobs:
             dist/gsbs-server-linux-amd64
             dist/gsbs-client-linux-amd64
             dist/gsbs-client_*.deb
-            dist/gsbs-client-*.AppImage
+            dist/gsbs-client-${{ needs.version.outputs.value }}-x86_64.AppImage
             dist/SHA256SUMS
             dist/latest-client.json
 
@@ -229,7 +229,7 @@ jobs:
             dist/gsbs-client-linux-amd64
             dist/gsbs-client-setup-*.exe
             dist/gsbs-client_*.deb
-            dist/gsbs-client-*.AppImage
+            dist/gsbs-client-${{ needs.version.outputs.value }}-x86_64.AppImage
             dist/SHA256SUMS
             dist/latest-client.json
         env:
