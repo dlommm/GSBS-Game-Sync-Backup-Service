@@ -13,6 +13,7 @@ permissions:
 jobs:
   resolve-runner:
     uses: ./.github/workflows/runner-resolve.yml
+    secrets: inherit
 
   test:
     needs: resolve-runner
