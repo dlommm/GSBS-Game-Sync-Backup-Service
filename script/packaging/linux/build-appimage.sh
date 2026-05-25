@@ -60,5 +60,16 @@ cd "$DEPLOY_DIR"
   --icon-file "$APPDIR/usr/share/icons/hicolor/32x32/apps/gsbs-client.png" \
   --output appimage
 
-mv gsbs-client-*-x86_64.AppImage "gsbs-client-${VERSION_VALUE}-x86_64.AppImage" 2>/dev/null || true
-echo "Built ${OUT_DIR}/gsbs-client-${VERSION_VALUE}-x86_64.AppImage"
+OUT_FILE="gsbs-client-${VERSION_VALUE}-x86_64.AppImage"
+shopt -s nullglob
+for candidate in gsbs-client-*-x86_64.AppImage GSBS_Client-*-x86_64.AppImage *-*-x86_64.AppImage; do
+  mv "$candidate" "$OUT_FILE"
+  break
+done
+shopt -u nullglob
+if [ ! -f "$OUT_FILE" ]; then
+  echo "AppImage output not found in ${DEPLOY_DIR}" >&2
+  ls -la ./*.AppImage 2>/dev/null || true
+  exit 1
+fi
+echo "Built ${DEPLOY_DIR}/${OUT_FILE}"
