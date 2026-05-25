@@ -1,17 +1,23 @@
 # Release workflow
 
-GSBS releases are automated via GitHub Actions when you push a semver tag. Local `./script/release.sh` remains a fallback for maintainers.
+Every release is a **two-step** publish: code on `main`, then a **semver git tag**. Pushing only to `main` runs [CI](../.github/workflows/ci.yml) (tests and builds); it does **not** publish GitHub Release assets or Docker Hub.
 
-## Primary path: tag push
+## Primary path (always do both steps)
 
-1. **Update [CHANGELOG.md](../CHANGELOG.md)** with the new version section.
-2. **Merge to `main`** — CI must be green.
-3. **Create and push a tag:**
+1. **Update [CHANGELOG.md](../CHANGELOG.md)** for the version.
+2. **Commit and push to `main`** — wait for CI green:
+   ```bash
+   git push origin main
+   ```
+3. **Create and push the version tag** (from the same `main` commit you just pushed):
    ```bash
    git tag -a v1.0.14 -m "Release v1.0.14"
    git push origin v1.0.14
    ```
-4. **Monitor** the [Release workflow](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/release.yml).
+   The [Release workflow](../.github/workflows/release.yml) runs on the tag. It always publishes:
+   - **GitHub Release** `vX.Y.Z` with binaries, installer, `.deb`, AppImage, manifests
+   - **Docker Hub** `dendlomm/gsbs-server:X.Y.Z` and `dendlomm/gsbs-server:latest`
+4. **Monitor** the [Release workflow](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml).
 5. **Verify** the GitHub Release contains:
    - `gsbs-server-windows-amd64.exe`, `gsbs-client-windows-amd64.exe`
    - `gsbs-server-linux-amd64`, `gsbs-client-linux-amd64`
@@ -19,19 +25,29 @@ GSBS releases are automated via GitHub Actions when you push a semver tag. Local
    - `gsbs-client_X.Y.Z_amd64.deb`
    - `gsbs-client-X.Y.Z-x86_64.AppImage`
    - `SHA256SUMS`, `latest-client.json`
-6. **Smoke test:** Windows installer, Linux `.deb` or AppImage, client **Check for updates**. (Docker Hub is not updated by CI; build and push locally if needed — see [DOCKER.md](DOCKER.md).)
+6. **Smoke test:** `docker pull dendlomm/gsbs-server:X.Y.Z`, Windows installer, Linux `.deb` or AppImage, client **Check for updates**.
 
 ## Manual workflow dispatch
 
-For testing the pipeline without a tag:
+Re-publish an existing version from current `main` (e.g. after a CI fix) without moving the git tag:
 
 ```bash
-gh workflow run release.yml -f version=v1.0.14-rc1
+gh workflow run release.yml -f version=v1.1.0
 ```
+
+This builds from the `main` commit, uploads GitHub Release assets for that tag name, and pushes Docker Hub **`X.Y.Z`** and **`latest`** (same as a tag-triggered run). Prefer **tag push** for normal releases so the git tag points at the shipped commit.
 
 ## GitHub secrets
 
-`GITHUB_TOKEN` is provided automatically for release upload. No Docker Hub secrets are required for CI (server images are built and pushed locally — see [DOCKER.md](DOCKER.md)).
+Configure in repository **Settings → Secrets and variables → Actions**:
+
+| Secret | Purpose |
+|--------|---------|
+| `DOCKERHUB_USERNAME` | Docker Hub login for server image push (release workflow) |
+| `DOCKERHUB_TOKEN` | Docker Hub access token |
+| `GITHUB_TOKEN` | Provided automatically for release upload |
+
+CI (`ci.yml`) does not use Docker secrets. See [DOCKER.md](DOCKER.md) for local image builds.
 
 ## Self-hosted runner (optional)
 
@@ -42,7 +58,7 @@ Resolution runs in `.github/workflows/runner-resolve.yml` at the start of each w
 **Runner setup**
 
 1. Register the runner on the repo with label `self-hosted` (GitHub’s default).
-2. Install on the host: **Go 1.25** (or let `setup-go` install it), **Node 22+**, GitHub Actions runner **≥ 2.327.1** (required for Node 24 action runtimes), and Linux client build deps (`libayatana-appindicator3-dev`, `libgtk-3-dev`, `pkg-config`, `gcc`, `file`). Jobs use `sudo apt-get` when deps are missing. AppImage builds use `APPIMAGE_EXTRACT_AND_RUN` (no FUSE required).
+2. Install on the host: **Docker** (with Buildx for multi-arch release images), **Go 1.25** (or let `setup-go` install it), **Node 22+**, GitHub Actions runner **≥ 2.327.1** (required for Node 24 action runtimes), and Linux client build deps (`libayatana-appindicator3-dev`, `libgtk-3-dev`, `pkg-config`, `gcc`, `file`). Jobs use `sudo apt-get` when deps are missing. AppImage builds use `APPIMAGE_EXTRACT_AND_RUN` (no FUSE required).
 3. Ensure the runner user can run `sudo` non-interactively for apt, or pre-install the packages above.
 4. **Mark the runner online** when it starts (so CI routes Linux jobs here instead of GitHub-hosted):
 

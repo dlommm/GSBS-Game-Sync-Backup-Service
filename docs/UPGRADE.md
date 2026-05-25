@@ -33,7 +33,7 @@ After upgrading to **v1.0.17+**, the PCGW mirror schema expands. The server migr
 
 ### Release tags
 
-Pushing tag `vX.Y.Z` publishes GitHub Release assets. Docker Hub images are updated separately (local build/push). See [RELEASE.md](RELEASE.md) and [DOCKER.md](DOCKER.md).
+Pushing tag `vX.Y.Z` publishes GitHub Release assets and Docker Hub `dendlomm/gsbs-server:X.Y.Z` and `:latest`. See [RELEASE.md](RELEASE.md).
 
 ## Client
 

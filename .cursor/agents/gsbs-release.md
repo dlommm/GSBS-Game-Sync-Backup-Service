@@ -10,7 +10,7 @@ When invoked:
 
 1. **Build scripts**: `script/build.sh`, `script/release-assets.sh`, `script/release.sh`, `script/build-webui.sh`.
 
-2. **CI**: `.github/workflows/release.yml` (tag push → GitHub Release assets). `.github/workflows/ci.yml` for tests and matrix builds. Docker Hub is local/manual only.
+2. **CI**: `.github/workflows/ci.yml` for tests and matrix builds (no Docker). `.github/workflows/release.yml` on tag push → GitHub Release + Docker Hub.
 
 3. **Packaging**: Inno Setup (`script/packaging/windows/`), nfpm `.deb` and AppImage (`script/packaging/linux/`).
 
