@@ -19,19 +19,19 @@ import (
 
 type adminPCGWData struct {
 	PageData
-	Stats          PCGWStatsView
-	Games          []types.PCGWGame
-	Query          string
-	FilterStatus   string
-	FilterPlatform string
-	Page           int
-	PerPage        int
-	Total          int
-	TotalPages     int
-	Start          int
-	End            int
-	PrevPage       int
-	NextPage       int
+	Stats            PCGWStatsView
+	Games            []types.PCGWGame
+	Query            string
+	FilterStatus     string
+	FilterPlatform   string
+	Page             int
+	PerPage          int
+	Total            int
+	TotalPages       int
+	Start            int
+	End              int
+	PrevPage         int
+	NextPage         int
 	JobRunning       bool
 	JobProgress      int
 	JobProgressTotal int
@@ -130,22 +130,22 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 	games, q, status, platform, page, perPage, total, totalPages, start, end, prevPage, nextPage := h.loadPCGWPage(r.Context(), r)
 	jobs := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret))
 	h.render(w, "admin_pcgw.html", adminPCGWData{
-		PageData:       h.adminPageData(w, r, userID, username, "pcgw", "admin_pcgw"),
-		Stats:          h.loadPCGWStats(r.Context()),
-		Games:          games,
-		Query:          q,
-		FilterStatus:   status,
-		FilterPlatform: platform,
-		Page:           page,
-		PerPage:        perPage,
-		Total:          total,
-		TotalPages:     totalPages,
-		Start:          start,
-		End:            end,
-		PrevPage:       prevPage,
-		NextPage:       nextPage,
-		JobRunning:     jobs.JobRunning,
-		JobProgress:    jobs.JobProgressPages,
+		PageData:         h.adminPageData(w, r, userID, username, "pcgw", "admin_pcgw"),
+		Stats:            h.loadPCGWStats(r.Context()),
+		Games:            games,
+		Query:            q,
+		FilterStatus:     status,
+		FilterPlatform:   platform,
+		Page:             page,
+		PerPage:          perPage,
+		Total:            total,
+		TotalPages:       totalPages,
+		Start:            start,
+		End:              end,
+		PrevPage:         prevPage,
+		NextPage:         nextPage,
+		JobRunning:       jobs.JobRunning,
+		JobProgress:      jobs.JobProgressPages,
 		JobProgressTotal: jobs.JobProgressTotal,
 		JobGamesSkipped:  jobs.JobGamesSkipped,
 	})
