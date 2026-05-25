@@ -4,6 +4,13 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-05-25
+
+### Fixed
+
+- Admin PCGW page: fix "Template error" while a sync is running (missing job progress fields on full page render).
+- Unraid compose example: add `GSBS_SAVE_ROOT`, optional BLOB-to-filesystem migration env, and updated docs.
+
 ## [1.2.0] - 2026-05-25
 
 ### Added
@@ -97,7 +104,8 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 See [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases) for earlier history.
 
-[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.17...v1.1.0
 [1.0.17]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.16...v1.0.17

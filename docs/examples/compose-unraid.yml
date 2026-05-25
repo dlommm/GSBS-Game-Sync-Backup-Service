@@ -6,6 +6,12 @@
 #   2. Edit GSBS_SESSION_SECRET below (openssl rand -hex 32)
 #   3. docker compose -f compose-unraid.yml up -d
 #
+# Upgrading from BLOB saves (no GSBS_SAVE_ROOT before):
+#   1. Uncomment GSBS_MIGRATE_BLOBS_TO_FS below
+#   2. docker compose -f compose-unraid.yml up -d
+#   3. Check logs; verify files under /mnt/user/appdata/gsbs-server/gamesaves/
+#   4. Comment out GSBS_MIGRATE_BLOBS_TO_FS again and recreate the container
+#
 # WebUI: http://YOUR_UNRAID_IP:8080
 # Clients: same URL (e.g. http://192.168.1.50:8080)
 
@@ -19,10 +25,12 @@ services:
     environment:
       GSBS_ADDR: ":8080"
       GSBS_DB: /app/data/gsbs.db
+      GSBS_SAVE_ROOT: /app/data/gamesaves
       GSBS_SESSION_SECRET: "REPLACE_ME_openssl_rand_hex_32"
       GSBS_PCGW_CRON: "0 3 * * 0"
       GSBS_LOG_LEVEL: info
       GSBS_ALLOW_REGISTER: "true"
+      # GSBS_MIGRATE_BLOBS_TO_FS: "1"  # one-time: export BLOB saves to gamesaves/; remove after success
       # GSBS_ADMIN_USERNAME: admin
     volumes:
       - /mnt/user/appdata/gsbs-server:/app/data
