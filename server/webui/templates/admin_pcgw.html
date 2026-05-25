@@ -1,0 +1,64 @@
+{{template "layout" .}}
+{{define "admin_pcgw_title"}}PCGW Games — GSBS Admin{{end}}
+{{define "admin_pcgw_content"}}
+<h1>PCGamingWiki Games</h1>
+<div class="stats-grid" style="margin-bottom:1rem;">
+  <div class="stat-card"><strong>{{.Stats.TotalGames}}</strong><span>Total games</span></div>
+  <div class="stat-card"><strong>{{.Stats.OK}}</strong><span>OK</span></div>
+  <div class="stat-card"><strong>{{.Stats.Partial}}</strong><span>Partial</span></div>
+  <div class="stat-card"><strong>{{.Stats.Failed}}</strong><span>Failed</span></div>
+  <div class="stat-card"><strong>v{{.Stats.ManifestVersion}}</strong><span>Manifest</span></div>
+</div>
+{{if .JobRunning}}<p class="notice">Sync running… pages: {{.JobProgress}}</p>{{end}}
+<form method="get" action="/admin/pcgw" class="inline-form" style="margin-bottom:1rem;">
+  <input type="search" name="q" value="{{.Query}}" placeholder="Search title…">
+  <select name="status">
+    <option value="">All statuses</option>
+    <option value="ok" {{if eq .FilterStatus "ok"}}selected{{end}}>ok</option>
+    <option value="partial" {{if eq .FilterStatus "partial"}}selected{{end}}>partial</option>
+    <option value="failed" {{if eq .FilterStatus "failed"}}selected{{end}}>failed</option>
+    <option value="pending" {{if eq .FilterStatus "pending"}}selected{{end}}>pending</option>
+  </select>
+  <select name="platform">
+    <option value="">All platforms</option>
+    <option value="windows" {{if eq .FilterPlatform "windows"}}selected{{end}}>windows</option>
+    <option value="linux" {{if eq .FilterPlatform "linux"}}selected{{end}}>linux</option>
+    <option value="macos" {{if eq .FilterPlatform "macos"}}selected{{end}}>macos</option>
+  </select>
+  <button type="submit">Filter</button>
+</form>
+<form method="post" action="/admin/pcgw/sync" class="inline-form">
+  <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+  <button type="submit">Incremental sync</button>
+</form>
+<form method="post" action="/admin/pcgw/sync" class="inline-form">
+  <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+  <input type="hidden" name="full" value="1">
+  <button type="submit">Full resync</button>
+</form>
+<form method="post" action="/admin/pcgw/purge-wikitext" class="inline-form">
+  <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+  <button type="submit">Purge old wikitext</button>
+</form>
+<table class="data-table">
+  <thead><tr><th>Title</th><th>Page ID</th><th>Steam</th><th>Platforms</th><th>Status</th><th>Updated</th></tr></thead>
+  <tbody>
+  {{range .Games}}
+  <tr>
+    <td><a href="/admin/pcgw/{{.PageID}}">{{.Title}}</a></td>
+    <td>{{.PageID}}</td>
+    <td>{{join .SteamAppIDs ", "}}</td>
+    <td>{{join .PlatformsPresent ", "}}</td>
+    <td>{{.ParseStatus}}</td>
+    <td>{{.UpdatedAt}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="6">No games yet — run a sync.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+<p>{{.Total}} games</p>
+{{end}}
+{{define "admin_pcgw_scripts"}}
+<div hidden sse-swap="job-progress" hx-trigger="job-progress from:body" hx-get="/admin/partial/jobs" hx-target="#job-status" hx-swap="innerHTML"></div>
+{{end}}

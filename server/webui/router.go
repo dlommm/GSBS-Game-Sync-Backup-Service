@@ -197,6 +197,9 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case path == "/admin/manifest.csv" && r.Method == http.MethodGet:
 		h.serveManifestCSV(w, r)
 	default:
+		if h.routeAdminPCGW(w, r) {
+			return
+		}
 		http.NotFound(w, r)
 	}
 }

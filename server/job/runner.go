@@ -14,8 +14,9 @@ import (
 
 // Runner manages background job execution with tracking and deduplication.
 type Runner struct {
-	store store.Store
-	hub   *sse.Hub
+	store       store.Store
+	hub         *sse.Hub
+	invalidator ManifestCacheInvalidator
 
 	mu            sync.Mutex
 	running       map[string]bool // job name -> is running
@@ -23,11 +24,13 @@ type Runner struct {
 }
 
 // NewRunner creates a Runner. hub may be nil if SSE is not needed.
-func NewRunner(st store.Store, hub *sse.Hub) *Runner {
+// invalidator may be nil; when set, manifest cache is cleared after successful PCGW sync.
+func NewRunner(st store.Store, hub *sse.Hub, invalidator ManifestCacheInvalidator) *Runner {
 	return &Runner{
-		store:   st,
-		hub:     hub,
-		running: make(map[string]bool),
+		store:       st,
+		hub:         hub,
+		invalidator: invalidator,
+		running:     make(map[string]bool),
 	}
 }
 
@@ -48,10 +51,16 @@ func (r *Runner) ProgressPages(jobName string) int {
 	return r.progressPages
 }
 
-// RunPCGWSync runs the PCGW sync job with tracking and dedup.
-// Returns immediately with false if the job is already running.
-// Otherwise starts the job in the background and returns true.
+// RunPCGWSyncFull starts a full PCGW resync in the background.
+func (r *Runner) RunPCGWSyncFull(ctx context.Context) bool {
+	return r.runPCGWSync(ctx, PCGWSyncOptions{Full: true})
+}
+
 func (r *Runner) RunPCGWSync(ctx context.Context) bool {
+	return r.runPCGWSync(ctx, PCGWSyncOptions{})
+}
+
+func (r *Runner) runPCGWSync(ctx context.Context, opts PCGWSyncOptions) bool {
 	const jobName = "pcgw_sync"
 	r.mu.Lock()
 	if r.running[jobName] {
@@ -69,7 +78,7 @@ func (r *Runner) RunPCGWSync(ctx context.Context) bool {
 			r.mu.Unlock()
 		}()
 
-		log.Printf("job: %s started", jobName)
+		log.Printf("job: %s started (full=%v)", jobName, opts.Full)
 		jobCtx, cancel := context.WithTimeout(ctx, 24*time.Hour)
 		defer cancel()
 
@@ -88,7 +97,13 @@ func (r *Runner) RunPCGWSync(ctx context.Context) bool {
 				r.hub.Broadcast(sse.Event{Type: "job-progress", Data: fmt.Sprintf(`{"job":"pcgw_sync","pages":%d}`, pages)})
 			}
 		}
-		count, syncErr := PCGWSync(jobCtx, r.store, pcgwClient, progressFn)
+		reportEx := func(p PCGWSyncProgress) {
+			if r.hub != nil {
+				r.hub.Broadcast(sse.Event{Type: "job-progress", Data: fmt.Sprintf(
+					`{"job":"pcgw_sync","pages":%d,"total":%d,"phase":%q}`, p.PagesProcessed, p.TotalEstimate, p.Phase)})
+			}
+		}
+		count, syncErr := PCGWSyncEx(jobCtx, r.store, pcgwClient, progressFn, reportEx, opts)
 
 		status := "success"
 		errMsg := ""
@@ -108,9 +123,8 @@ func (r *Runner) RunPCGWSync(ctx context.Context) bool {
 
 		if r.hub != nil {
 			r.hub.Broadcast(sse.Event{Type: "job-finished", Data: `{"job":"pcgw_sync","status":"` + status + `"}`})
-			// Only notify clients of manifest update on success; failed syncs
-			// leave the manifest unchanged and would cause unnecessary re-fetches.
-			if status == "success" {
+			if status == "success" || status == "partial" {
+				LogSyncComplete(r.invalidator, count)
 				r.hub.Broadcast(sse.Event{Type: "manifest-updated", Data: "{}"})
 			}
 		}

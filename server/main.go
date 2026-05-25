@@ -152,7 +152,7 @@ func main() {
 	}
 
 	hub := sse.NewHub()
-	runner := job.NewRunner(st, hub)
+	var runner *job.Runner
 
 	authLimiter := rateLimiterFromEnv("GSBS_RATE_LIMIT_AUTH", 20, time.Minute)
 	pushLimiter := rateLimiterFromEnv("GSBS_RATE_LIMIT_PUSH", 120, time.Minute)
@@ -174,6 +174,7 @@ func main() {
 		log.Println("server is in READ-ONLY mode (push/delete disabled)")
 	}
 	apiHandler := api.NewHandler(st, authSvc, allowRegister, hub, authLimiter, pushLimiter, pullLimiter, generalLimiter, manifestLimiter, maxStorageBytes, readOnly, sessionSecret, Version)
+	runner = job.NewRunner(st, hub, apiHandler)
 	webHandler := webui.NewWebHandler(st, authSvc, sessionSecret, os.Getenv("GSBS_ADMIN_USERNAME"), allowRegister, hub, apiHandler, runner, maxStorageBytes, readOnly, authLimiter)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiHandler)

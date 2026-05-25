@@ -202,6 +202,7 @@ func (r *Resolver) expandOne(template string, targetOS OS) string {
 	s = replaceEnv(s, "%APPDATA%", r.AppData)
 	s = replaceEnv(s, "%PROGRAMDATA%", r.ProgramData)
 	s = replaceEnv(s, "%PROGRAMFILES%", r.ProgramFiles)
+	s = replaceEnv(s, "%PUBLIC%", r.publicFolder())
 	s = replaceEnv(s, "<user-id>", r.UserID)
 	s = replaceEnv(s, "<Ubisoft-Connect-folder>", r.UbisoftConnect)
 	s = replaceEnv(s, "<GOG-Galaxy-folder>", r.GOGGalaxy)
@@ -247,6 +248,16 @@ func replaceEnv(s, key, value string) string {
 		return s
 	}
 	return strings.ReplaceAll(s, key, value)
+}
+
+func (r *Resolver) publicFolder() string {
+	if runtime.GOOS == "windows" {
+		if p := os.Getenv("PUBLIC"); p != "" {
+			return p
+		}
+		return filepath.Join(r.Home, "..", "Public")
+	}
+	return r.Home
 }
 
 // PathExists returns true if the directory for the given path exists (for "don't push until folder exists").

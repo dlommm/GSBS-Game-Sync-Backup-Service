@@ -95,6 +95,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.withAuth(h.handleDeleteSave)(w, r)
 	case r.URL.Path == "/api/manifest" && r.Method == http.MethodGet:
 		h.handleManifest(w, r)
+	case r.URL.Path == "/api/manifest/v2" && r.Method == http.MethodGet:
+		h.handleManifestV2(w, r)
 	case r.URL.Path == "/api/clients" && r.Method == http.MethodGet:
 		h.withAuth(h.handleListClients)(w, r)
 	case r.URL.Path == "/api/saves/versions" && r.Method == http.MethodGet:
@@ -875,7 +877,59 @@ func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request) {
 	if manifestLimit > 0 || manifestOffset > 0 {
 		resp["total"] = total
 	}
+	h.writeManifestHeaders(w, r)
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) writeManifestHeaders(w http.ResponseWriter, r *http.Request) {
+	meta, err := h.store.GetPCGWManifestMeta(r.Context())
+	if err != nil || meta == nil {
+		return
+	}
+	if meta.ManifestETag != "" {
+		w.Header().Set("ETag", meta.ManifestETag)
+	}
+	if meta.ManifestVersion > 0 {
+		w.Header().Set("X-Manifest-Version", strconv.Itoa(meta.ManifestVersion))
+	}
+}
+
+func (h *Handler) handleManifestV2(w http.ResponseWriter, r *http.Request) {
+	if h.manifestLimiter != nil {
+		key := netutil.ClientIP(r)
+		if userID, _, err := h.auth.ValidateToken(r.Context(), getToken(r)); err == nil {
+			key = userID
+		}
+		if h.rateLimited(w, r, h.manifestLimiter, key, "manifest") {
+			return
+		}
+	}
+	since := r.URL.Query().Get("since")
+	platform := r.URL.Query().Get("platform")
+	limit, offset := parseLimitOffset(r)
+	if limit <= 0 {
+		limit = 10000
+	}
+
+	meta, _ := h.store.GetPCGWManifestMeta(r.Context())
+	if meta != nil && meta.ManifestETag != "" {
+		w.Header().Set("ETag", meta.ManifestETag)
+		if inm := r.Header.Get("If-None-Match"); inm != "" && inm == meta.ManifestETag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		if meta.ManifestVersion > 0 {
+			w.Header().Set("X-Manifest-Version", strconv.Itoa(meta.ManifestVersion))
+		}
+	}
+
+	out, err := h.store.BuildManifestV2(r.Context(), since, platform, limit, offset)
+	if err != nil {
+		logx.Logger().Error().Err(err).Msg("api manifest v2 failed")
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "manifest v2 failed"})
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleSSE streams server-sent events to an authenticated client.

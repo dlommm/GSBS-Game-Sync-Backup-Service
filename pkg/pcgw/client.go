@@ -6,19 +6,29 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-const max429Retries = 5
-const default429Backoff = 60 * time.Second
-
-const baseURL = "https://www.pcgamingwiki.com"
+const (
+	max429Retries     = 5
+	default429Backoff = 60 * time.Second
+	defaultBaseURL    = "https://www.pcgamingwiki.com"
+	defaultUserAgent  = "GSBS/1.0 (https://github.com/gsbs/gsbs; game-save-sync)"
+	defaultRateLimit  = 2 * time.Second
+)
 
 // Client talks to PCGamingWiki MediaWiki API.
 type Client struct {
 	HTTP *http.Client
+	// BaseURL overrides the API origin (for tests). Empty uses defaultBaseURL.
+	BaseURL string
+
+	mu          sync.Mutex
+	lastRequest time.Time
 }
 
 // NewClient returns a new PCGW API client with sensible timeouts.
@@ -28,11 +38,59 @@ func NewClient() *Client {
 	}}
 }
 
-// getWith429Retry performs GET and on HTTP 429 retries with backoff (Retry-After header or default 60s).
-func (c *Client) getWith429Retry(u string) (*http.Response, error) {
+func (c *Client) baseURL() string {
+	if c != nil && c.BaseURL != "" {
+		return c.BaseURL
+	}
+	return defaultBaseURL
+}
+
+func (c *Client) userAgentString() string {
+	if v := strings.TrimSpace(os.Getenv("GSBS_PCGW_USER_AGENT")); v != "" {
+		return v
+	}
+	return defaultUserAgent
+}
+
+func (c *Client) rateLimitDuration() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("GSBS_PCGW_RATE_LIMIT")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultRateLimit
+}
+
+func (c *Client) waitBetweenRequests() {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	rl := c.rateLimitDuration()
+	if !c.lastRequest.IsZero() {
+		if wait := rl - time.Since(c.lastRequest); wait > 0 {
+			time.Sleep(wait)
+		}
+	}
+	c.lastRequest = time.Now()
+}
+
+func (c *Client) doGet(u string) (*http.Response, error) {
+	c.waitBetweenRequests()
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", c.userAgentString())
+	return c.getWith429Retry(req)
+}
+
+func (c *Client) getWith429Retry(req *http.Request) (*http.Response, error) {
 	var lastResp *http.Response
 	for attempt := 0; attempt <= max429Retries; attempt++ {
-		resp, err := c.HTTP.Get(u)
+		reqCopy := req.Clone(req.Context())
+		resp, err := c.HTTP.Do(reqCopy)
 		if err != nil {
 			return nil, err
 		}
@@ -59,48 +117,6 @@ func (c *Client) getWith429Retry(u string) (*http.Response, error) {
 	return nil, fmt.Errorf("rate limited (429)")
 }
 
-// CargoQuery runs a cargoquery action. See https://www.pcgamingwiki.com/wiki/PCGamingWiki:API
-// limit and offset 0 mean default (50). Use limit 500 max per request.
-func (c *Client) CargoQuery(tables, fields, where string, limit, offset int) ([]map[string]interface{}, error) {
-	u := baseURL + "/w/api.php?action=cargoquery&format=json"
-	u += "&tables=" + url.QueryEscape(tables)
-	u += "&fields=" + url.QueryEscape(fields)
-	if where != "" {
-		u += "&where=" + url.QueryEscape(where)
-	}
-	if limit > 0 {
-		if limit > 500 {
-			limit = 500
-		}
-		u += "&limit=" + strconv.Itoa(limit)
-	}
-	if offset > 0 {
-		u += "&offset=" + strconv.Itoa(offset)
-	}
-	resp, err := c.getWith429Retry(u)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("cargo query: HTTP %d: %s", resp.StatusCode, string(body))
-	}
-	var out struct {
-		CargoQuery []struct {
-			Title map[string]interface{} `json:"title"`
-		} `json:"cargoquery"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, err
-	}
-	var rows []map[string]interface{}
-	for _, r := range out.CargoQuery {
-		rows = append(rows, r.Title)
-	}
-	return rows, nil
-}
-
 // GetPageIDBySteamAppID returns the PCGW page ID for a Steam App ID.
 func (c *Client) GetPageIDBySteamAppID(steamAppID string) (string, error) {
 	rows, err := c.CargoQuery(
@@ -123,8 +139,8 @@ func (c *Client) GetPageIDBySteamAppID(steamAppID string) (string, error) {
 
 // RedirectBySteamAppID returns the wiki page URL for a Steam App ID (uses PCGW redirect API).
 func (c *Client) RedirectBySteamAppID(steamAppID string) (string, error) {
-	u := baseURL + "/api/appid.php?appid=" + url.QueryEscape(steamAppID)
-	resp, err := c.HTTP.Get(u)
+	u := c.baseURL() + "/api/appid.php?appid=" + url.QueryEscape(steamAppID)
+	resp, err := c.doGet(u)
 	if err != nil {
 		return "", err
 	}
@@ -138,7 +154,7 @@ func (c *Client) RedirectBySteamAppID(steamAppID string) (string, error) {
 	return "", fmt.Errorf("no redirect for appid %s", steamAppID)
 }
 
-// PageInfo is a single page from ListAllPages.
+// PageInfo is a single page from ListGamePages.
 type PageInfo struct {
 	PageID      int64
 	Title       string
@@ -146,19 +162,26 @@ type PageInfo struct {
 	GOGID       string
 	EpicID      string
 	UbisoftID   string
+	CoverURL    string
+	CoverImage  string
+	HLTBID      string
+	IGDBID      string
+	Developers  []string
+	Publishers  []string
+	AvailableOn []string
+	Engines     []string
 }
 
 // ListAllPages returns a chunk of wiki pages. Use apcontinue to paginate.
-// aplimit is max 500. Returns nextContinue empty when no more pages.
 func (c *Client) ListAllPages(apcontinue string, aplimit int) ([]PageInfo, string, error) {
 	if aplimit <= 0 || aplimit > 500 {
 		aplimit = 500
 	}
-	u := baseURL + "/w/api.php?action=query&list=allpages&format=json&aplimit=" + strconv.Itoa(aplimit)
+	u := c.baseURL() + "/w/api.php?action=query&list=allpages&format=json&aplimit=" + strconv.Itoa(aplimit)
 	if apcontinue != "" {
 		u += "&apcontinue=" + url.QueryEscape(apcontinue)
 	}
-	resp, err := c.HTTP.Get(u)
+	resp, err := c.doGet(u)
 	if err != nil {
 		return nil, "", err
 	}
@@ -188,81 +211,10 @@ func (c *Client) ListAllPages(apcontinue string, aplimit int) ([]PageInfo, strin
 	return pages, out.Continue.APContinue, nil
 }
 
-// ListGamePages returns game pages from the Infobox_game Cargo table (only actual game pages).
-// limit max 500. offset is for pagination (0, 500, 1000, ...).
-func (c *Client) ListGamePages(limit, offset int) ([]PageInfo, error) {
-	if limit <= 0 || limit > 500 {
-		limit = 500
-	}
-	rows, err := c.CargoQuery(
-		"Infobox_game",
-		"Infobox_game._pageID=PageID,Infobox_game._pageName=Title,Infobox_game.Steam_AppID=SteamAppID,Infobox_game.GOG_com_id=GOGID,Infobox_game.Epic_Games_Store=EpicID,Infobox_game.Ubisoft_Connect=UbisoftID",
-		"",
-		limit, offset,
-	)
-	if err != nil {
-		return nil, err
-	}
-	var pages []PageInfo
-	for _, r := range rows {
-		pageID, _ := r["PageID"].(string)
-		title, _ := r["Title"].(string)
-		if pageID == "" || title == "" {
-			continue
-		}
-		id, err := strconv.ParseInt(pageID, 10, 64)
-		if err != nil {
-			continue
-		}
-		pages = append(pages, PageInfo{
-			PageID:      id,
-			Title:       title,
-			SteamAppIDs: parseCargoMultiValue(r["SteamAppID"]),
-			GOGID:       parseCargoSingleValue(r["GOGID"]),
-			EpicID:      parseCargoSingleValue(r["EpicID"]),
-			UbisoftID:   parseCargoSingleValue(r["UbisoftID"]),
-		})
-	}
-	return pages, nil
-}
-
-// parseCargoSingleValue extracts a string from a Cargo field (string or nested map).
-func parseCargoSingleValue(v interface{}) string {
-	switch val := v.(type) {
-	case string:
-		return strings.TrimSpace(val)
-	case map[string]interface{}:
-		if s, ok := val["fulltext"].(string); ok {
-			return strings.TrimSpace(s)
-		}
-		if s, ok := val["value"].(string); ok {
-			return strings.TrimSpace(s)
-		}
-	}
-	return ""
-}
-
-// parseCargoMultiValue extracts multiple IDs (comma-separated or array) from Cargo.
-func parseCargoMultiValue(v interface{}) []string {
-	s := parseCargoSingleValue(v)
-	if s == "" {
-		return nil
-	}
-	var out []string
-	for _, part := range strings.Split(s, ",") {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			out = append(out, part)
-		}
-	}
-	return out
-}
-
-// ParsePageWikitext returns the raw wikitext of a page (for parsing save locations).
-// pageID is the numeric page ID from GetPageIDBySteamAppID or similar.
+// ParsePageWikitext returns the raw wikitext of a page.
 func (c *Client) ParsePageWikitext(pageID string) (string, error) {
-	u := baseURL + "/w/api.php?action=parse&format=json&pageid=" + url.QueryEscape(pageID) + "&prop=wikitext"
-	resp, err := c.getWith429Retry(u)
+	u := c.baseURL() + "/w/api.php?action=parse&format=json&pageid=" + url.QueryEscape(pageID) + "&prop=wikitext"
+	resp, err := c.doGet(u)
 	if err != nil {
 		return "", err
 	}
@@ -285,11 +237,40 @@ func (c *Client) ParsePageWikitext(pageID string) (string, error) {
 }
 
 // SaveLocationTemplate represents a single save/config path template per system.
-// PCGW "Save game data location" and "Configuration file(s) location" are typically
-// in wikitext templates; this struct is what we cache after parsing.
 type SaveLocationTemplate struct {
-	GameID   string   // PCGW page name or Steam App ID
-	System   string   // e.g. "Windows", "Steam Play (Linux)"
-	Paths    []string // path templates (with placeholders)
-	IsConfig bool     // config file vs save file
+	GameID   string
+	System   string
+	Paths    []string
+	IsConfig bool
+}
+
+func decodeCargoResponse(body io.Reader) ([]map[string]interface{}, error) {
+	var out struct {
+		CargoQuery []struct {
+			Title map[string]interface{} `json:"title"`
+		} `json:"cargoquery"`
+		Error *struct {
+			Code    string `json:"code"`
+			Info    string `json:"info"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(body).Decode(&out); err != nil {
+		return nil, err
+	}
+	if out.Error != nil {
+		msg := out.Error.Info
+		if msg == "" {
+			msg = out.Error.Message
+		}
+		if msg == "" {
+			msg = out.Error.Code
+		}
+		return nil, fmt.Errorf("cargo query: %s", msg)
+	}
+	var rows []map[string]interface{}
+	for _, r := range out.CargoQuery {
+		rows = append(rows, r.Title)
+	}
+	return rows, nil
 }

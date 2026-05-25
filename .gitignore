@@ -6,8 +6,8 @@ gsbs-client-windows-amd64.exe
 gsbs-client-linux-amd64
 gsbs-server-windows-amd64.exe
 gsbs-server-linux-amd64
-pcgw-fetch
-pcgw-sync
+/pcgw-fetch
+/pcgw-sync
 dist/
 # Windows exe icon resource (generate with: rsrc -ico server/icon.ico -o server/rsrc.syso when building for Windows)
 server/rsrc.syso

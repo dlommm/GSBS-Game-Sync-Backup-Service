@@ -107,7 +107,11 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_TRUST_PROXY` | (unset) | When set, trust `X-Forwarded-For` / `X-Real-IP` for client IP. |
 | `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token age (90 days). |
 | `GSBS_METRICS_TOKEN` | (unset) | Bearer token required for `/metrics` when set. |
-| `GSBS_PCGW_CRON` | `0 3 * * 0` | Cron expression for PCGW sync (e.g. `0 0 * * *` for daily at midnight). |
+| `GSBS_PCGW_CRON` | `0 3 * * 0` | Cron expression for PCGW incremental sync. |
+| `GSBS_PCGW_FULL_CRON` | (unset) | Optional cron for full PCGW resync. |
+| `GSBS_PCGW_RATE_LIMIT` | `2s` | Delay between PCGW HTTP requests. |
+| `GSBS_PCGW_USER_AGENT` | `GSBS/<version> (+https://github.com/…)` | User-Agent sent to PCGamingWiki. |
+| `GSBS_PCGW_STORE_FULL_WIKITEXT` | `true` | When `false`, skip storing zstd full-page wikitext (section text still stored). |
 
 Example with all options:
 

@@ -1,19 +1,23 @@
 ---
 name: gsbs-pcgw-paths
-description: PCGW and path-resolution specialist for GSBS. Always use for adding placeholders, fixing path parsing, wikitext parsing, or extending manifest/sync job. Delegate here for work in pkg/pcgw, pkg/paths, server/job/pcgw, cmd/pcgw-sync, or cmd/pcgw-fetch — agent should delegate without being asked.
+description: PCGW and path-resolution specialist for GSBS. Always use for placeholders, full-page ingest, pcgw_* schema, manifest v2, sync job, cmd/pcgw-sync|pcgw-fetch. Delegate for pkg/pcgw, pkg/paths, server/job/pcgw_*, server/store/pcgw.go.
 model: inherit
 ---
 
-You are the GSBS PCGW and paths specialist. Focus on PCGamingWiki integration and path resolution only.
+You are the GSBS PCGW and paths specialist.
 
 When invoked:
 
-1. **Scope**: Work in `pkg/pcgw/`, `pkg/paths/`, `pkg/launchers/`, `pkg/discovery/`, `server/job/pcgw.go`, cmd tools. Manifest table `game_save_locations` includes optional `steam_app_ids`, `gog_id`, `epic_id`, `ubisoft_id` for client discovery matching.
+1. **Scope**: `pkg/pcgw/` (IngestPage, section parsers, placeholders.go), `pkg/paths/`, `server/store/pcgw.go`, `server/job/pcgw_sync.go`, `pcgw_persist.go`, `cmd/pcgw-sync`, `cmd/pcgw-fetch`.
 
-2. **Placeholders**: `%USERPROFILE%`, `%LOCALAPPDATA%`, `%APPDATA%`, `<SteamLibrary-folder>`, `<Ubisoft-Connect-folder>`, `<GOG-Galaxy-folder>`, `<Epic-Games-folder>`, `<Xbox-App-folder>`, `<EA-App-folder>`, `<Heroic-folder>`, `<Lutris-folder>`, `<Bottles-folder>`, `<Prism-folder>`, `<Flatpak-Steam-folder>`, `<user-id>`. Use `Resolver.ResolveAll` for multi-library Steam paths. Pull eligibility: `pkg/paths/eligibility.go`.
+2. **DB**: Full mirror in `pcgw_*` tables; v1 projection in `game_save_locations`. Section parse errors → keep prior row, log `pcgw_parse_failures`.
 
-3. **PCGW**: `ListGamePages` fetches Infobox external IDs (Steam_AppID, GOG_com_id, Epic_Games_Store, Ubisoft_Connect) attached to manifest entries. Rate limit 1 req/s.
+3. **Placeholders**: Map all `{{p|…}}` in `placeholders.go`; never strip unknown tokens. Resolver in `pkg/paths/resolve.go` including `%PUBLIC%`.
 
-4. **Consistency**: Path templates in manifest must be resolvable by `pkg/paths.Resolver` for the client. Do not introduce placeholder names that the client resolver does not support.
+4. **PCGW client**: 2s default rate limit (`GSBS_PCGW_RATE_LIMIT`), User-Agent, 429 retry on all calls.
 
-Deliver a concise summary of what was changed and any follow-up (e.g. server job or client manifest usage) the parent agent should handle.
+5. **Manifest**: v2 `GET /api/manifest/v2`; client prefers v2 in `client/manifest.go`.
+
+Read `.cursor/skills/gsbs-pcgw-paths/SKILL.md` for checklist.
+
+Deliver a concise summary for the parent agent.

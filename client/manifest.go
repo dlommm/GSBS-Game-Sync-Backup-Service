@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,10 +27,15 @@ type manifestResponse struct {
 
 const manifestFetchTimeout = 60 * time.Second
 
-// FetchManifest downloads the manifest from the server. If since is non-empty, requests delta.
-// include is "saves", "config", or "both" (default) to filter manifest content.
-// If token is non-empty, it is sent as a Bearer token for server-side fetch tracking.
+// FetchManifest downloads the manifest from the server. Tries v2 first for richer metadata, falls back to v1.
 func FetchManifest(ctx context.Context, baseURL, token, since, include string) ([]types.GameSaveLocation, error) {
+	if entries, err := fetchManifestV2(ctx, baseURL, token, since, include); err == nil && len(entries) > 0 {
+		return entries, nil
+	}
+	return fetchManifestV1(ctx, baseURL, token, since, include)
+}
+
+func fetchManifestV1(ctx context.Context, baseURL, token, since, include string) ([]types.GameSaveLocation, error) {
 	url := baseURL + "/api/manifest"
 	params := []string{}
 	if since != "" {
@@ -62,6 +68,77 @@ func FetchManifest(ctx context.Context, baseURL, token, since, include string) (
 		return nil, err
 	}
 	return out.Entries, nil
+}
+
+func fetchManifestV2(ctx context.Context, baseURL, token, since, include string) ([]types.GameSaveLocation, error) {
+	url := baseURL + "/api/manifest/v2"
+	params := []string{}
+	if since != "" {
+		params = append(params, "since="+since)
+	}
+	if len(params) > 0 {
+		url += "?" + strings.Join(params, "&")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	client := &http.Client{Timeout: manifestFetchTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotModified || resp.StatusCode == http.StatusOK {
+		if resp.StatusCode == http.StatusNotModified {
+			return LoadManifestFromDisk(), nil
+		}
+	} else {
+		return nil, fmt.Errorf("manifest v2: %s", resp.Status)
+	}
+	var out types.ManifestV2Response
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, err
+	}
+	return manifestV2ToEntries(out, include), nil
+}
+
+func manifestV2ToEntries(v2 types.ManifestV2Response, include string) []types.GameSaveLocation {
+	var entries []types.GameSaveLocation
+	for _, g := range v2.Games {
+		addLocs := func(locs []types.ManifestV2Location, isConfig bool) {
+			for _, loc := range locs {
+				if include == "saves" && isConfig {
+					continue
+				}
+				if include == "config" && !isConfig {
+					continue
+				}
+				for _, pt := range loc.PathTemplates {
+					if pt == "" {
+						continue
+					}
+					entries = append(entries, types.GameSaveLocation{
+						GameID: g.GameID, PCGWPageID: parsePageID(g.GameID),
+						GameTitle: g.Title, Platform: loc.Platform, PathTemplate: pt,
+						IsConfig: isConfig, UpdatedAt: g.LastUpdated, Source: "pcgw",
+						SteamAppIDs: g.SteamAppIDs, GOGID: g.GOGID, EpicID: g.EpicID, UbisoftID: g.UbisoftID,
+					})
+				}
+			}
+		}
+		addLocs(g.SaveLocations, false)
+		addLocs(g.ConfigLocations, true)
+	}
+	return entries
+}
+
+func parsePageID(gameID string) int64 {
+	n, _ := strconv.ParseInt(gameID, 10, 64)
+	return n
 }
 
 func manifestPath() string {

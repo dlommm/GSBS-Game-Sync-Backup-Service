@@ -1,14 +1,12 @@
-// Command pcgw-sync runs a one-off PCGW manifest sync: list game pages, fetch wikitext,
-// parse save locations, upsert into the server DB. For use from cron or manually.
-// Usage: pcgw-sync [options]
-// Env: GSBS_DB path to SQLite DB (default gsbs.db).
+// Command pcgw-sync syncs PCGamingWiki game data into a GSBS SQLite database.
 package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/pcgw"
@@ -17,32 +15,46 @@ import (
 )
 
 func main() {
-	dbPath := os.Getenv("GSBS_DB")
-	if dbPath == "" {
-		dbPath = "gsbs.db"
-	}
-	st, err := store.NewSQLite(dbPath)
+	dbPath := flag.String("db", envOr("GSBS_DB", "gsbs.db"), "SQLite database path")
+	full := flag.Bool("full", false, "Full resync (skip incremental)")
+	offset := flag.Int("offset", 0, "Resume list offset")
+	flag.Parse()
+
+	st, err := store.NewSQLite(*dbPath)
 	if err != nil {
-		log.Fatal("store:", err)
+		log.Fatal(err)
 	}
 	defer st.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
 	defer cancel()
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-	go func() {
-		<-sig
-		cancel()
-	}()
-
-	ctx, timeoutCancel := context.WithTimeout(ctx, 24*time.Hour)
-	defer timeoutCancel()
 
 	client := pcgw.NewClient()
-	count, err := job.PCGWSync(ctx, st, client, nil)
-	if err != nil && ctx.Err() == nil {
+	runID, err := st.StartPCGWSyncRun(ctx, syncMode(*full))
+	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("pcgw-sync finished (%d entries)", count)
+	n, err := job.PCGWSync(ctx, st, client, func(pages int) {
+		if pages%10 == 0 {
+			fmt.Printf("pages: %d\n", pages)
+		}
+	}, job.PCGWSyncOptions{Full: *full, Offset: *offset, SyncRunID: runID})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("done: %d manifest path rows upserted\n", n)
+}
+
+func syncMode(full bool) string {
+	if full {
+		return "full"
+	}
+	return "incremental"
+}
+
+func envOr(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
 }

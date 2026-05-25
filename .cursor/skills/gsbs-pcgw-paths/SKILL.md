@@ -1,34 +1,34 @@
 ---
 name: gsbs-pcgw-paths
-description: Works with PCGamingWiki integration and path resolution: pkg/pcgw (API, wikitext parsing), pkg/paths (resolver, placeholders, Steam VDF), manifest and game_save_locations. Use when adding placeholders, fixing path resolution, parsing PCGW templates, or extending the PCGW sync or manifest.
+description: Works with PCGamingWiki integration and path resolution: pkg/pcgw (API, full-page ingest, section parsers), pkg/paths (resolver, placeholders), pcgw_* DB tables, manifest v1/v2, cmd/pcgw-sync and pcgw-fetch. Use when adding placeholders, parsing PCGW templates, or extending PCGW sync/manifest.
 ---
 
 # GSBS PCGW & Paths
 
-**To keep context low:** For implementation or multi-file work in pkg/pcgw, pkg/paths, or the PCGW job/cmd tools, invoke the **gsbs-pcgw-paths** subagent (`.cursor/agents/gsbs-pcgw-paths.md` or `/gsbs-pcgw-paths`) at the start of the task instead of doing it in the main chat.
+**To keep context low:** For implementation or multi-file work in pkg/pcgw, pkg/paths, or the PCGW job/cmd tools, invoke the **gsbs-pcgw-paths** subagent at the start of the task.
 
 ## Scope
 
-- **pkg/pcgw/** — client.go (MediaWiki API, ListGamePages, ParsePageWikitext), parse_wikitext.go (ParseSaveLocationsFromWikitext). Output normalized path templates and platform (windows/linux).
-- **pkg/paths/** — resolve.go (Resolver, ReplacePlaceholders, PathExists, CurrentOS), steam_vdf.go (libraryfolders.vdf parsing for Steam library roots). Placeholders must match what PCGW and config use.
-- **Manifest**: Server table `game_save_locations`; columns: game_id, pcgw_page_id, game_title, platform, path_template, is_config, updated_at, source. Unique (game_id, platform, path_template). Filled by `server/job/pcgw.go` or `cmd/pcgw-sync`; read by `GET /api/manifest`.
-- **cmd/pcgw-sync**, **cmd/pcgw-fetch** — standalone tools for syncing or fetching one game's save locations from PCGW.
+- **pkg/pcgw/** — `IngestPage`, section parsers, `placeholders.go`, Cargo + MediaWiki client (2s default rate limit, User-Agent). Golden fixtures in `testdata/`.
+- **pkg/paths/** — `resolve.go`, `steam_vdf.go`; must match `placeholders.go` mappings including `%PUBLIC%`, GOG/Epic/Heroic/Lutris/Bottles/Flatpak.
+- **DB**: `pcgw_*` tables (full mirror) + `game_save_locations` (v1 projection). Store methods in `server/store/pcgw.go`.
+- **Sync**: `server/job/pcgw_sync.go`, `pcgw_persist.go` — incremental via rev_id/content_hash; section-level partial updates.
+- **Manifest**: v1 `GET /api/manifest` (flat entries); v2 `GET /api/manifest/v2` (rich per-game). Client tries v2 first in `client/manifest.go`.
+- **cmd/pcgw-sync**, **cmd/pcgw-fetch** — CLI sync/fetch tools.
+- **WebUI**: `/admin/pcgw` — browse, refresh, full sync, export.
 
-## Placeholders (normalized form)
+## Env
 
-- Windows env: `%USERPROFILE%`, `%LOCALAPPDATA%`, `%APPDATA%`.
-- Cross-platform: `<SteamLibrary-folder>`, `<Ubisoft-Connect-folder>`, `<user-id>`.
-- Linux: same; Resolver maps to `$HOME`, `~/.local/share`, `~/.config` and Steam/Proton paths. Proton: `<SteamLibrary-folder>/steamapps/compatdata/<AppID>/pfx/...`.
-- Resolver fills: SteamLibraries (from libraryfolders.vdf or defaults), UbisoftConnect, UserID, Home, LocalAppData, AppData.
+- `GSBS_PCGW_RATE_LIMIT` (default `2s`), `GSBS_PCGW_USER_AGENT`, `GSBS_PCGW_STORE_FULL_WIKITEXT` (default true), `GSBS_PCGW_CRON`, `GSBS_PCGW_FULL_CRON`.
 
 ## Conventions
 
-- PCGW rate limit: 1 request/second when calling API from job or cmd.
-- Parse wikitext for "Save game data location" / "Configuration file(s) location"; normalize to resolver placeholders so client can expand. Store platform as "windows" or "linux" (pcgw.SystemToPlatform).
-- Adding a new placeholder: add to `pkg/paths` Resolver and ReplacePlaceholders; document in `docs/EXAMPLE_CONFIG.md` and ARCHITECTURE path resolution section.
+- Never strip unknown `{{p|…}}` in paths.
+- On section parse error: keep prior DB row; log `pcgw_parse_failures`; `parse_status=partial`.
+- Project manifest paths only when game_data parse succeeds.
 
-## Checklist for PCGW/path changes
+## Checklist
 
-- [ ] Path templates in DB and manifest use the same placeholder names as Resolver.
-- [ ] New launcher/platform: add resolver field and ReplacePlaceholders logic; update docs.
-- [ ] PCGW job: use store.UpsertGameSaveLocations; keep rate limit.
+- [ ] Placeholders in pkg/pcgw match pkg/paths resolver tokens.
+- [ ] New section/template: add parser + store upsert + golden fixture.
+- [ ] After sync: `BumpManifestVersion`, `InvalidateManifestCache`, SSE `manifest-updated`.

@@ -131,6 +131,54 @@ type Store interface {
 	AppendStatsSnapshot(ctx context.Context) error
 	ListStatsSnapshots(ctx context.Context, limit int) ([]StatsSnapshotRow, error)
 
+	// PCGW games (full mirror)
+	UpsertPCGWGame(ctx context.Context, g *types.PCGWGame) error
+	GetPCGWGame(ctx context.Context, pageID int64) (*types.PCGWGame, error)
+	GetPCGWGameByPageName(ctx context.Context, pageName string) (*types.PCGWGame, error)
+	ListPCGWGames(ctx context.Context, filter PCGWGameListFilter) ([]types.PCGWGame, int, error)
+	SearchPCGWGamesFTS(ctx context.Context, query string, limit, offset int) ([]types.PCGWGame, int, error)
+	UpdatePCGWGameSyncState(ctx context.Context, pageID int64, revID int64, revTS, status, parseErr string, durationMs int) error
+
+	UpsertPCGWGameData(ctx context.Context, row *types.PCGWGameData) error
+	DeletePCGWGameDataExcept(ctx context.Context, pageID int64, keepPlatformKeys []string) error
+	ListPCGWGameData(ctx context.Context, pageID int64) ([]types.PCGWGameData, error)
+
+	UpsertPCGWAvailability(ctx context.Context, row *types.PCGWSectionRow) error
+	UpsertPCGWMonetization(ctx context.Context, row *types.PCGWSectionRow) error
+	UpsertPCGWVideo(ctx context.Context, row *types.PCGWSectionRow) error
+	UpsertPCGWInput(ctx context.Context, row *types.PCGWSectionRow) error
+	UpsertPCGWAudio(ctx context.Context, row *types.PCGWSectionRow) error
+	UpsertPCGWNetwork(ctx context.Context, row *types.PCGWSectionRow) error
+	UpsertPCGWOther(ctx context.Context, row *types.PCGWSectionRow) error
+	UpsertPCGWNotes(ctx context.Context, row *types.PCGWSectionRow) error
+	UpsertPCGWReferences(ctx context.Context, row *types.PCGWSectionRow) error
+	UpsertPCGWExternalLinks(ctx context.Context, row *types.PCGWSectionRow) error
+	GetPCGWSection(ctx context.Context, pageID int64, section string) (*types.PCGWSectionRow, error)
+
+	ReplacePCGWSystemRequirements(ctx context.Context, pageID int64, rows []types.PCGWSystemRequirement) error
+	ListPCGWSystemRequirements(ctx context.Context, pageID int64) ([]types.PCGWSystemRequirement, error)
+
+	UpsertPCGWMetadata(ctx context.Context, m *types.PCGWMetadata) error
+	GetPCGWMetadata(ctx context.Context, pageID int64) (*types.PCGWMetadata, error)
+	GetPCGWContentHash(ctx context.Context, pageID int64) (contentHash string, sectionHashes map[string]string, err error)
+	PurgePCGWFullWikitext(ctx context.Context) (rowsAffected int64, err error)
+
+	InsertPCGWParseFailure(ctx context.Context, f *types.PCGWParseFailure) error
+	ListPCGWParseFailures(ctx context.Context, pageID int64, limit int) ([]types.PCGWParseFailure, error)
+
+	StartPCGWSyncRun(ctx context.Context, mode string) (runID string, err error)
+	UpdatePCGWSyncRunCheckpoint(ctx context.Context, runID string, offset int, stats PCGWSyncRunStats) error
+	FinishPCGWSyncRun(ctx context.Context, runID, status, errMsg string, stats PCGWSyncRunStats) error
+	GetLatestPCGWSyncRun(ctx context.Context) (*types.PCGWSyncRun, error)
+
+	GetPCGWManifestMeta(ctx context.Context) (*types.PCGWManifestMeta, error)
+	BumpManifestVersion(ctx context.Context, newETag string) (version int, err error)
+	ReplaceGameSaveLocationsForGame(ctx context.Context, gameID string, entries []types.GameSaveLocation) error
+	BuildManifestV2(ctx context.Context, since, platform string, limit, offset int) (*types.ManifestV2Response, error)
+
+	GetPCGWStats(ctx context.Context) (PCGWStats, error)
+	ExportPCGWGameJSON(ctx context.Context, pageID int64) ([]byte, error)
+
 	// Close releases resources (e.g. DB connection).
 	Close() error
 }
@@ -254,4 +302,37 @@ type SessionRow struct {
 	CreatedAt string
 	LastSeen  string
 	UserAgent string
+}
+
+// PCGWGameListFilter filters ListPCGWGames.
+type PCGWGameListFilter struct {
+	ParseStatus  string
+	Platform     string
+	SteamAppID   string
+	UpdatedAfter string
+	Limit        int
+	Offset       int
+}
+
+// PCGWSyncRunStats aggregates sync progress counters.
+type PCGWSyncRunStats struct {
+	GamesTotal   int
+	GamesOK      int
+	GamesPartial int
+	GamesFailed  int
+	GamesSkipped int
+	AvgParseMs   int
+}
+
+// PCGWStats is admin dashboard summary for PCGW data.
+type PCGWStats struct {
+	TotalGames      int
+	OK              int
+	Partial         int
+	Failed          int
+	Pending         int
+	LastSyncAt      string
+	AvgParseMs      int
+	DBWikitextBytes int64
+	ManifestVersion int
 }
