@@ -1,0 +1,58 @@
+{{template "layout" .}}
+{{define "admin_settings_title"}}Admin Settings — GSBS{{end}}
+{{define "admin_settings_content"}}
+<section class="panel">
+  <div class="panel-header"><h2>PCGW Sync Schedule</h2></div>
+  {{if .PCGWCronEnvOverride}}
+  <p class="notice notice-warn">Cron is controlled by <code>GSBS_PCGW_CRON</code> environment variable (overrides database). Change it in Docker/compose and restart the server to update.</p>
+  {{end}}
+  <form method="post" action="/admin/settings/save" class="settings-form">
+    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+
+    <div class="form-group">
+      <label for="pcgw_cron">Cron expression</label>
+      <input type="text" id="pcgw_cron" name="pcgw_cron" class="text-input" value="{{.PCGWCron}}" {{if .PCGWCronEnvOverride}}disabled{{end}} placeholder="0 3 * * 0">
+      <p class="cell-muted form-hint">Standard 5-field cron. Leave empty to disable scheduled sync (when not overridden by env).</p>
+      <div class="preset-buttons" style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.5rem;">
+        <button type="button" class="btn-ghost-sm" onclick="document.getElementById('pcgw_cron').value='0 3 * * 0'" {{if .PCGWCronEnvOverride}}disabled{{end}}>Weekly Sun 03:00</button>
+        <button type="button" class="btn-ghost-sm" onclick="document.getElementById('pcgw_cron').value='0 3 * * *'" {{if .PCGWCronEnvOverride}}disabled{{end}}>Daily 03:00</button>
+        <button type="button" class="btn-ghost-sm" onclick="document.getElementById('pcgw_cron').value='0 */6 * * *'" {{if .PCGWCronEnvOverride}}disabled{{end}}>Every 6 hours</button>
+        <button type="button" class="btn-ghost-sm" onclick="document.getElementById('pcgw_cron').value=''" {{if .PCGWCronEnvOverride}}disabled{{end}}>Disabled</button>
+      </div>
+    </div>
+
+    <div class="config-grid" style="margin-bottom:1rem;">
+      <div class="config-item"><span class="config-key">Source</span><span class="config-val">{{.PCGWCronSource}}</span></div>
+      <div class="config-item"><span class="config-key">Status</span>
+        {{if .PCGWCronDisabled}}<span class="badge-warn">Disabled</span>{{else}}<span class="badge-success">Active</span>{{end}}
+      </div>
+      {{if .PCGWCronNextRun}}
+      <div class="config-item"><span class="config-key">Next run</span><span class="config-val">{{.PCGWCronNextRun}}</span></div>
+      {{end}}
+    </div>
+
+    <div class="form-group">
+      <label class="checkbox-label">
+        <input type="checkbox" name="pcgw_auto_run_on_first_start" value="1" {{if .AutoRunFirstStart}}checked{{end}}>
+        Auto-run PCGW incremental sync on first server start
+      </label>
+      <p class="cell-muted form-hint">Runs once when the server starts for the first time (until the first-run marker is set).</p>
+    </div>
+
+    <div class="panel-header" style="margin-top:1.5rem;padding-left:0;"><h2>PCGW Filters</h2></div>
+    <p class="cell-muted">Substring excludes applied during sync. Path excludes use defaults when empty.</p>
+
+    <div class="form-group">
+      <label for="pcgw_title_excludes">Title excludes (JSON array)</label>
+      <textarea id="pcgw_title_excludes" name="pcgw_title_excludes" class="text-input" rows="3">{{.PCGWTitleExcludesJSON}}</textarea>
+    </div>
+    <div class="form-group">
+      <label for="pcgw_path_excludes">Path excludes (JSON array)</label>
+      <textarea id="pcgw_path_excludes" name="pcgw_path_excludes" class="text-input" rows="3">{{.PCGWPathExcludesJSON}}</textarea>
+    </div>
+
+    <button type="submit" class="btn-primary">Save settings</button>
+  </form>
+</section>
+{{end}}
+{{define "admin_settings_scripts"}}{{end}}

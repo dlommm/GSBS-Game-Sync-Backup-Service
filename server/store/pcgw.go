@@ -7,10 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/gsbs/gsbs/pkg/pcgw"
 	"github.com/gsbs/gsbs/pkg/types"
 )
 
@@ -198,6 +200,14 @@ func (s *sqliteStore) migratePCGW() error {
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.Exec(stmt); err != nil {
+			return fmt.Errorf("migrate pcgw: %w", err)
+		}
+	}
+	for _, col := range []string{
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN resumed_from_run_id TEXT`,
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN notes TEXT`,
+	} {
+		if _, err := s.db.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate") {
 			return fmt.Errorf("migrate pcgw: %w", err)
 		}
 	}
@@ -864,6 +874,18 @@ func (s *sqliteStore) StartPCGWSyncRun(ctx context.Context, mode string) (string
 	return id, err
 }
 
+func (s *sqliteStore) StartPCGWSyncRunWithResume(ctx context.Context, mode, resumedFromRunID, notes string) (string, error) {
+	id, err := genID()
+	if err != nil {
+		return "", err
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO pcgw_sync_runs (id, mode, status, started_at, resumed_from_run_id, notes)
+		VALUES (?,?,'running',?,?,?)`, id, mode, now, nullIfEmpty(resumedFromRunID), nullIfEmpty(notes))
+	return id, err
+}
+
 func (s *sqliteStore) UpdatePCGWSyncRunCheckpoint(ctx context.Context, runID string, offset int, stats PCGWSyncRunStats) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE pcgw_sync_runs SET checkpoint_offset=?, games_total=?, games_ok=?, games_partial=?,
@@ -883,14 +905,30 @@ func (s *sqliteStore) FinishPCGWSyncRun(ctx context.Context, runID, status, errM
 }
 
 func (s *sqliteStore) GetLatestPCGWSyncRun(ctx context.Context) (*types.PCGWSyncRun, error) {
-	var r types.PCGWSyncRun
-	var finished, errMsg sql.NullString
-	err := s.db.QueryRowContext(ctx, `
+	return s.scanPCGWSyncRun(ctx, `
 		SELECT id, mode, status, started_at, finished_at, checkpoint_offset,
-			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message
-		FROM pcgw_sync_runs ORDER BY started_at DESC LIMIT 1`).
+			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message,
+			resumed_from_run_id, notes
+		FROM pcgw_sync_runs ORDER BY started_at DESC LIMIT 1`)
+}
+
+func (s *sqliteStore) GetResumablePCGWSyncRun(ctx context.Context, mode string) (*types.PCGWSyncRun, error) {
+	return s.scanPCGWSyncRun(ctx, `
+		SELECT id, mode, status, started_at, finished_at, checkpoint_offset,
+			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message,
+			resumed_from_run_id, notes
+		FROM pcgw_sync_runs
+		WHERE mode = ? AND status IN ('interrupted', 'failed', 'canceled') AND checkpoint_offset > 0
+		ORDER BY started_at DESC LIMIT 1`, mode)
+}
+
+func (s *sqliteStore) scanPCGWSyncRun(ctx context.Context, query string, args ...interface{}) (*types.PCGWSyncRun, error) {
+	var r types.PCGWSyncRun
+	var finished, errMsg, resumedFrom, notes sql.NullString
+	err := s.db.QueryRowContext(ctx, query, args...).
 		Scan(&r.ID, &r.Mode, &r.Status, &r.StartedAt, &finished, &r.CheckpointOffset,
-			&r.GamesTotal, &r.GamesOK, &r.GamesPartial, &r.GamesFailed, &r.GamesSkipped, &r.AvgParseMs, &errMsg)
+			&r.GamesTotal, &r.GamesOK, &r.GamesPartial, &r.GamesFailed, &r.GamesSkipped, &r.AvgParseMs, &errMsg,
+			&resumedFrom, &notes)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -899,7 +937,58 @@ func (s *sqliteStore) GetLatestPCGWSyncRun(ctx context.Context) (*types.PCGWSync
 	}
 	r.FinishedAt = finished.String
 	r.ErrorMessage = errMsg.String
+	r.ResumedFromRunID = resumedFrom.String
+	r.Notes = notes.String
 	return &r, nil
+}
+
+// ReconcileStalePCGWSyncRuns marks in-flight pcgw_sync_runs as interrupted after restart.
+func (s *sqliteStore) ReconcileStalePCGWSyncRuns(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, mode, started_at, checkpoint_offset FROM pcgw_sync_runs WHERE status = 'running'`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type staleRow struct {
+		id       string
+		mode     string
+		started  string
+		checkpoint int
+	}
+	var stale []staleRow
+	for rows.Next() {
+		var row staleRow
+		if err := rows.Scan(&row.id, &row.mode, &row.started, &row.checkpoint); err != nil {
+			return err
+		}
+		stale = append(stale, row)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, row := range stale {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE pcgw_sync_runs SET status = ?, finished_at = ?, error_message = ? WHERE id = ?`,
+			"interrupted", now, staleJobMessage, row.id); err != nil {
+			return err
+		}
+		log.Printf("reconcile: pcgw_sync_runs id=%s mode=%s started=%s checkpoint=%d -> interrupted",
+			row.id, row.mode, row.started, row.checkpoint)
+	}
+	return nil
+}
+
+// HasRunningPCGWSync reports whether a pcgw sync run is in progress.
+func (s *sqliteStore) HasRunningPCGWSync(ctx context.Context) bool {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM pcgw_sync_runs WHERE status = 'running'`).Scan(&n)
+	return err == nil && n > 0
 }
 
 func (s *sqliteStore) GetPCGWManifestMeta(ctx context.Context) (*types.PCGWManifestMeta, error) {
@@ -953,10 +1042,10 @@ func (s *sqliteStore) ReplaceGameSaveLocationsForGame(ctx context.Context, gameI
 			e.UpdatedAt = now
 		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO game_save_locations (id, game_id, pcgw_page_id, game_title, platform, path_template, is_config, updated_at, source, notes, steam_app_ids, gog_id, epic_id, ubisoft_id)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			INSERT INTO game_save_locations (id, game_id, pcgw_page_id, game_title, platform, path_template, is_config, updated_at, source, notes, steam_app_ids, gog_id, epic_id, ubisoft_id, save_rules_json)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			id, e.GameID, e.PCGWPageID, e.GameTitle, e.Platform, e.PathTemplate, isConfig, e.UpdatedAt, e.Source, e.Notes,
-			encodeSteamAppIDs(e.SteamAppIDs), nullIfEmpty(e.GOGID), nullIfEmpty(e.EpicID), nullIfEmpty(e.UbisoftID)); err != nil {
+			encodeSteamAppIDs(e.SteamAppIDs), nullIfEmpty(e.GOGID), nullIfEmpty(e.EpicID), nullIfEmpty(e.UbisoftID), nullIfEmpty(encodeSaveRules(e.SaveRules))); err != nil {
 			return err
 		}
 	}
@@ -1047,24 +1136,32 @@ func (s *sqliteStore) BuildManifestV2(ctx context.Context, since, platform strin
 		}
 		var installPaths []string
 		cloud := map[string]interface{}{}
+		rawLabelByPlatform := map[string]string{}
+		gsEntries, _ := s.listGameSaveLocationsForGame(ctx, mg.GameID)
+		useManifestEntries := len(gsEntries) > 0
 		for _, gd := range gameData {
 			if platform != "" && gd.PlatformKey != platform {
 				continue
 			}
-			for _, sl := range gd.SaveLocations {
-				mg.SaveLocations = append(mg.SaveLocations, types.ManifestV2Location{
-					Platform: gd.PlatformKey, PlatformRawLabel: gd.PlatformRawLabel,
-					PathTemplates: sl.PathTemplates, IsConfig: false, Notes: sl.Notes,
-				})
-				if len(sl.PathTemplates) > 0 {
-					mg.HasSaveData = true
+			rawLabelByPlatform[gd.PlatformKey] = gd.PlatformRawLabel
+			if !useManifestEntries {
+				for _, sl := range gd.SaveLocations {
+					rules := saveRulesFromPathTemplates(sl.PathTemplates, gd.PlatformKey, false)
+					mg.SaveLocations = append(mg.SaveLocations, types.ManifestV2Location{
+						Platform: gd.PlatformKey, PlatformRawLabel: gd.PlatformRawLabel,
+						PathTemplates: sl.PathTemplates, SaveRules: rules, IsConfig: false, Notes: sl.Notes,
+					})
+					if len(sl.PathTemplates) > 0 {
+						mg.HasSaveData = true
+					}
 				}
-			}
-			for _, cl := range gd.ConfigLocations {
-				mg.ConfigLocations = append(mg.ConfigLocations, types.ManifestV2Location{
-					Platform: gd.PlatformKey, PlatformRawLabel: gd.PlatformRawLabel,
-					PathTemplates: cl.PathTemplates, IsConfig: true, Notes: cl.Notes,
-				})
+				for _, cl := range gd.ConfigLocations {
+					rules := saveRulesFromPathTemplates(cl.PathTemplates, gd.PlatformKey, true)
+					mg.ConfigLocations = append(mg.ConfigLocations, types.ManifestV2Location{
+						Platform: gd.PlatformKey, PlatformRawLabel: gd.PlatformRawLabel,
+						PathTemplates: cl.PathTemplates, SaveRules: rules, IsConfig: true, Notes: cl.Notes,
+					})
+				}
 			}
 			for _, inst := range gd.InstallLocations {
 				if str, ok := inst.(string); ok && str != "" {
@@ -1073,6 +1170,33 @@ func (s *sqliteStore) BuildManifestV2(ctx context.Context, since, platform strin
 			}
 			for k, v := range gd.SaveGameCloudSync {
 				cloud[k] = v
+			}
+		}
+		if useManifestEntries {
+			for _, e := range gsEntries {
+				if platform != "" && e.Platform != platform {
+					continue
+				}
+				rules := e.SaveRules
+				if len(rules) == 0 {
+					rules = pcgw.ParseSaveRules(e.PathTemplate, e.Platform, e.IsConfig)
+				}
+				loc := types.ManifestV2Location{
+					Platform:         e.Platform,
+					PlatformRawLabel: rawLabelByPlatform[e.Platform],
+					PathTemplates:    []string{e.PathTemplate},
+					SaveRules:        rules,
+					IsConfig:         e.IsConfig,
+					Notes:            e.Notes,
+				}
+				if e.IsConfig {
+					mg.ConfigLocations = append(mg.ConfigLocations, loc)
+				} else {
+					mg.SaveLocations = append(mg.SaveLocations, loc)
+					if e.PathTemplate != "" {
+						mg.HasSaveData = true
+					}
+				}
 			}
 		}
 		mg.CommonInstallPaths = dedupeStrings(installPaths)
@@ -1090,6 +1214,14 @@ func (s *sqliteStore) BuildManifestV2(ctx context.Context, since, platform strin
 		ETag:        meta.ManifestETag,
 		Games:       games,
 	}, nil
+}
+
+func saveRulesFromPathTemplates(templates []string, platform string, isConfig bool) []types.SaveRule {
+	var rules []types.SaveRule
+	for _, pt := range templates {
+		rules = append(rules, pcgw.ParseSaveRules(pt, platform, isConfig)...)
+	}
+	return rules
 }
 
 func dedupeStrings(in []string) []string {

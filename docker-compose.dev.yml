@@ -17,6 +17,7 @@ services:
     environment:
       GSBS_ADDR: ":8080"
       GSBS_DB: /app/data/gsbs.db
+      GSBS_SAVE_ROOT: /app/data/gamesaves
       GSBS_SESSION_SECRET: ${GSBS_SESSION_SECRET:-dev-change-me-in-production}
       GSBS_ALLOW_REGISTER: "true"
       GSBS_PCGW_CRON: "0 3 * * 0"

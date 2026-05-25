@@ -3,6 +3,9 @@ package pcgw
 import (
 	"regexp"
 	"strings"
+
+	"github.com/gsbs/gsbs/pkg/saverule"
+	"github.com/gsbs/gsbs/pkg/types"
 )
 
 // pPlaceholderRe matches PCGW Path shorthand {{p|...}} or {{P|...}}.
@@ -59,4 +62,16 @@ func NormalizePathTemplate(raw string) string {
 	s = strings.ReplaceAll(s, "\\\\", "/")
 	s = strings.ReplaceAll(s, "\\", "/")
 	return strings.TrimSpace(s)
+}
+
+// ParseSaveRules parses a raw PCGW path string into structured save rules.
+func ParseSaveRules(raw, platform string, isConfig bool) []types.SaveRule {
+	return saverule.ParseSaveRules(raw, platform, isConfig, NormalizePathTemplate)
+}
+
+// SplitNormalizePathTemplates splits pipe-separated PCGW path strings, normalizes each
+// segment, strips trailing file globs (/*, /*.ext) to directory-only paths, deduplicates,
+// and returns non-empty results in stable order.
+func SplitNormalizePathTemplates(raw string) []string {
+	return saverule.Directories(ParseSaveRules(raw, "", false))
 }

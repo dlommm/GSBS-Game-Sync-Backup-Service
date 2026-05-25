@@ -2,7 +2,10 @@
 {{define "admin_users_title"}}Admin Users — GSBS{{end}}
 {{define "admin_users_content"}}
 <section class="panel">
-  <div class="panel-header"><h2>Users</h2></div>
+  <div class="panel-header-actions">
+    <h2>Users</h2>
+    <button type="button" class="btn-primary-sm" onclick="document.getElementById('create-user-dialog').showModal()">Create user</button>
+  </div>
   {{if .Users}}
   <div class="table-wrap">
     <table class="data-table">
@@ -19,18 +22,36 @@
           </td>
           <td>{{.SaveCount}}</td>
           <td class="cell-size">{{formatBytes .StorageBytes}}</td>
-          <td class="cell-size">{{if eq .QuotaBytes 0}}—{{else}}{{formatBytes .QuotaBytes}}{{end}}</td>
+          <td class="quota-cell">
+            {{if eq .QuotaBytes 0}}
+            <span class="cell-muted">Unlimited</span>
+            <div class="quota-bar-track quota-bar-compact"><div class="quota-bar-fill" style="width:{{if gt .StorageBytes 0}}100{{else}}0{{end}}%;opacity:0.35;"></div></div>
+            {{else}}
+            <div class="quota-bar-header quota-bar-header-compact">
+              <span>{{formatBytes .StorageBytes}} / {{formatBytes .QuotaBytes}}</span>
+              <span>{{printf "%.0f" (percent .StorageBytes .QuotaBytes)}}%</span>
+            </div>
+            <div class="quota-bar-track quota-bar-compact">
+              <div class="quota-bar-fill {{quotaBarClass .StorageBytes .QuotaBytes}}" style="width:{{printf "%.1f" (percent .StorageBytes .QuotaBytes)}}%;"></div>
+            </div>
+            {{end}}
+          </td>
           <td>{{if .Disabled}}<span class="badge-failed">disabled</span>{{else}}<span class="badge-success">active</span>{{end}}</td>
           <td class="cell-action">
-            {{if ne .ID $.CurrentUserID}}
-            {{if .Disabled}}
-            <form method="post" action="/admin/user/enable" class="inline-form"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-ghost-sm">Enable</button></form>
-            {{else}}
-            <form method="post" action="/admin/user/disable" class="inline-form" onsubmit="return confirm('Disable this user?');"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-ghost-sm">Disable</button></form>
-            {{end}}
-            <form method="post" action="/admin/user/delete" class="inline-form" onsubmit="return confirm('Delete user permanently?');"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-danger-sm">Delete</button></form>
-            {{end}}
-            <form method="post" action="/admin/user/quota" class="inline-form"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><input type="number" name="quota_bytes" value="{{.QuotaBytes}}" min="0" style="width:6rem;padding:0.25rem;"><button type="submit" class="btn-ghost-sm">Quota</button></form>
+            <details class="action-menu">
+              <summary class="btn-ghost-sm">Actions</summary>
+              <div class="action-menu-panel">
+                {{if ne .ID $.CurrentUserID}}
+                {{if .Disabled}}
+                <form method="post" action="/admin/user/enable" class="inline-form"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-ghost-sm">Enable</button></form>
+                {{else}}
+                <form method="post" action="/admin/user/disable" class="inline-form" onsubmit="return confirm('Disable this user?');"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-ghost-sm">Disable</button></form>
+                {{end}}
+                <form method="post" action="/admin/user/delete" class="inline-form" onsubmit="return confirm('Delete user permanently?');"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-danger-sm">Delete</button></form>
+                {{end}}
+                <button type="button" class="btn-ghost-sm" onclick="openQuotaDialog('{{.ID}}', '{{.Username}}', {{.QuotaBytes}})">Set quota</button>
+              </div>
+            </details>
           </td>
         </tr>
         {{end}}
@@ -67,4 +88,59 @@
   </div>
   {{else}}<div class="panel-empty"><p>No clients.</p></div>{{end}}
 </section>
+
+<dialog id="create-user-dialog">
+  <form method="post" action="/admin/user/create">
+    <div class="dialog-body">
+      <h3 style="margin:0 0 1rem;">Create user</h3>
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <label for="new_username">Username</label>
+      <input id="new_username" name="username" required autocomplete="off">
+      <label for="new_password">Password</label>
+      <input id="new_password" name="password" type="password" required autocomplete="new-password">
+      <label for="new_confirm_password">Confirm password</label>
+      <input id="new_confirm_password" name="confirm_password" type="password" required autocomplete="new-password">
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn-ghost-sm" onclick="this.closest('dialog').close()">Cancel</button>
+      <button type="submit" class="btn-primary-sm">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="quota-dialog">
+  <form method="post" action="/admin/user/quota">
+    <div class="dialog-body">
+      <h3 style="margin:0 0 0.5rem;">Set storage quota</h3>
+      <p class="cell-muted" id="quota-dialog-user" style="margin:0 0 1rem;font-size:0.875rem;"></p>
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <input type="hidden" name="user_id" id="quota-user-id">
+      <div class="quota-presets">
+        <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(5368709120)">5 GB</button>
+        <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(21474836480)">20 GB</button>
+        <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(53687091200)">50 GB</button>
+        <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(0)">Unlimited</button>
+      </div>
+      <label for="quota_bytes">Custom quota (bytes, 0 = unlimited)</label>
+      <input id="quota_bytes" name="quota_bytes" type="number" min="0" step="1" required>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn-ghost-sm" onclick="this.closest('dialog').close()">Cancel</button>
+      <button type="submit" class="btn-primary-sm">Save quota</button>
+    </div>
+  </form>
+</dialog>
+{{end}}
+{{define "admin_users_scripts"}}
+<script>
+function openQuotaDialog(userId, username, quotaBytes) {
+  document.getElementById('quota-user-id').value = userId;
+  document.getElementById('quota-dialog-user').textContent = username;
+  document.getElementById('quota_bytes').value = quotaBytes;
+  document.getElementById('quota-dialog').showModal();
+}
+function setQuotaPreset(bytes) {
+  document.getElementById('quota_bytes').value = bytes;
+}
+</script>
 {{end}}

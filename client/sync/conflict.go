@@ -139,7 +139,7 @@ func ResolveConflict(ctx context.Context, client *Client, gameID, pathKey string
 		if err != nil {
 			return err
 		}
-		if err := client.Push(ctx, gameID, pathKey, absPath, content); err != nil {
+		if err := client.Push(ctx, gameID, pathKey, absPath, "", content); err != nil {
 			return err
 		}
 	case ResolveUseServer:

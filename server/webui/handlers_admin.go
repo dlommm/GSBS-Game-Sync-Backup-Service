@@ -3,13 +3,16 @@ package webui
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gsbs/gsbs/pkg/types"
+	"github.com/gsbs/gsbs/server/job"
 	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/sse"
+	"github.com/gsbs/gsbs/server/store"
 )
 
 func (h *WebHandler) loadAdminStats(ctx context.Context) adminStats {
@@ -39,6 +42,43 @@ func (h *WebHandler) jobStatus() (running bool, progressPages int) {
 	return false, 0
 }
 
+type jobsViewData struct {
+	RecentJobs           []store.JobRun
+	JobRunning           bool
+	JobProgressPages     int
+	JobProgressTotal     int
+	JobGamesSkipped      int
+	LastSuccessfulSyncAt string
+	CSRFToken            string
+}
+
+func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string) jobsViewData {
+	recentJobs, _ := h.store.ListJobRuns(ctx, "pcgw_sync", 10)
+	jobRunning, jobProgress := h.jobStatus()
+	data := jobsViewData{
+		RecentJobs:       recentJobs,
+		JobRunning:       jobRunning,
+		JobProgressPages: jobProgress,
+		CSRFToken:        csrf,
+	}
+	if last, _ := h.store.GetLatestSuccessfulJobRun(ctx, "pcgw_sync"); last != nil {
+		data.LastSuccessfulSyncAt = last.FinishedAt
+		if data.LastSuccessfulSyncAt == "" {
+			data.LastSuccessfulSyncAt = last.StartedAt
+		}
+	}
+	if syncRun, _ := h.store.GetLatestPCGWSyncRun(ctx); syncRun != nil {
+		if syncRun.GamesTotal > 0 {
+			data.JobProgressTotal = syncRun.GamesTotal
+		}
+		data.JobGamesSkipped = syncRun.GamesSkipped
+		if jobRunning && jobProgress == 0 && syncRun.CheckpointOffset > 0 {
+			data.JobProgressPages = syncRun.CheckpointOffset
+		}
+	}
+	return data
+}
+
 func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) {
 	userID, username, ok := h.requireAdmin(w, r)
 	if !ok {
@@ -47,22 +87,25 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	statsSnapshots, _ := h.store.ListStatsSnapshots(ctx, 30)
 	recentJobs, _ := h.store.ListJobRuns(ctx, "pcgw_sync", 10)
-	jobRunning, jobProgress := h.jobStatus()
+	jobsData := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret))
 	sseClients := 0
 	if h.hub != nil {
 		sseClients = h.hub.Count()
 	}
 	h.render(w, "admin_overview.html", adminOverviewData{
-		PageData:         h.adminPageData(w, r, userID, username, "overview", "admin_overview"),
-		Stats:            h.loadAdminStats(ctx),
-		StatsSnapshots:   statsSnapshots,
-		SSEClients:       sseClients,
-		AllowRegister:    h.allowRegister,
-		MaxStorageBytes:  h.maxStorageBytes,
-		ReadOnly:         h.readOnly,
-		RecentJobs:       recentJobs,
-		JobRunning:       jobRunning,
-		JobProgressPages: jobProgress,
+		PageData:             h.adminPageData(w, r, userID, username, "overview", "admin_overview"),
+		Stats:                h.loadAdminStats(ctx),
+		StatsSnapshots:       statsSnapshots,
+		SSEClients:           sseClients,
+		AllowRegister:        h.allowRegister,
+		MaxStorageBytes:      h.maxStorageBytes,
+		ReadOnly:             h.readOnly,
+		RecentJobs:           recentJobs,
+		JobRunning:           jobsData.JobRunning,
+		JobProgressPages:     jobsData.JobProgressPages,
+		JobProgressTotal:     jobsData.JobProgressTotal,
+		JobGamesSkipped:      jobsData.JobGamesSkipped,
+		LastSuccessfulSyncAt: jobsData.LastSuccessfulSyncAt,
 	})
 }
 
@@ -172,30 +215,34 @@ func (h *WebHandler) serveAdminActivity(w http.ResponseWriter, r *http.Request) 
 	auditLog, _ := h.store.ListAuditLog(ctx, 50, "")
 	statsSnapshots, _ := h.store.ListStatsSnapshots(ctx, 30)
 	recentJobs, _ := h.store.ListJobRuns(ctx, "pcgw_sync", 10)
-	jobRunning, jobProgress := h.jobStatus()
+	jobsData := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret))
 	h.render(w, "admin_activity.html", adminActivityData{
-		PageData:         h.adminPageData(w, r, userID, username, "activity", "admin_activity"),
-		Fetches:          fetches,
-		AuditLog:         auditLog,
-		StatsSnapshots:   statsSnapshots,
-		RecentJobs:       recentJobs,
-		JobRunning:       jobRunning,
-		JobProgressPages: jobProgress,
+		PageData:             h.adminPageData(w, r, userID, username, "activity", "admin_activity"),
+		Fetches:              fetches,
+		AuditLog:             auditLog,
+		StatsSnapshots:       statsSnapshots,
+		RecentJobs:           recentJobs,
+		JobRunning:           jobsData.JobRunning,
+		JobProgressPages:     jobsData.JobProgressPages,
+		JobProgressTotal:     jobsData.JobProgressTotal,
+		JobGamesSkipped:      jobsData.JobGamesSkipped,
+		LastSuccessfulSyncAt: jobsData.LastSuccessfulSyncAt,
 	})
 }
 
 func (h *WebHandler) serveAdminJobsPartial(w http.ResponseWriter, r *http.Request) {
-	userID, username, ok := h.requireAdmin(w, r)
-	if !ok {
+	if _, _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
-	_ = userID
-	_ = username
-	recentJobs, _ := h.store.ListJobRuns(r.Context(), "pcgw_sync", 10)
-	jobRunning, jobProgress := h.jobStatus()
+	data := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret))
 	h.renderPartial(w, "partials/admin_jobs.html", map[string]interface{}{
-		"RecentJobs": recentJobs, "JobRunning": jobRunning,
-		"JobProgressPages": jobProgress, "CSRFToken": SetCSRFToken(w, r, h.secret),
+		"RecentJobs":           data.RecentJobs,
+		"JobRunning":           data.JobRunning,
+		"JobProgressPages":     data.JobProgressPages,
+		"JobProgressTotal":     data.JobProgressTotal,
+		"JobGamesSkipped":      data.JobGamesSkipped,
+		"LastSuccessfulSyncAt": data.LastSuccessfulSyncAt,
+		"CSRFToken":            data.CSRFToken,
 	})
 }
 
@@ -254,12 +301,83 @@ func (h *WebHandler) handleRunJob(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	redirect := "/admin/activity?job_started=1"
 	if h.jobRunner != nil {
-		h.jobRunner.RunPCGWSync(context.Background())
+		var started bool
+		var err error
+		if r.FormValue("full") == "1" {
+			started, err = h.jobRunner.RunPCGWSyncFull(context.Background())
+		} else {
+			started, err = h.jobRunner.RunPCGWSync(context.Background())
+		}
+		if err != nil {
+			if errors.Is(err, job.ErrJobAlreadyRunning) {
+				Redirect(w, r, "/admin/activity?error=job_already_running")
+				return
+			}
+			Redirect(w, r, "/admin/activity?error=job_start_failed")
+			return
+		}
+		if !started {
+			Redirect(w, r, "/admin/activity?error=job_already_running")
+			return
+		}
 	}
-	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "pcgw_sync", "")
-	logx.Logger().Info().Str("username", username).Msg("webui admin run-job pcgw_sync triggered")
-	Redirect(w, r, "/admin/activity?job_started=1")
+	action := "run_job"
+	if r.FormValue("full") == "1" {
+		action = "pcgw_sync_full"
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, action, "pcgw_sync", "")
+	logx.Logger().Info().Str("username", username).Str("action", action).Msg("webui admin run-job pcgw_sync triggered")
+	Redirect(w, r, redirect)
+}
+
+func (h *WebHandler) handleCancelPCGWJob(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if h.jobRunner != nil {
+		h.jobRunner.CancelPCGWSync(r.Context())
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "cancel_job", "pcgw_sync", "")
+	Redirect(w, r, "/admin/activity?job_canceled=1")
+}
+
+func (h *WebHandler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	newUsername := strings.TrimSpace(r.FormValue("username"))
+	password := r.FormValue("password")
+	confirm := r.FormValue("confirm_password")
+	if newUsername == "" || password == "" {
+		Redirect(w, r, "/admin/users?error=missing_credentials")
+		return
+	}
+	if password != confirm {
+		Redirect(w, r, "/admin/users?error=password_mismatch")
+		return
+	}
+	if _, err := h.auth.RegisterUser(r.Context(), newUsername, password); err != nil {
+		if strings.Contains(err.Error(), "exists") || strings.Contains(err.Error(), "duplicate") {
+			Redirect(w, r, "/admin/users?error=username_taken")
+			return
+		}
+		Redirect(w, r, "/admin/users?error=create_user_failed")
+		return
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "create_user", newUsername, "")
+	Redirect(w, r, "/admin/users?user_created=1")
 }
 
 func (h *WebHandler) handleDisableUser(w http.ResponseWriter, r *http.Request) {

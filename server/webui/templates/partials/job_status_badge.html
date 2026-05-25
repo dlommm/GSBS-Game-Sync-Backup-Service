@@ -1,0 +1,8 @@
+{{define "partials/job_status_badge.html"}}
+{{if eq . "success"}}<span class="badge-success">success</span>
+{{else if eq . "running"}}<span class="badge-running">running</span>
+{{else if eq . "canceled"}}<span class="badge-warn">canceled</span>
+{{else if eq . "interrupted"}}<span class="badge-warn">interrupted</span>
+{{else if eq . "partial"}}<span class="badge-warn">partial</span>
+{{else}}<span class="badge-failed">failed</span>{{end}}
+{{end}}

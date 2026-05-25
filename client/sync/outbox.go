@@ -101,7 +101,7 @@ func ProcessOutbox(ctx context.Context, client *Client) int {
 			_ = os.Remove(path)
 			continue
 		}
-		if err := client.pushOnce(ctx, entry.GameID, entry.PathKey, entry.FilePath, content); err != nil {
+		if err := client.pushOnce(ctx, entry.GameID, entry.PathKey, entry.FilePath, "", content); err != nil {
 			if !retry.IsRetryableError(err) {
 				log.Printf("outbox: non-retryable id=%s: %v — removing", entry.ID, err)
 				_ = os.Remove(path)

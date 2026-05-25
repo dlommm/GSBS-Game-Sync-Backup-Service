@@ -17,7 +17,9 @@ import (
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/paths"
+	"github.com/gsbs/gsbs/pkg/pcgw"
 	"github.com/gsbs/gsbs/pkg/retry"
+	"github.com/gsbs/gsbs/pkg/saverule"
 	"github.com/gsbs/gsbs/pkg/types"
 )
 
@@ -202,10 +204,19 @@ func manifestV2ToEntries(v2 types.ManifestV2Response, include string) []types.Ga
 				if include == "config" && !isConfig {
 					continue
 				}
-				for _, pt := range loc.PathTemplates {
-					if pt == "" {
-						continue
+				if len(loc.SaveRules) > 0 {
+					for _, rule := range loc.SaveRules {
+						entries = append(entries, types.GameSaveLocation{
+							GameID: g.GameID, PCGWPageID: parsePageID(g.GameID),
+							GameTitle: g.Title, Platform: loc.Platform, PathTemplate: rule.Directory,
+							IsConfig: isConfig, UpdatedAt: g.LastUpdated, Source: "pcgw",
+							SaveRules: []types.SaveRule{rule}, Notes: loc.Notes, SteamAppIDs: g.SteamAppIDs,
+							GOGID: g.GOGID, EpicID: g.EpicID, UbisoftID: g.UbisoftID,
+						})
 					}
+					continue
+				}
+				for _, pt := range loc.PathTemplates {
 					entries = append(entries, types.GameSaveLocation{
 						GameID: g.GameID, PCGWPageID: parsePageID(g.GameID),
 						GameTitle: g.Title, Platform: loc.Platform, PathTemplate: pt,
@@ -562,84 +573,377 @@ func connectSSE(ctx context.Context, baseURL, token string, onEvent func(eventTy
 	return scanner.Err()
 }
 
+// WatchPathBuildStats counts manifest entries skipped while building watch paths.
+type WatchPathBuildStats struct {
+	SkippedDiscovered int
+	SkippedPlatform   int
+	SkippedMissingDir int
+	SkippedMalformed  int
+}
+
+// LogZeroWatchPathsSummary logs skip-reason counts when no watch paths were built.
+func LogZeroWatchPathsSummary(stats WatchPathBuildStats) {
+	log.Printf("sync: no watch paths — skipped discovered=%d platform=%d missing_dir=%d malformed=%d",
+		stats.SkippedDiscovered, stats.SkippedPlatform, stats.SkippedMissingDir, stats.SkippedMalformed)
+}
+
 // ManifestToWatchPaths converts manifest entries to watch paths for the current OS.
 // When mode is "discovered", only includes entries for game IDs in activeGameIDs (or explicit config paths via mergeWatchPaths).
-func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Resolver, currentOS paths.OS, includeConfig bool, activeGameIDs map[string]bool, mode string) []watchPath {
+func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Resolver, currentOS paths.OS, includeConfig bool, activeGameIDs map[string]bool, mode string) ([]watchPath, WatchPathBuildStats) {
 	var out []watchPath
+	var stats WatchPathBuildStats
 	seen := make(map[string]bool)
 	discoveredMode := mode == "discovered"
 	for _, e := range entries {
 		if discoveredMode && !activeGameIDs[e.GameID] {
+			stats.SkippedDiscovered++
 			continue
 		}
 		platform := e.Platform
 		if platform != string(currentOS) {
+			stats.SkippedPlatform++
 			continue
 		}
 		if e.IsConfig && !includeConfig {
 			continue
 		}
-		resolved := resolver.ResolveAll(e.PathTemplate, currentOS)
-		for _, abs := range resolved {
-			if abs == "" {
-				continue
-			}
-			if !paths.WatchDirExists(abs) {
-				continue
-			}
-			pathKey := PathKeyForManifestEntry(e.GameID, e.PathTemplate)
-			key := e.GameID + "\x00" + pathKey
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			out = append(out, watchPath{
-				GameID:        e.GameID,
-				PathKey:       pathKey,
-				PathTemplates: []string{e.PathTemplate},
-			})
-		}
-	}
-	return out
-}
-
-// resolveSavePath finds the local absolute path for a save slot.
-func resolveSavePath(gameID, pathKey string, manifestEntries []types.GameSaveLocation, watchPaths []watchPath, resolver *paths.Resolver, currentOS paths.OS, pullCtx paths.PullContext) string {
-	for _, w := range watchPaths {
-		if w.GameID != gameID || w.PathKey != pathKey {
+		rules := saveRulesForEntry(e)
+		if len(rules) == 0 {
+			stats.SkippedMalformed++
 			continue
 		}
-		for _, t := range w.PathTemplates {
-			for _, abs := range resolver.ResolveAll(t, currentOS) {
+		addedRule := false
+		for _, rule := range rules {
+			ruleKey := saverule.RuleKey(e.GameID, rule)
+			resolved := resolver.ResolveAll(rule.Directory, currentOS)
+			if len(resolved) == 0 {
+				stats.SkippedMissingDir++
+				continue
+			}
+			for _, abs := range resolved {
 				if abs == "" {
 					continue
 				}
-				if paths.WatchDirExists(abs) {
-					return abs
+				if !paths.WatchDirExists(abs) {
+					stats.SkippedMissingDir++
+					continue
 				}
-				elig := paths.EvaluatePullEligibility(abs, gameID, pullCtx)
-				if elig == paths.ApplyReady || elig == paths.ApplyCreateDir {
-					return abs
+				key := e.GameID + "\x00" + ruleKey
+				if seen[key] {
+					continue
 				}
+				seen[key] = true
+				addedRule = true
+				out = append(out, watchPath{
+					GameID:          e.GameID,
+					PathKey:         ruleKey,
+					RuleKey:         ruleKey,
+					Directory:       rule.Directory,
+					IncludePatterns: append([]string(nil), rule.IncludePatterns...),
+					Recursive:       rule.Recursive,
+					SyncAll:         rule.SyncAll,
+				})
 			}
+		}
+		if !addedRule && len(rules) > 0 {
+			stats.SkippedMissingDir++
+		}
+	}
+	return out, stats
+}
+
+func saveRulesForEntry(e types.GameSaveLocation) []types.SaveRule {
+	rules := e.SaveRules
+	if len(rules) == 0 {
+		rules = pcgw.ParseSaveRules(e.PathTemplate, e.Platform, e.IsConfig)
+	}
+	if len(rules) == 0 && strings.TrimSpace(e.PathTemplate) != "" {
+		rules = []types.SaveRule{{Directory: e.PathTemplate, SyncAll: true, Platform: e.Platform, IsConfig: e.IsConfig}}
+	}
+	return rules
+}
+
+// resolveSavePath finds the local absolute path for a save slot.
+func watchPathTemplates(w watchPath) []string {
+	if w.Directory != "" {
+		if len(w.IncludePatterns) == 1 && !w.SyncAll {
+			return []string{w.Directory + "/" + w.IncludePatterns[0]}
+		}
+		return []string{w.Directory}
+	}
+	return w.PathTemplates
+}
+
+func pathKeyForRelative(ruleKey, relPath string, patterns []string, syncAll bool) string {
+	if syncAll || len(patterns) != 1 {
+		return saverule.PathKeyForFile(ruleKey, relPath)
+	}
+	if strings.ContainsAny(patterns[0], "*?[") {
+		return saverule.PathKeyForFile(ruleKey, relPath)
+	}
+	return ruleKey
+}
+
+func ruleKeyForWatchPath(w watchPath) string {
+	if w.RuleKey != "" {
+		return w.RuleKey
+	}
+	return w.PathKey
+}
+
+func syncAllForWatchPath(w watchPath) bool {
+	if w.SyncAll {
+		return true
+	}
+	return len(w.IncludePatterns) == 0
+}
+
+func resolveSavePath(gameID, pathKey string, manifestEntries []types.GameSaveLocation, watchPaths []watchPath, resolver *paths.Resolver, currentOS paths.OS, pullCtx paths.PullContext) string {
+	for _, w := range watchPaths {
+		if w.GameID != gameID {
+			continue
+		}
+		if w.PathKey == pathKey || w.RuleKey == pathKey {
+			if abs := resolveWatchPathDirect(w, resolver, currentOS, gameID, pullCtx); abs != "" {
+				return abs
+			}
+		}
+	}
+	for _, w := range watchPaths {
+		if w.GameID != gameID {
+			continue
+		}
+		if abs := resolveSavePathByPathKeyForFile(gameID, pathKey, w, resolver, currentOS, pullCtx); abs != "" {
+			return abs
 		}
 	}
 	for _, e := range manifestEntries {
 		if e.GameID != gameID {
 			continue
 		}
-		if PathKeyForManifestEntry(e.GameID, e.PathTemplate) != pathKey {
-			continue
-		}
-		for _, abs := range resolver.ResolveAll(e.PathTemplate, currentOS) {
-			if abs == "" {
-				continue
+		if PathKeyForManifestEntry(e.GameID, e.PathTemplate) == pathKey {
+			for _, abs := range resolver.ResolveAll(e.PathTemplate, currentOS) {
+				if abs == "" {
+					continue
+				}
+				if abs := eligiblePullPath(abs, gameID, pullCtx); abs != "" {
+					return abs
+				}
 			}
-			elig := paths.EvaluatePullEligibility(abs, gameID, pullCtx)
-			if elig == paths.ApplyReady || elig == paths.ApplyCreateDir {
+		}
+		for _, rule := range saveRulesForEntry(e) {
+			ruleKey := saverule.RuleKey(gameID, rule)
+			if ruleKey == pathKey {
+				wp := watchPath{
+					GameID: gameID, PathKey: ruleKey, RuleKey: ruleKey,
+					Directory: rule.Directory, IncludePatterns: rule.IncludePatterns,
+					Recursive: rule.Recursive, SyncAll: rule.SyncAll,
+				}
+				if abs := resolveWatchPathDirect(wp, resolver, currentOS, gameID, pullCtx); abs != "" {
+					return abs
+				}
+			}
+			wp := watchPath{
+				GameID: gameID, PathKey: ruleKey, RuleKey: ruleKey,
+				Directory: rule.Directory, IncludePatterns: rule.IncludePatterns,
+				Recursive: rule.Recursive, SyncAll: rule.SyncAll,
+			}
+			if abs := resolveSavePathByPathKeyForFile(gameID, pathKey, wp, resolver, currentOS, pullCtx); abs != "" {
 				return abs
 			}
 		}
+	}
+	return ""
+}
+
+func watchDirFromResolved(abs string) string {
+	if abs == "" {
+		return ""
+	}
+	info, err := os.Stat(abs)
+	if err == nil && info.IsDir() {
+		return filepath.Clean(abs)
+	}
+	return filepath.Clean(filepath.Dir(abs))
+}
+
+// resolveWatchRoot returns the resolved watch directory anchor for a save slot.
+func resolveWatchRoot(gameID, pathKey string, manifestEntries []types.GameSaveLocation, watchPaths []watchPath, resolver *paths.Resolver, currentOS paths.OS) string {
+	for _, w := range watchPaths {
+		if w.GameID != gameID {
+			continue
+		}
+		if w.PathKey == pathKey || w.RuleKey == pathKey {
+			if root := resolveWatchRootDirect(w, resolver, currentOS); root != "" {
+				return root
+			}
+		}
+	}
+	for _, w := range watchPaths {
+		if w.GameID != gameID {
+			continue
+		}
+		if root := resolveWatchRootByPathKeyForFile(gameID, pathKey, w, resolver, currentOS); root != "" {
+			return root
+		}
+	}
+	for _, e := range manifestEntries {
+		if e.GameID != gameID {
+			continue
+		}
+		if PathKeyForManifestEntry(e.GameID, e.PathTemplate) == pathKey {
+			for _, abs := range resolver.ResolveAll(e.PathTemplate, currentOS) {
+				if root := watchDirFromResolved(abs); root != "" {
+					return root
+				}
+			}
+		}
+		for _, rule := range saveRulesForEntry(e) {
+			ruleKey := saverule.RuleKey(gameID, rule)
+			wp := watchPath{
+				GameID: gameID, PathKey: ruleKey, RuleKey: ruleKey,
+				Directory: rule.Directory, IncludePatterns: rule.IncludePatterns,
+				Recursive: rule.Recursive, SyncAll: rule.SyncAll,
+			}
+			if ruleKey == pathKey {
+				if root := resolveWatchRootDirect(wp, resolver, currentOS); root != "" {
+					return root
+				}
+			}
+			if root := resolveWatchRootByPathKeyForFile(gameID, pathKey, wp, resolver, currentOS); root != "" {
+				return root
+			}
+		}
+	}
+	return ""
+}
+
+func resolveWatchRootDirect(w watchPath, resolver *paths.Resolver, currentOS paths.OS) string {
+	for _, dirTemplate := range watchRootDirs(w) {
+		for _, abs := range resolver.ResolveAll(dirTemplate, currentOS) {
+			if root := watchDirFromResolved(abs); root != "" {
+				return root
+			}
+		}
+	}
+	return ""
+}
+
+func resolveWatchRootByPathKeyForFile(gameID, pathKey string, w watchPath, resolver *paths.Resolver, currentOS paths.OS) string {
+	ruleKey := ruleKeyForWatchPath(w)
+	syncAll := syncAllForWatchPath(w)
+	patterns := w.IncludePatterns
+	for _, dirTemplate := range watchRootDirs(w) {
+		for _, root := range resolver.ResolveAll(dirTemplate, currentOS) {
+			if root == "" {
+				continue
+			}
+			if !paths.WatchDirExists(root) {
+				if info, err := os.Stat(root); err == nil && !info.IsDir() {
+					root = filepath.Dir(root)
+				} else {
+					continue
+				}
+			}
+			root = filepath.Clean(root)
+			if findFileForPathKey(root, ruleKey, pathKey, patterns, syncAll, w.Recursive) != "" {
+				return root
+			}
+		}
+	}
+	return ""
+}
+
+func resolveWatchPathDirect(w watchPath, resolver *paths.Resolver, currentOS paths.OS, gameID string, pullCtx paths.PullContext) string {
+	for _, t := range watchPathTemplates(w) {
+		for _, abs := range resolver.ResolveAll(t, currentOS) {
+			if abs == "" {
+				continue
+			}
+			if abs := eligiblePullPath(abs, gameID, pullCtx); abs != "" {
+				return abs
+			}
+		}
+	}
+	return ""
+}
+
+func resolveSavePathByPathKeyForFile(gameID, pathKey string, w watchPath, resolver *paths.Resolver, currentOS paths.OS, pullCtx paths.PullContext) string {
+	ruleKey := ruleKeyForWatchPath(w)
+	syncAll := syncAllForWatchPath(w)
+	patterns := w.IncludePatterns
+	for _, dirTemplate := range watchRootDirs(w) {
+		for _, root := range resolver.ResolveAll(dirTemplate, currentOS) {
+			if root == "" {
+				continue
+			}
+			if !paths.WatchDirExists(root) {
+				if info, err := os.Stat(root); err == nil && !info.IsDir() {
+					root = filepath.Dir(root)
+				} else {
+					continue
+				}
+			}
+			if abs := findFileForPathKey(root, ruleKey, pathKey, patterns, syncAll, w.Recursive); abs != "" {
+				if abs := eligiblePullPath(abs, gameID, pullCtx); abs != "" {
+					return abs
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func watchRootDirs(w watchPath) []string {
+	if w.Directory != "" {
+		return []string{w.Directory}
+	}
+	return w.PathTemplates
+}
+
+func findFileForPathKey(rootDir, ruleKey, pathKey string, patterns []string, syncAll, recursive bool) string {
+	var found string
+	walk := func(path string, d os.DirEntry, err error) error {
+		if err != nil || found != "" {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(rootDir, path)
+		if err != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if !saverule.MatchInclude(rel, patterns, syncAll) {
+			return nil
+		}
+		if pathKeyForRelative(ruleKey, rel, patterns, syncAll) == pathKey {
+			found = path
+		}
+		return nil
+	}
+	if recursive {
+		_ = filepath.WalkDir(rootDir, walk)
+	} else {
+		entries, err := os.ReadDir(rootDir)
+		if err != nil {
+			return ""
+		}
+		for _, e := range entries {
+			_ = walk(filepath.Join(rootDir, e.Name()), e, nil)
+		}
+	}
+	return found
+}
+
+func eligiblePullPath(abs, gameID string, pullCtx paths.PullContext) string {
+	if paths.WatchDirExists(abs) {
+		return abs
+	}
+	elig := paths.EvaluatePullEligibility(abs, gameID, pullCtx)
+	if elig == paths.ApplyReady || elig == paths.ApplyCreateDir {
+		return abs
 	}
 	return ""
 }

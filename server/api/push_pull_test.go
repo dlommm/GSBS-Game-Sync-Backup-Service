@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gsbs/gsbs/server/auth"
@@ -215,5 +216,56 @@ func TestPushStorageQuotaExceeded(t *testing.T) {
 	}
 	if !bytes.Contains(rec.Body.Bytes(), []byte("storage quota exceeded")) {
 		t.Fatalf("expected quota error message, got %s", rec.Body.String())
+	}
+}
+
+func TestPushStorageQuotaReplaceExisting(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := auth.NewService(st)
+	ctx := context.Background()
+	userID, _ := svc.RegisterUser(ctx, "quota-replace", "password123")
+	_, token, _ := svc.Login(ctx, "quota-replace", "password123", "c", "linux")
+
+	const quota = int64(100)
+	if err := st.SetUserQuota(ctx, userID, quota); err != nil {
+		t.Fatal(err)
+	}
+	_ = st.UpsertSave(ctx, userID, "g1", "pk1", bytes.Repeat([]byte("x"), 80))
+
+	h := NewHandler(st, svc, false, nil, nil, nil, nil, nil, nil, 0, false, "", "test")
+	req := httptest.NewRequest(http.MethodPost, "/api/saves", bytes.NewReader(bytes.Repeat([]byte("y"), 30)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Game-ID", "g1")
+	req.Header.Set("X-Path-Key", "pk1")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("replace within quota: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPullSingleSaveKeyTooLong(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := auth.NewService(st)
+	ctx := context.Background()
+	_, _ = svc.RegisterUser(ctx, "u-long", "password123")
+	_, token, _ := svc.Login(ctx, "u-long", "password123", "c", "linux")
+
+	h := NewHandler(st, svc, false, nil, nil, nil, nil, nil, nil, 0, false, "", "test")
+	longKey := strings.Repeat("k", 1025)
+	req := httptest.NewRequest(http.MethodGet, "/api/saves?game_id=g1&path_key="+longKey, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d %s", rec.Code, rec.Body.String())
 	}
 }

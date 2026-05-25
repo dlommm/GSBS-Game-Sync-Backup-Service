@@ -1,5 +1,22 @@
 {{define "partials/admin_pcgw_job_status.html"}}
 {{if .JobRunning}}
-<p class="notice notice-running"><span class="badge-running">Sync running</span> {{.JobProgress}} pages processed</p>
+<div class="job-progress-wrap" style="padding:0 1.25rem 1rem;">
+  <p class="notice notice-running" style="margin:0 0 0.75rem;"><span class="badge-running">Sync running</span></p>
+  <div class="quota-bar-header">
+    <span>Progress</span>
+    <span>{{.JobProgress}}{{if gt .JobProgressTotal 0}} / {{.JobProgressTotal}}{{end}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
+  </div>
+  <div class="quota-bar-track">
+    {{if gt .JobProgressTotal 0}}
+    <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgress .JobProgressTotal)}}%;"></div>
+    {{else}}
+    <div class="quota-bar-fill" style="width:100%;opacity:0.35;"></div>
+    {{end}}
+  </div>
+  <form method="post" action="/admin/jobs/pcgw/cancel" class="inline-form" style="margin-top:0.75rem;">
+    <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+    <button type="submit" class="btn-ghost-sm">Cancel sync</button>
+  </form>
+</div>
 {{end}}
 {{end}}

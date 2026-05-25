@@ -107,9 +107,14 @@ type config struct {
 }
 
 type watchPath struct {
-	GameID        string   `json:"game_id"`
-	PathKey       string   `json:"path_key"`
-	PathTemplates []string `json:"path_templates"` // OS-specific templates; client resolves for current OS
+	GameID          string   `json:"game_id"`
+	PathKey         string   `json:"path_key"`
+	PathTemplates   []string `json:"path_templates,omitempty"` // legacy; client resolves for current OS
+	Directory       string   `json:"directory,omitempty"`
+	IncludePatterns []string `json:"include_patterns,omitempty"`
+	Recursive       bool     `json:"recursive,omitempty"`
+	SyncAll         bool     `json:"sync_all,omitempty"`
+	RuleKey         string   `json:"rule_key,omitempty"`
 }
 
 func loadConfig() (*config, error) {

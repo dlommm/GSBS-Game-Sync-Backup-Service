@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"log"
 	"os"
 	"strconv"
@@ -17,10 +18,14 @@ import (
 
 // PCGWSyncOptions configures a sync run.
 type PCGWSyncOptions struct {
-	Full       bool
-	SinglePage int64 // if >0, sync only this page
-	Offset     int   // resume offset for full/incremental list
-	SyncRunID  string
+	Full             bool
+	ForceFull        bool // bypass resume checkpoint
+	SinglePage       int64 // if >0, sync only this page
+	Offset           int   // resume offset for full/incremental list
+	SyncRunID        string
+	ResumedFromRunID string
+	Notes            string
+	SkipStartRun     bool // use SyncRunID instead of StartPCGWSyncRun
 }
 
 // PCGWSyncProgress reports sync progress for SSE.
@@ -28,6 +33,8 @@ type PCGWSyncProgress struct {
 	PagesProcessed int
 	TotalEstimate  int
 	Phase          string
+	GamesSkipped   int
+	ETASeconds     int // set by runner when broadcasting
 }
 
 // ReportProgress is an optional callback (pages processed).
@@ -53,9 +60,13 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	}
 
 	runID := opts.SyncRunID
-	if runID == "" {
+	if runID == "" && !opts.SkipStartRun {
 		var err error
-		runID, err = st.StartPCGWSyncRun(ctx, mode)
+		if opts.ResumedFromRunID != "" || opts.Notes != "" {
+			runID, err = st.StartPCGWSyncRunWithResume(ctx, mode, opts.ResumedFromRunID, opts.Notes)
+		} else {
+			runID, err = st.StartPCGWSyncRun(ctx, mode)
+		}
 		if err != nil {
 			return 0, err
 		}
@@ -66,32 +77,49 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	offset := opts.Offset
 	parseMsTotal := 0
 	parseCount := 0
+	filters := LoadPCGWFilters(ctx, st)
+
+	finishRun := func(status, errMsg string) {
+		_ = st.FinishPCGWSyncRun(context.Background(), runID, status, errMsg, stats)
+	}
 
 	report := func(pages, total int, phase string) {
 		if reportProgress != nil {
 			reportProgress(pages)
 		}
 		if reportEx != nil {
-			reportEx(PCGWSyncProgress{PagesProcessed: pages, TotalEstimate: total, Phase: phase})
+			reportEx(PCGWSyncProgress{PagesProcessed: pages, TotalEstimate: total, Phase: phase, GamesSkipped: stats.GamesSkipped})
 		}
 		_ = st.UpdatePCGWSyncRunCheckpoint(ctx, runID, offset, stats)
 	}
 
 	if opts.SinglePage > 0 {
-		n, err := syncOnePage(ctx, st, client, runID, opts.SinglePage, pcgw.PageInfo{PageID: opts.SinglePage}, &stats)
+		n, err := syncOnePage(ctx, st, client, runID, opts.SinglePage, pcgw.PageInfo{PageID: opts.SinglePage}, &stats, filters)
 		if err != nil {
-			_ = st.FinishPCGWSyncRun(ctx, runID, "failed", err.Error(), stats)
+			finishRun(JobFailed, err.Error())
 			return n, err
 		}
 		stats.GamesOK++
-		_ = st.FinishPCGWSyncRun(ctx, runID, "success", "", stats)
+		finishRun(JobSuccess, "")
 		return bumpManifestAndReturn(ctx, st, n)
 	}
 
 	for {
+		select {
+		case <-ctx.Done():
+			status := JobFailed
+			errMsg := ctx.Err().Error()
+			if errors.Is(ctx.Err(), context.Canceled) {
+				status = JobCanceled
+			}
+			finishRun(status, errMsg)
+			return totalUpserted, ctx.Err()
+		default:
+		}
+
 		pages, err := client.ListGamePages(chunkSize, offset)
 		if err != nil {
-			_ = st.FinishPCGWSyncRun(ctx, runID, "failed", err.Error(), stats)
+			finishRun(JobFailed, err.Error())
 			return totalUpserted, err
 		}
 		if len(pages) == 0 {
@@ -103,7 +131,12 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		for _, p := range pages {
 			select {
 			case <-ctx.Done():
-				_ = st.FinishPCGWSyncRun(ctx, runID, "failed", ctx.Err().Error(), stats)
+				status := JobFailed
+				errMsg := ctx.Err().Error()
+				if errors.Is(ctx.Err(), context.Canceled) {
+					status = JobCanceled
+				}
+				finishRun(status, errMsg)
 				return totalUpserted, ctx.Err()
 			default:
 			}
@@ -115,8 +148,13 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 				}
 			}
 
+			if filters.ShouldSkipTitle(p.Title) {
+				stats.GamesSkipped++
+				continue
+			}
+
 			start := time.Now()
-			n, err := syncOnePage(ctx, st, client, runID, p.PageID, p, &stats)
+			n, err := syncOnePage(ctx, st, client, runID, p.PageID, p, &stats, filters)
 			parseMsTotal += int(time.Since(start).Milliseconds())
 			parseCount++
 			if err != nil {
@@ -141,11 +179,11 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	if parseCount > 0 {
 		stats.AvgParseMs = parseMsTotal / parseCount
 	}
-	status := "success"
+	status := JobSuccess
 	if stats.GamesFailed > 0 {
 		status = "partial"
 	}
-	_ = st.FinishPCGWSyncRun(ctx, runID, status, "", stats)
+	finishRun(status, "")
 	log.Printf("pcgw sync: done, upserted %d location entries (ok=%d partial=%d failed=%d skipped=%d)",
 		totalUpserted, stats.GamesOK, stats.GamesPartial, stats.GamesFailed, stats.GamesSkipped)
 	return bumpManifestAndReturn(ctx, st, totalUpserted)
@@ -178,12 +216,12 @@ func shouldSkipPage(ctx context.Context, st store.Store, client *pcgw.Client, pa
 	return false, nil
 }
 
-func syncOnePage(ctx context.Context, st store.Store, client *pcgw.Client, runID string, pageID int64, p pcgw.PageInfo, stats *store.PCGWSyncRunStats) (int, error) {
+func syncOnePage(ctx context.Context, st store.Store, client *pcgw.Client, runID string, pageID int64, p pcgw.PageInfo, stats *store.PCGWSyncRunStats, filters PCGWFilters) (int, error) {
 	result, err := pcgw.IngestPage(client, pageID, p)
 	if err != nil {
 		return 0, err
 	}
-	n, persistErr := PersistIngestResult(ctx, st, runID, result)
+	n, persistErr := PersistIngestResult(ctx, st, runID, result, filters)
 	if persistErr != nil {
 		return n, persistErr
 	}
@@ -203,7 +241,7 @@ func syncOnePage(ctx context.Context, st store.Store, client *pcgw.Client, runID
 }
 
 // PersistIngestResult writes ingest bundle to pcgw_* tables and projects manifest paths.
-func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, result *pcgw.IngestResult) (int, error) {
+func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, result *pcgw.IngestResult, filters PCGWFilters) (int, error) {
 	if result == nil {
 		return 0, nil
 	}
@@ -305,18 +343,22 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 		for _, t := range b.SaveLocations {
 			platform := pcgw.SystemToPlatform(t.System)
 			for _, path := range t.Paths {
-				if path == "" {
-					continue
+				rules := pcgw.ParseSaveRules(path, platform, t.IsConfig)
+				for _, rule := range rules {
+					if filters.ShouldExcludePath(rule.Directory) {
+						continue
+					}
+					entries = append(entries, types.GameSaveLocation{
+						GameID: gameID, PCGWPageID: b.PageID, GameTitle: b.PageInfo.Title,
+						Platform: platform, PathTemplate: rule.Directory, IsConfig: t.IsConfig,
+						SaveRules:   []types.SaveRule{rule},
+						Source:      "pcgw",
+						Notes:       "https://www.pcgamingwiki.com/wiki/?curid=" + gameID,
+						SteamAppIDs: b.PageInfo.SteamAppIDs, GOGID: b.PageInfo.GOGID,
+						EpicID: b.PageInfo.EpicID, UbisoftID: b.PageInfo.UbisoftID,
+						UpdatedAt: now,
+					})
 				}
-				entries = append(entries, types.GameSaveLocation{
-					GameID: gameID, PCGWPageID: b.PageID, GameTitle: b.PageInfo.Title,
-					Platform: platform, PathTemplate: path, IsConfig: t.IsConfig,
-					Source:      "pcgw",
-					Notes:       "https://www.pcgamingwiki.com/wiki/?curid=" + gameID,
-					SteamAppIDs: b.PageInfo.SteamAppIDs, GOGID: b.PageInfo.GOGID,
-					EpicID: b.PageInfo.EpicID, UbisoftID: b.PageInfo.UbisoftID,
-					UpdatedAt: now,
-				})
 			}
 		}
 		if gameDataOK && len(entries) > 0 {

@@ -1,17 +1,48 @@
 {{define "partials/admin_jobs.html"}}
 <div class="panel-header-actions">
-  <h2>Jobs</h2>
-  <div class="panel-actions">
+  <div>
+    <h2>Jobs</h2>
+    {{if .LastSuccessfulSyncAt}}
+    <p class="cell-muted" style="margin:0.25rem 0 0;font-size:0.8125rem;">Last successful sync: <strong>{{formatTime .LastSuccessfulSyncAt}}</strong></p>
+    {{else}}
+    <p class="cell-muted" style="margin:0.25rem 0 0;font-size:0.8125rem;">No successful sync recorded yet.</p>
+    {{end}}
+  </div>
+  <div class="panel-actions actions-stack">
     {{if .JobRunning}}
-    <span class="badge-running">Running… {{.JobProgressPages}} pages processed</span>
+    <span class="badge-running">Running…</span>
+    <form method="post" action="/admin/jobs/pcgw/cancel" class="inline-form">
+      <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+      <button type="submit" class="btn-ghost-sm">Cancel</button>
+    </form>
     {{else}}
     <form method="post" action="/admin/run-job" class="inline-form">
-      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
       <button type="submit" class="btn-primary-sm">Run PCGW Sync</button>
+    </form>
+    <form method="post" action="/admin/run-job" class="inline-form" onsubmit="return confirm('Force a full PCGW resync? This bypasses resume and may take a long time.');">
+      <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+      <input type="hidden" name="full" value="1">
+      <button type="submit" class="btn-ghost-sm">Force Full Sync</button>
     </form>
     {{end}}
   </div>
 </div>
+{{if .JobRunning}}
+<div class="job-progress-wrap" style="padding:0 1.25rem 1rem;">
+  <div class="quota-bar-header">
+    <span>Progress</span>
+    <span>{{.JobProgressPages}}{{if gt .JobProgressTotal 0}} / {{.JobProgressTotal}}{{end}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
+  </div>
+  <div class="quota-bar-track">
+    {{if gt .JobProgressTotal 0}}
+    <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}%;"></div>
+    {{else}}
+    <div class="quota-bar-fill" style="width:100%;opacity:0.35;animation:pulse 1.5s ease-in-out infinite;"></div>
+    {{end}}
+  </div>
+</div>
+{{end}}
 {{if .RecentJobs}}
 <div class="table-wrap">
   <table class="data-table">
@@ -22,11 +53,7 @@
         <td class="cell-primary">{{.JobName}}</td>
         <td class="cell-muted">{{formatTime .StartedAt}}</td>
         <td class="cell-muted">{{formatDuration .StartedAt .FinishedAt}}</td>
-        <td>
-          {{if eq .Status "success"}}<span class="badge-success">success</span>
-          {{else if eq .Status "running"}}<span class="badge-running">running</span>
-          {{else}}<span class="badge-failed">failed</span>{{end}}
-        </td>
+        <td>{{template "partials/job_status_badge.html" .Status}}</td>
         <td class="cell-size">{{.EntriesCount}}</td>
         <td class="cell-muted">{{if .ErrorMessage}}{{truncate .ErrorMessage 80}}{{else}}—{{end}}</td>
       </tr>

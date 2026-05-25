@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/crypto"
@@ -34,6 +35,8 @@ type Client struct {
 	verbose           bool
 	encryptionEnabled bool
 	passphrase        string
+	pushMu            sync.Mutex
+	lastPushedHash    map[string]string // gameID+pathKey -> content hash
 }
 
 // HTTP timeout for sync requests (pull can return large payloads).
@@ -456,6 +459,11 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 			}
 		}
 	}
+	if opts.WatchRoot != nil {
+		if err := ValidateWriteUnderRoot(absPath, opts.WatchRoot(gameID, pathKey)); err != nil {
+			return err
+		}
+	}
 	if err := os.WriteFile(absPath, content, 0644); err != nil {
 		return err
 	}
@@ -466,6 +474,38 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 		OnSaveEvent(gameID, pathKey, "", SaveDirPull, nil)
 	}
 	return nil
+}
+
+func (c *Client) pushSlotKey(gameID, pathKey string) string {
+	return gameID + "\x00" + pathKey
+}
+
+// ContentWireHash returns the SHA256 hex of encoded (possibly encrypted) push payload.
+func (c *Client) ContentWireHash(content []byte) (string, error) {
+	wire, _, err := c.encodeContent(content)
+	if err != nil {
+		return "", err
+	}
+	return FileHash(wire), nil
+}
+
+// ShouldSkipPush reports whether content with hash was already pushed for the slot.
+func (c *Client) ShouldSkipPush(gameID, pathKey, hash string) bool {
+	c.pushMu.Lock()
+	defer c.pushMu.Unlock()
+	if c.lastPushedHash == nil {
+		return false
+	}
+	return c.lastPushedHash[c.pushSlotKey(gameID, pathKey)] == hash
+}
+
+func (c *Client) markPushed(gameID, pathKey, hash string) {
+	c.pushMu.Lock()
+	defer c.pushMu.Unlock()
+	if c.lastPushedHash == nil {
+		c.lastPushedHash = make(map[string]string)
+	}
+	c.lastPushedHash[c.pushSlotKey(gameID, pathKey)] = hash
 }
 
 func (c *Client) encodeContent(plaintext []byte) (wire []byte, encrypted bool, err error) {
@@ -489,12 +529,16 @@ func (c *Client) decodeContent(wire []byte, encrypted bool) ([]byte, error) {
 	return crypto.Decrypt(c.passphrase, string(wire))
 }
 
-func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath string, content []byte) error {
+func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relativePath string, content []byte) error {
 	wire, encrypted, err := c.encodeContent(content)
 	if err != nil {
 		return err
 	}
 	hash := FileHash(wire)
+	if c.ShouldSkipPush(gameID, pathKey, hash) {
+		log.Printf("push skipped: unchanged content game=%s path_key=%s file=%s", gameID, pathKey, filePath)
+		return nil
+	}
 	var body io.Reader = bytes.NewReader(wire)
 	if c.useCompression {
 		var buf bytes.Buffer
@@ -524,6 +568,9 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath string,
 	req.Header.Set("X-Game-ID", gameID)
 	req.Header.Set("X-Path-Key", pathKey)
 	req.Header.Set("X-File-Path", filePath)
+	if relativePath != "" {
+		req.Header.Set("X-Relative-Path", filepath.ToSlash(relativePath))
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return err
@@ -545,13 +592,22 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath string,
 		}
 		return fmt.Errorf("push: status %d", resp.StatusCode)
 	}
+	respBody, _ := io.ReadAll(resp.Body)
+	var status struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(respBody, &status)
+	c.markPushed(gameID, pathKey, hash)
+	if status.Status == "unchanged" {
+		log.Printf("push skipped: server unchanged game=%s path_key=%s file=%s", gameID, pathKey, filePath)
+	}
 	return nil
 }
 
 // Push uploads a save file with content hash metadata.
-func (c *Client) Push(ctx context.Context, gameID, pathKey, filePath string, content []byte) error {
+func (c *Client) Push(ctx context.Context, gameID, pathKey, filePath, relativePath string, content []byte) error {
 	return retry.Do(ctx, retry.DefaultBackoff(), pushMaxRetries, func() error {
-		return c.pushOnce(ctx, gameID, pathKey, filePath, content)
+		return c.pushOnce(ctx, gameID, pathKey, filePath, relativePath, content)
 	})
 }
 

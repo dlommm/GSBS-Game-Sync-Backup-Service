@@ -1,54 +1,67 @@
 {{template "layout" .}}
 {{define "settings_title"}}Settings — GSBS{{end}}
 {{define "settings_content"}}
-<section class="panel">
-  <div class="panel-header"><h2>Change password</h2></div>
-  <form method="post" action="/dashboard/settings" class="auth-form" style="max-width:24rem;padding:0 1.25rem 1.25rem;">
-    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-    <label for="current_password">Current password</label>
-    <input id="current_password" name="current_password" type="password" required autocomplete="current-password">
-    <label for="new_password">New password</label>
-    <input id="new_password" name="new_password" type="password" required autocomplete="new-password">
-    <label for="confirm_password">Confirm new password</label>
-    <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password">
-    <button type="submit">Update password</button>
-  </form>
-</section>
-
-<section class="panel">
-  <div class="panel-header"><h2>End-to-end encryption</h2></div>
-  <div style="padding:0 1.25rem 1.25rem;">
-    <p class="cell-muted">When enabled, clients encrypt save data before upload. The server stores ciphertext only.</p>
-    <form method="post" action="/dashboard/settings/encryption" class="auth-form" style="max-width:24rem;padding:0;">
+<div class="settings-grid">
+  <section class="panel settings-card">
+    <div class="panel-header"><h2>Change password</h2></div>
+    <form method="post" action="/dashboard/settings" class="auth-form settings-card-body">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <label style="display:flex;align-items:center;gap:0.5rem;margin:0.75rem 0;">
-        <input type="checkbox" name="encryption_enabled" value="1" {{if .EncryptionEnabled}}checked{{end}}>
-        Enable E2E encryption for my account
-      </label>
-      <button type="submit">Save encryption setting</button>
+      <label for="current_password">Current password</label>
+      <input id="current_password" name="current_password" type="password" required autocomplete="current-password">
+      <label for="new_password">New password</label>
+      <input id="new_password" name="new_password" type="password" required autocomplete="new-password">
+      <label for="confirm_password">Confirm new password</label>
+      <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password">
+      <button type="submit">Update password</button>
     </form>
-  </div>
-</section>
+  </section>
 
-<section class="panel">
-  <div class="panel-header"><h2>Two-factor authentication</h2></div>
-  <div style="padding:0 1.25rem 1.25rem;">
-    {{if .TOTPEnabled}}
-    <p class="cell-muted">2FA is enabled on your account.</p>
-    <form method="post" action="/dashboard/settings/2fa/disable" class="auth-form" style="max-width:24rem;padding:0;">
-      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" required>
-      <label for="code">Authenticator code</label>
-      <input id="code" name="code" type="text" inputmode="numeric" required>
-      <button type="submit" class="btn-danger-sm" style="width:100%;margin-top:1rem;">Disable 2FA</button>
-    </form>
-    {{else}}
-    <p class="cell-muted">Add an extra layer of security to your account.</p>
-    <a href="/dashboard/settings/2fa/enable" class="btn-primary-sm">Enable 2FA</a>
-    {{end}}
-  </div>
-</section>
+  <section class="panel settings-card">
+    <div class="panel-header"><h2>Two-factor authentication</h2></div>
+    <div class="settings-card-body">
+      {{if .TOTPEnabled}}
+      <p><span class="badge-success">Enabled</span></p>
+      <p class="cell-muted">Your account requires an authenticator code at login.</p>
+      <form method="post" action="/dashboard/settings/2fa/disable" class="auth-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required>
+        <label for="code">Authenticator code</label>
+        <input id="code" name="code" type="text" inputmode="numeric" required>
+        <button type="submit" class="btn-danger-sm">Disable 2FA</button>
+      </form>
+      {{else}}
+      <p><span class="badge-warn">Off</span></p>
+      <p class="cell-muted">Add an extra layer of security with an authenticator app.</p>
+      <a href="/dashboard/settings/2fa/enable" class="btn-primary-sm">Enable 2FA</a>
+      {{end}}
+    </div>
+  </section>
+
+  <section class="panel settings-card">
+    <div class="panel-header"><h2>End-to-end encryption</h2></div>
+    <div class="settings-card-body">
+      {{if .EncryptionEnabled}}
+      <p><span class="badge-success">On</span></p>
+      {{else}}
+      <p><span class="badge-warn">Off</span></p>
+      {{end}}
+      <ul class="settings-list cell-muted">
+        <li>Clients encrypt save data on your device before upload.</li>
+        <li>The server stores ciphertext only — it cannot read your saves.</li>
+        <li>Requires a GSBS client that supports encryption.</li>
+      </ul>
+      <form method="post" action="/dashboard/settings/encryption" class="auth-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <label class="settings-toggle">
+          <input type="checkbox" name="encryption_enabled" value="1" {{if .EncryptionEnabled}}checked{{end}}>
+          Enable E2E encryption for my account
+        </label>
+        <button type="submit">Save encryption setting</button>
+      </form>
+    </div>
+  </section>
+</div>
 
 <section class="panel">
   <div class="panel-header"><h2>Active sessions</h2></div>

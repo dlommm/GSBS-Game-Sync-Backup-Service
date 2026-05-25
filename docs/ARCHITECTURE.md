@@ -13,14 +13,15 @@
 - **Clients**: `id`, `user_id`, `name`, `os` (windows/linux), last_seen, optional auth token.
 - **Job runs**: `id`, `job_name`, `started_at`, `finished_at`, `status` (running/success/failed), `error_message`, `entries_count`. Tracks PCGW sync job executions for the admin dashboard.
 - **Manifest fetches**: `id`, `client_id`, `client_name`, `username`, `entries_count`, `fetched_at`. Logs every manifest download for admin visibility.
-- **Saves**: `user_id`, `game_id` (e.g. PCGW page or Steam App ID), `path_key` (stable key for the logical path, e.g. hash of normalized path), `content` (binary or path to blob), `updated_at`. One “current” version per (user, game_id, path_key).
+- **Saves**: `user_id`, `game_id`, `path_key`, `updated_at`, optional `relative_path`, optional `storage_path`, optional inline `content` BLOB (legacy). One current version per (user, game_id, path_key). When `GSBS_SAVE_ROOT` is set, file bytes live on disk under `{GSBS_SAVE_ROOT}/{user_id}/{game_id}/…`; SQLite holds metadata only.
+- **Manifest save rules**: PCGW paths are normalized into `SaveRule` records (`directory`, `include_patterns`, `recursive`, `sync_all`) stored in `game_save_locations.save_rules_json` and exposed on manifest v2 as `save_rules`. Clients watch **directories only** and filter uploads by `include_patterns`.
 
-Path key ensures the same logical save (e.g. “Assassin’s Creed Rogue – Ubisoft Connect Worldwide”) maps to one blob even if absolute paths differ per OS (e.g. Windows vs Linux).
+Path keys: `rule_key` = hash(game + rule); per-file slots use `path_key` = hash(rule_key + relative path). Legacy single-file slots keep one blob per rule_key.
 
 ## Sync flow
 
 1. **Upload (client → server)**  
-   Client detects change under a watched path → uploads file with `game_id`, `path_key`, optional metadata. Server overwrites stored save for that user/game_id/path_key.
+   Client watches resolved save **directories** (not globs). On change, files matching `include_patterns` are debounced and pushed with `game_id`, `path_key`, `X-Relative-Path` (path within the rule directory), and optional `X-Content-Hash`. Server writes under `{GSBS_SAVE_ROOT}/{user_id}/…` when configured, else inline BLOB.
 
 2. **Download (server → client)**  
    Client requests “all saves for this user”. Server returns list of (game_id, path_key, updated_at, blob). Client for each item:
@@ -86,13 +87,19 @@ sequenceDiagram
 
 ## Watcher and retry
 
-- **Watcher supervisor**: `RunWatcherSupervisor` in `client/sync/` restarts the fsnotify watcher on channel close or repeated errors, removes stale watch paths on manifest refresh, and exposes health via `WatcherHealthy`.
-- **Network retry**: Shared `pkg/retry` backoff for pull, push, manifest fetch, SSE, and outbox (outbox uses longer delays and drops entries after 7 days).
+- **Save rules** (`pkg/saverule`): PCGW pipe/glob strings parse into directory + `include_patterns`. Example: `gamesaves/*.png|gamesaves/*.sav` → watch `gamesaves/`, upload only `*.png` and `*.sav`.
+- **Watcher supervisor**: `RunWatcherSupervisor` in `client/sync/` restarts fsnotify on channel close, filters events by manifest patterns, removes stale paths on manifest refresh/discovery, and exposes health via `WatcherHealthy`.
+- **Network retry**: Shared `pkg/retry` backoff for pull, push, manifest fetch, SSE, and outbox (outbox uses longer delays and drops entries after 7 days). Push skips unchanged content via client hash cache and server `unchanged` response.
 
 ## Job Runner
 
-- **Runner**: `server/job/runner.go` wraps job execution with DB tracking (`job_runs` table), dedup (prevents concurrent runs of the same job), and SSE broadcast on completion.
-- **PCGW sync**: Runs weekly (Sunday 03:00 via cron) or manually via `POST /admin/run-job` in the admin WebUI. Logs start/finish/status/error/entries_count.
+- **Runner**: `server/job/runner.go` wraps job execution with DB tracking (`job_runs` and `pcgw_sync_runs` tables), in-memory + DB dedup (prevents concurrent runs), cancel/resume support, and SSE broadcast on completion.
+- **Job statuses** (`server/job/status.go`): `running`, `success`, `failed`, `canceled`, `interrupted`. On server startup, stale `running` rows in `job_runs` and `pcgw_sync_runs` are reconciled to `interrupted` with a restart message.
+- **PCGW sync resume**: Incremental syncs can resume from the latest `pcgw_sync_runs` row with status `interrupted`, `failed`, or `canceled` and `checkpoint_offset > 0`. Full syncs (`ForceFull`) bypass resume. Resumed runs link via `resumed_from_run_id` and `notes`.
+- **PCGW sync schedule**: Weekly Sunday 03:00 via cron (`GSBS_PCGW_CRON`, default `0 3 * * 0`). Set `GSBS_PCGW_CRON=""` to disable scheduled sync; unset env uses the default. When env is not set, cron is configurable in admin **Settings** (`admin_settings.pcgw_cron`) with live reschedule. Manual trigger via admin WebUI (`POST /admin/run-job` / PCGW admin actions).
+- **PCGW filters**: Title and path substring excludes in `admin_settings` (`pcgw_title_excludes`, `pcgw_path_excludes` JSON arrays). Applied during sync in `server/job/pcgw_persist.go`; default path excludes filter common noise (`home`, `.exe`, `.dll`, `steamapps`, `common`).
+- **PCGW export/import**: Admin can download `GET /admin/pcgw/export/manifest.json.gz` (gzip bundle with manifest + PCGW mirror tables) and upload via `POST /admin/pcgw/import` (`merge` or `full_replace`). Post-import validation counts rows and samples game_data.
+- **First-start auto sync**: Optional `pcgw_auto_run_on_first_start` in admin settings; runs incremental sync once when `pcgw_first_run_done` is unset.
 
 ## Admin WebUI
 
@@ -104,6 +111,8 @@ Premium WebUI under `server/webui/`: Tailwind-compiled `static/app.css`, embedde
   - `GET /admin/users` — users table with client-count bars, all clients with revoke
   - `GET /admin/manifest` — server-side search (`q`), pagination; `GET /admin/partial/manifest` HTMX partial
   - `GET /admin/activity` — jobs (`GET /admin/partial/jobs`), manifest fetches, audit log, stats snapshots
+  - `GET /admin/settings` — PCGW cron, filters, first-start auto sync (`POST /admin/settings/save`)
+  - `GET /admin/analytics` — storage, active clients, sync volume, PCGW coverage %, SVG trend charts
 - **Admin POST**: `POST /admin/revoke`, `/admin/push-manifest`, `/admin/run-job`, user disable/enable/delete/quota (unchanged paths).
 - **Assets**: Run `./script/build-webui.sh` before server build (also in `script/release.sh`). Icons via `go run ./cmd/resize-icon`.
 - **Handler layout**: `server/webui/router.go`, `handlers_*.go`, `render.go` (template funcs: `chartLineSVG`, `auditLabel`).

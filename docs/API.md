@@ -21,7 +21,7 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 - **Pull all saves**: `GET /api/saves` — returns JSON `{"saves":[{"game_id","path_key","updated_at","content","encrypted"}]}`. `content` is base64-encoded. `encrypted` is true when the blob was stored with client-side E2E encryption. Supports gzip when `Accept-Encoding: gzip`.
 - **Pull single save**: `GET /api/saves?game_id=...&path_key=...` — returns one save in the same format.
 - **Save summaries only**: `GET /api/saves?summaries=1` — returns `{"saves":[{"game_id","path_key","game_title","size_bytes","updated_at","content_hash","encrypted"}]}` (no content). Use for conditional sync.
-- **Push a save**: `POST /api/saves` with body = raw file bytes (optional `Content-Encoding: gzip`). Headers: `X-Game-ID`, `X-Path-Key` (required), `X-File-Path` (optional), `X-Content-Hash` (SHA256 hex of wire bytes), `X-Content-Size`, `X-Encrypted: 1` when content is client-encrypted. Max body 50 MiB. Returns 200 `{"status":"ok"}`, `{"status":"unchanged"}` if hash matches, or 4xx.
+- **Push a save**: `POST /api/saves` with body = raw file bytes (optional `Content-Encoding: gzip`). Headers: `X-Game-ID`, `X-Path-Key` (required), `X-Relative-Path` (required when server uses `GSBS_SAVE_ROOT` — path relative to the save rule directory, forward slashes), `X-File-Path` (optional log metadata), `X-Content-Hash` (SHA256 hex of wire bytes), `X-Content-Size`, `X-Encrypted: 1` when content is client-encrypted. Max body 50 MiB. Returns 200 `{"status":"ok"}`, `{"status":"unchanged"}` if hash matches, or 4xx.
 - **Delete a save**: `DELETE /api/saves?game_id=...&path_key=...`. Returns 200 `{"status":"ok"}` or 4xx.
 - **List versions**: `GET /api/saves/versions?game_id=...&path_key=...` — returns `{"versions":[{"version","updated_at","size_bytes"}]}`.
 - **Get a version**: `GET /api/saves/versions/download?game_id=...&path_key=...&version=N` — returns JSON with `content` (base64).
@@ -38,9 +38,9 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 
 ## Manifest (public or authenticated)
 
-- **Full manifest (v1)**: `GET /api/manifest` — returns `{"entries":[...]}` of `GameSaveLocation`. Each entry includes `game_id` (PCGW page ID), `game_title`, `platform`, `path_template`, optional launcher IDs (`steam_app_ids`, `gog_id`, `epic_id`, `ubisoft_id`), and metadata. Cached on server ~10 min. Response headers: `ETag`, `X-Manifest-Version`.
+- **Full manifest (v1)**: `GET /api/manifest` — returns `{"entries":[...]}` of `GameSaveLocation`. Each entry includes `game_id`, `game_title`, `platform`, `path_template` (directory template for compat), optional `save_rules` (`directory`, `include_patterns`, `recursive`, `sync_all`), launcher IDs, and metadata. Cached on server ~10 min. Response headers: `ETag`, `X-Manifest-Version`.
 - **Delta**: `GET /api/manifest?since=<RFC3339>` — returns only entries updated after the given time.
-- **Manifest v2 (rich)**: `GET /api/manifest/v2` — returns grouped per-game JSON (`games[]` with taxonomy, engines, `save_locations`, `config_locations`, `has_save_data`, `proton_support_level`, etc.). Query: `?since=<RFC3339>`, `?platform=windows|linux|macos`. Supports `If-None-Match` → 304. Clients should prefer v2 when available.
+- **Manifest v2 (rich)**: `GET /api/manifest/v2` — returns grouped per-game JSON (`games[]` with taxonomy, engines, `save_locations` / `config_locations` each with `path_templates` and `save_rules`, `has_save_data`, `proton_support_level`, etc.). Query: `?since=<RFC3339>`, `?platform=windows|linux|macos`. Supports `If-None-Match` → 304. Clients should prefer v2 when available.
 
 ## Server-Sent Events (authenticated)
 

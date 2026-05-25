@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/gsbs/gsbs/pkg/paths"
+	"github.com/gsbs/gsbs/pkg/saverule"
 	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -151,8 +153,46 @@ func TestManifestToWatchPaths_DiscoveredModeEmpty(t *testing.T) {
 		{GameID: "1", Platform: "linux", PathTemplate: "%USERPROFILE%/saves"},
 	}
 	resolver := pathsResolverForTest(t)
-	out := ManifestToWatchPaths(entries, resolver, paths.CurrentOS(), false, map[string]bool{}, "discovered")
+	out, stats := ManifestToWatchPaths(entries, resolver, paths.CurrentOS(), false, map[string]bool{}, "discovered")
 	assert.Empty(t, out)
+	assert.Equal(t, 1, stats.SkippedDiscovered)
+}
+
+func TestManifestToWatchPaths_PlatformSkip(t *testing.T) {
+	entries := []types.GameSaveLocation{
+		{GameID: "1", Platform: "windows", PathTemplate: "C:/saves"},
+	}
+	resolver := pathsResolverForTest(t)
+	current := string(paths.CurrentOS())
+	if current == "windows" {
+		t.Skip("need non-windows platform for this test")
+	}
+	out, stats := ManifestToWatchPaths(entries, resolver, paths.CurrentOS(), false, map[string]bool{"1": true}, "discovered")
+	assert.Empty(t, out)
+	assert.Equal(t, 1, stats.SkippedPlatform)
+}
+
+func TestResolveSavePath_PathKeyForFile(t *testing.T) {
+	dir := t.TempDir()
+	saveFile := filepath.Join(dir, "slot.sav")
+	require.NoError(t, os.WriteFile(saveFile, []byte("data"), 0644))
+
+	resolver := paths.NewResolver()
+	gameID := "42"
+	ruleKey := saverule.RuleKey(gameID, types.SaveRule{
+		Directory:       dir,
+		IncludePatterns: []string{"*.sav"},
+	})
+	pathKey := saverule.PathKeyForFile(ruleKey, "slot.sav")
+
+	abs := resolveSavePath(gameID, pathKey, nil, []watchPath{{
+		GameID:          gameID,
+		PathKey:         ruleKey,
+		RuleKey:         ruleKey,
+		Directory:       dir,
+		IncludePatterns: []string{"*.sav"},
+	}}, resolver, paths.CurrentOS(), paths.PullContext{})
+	assert.Equal(t, saveFile, abs)
 }
 
 func pathsResolverForTest(t *testing.T) *paths.Resolver {

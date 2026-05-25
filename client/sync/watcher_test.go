@@ -13,6 +13,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/gsbs/gsbs/pkg/paths"
+	"github.com/gsbs/gsbs/pkg/saverule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,6 +24,94 @@ func TestWatcherExcludePatterns(t *testing.T) {
 	assert.True(t, w.excludeMatch("/game/autosave.bak"))
 	assert.False(t, w.excludeMatch("/game/save.dat"))
 	assert.False(t, w.excludeMatch("/game/profile.bin"))
+}
+
+func TestMatchInclude_PatternFilter(t *testing.T) {
+	assert.True(t, matchInclude("save.sav", []string{"*.sav"}, false))
+	assert.False(t, matchInclude("save.tmp", []string{"*.sav"}, false))
+	assert.True(t, matchInclude("nested/save.sav", []string{"*.sav"}, false))
+	assert.True(t, matchInclude("anything.dat", nil, true))
+}
+
+func TestPushPathKey(t *testing.T) {
+	ruleKey := "abc123"
+	assert.Equal(t, ruleKey, pushPathKey(ruleKey, "save.sav", []string{"save.sav"}, false))
+	assert.Equal(t, saverule.PathKeyForFile(ruleKey, "a.sav"), pushPathKey(ruleKey, "a.sav", []string{"*.sav"}, false))
+	assert.Equal(t, saverule.PathKeyForFile(ruleKey, "a.sav"), pushPathKey(ruleKey, "a.sav", []string{"*.sav", "profile.dat"}, false))
+	assert.Equal(t, saverule.PathKeyForFile(ruleKey, "a.sav"), pushPathKey(ruleKey, "a.sav", nil, true))
+}
+
+func TestWatcherAddPaths_Attachment(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "saves")
+	require.NoError(t, os.MkdirAll(sub, 0755))
+
+	resolver := paths.NewResolver()
+	client, err := NewClient("http://127.0.0.1:1", "test-token", resolver, paths.CurrentOS(), 0, false, false)
+	require.NoError(t, err)
+
+	w, err := NewWatcher(resolver, paths.CurrentOS(), client)
+	require.NoError(t, err)
+	defer w.Close()
+
+	err = w.AddPaths([]WatchPath{{
+		GameID:          "g1",
+		RuleKey:         "rk1",
+		Directory:       dir,
+		IncludePatterns: []string{"*.dat"},
+		SyncAll:         false,
+	}})
+	require.NoError(t, err)
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	entry, ok := w.pathMap[dir]
+	require.True(t, ok, "expected watch on resolved directory")
+	require.Len(t, entry.rules, 1)
+	assert.Equal(t, "g1", entry.rules[0].GameID)
+	assert.Equal(t, "rk1", entry.rules[0].RuleKey)
+}
+
+func TestWatcherPatternFilter_IgnoresNonMatching(t *testing.T) {
+	dir := t.TempDir()
+	saveFile := filepath.Join(dir, "save.dat")
+	ignoredFile := filepath.Join(dir, "readme.txt")
+	require.NoError(t, os.WriteFile(saveFile, []byte("save"), 0644))
+	require.NoError(t, os.WriteFile(ignoredFile, []byte("txt"), 0644))
+
+	var pushCount atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/saves" && r.Method == http.MethodPost {
+			pushCount.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	resolver := paths.NewResolver()
+	client, err := NewClient(srv.URL, "test-token", resolver, paths.CurrentOS(), 0, false, false)
+	require.NoError(t, err)
+
+	w, err := NewWatcher(resolver, paths.CurrentOS(), client)
+	require.NoError(t, err)
+	defer w.Close()
+
+	SetDebounceDelayForTest(50 * time.Millisecond)
+	t.Cleanup(func() { SetDebounceDelayForTest(0) })
+
+	require.NoError(t, w.AddPaths([]WatchPath{{
+		GameID:          "g1",
+		RuleKey:         "rk1",
+		Directory:       dir,
+		IncludePatterns: []string{"*.dat"},
+	}}))
+
+	ctx := context.Background()
+	w.handleEvent(ctx, fsnotify.Event{Name: ignoredFile, Op: fsnotify.Write})
+	w.handleEvent(ctx, fsnotify.Event{Name: saveFile, Op: fsnotify.Write})
+
+	time.Sleep(150 * time.Millisecond)
+	assert.Equal(t, int32(1), pushCount.Load())
 }
 
 func TestWatcherDebounce(t *testing.T) {
@@ -50,9 +139,12 @@ func TestWatcherDebounce(t *testing.T) {
 	SetDebounceDelayForTest(50 * time.Millisecond)
 	t.Cleanup(func() { SetDebounceDelayForTest(0) })
 
-	w.mu.Lock()
-	w.pathMap[dir] = pathInfo{GameID: "g1", PathKey: "pk1"}
-	w.mu.Unlock()
+	require.NoError(t, w.AddPaths([]WatchPath{{
+		GameID:    "g1",
+		RuleKey:   "pk1",
+		Directory: dir,
+		SyncAll:   true,
+	}}))
 
 	ctx := context.Background()
 	ev := fsnotify.Event{Name: saveFile, Op: fsnotify.Write}
@@ -96,9 +188,12 @@ func TestWatcherDebounceSeparateFiles(t *testing.T) {
 	SetDebounceDelayForTest(50 * time.Millisecond)
 	t.Cleanup(func() { SetDebounceDelayForTest(0) })
 
-	w.mu.Lock()
-	w.pathMap[dir] = pathInfo{GameID: "g1", PathKey: "pk1"}
-	w.mu.Unlock()
+	require.NoError(t, w.AddPaths([]WatchPath{{
+		GameID:    "g1",
+		RuleKey:   "pk1",
+		Directory: dir,
+		SyncAll:   true,
+	}}))
 
 	ctx := context.Background()
 	w.handleEvent(ctx, fsnotify.Event{Name: fileA, Op: fsnotify.Write})
@@ -110,4 +205,43 @@ func TestWatcherDebounceSeparateFiles(t *testing.T) {
 	assert.True(t, pushed[fileA])
 	assert.True(t, pushed[fileB])
 	mu.Unlock()
+}
+
+func TestWatcherPushRelativePathHeader(t *testing.T) {
+	dir := t.TempDir()
+	saveFile := filepath.Join(dir, "save.dat")
+	require.NoError(t, os.WriteFile(saveFile, []byte("content"), 0644))
+
+	var relHeader atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/saves" && r.Method == http.MethodPost {
+			relHeader.Store(r.Header.Get("X-Relative-Path"))
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	resolver := paths.NewResolver()
+	client, err := NewClient(srv.URL, "test-token", resolver, paths.CurrentOS(), 0, false, false)
+	require.NoError(t, err)
+
+	w, err := NewWatcher(resolver, paths.CurrentOS(), client)
+	require.NoError(t, err)
+	defer w.Close()
+
+	SetDebounceDelayForTest(50 * time.Millisecond)
+	t.Cleanup(func() { SetDebounceDelayForTest(0) })
+
+	require.NoError(t, w.AddPaths([]WatchPath{{
+		GameID:    "g1",
+		RuleKey:   "pk1",
+		Directory: dir,
+		SyncAll:   true,
+	}}))
+
+	ctx := context.Background()
+	w.handleEvent(ctx, fsnotify.Event{Name: saveFile, Op: fsnotify.Write})
+	time.Sleep(150 * time.Millisecond)
+
+	assert.Equal(t, "save.dat", relHeader.Load())
 }

@@ -30,6 +30,23 @@
         <input type="hidden" name="csrf" value="{{.CSRFToken}}">
         <button type="submit" class="btn-ghost-sm">Purge old wikitext</button>
       </form>
+      <a href="/admin/pcgw/export/manifest.json.gz" class="btn-ghost-sm">Export bundle</a>
+      <form method="post" action="/admin/pcgw/import" enctype="multipart/form-data" class="inline-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <input type="hidden" name="mode" value="merge">
+        <label class="btn-ghost-sm" style="cursor:pointer;">
+          Import (merge)
+          <input type="file" name="file" accept=".json,.gz,application/gzip,application/json" style="display:none;" onchange="this.form.submit()">
+        </label>
+      </form>
+      <form method="post" action="/admin/pcgw/import" enctype="multipart/form-data" class="inline-form" onsubmit="return confirm('Replace all PCGW data and manifest entries with the import file?');">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <input type="hidden" name="mode" value="full_replace">
+        <label class="btn-ghost-sm" style="cursor:pointer;">
+          Import (replace all)
+          <input type="file" name="file" accept=".json,.gz,application/gzip,application/json" style="display:none;" onchange="if(confirm('Replace all PCGW data and manifest entries?')) this.form.submit();">
+        </label>
+      </form>
     </div>
   </div>
 

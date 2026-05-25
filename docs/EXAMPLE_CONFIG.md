@@ -30,6 +30,26 @@ You must set the resolver’s `UbisoftConnect` and optionally `UserID` (or rely 
 
 Existing configs without `auto_watch_mode` keep legacy behavior (watch any manifest path whose directory exists).
 
+If the client logs `sync: no watch paths — skipped discovered=… platform=… missing_dir=… malformed=…`, check: games discovered (tray **Discovered games** / `discovery.json`), save folders exist on disk, and manifest entries match your OS. See [CLIENT.md](CLIENT.md#auto-watch-modes).
+
+**Pattern-filtered watch path** (upload only `*.sav` under a directory):
+
+```json
+{
+  "watch_paths": [
+    {
+      "game_id": "311560",
+      "path_key": "ac_rogue_saves",
+      "directory": "<SteamLibrary-folder>/steamapps/compatdata/311560/pfx/drive_c/users/steamuser/Documents/MySaves",
+      "include_patterns": ["*.sav"],
+      "sync_all": false
+    }
+  ]
+}
+```
+
+Use `sync_all: true` (and omit `include_patterns`) to push every file in the directory. Multiple patterns or wildcards get a per-file `path_key` on the server (see sync behavior in [CLIENT.md](CLIENT.md)).
+
 **Linux launcher paths** — auto-detected on startup; override when detection fails (Flatpak, custom install locations):
 
 ```json

@@ -10,6 +10,7 @@ import (
 	"github.com/gsbs/gsbs/server/job"
 	"github.com/gsbs/gsbs/server/netutil"
 	"github.com/gsbs/gsbs/server/ratelimit"
+	"github.com/gsbs/gsbs/server/schedule"
 	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
 )
@@ -25,20 +26,23 @@ type WebHandler struct {
 	hub             *sse.Hub
 	apiHandler      *api.Handler
 	jobRunner       *job.Runner
+	pcgwCron        *schedule.PCGWCron
+	gsbsVersion     string
 	maxStorageBytes int64
 	readOnly        bool
 	loginLimiter    *ratelimit.Limiter
 }
 
 // NewWebHandler creates a WebHandler. loginLimiter may be nil (no rate limit on WebUI login).
-func NewWebHandler(st store.Store, authSvc *auth.Service, secret, adminUsername string, allowRegister bool, hub *sse.Hub, apiHandler *api.Handler, jobRunner *job.Runner, maxStorageBytes int64, readOnly bool, loginLimiter *ratelimit.Limiter) *WebHandler {
+func NewWebHandler(st store.Store, authSvc *auth.Service, secret, adminUsername string, allowRegister bool, hub *sse.Hub, apiHandler *api.Handler, jobRunner *job.Runner, pcgwCron *schedule.PCGWCron, gsbsVersion string, maxStorageBytes int64, readOnly bool, loginLimiter *ratelimit.Limiter) *WebHandler {
 	if secret == "" {
 		secret = "gsbs-default-secret-change-me"
 	}
 	return &WebHandler{
 		store: st, auth: authSvc, secret: secret, adminUsername: adminUsername,
 		allowRegister: allowRegister, templates: parseTemplates(), hub: hub,
-		apiHandler: apiHandler, jobRunner: jobRunner, maxStorageBytes: maxStorageBytes,
+		apiHandler: apiHandler, jobRunner: jobRunner, pcgwCron: pcgwCron, gsbsVersion: gsbsVersion,
+		maxStorageBytes: maxStorageBytes,
 		readOnly: readOnly, loginLimiter: loginLimiter,
 	}
 }
@@ -152,6 +156,12 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveAdminManifest(w, r)
 	case path == "/admin/activity" && r.Method == http.MethodGet:
 		h.serveAdminActivity(w, r)
+	case path == "/admin/settings" && r.Method == http.MethodGet:
+		h.serveAdminSettings(w, r)
+	case path == "/admin/settings/save" && r.Method == http.MethodPost:
+		h.handleAdminSettingsSave(w, r)
+	case path == "/admin/analytics" && r.Method == http.MethodGet:
+		h.serveAdminAnalytics(w, r)
 	case path == "/admin/partial/manifest" && r.Method == http.MethodGet:
 		h.serveAdminManifestPartial(w, r)
 	case path == "/admin/partial/jobs" && r.Method == http.MethodGet:
@@ -162,6 +172,10 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handlePushManifest(w, r)
 	case path == "/admin/run-job" && r.Method == http.MethodPost:
 		h.handleRunJob(w, r)
+	case path == "/admin/jobs/pcgw/cancel" && r.Method == http.MethodPost:
+		h.handleCancelPCGWJob(w, r)
+	case path == "/admin/user/create" && r.Method == http.MethodPost:
+		h.handleCreateUser(w, r)
 	case path == "/admin/user/disable" && r.Method == http.MethodPost:
 		h.handleDisableUser(w, r)
 	case path == "/admin/user/enable" && r.Method == http.MethodPost:

@@ -81,6 +81,8 @@ type Store interface {
 	// ListSavesPaginated returns a page of saves and total count. limit/offset 0 means no pagination (returns all).
 	ListSavesPaginated(ctx context.Context, userID string, limit, offset int) ([]types.SaveBlob, int, error)
 	GetSave(ctx context.Context, userID, gameID, pathKey string) (*types.SaveBlob, error)
+	// GetSaveContentSize returns stored bytes for an existing save slot, or 0 if none.
+	GetSaveContentSize(ctx context.Context, userID, gameID, pathKey string) (int64, error)
 	DeleteSave(ctx context.Context, userID, gameID, pathKey string) error
 	// Save versioning (last N versions per slot; retention policy applied on upsert)
 	ListSaveVersions(ctx context.Context, userID, gameID, pathKey string, limit int) ([]SaveVersionInfo, error)
@@ -121,6 +123,9 @@ type Store interface {
 	LogJobFinish(ctx context.Context, runID, status, errorMsg string, entriesCount int) error
 	ListJobRuns(ctx context.Context, jobName string, limit int) ([]JobRun, error)
 	GetLatestJobRun(ctx context.Context, jobName string) (*JobRun, error)
+	GetLatestSuccessfulJobRun(ctx context.Context, jobName string) (*JobRun, error)
+	ReconcileStaleJobRuns(ctx context.Context) error
+	HasRunningJob(ctx context.Context, jobName string) bool
 
 	// Manifest fetch tracking (admin manifest fetch log)
 	LogManifestFetch(ctx context.Context, clientID, clientName, username string, entriesCount int) error
@@ -172,9 +177,13 @@ type Store interface {
 	ListPCGWParseFailures(ctx context.Context, pageID int64, limit int) ([]types.PCGWParseFailure, error)
 
 	StartPCGWSyncRun(ctx context.Context, mode string) (runID string, err error)
+	StartPCGWSyncRunWithResume(ctx context.Context, mode, resumedFromRunID, notes string) (runID string, err error)
 	UpdatePCGWSyncRunCheckpoint(ctx context.Context, runID string, offset int, stats PCGWSyncRunStats) error
 	FinishPCGWSyncRun(ctx context.Context, runID, status, errMsg string, stats PCGWSyncRunStats) error
 	GetLatestPCGWSyncRun(ctx context.Context) (*types.PCGWSyncRun, error)
+	GetResumablePCGWSyncRun(ctx context.Context, mode string) (*types.PCGWSyncRun, error)
+	ReconcileStalePCGWSyncRuns(ctx context.Context) error
+	HasRunningPCGWSync(ctx context.Context) bool
 
 	GetPCGWManifestMeta(ctx context.Context) (*types.PCGWManifestMeta, error)
 	BumpManifestVersion(ctx context.Context, newETag string) (version int, err error)
@@ -183,6 +192,20 @@ type Store interface {
 
 	GetPCGWStats(ctx context.Context) (PCGWStats, error)
 	ExportPCGWGameJSON(ctx context.Context, pageID int64) ([]byte, error)
+	ExportPCGWManifestBundle(ctx context.Context, gsbsVersion string) ([]byte, error)
+	ImportPCGWManifestBundle(ctx context.Context, data []byte, mode string) (PCGWImportResult, error)
+	ValidatePCGWImport(ctx context.Context) (PCGWImportValidation, error)
+
+	// Admin settings (key/value, persisted cron and PCGW filters).
+	GetAdminSetting(ctx context.Context, key string) (string, error)
+	SetAdminSetting(ctx context.Context, key, value string) error
+	ListAdminSettings(ctx context.Context) (map[string]string, error)
+
+	// Analytics queries for admin dashboard.
+	CountActiveClientsSince(ctx context.Context, since time.Time) (int, error)
+	CountSyncVolume7d(ctx context.Context) (int, error)
+	CountDistinctManifestGames(ctx context.Context) (int, error)
+	CountDistinctSaveGames(ctx context.Context) (int, error)
 
 	// Close releases resources (e.g. DB connection).
 	Close() error
@@ -199,10 +222,11 @@ type SaveRecord struct {
 
 // SaveMeta optional metadata for upsert (hash dedup, client tracking).
 type SaveMeta struct {
-	ContentHash string
-	ContentSize int64
-	ClientID    string
-	Encrypted   bool
+	ContentHash  string
+	ContentSize  int64
+	ClientID     string
+	Encrypted    bool
+	RelativePath string // validated client-relative path when GSBS_SAVE_ROOT is set
 }
 
 type ClientInfo struct {
@@ -327,6 +351,26 @@ type PCGWSyncRunStats struct {
 	GamesFailed  int
 	GamesSkipped int
 	AvgParseMs   int
+}
+
+// PCGWImportResult summarizes a manifest bundle import.
+type PCGWImportResult struct {
+	Mode                string
+	GameSaveLocations   int
+	PCGWGames           int
+	PCGWGameData        int
+	PCGWMetadata        int
+	PCGWSections        int
+	PCGWSystemReqs      int
+}
+
+// PCGWImportValidation is post-import row counts and sample checks.
+type PCGWImportValidation struct {
+	GameSaveLocations int
+	PCGWGames         int
+	PCGWGameData      int
+	SampleOK          bool
+	Errors            []string
 }
 
 // PCGWStats is admin dashboard summary for PCGW data.

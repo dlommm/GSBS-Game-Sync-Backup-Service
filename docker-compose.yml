@@ -8,6 +8,7 @@ services:
     environment:
       GSBS_ADDR: ":8080"
       GSBS_DB: /app/data/gsbs.db
+      GSBS_SAVE_ROOT: /app/data/gamesaves
       GSBS_SESSION_SECRET: ${GSBS_SESSION_SECRET:?set GSBS_SESSION_SECRET in .env}
       GSBS_PCGW_CRON: "0 3 * * 0"
       GSBS_LOG_LEVEL: info
