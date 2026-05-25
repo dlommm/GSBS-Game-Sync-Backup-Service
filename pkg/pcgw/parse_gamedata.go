@@ -63,9 +63,9 @@ func ParseGameDataSection(sectionWikitext, gameID string) ([]SaveLocationTemplat
 		}
 	}
 	data := map[string]interface{}{
-		"save_locations":  filterTemplates(templates, false),
+		"save_locations":   filterTemplates(templates, false),
 		"config_locations": filterTemplates(templates, true),
-		"platforms":       collectSystems(templates),
+		"platforms":        collectSystems(templates),
 	}
 	return templates, data
 }
@@ -77,10 +77,10 @@ func filterTemplates(all []SaveLocationTemplate, config bool) []map[string]inter
 			continue
 		}
 		out = append(out, map[string]interface{}{
-			"system":            t.System,
-			"platform":          SystemToPlatform(t.System),
+			"system":             t.System,
+			"platform":           SystemToPlatform(t.System),
 			"platform_raw_label": t.System,
-			"path_templates":    t.Paths,
+			"path_templates":     t.Paths,
 		})
 	}
 	return out

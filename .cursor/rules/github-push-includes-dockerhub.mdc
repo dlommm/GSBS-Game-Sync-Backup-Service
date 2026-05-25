@@ -7,10 +7,10 @@ alwaysApply: true
 
 ## What updates Docker Hub
 
-| Push type | GitHub | Docker Hub (`dendlomm/gsbs-server`) |
-|-----------|--------|-------------------------------------|
-| `git push origin main` (code only) | Yes | **No** — image unchanged |
-| `git push origin vX.Y.Z` (release tag) | Yes + GitHub Release | **Yes** — `:X.Y.Z` and `:latest` via CI |
+| Push type | GitHub CI | Docker Hub (`dendlomm/gsbs-server`) |
+|-----------|-----------|-------------------------------------|
+| `git push origin main` (code only) | Yes — test, lint, **docker build** (no push) | **No** — image unchanged |
+| `git push origin vX.Y.Z` (release tag) | Release workflow | **Yes** — `:X.Y.Z` and `:latest` via release workflow |
 
 Docker Hub is published by [.github/workflows/release.yml](.github/workflows/release.yml) on **version tag push** only. Requires repo secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
 

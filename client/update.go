@@ -34,8 +34,8 @@ type UpdateInfo struct {
 
 // ClientManifest is the latest-client.json release asset.
 type ClientManifest struct {
-	Version    string                       `json:"version"`
-	ReleasedAt string                       `json:"released_at"`
+	Version    string                         `json:"version"`
+	ReleasedAt string                         `json:"released_at"`
 	Assets     map[string]ClientManifestAsset `json:"assets"`
 }
 

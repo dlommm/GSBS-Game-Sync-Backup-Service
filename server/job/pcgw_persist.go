@@ -19,7 +19,7 @@ import (
 type PCGWSyncOptions struct {
 	Full       bool
 	SinglePage int64 // if >0, sync only this page
-	Offset     int // resume offset for full/incremental list
+	Offset     int   // resume offset for full/incremental list
 	SyncRunID  string
 }
 
@@ -311,8 +311,8 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 				entries = append(entries, types.GameSaveLocation{
 					GameID: gameID, PCGWPageID: b.PageID, GameTitle: b.PageInfo.Title,
 					Platform: platform, PathTemplate: path, IsConfig: t.IsConfig,
-					Source: "pcgw",
-					Notes:  "https://www.pcgamingwiki.com/wiki/?curid=" + gameID,
+					Source:      "pcgw",
+					Notes:       "https://www.pcgamingwiki.com/wiki/?curid=" + gameID,
 					SteamAppIDs: b.PageInfo.SteamAppIDs, GOGID: b.PageInfo.GOGID,
 					EpicID: b.PageInfo.EpicID, UbisoftID: b.PageInfo.UbisoftID,
 					UpdatedAt: now,

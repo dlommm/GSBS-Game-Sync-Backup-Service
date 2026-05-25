@@ -25,8 +25,8 @@ type PageData struct {
 	BodyClass string
 	Error     string
 	Success   string
-	Restored  bool // dashboard save restore flash
-	Deleted   bool // dashboard save delete flash
+	Restored  bool   // dashboard save restore flash
+	Deleted   bool   // dashboard save delete flash
 	AdminNav  string // non-empty enables admin sidebar: overview, users, manifest, activity
 }
 
@@ -115,21 +115,21 @@ type adminActivityData struct {
 
 func newTemplateFuncs(t *template.Template) template.FuncMap {
 	return template.FuncMap{
-		"formatTime":       formatTime,
-		"formatBytes":      formatBytes,
-		"truncate":         truncate,
-		"formatDuration":   formatDuration,
-		"urlquery":         url.QueryEscape,
-		"auditLabel":       auditLabel,
-		"chartLineSVG":     chartLineSVG,
-		"percent":          percent,
-		"minInt":           minInt,
-		"quotaBarClass":    quotaBarClass,
-		"clientBarWidth":   clientBarWidth,
-		"renderPageBlock":  renderPageBlock(t),
-		"add":              func(a, b int) int { return a + b },
-		"sub":              func(a, b int) int { return a - b },
-		"join":             strings.Join,
+		"formatTime":      formatTime,
+		"formatBytes":     formatBytes,
+		"truncate":        truncate,
+		"formatDuration":  formatDuration,
+		"urlquery":        url.QueryEscape,
+		"auditLabel":      auditLabel,
+		"chartLineSVG":    chartLineSVG,
+		"percent":         percent,
+		"minInt":          minInt,
+		"quotaBarClass":   quotaBarClass,
+		"clientBarWidth":  clientBarWidth,
+		"renderPageBlock": renderPageBlock(t),
+		"add":             func(a, b int) int { return a + b },
+		"sub":             func(a, b int) int { return a - b },
+		"join":            strings.Join,
 	}
 }
 

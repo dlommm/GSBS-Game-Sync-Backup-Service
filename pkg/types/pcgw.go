@@ -45,19 +45,19 @@ type PCGWPathEntry struct {
 
 // PCGWGameData is per-platform Game data section content.
 type PCGWGameData struct {
-	PageID             int64                  `json:"page_id"`
-	PlatformKey        string                 `json:"platform_key"`
-	PlatformRawLabel   string                 `json:"platform_raw_label,omitempty"`
-	SaveLocations      []PCGWPathEntry        `json:"save_locations,omitempty"`
-	ConfigLocations    []PCGWPathEntry        `json:"config_locations,omitempty"`
-	SaveGameCloudSync  map[string]interface{} `json:"save_game_cloud_sync,omitempty"`
-	InstallLocations   []interface{}          `json:"install_locations,omitempty"`
-	RegistryKeys       []interface{}          `json:"registry_keys,omitempty"`
-	SaveFileInfo       map[string]interface{} `json:"save_file_info,omitempty"`
-	AllTemplates       []string               `json:"all_templates,omitempty"`
-	SectionWikitext    string                 `json:"section_wikitext,omitempty"`
-	Structured         map[string]interface{} `json:"structured,omitempty"`
-	UpdatedAt          string                 `json:"updated_at,omitempty"`
+	PageID            int64                  `json:"page_id"`
+	PlatformKey       string                 `json:"platform_key"`
+	PlatformRawLabel  string                 `json:"platform_raw_label,omitempty"`
+	SaveLocations     []PCGWPathEntry        `json:"save_locations,omitempty"`
+	ConfigLocations   []PCGWPathEntry        `json:"config_locations,omitempty"`
+	SaveGameCloudSync map[string]interface{} `json:"save_game_cloud_sync,omitempty"`
+	InstallLocations  []interface{}          `json:"install_locations,omitempty"`
+	RegistryKeys      []interface{}          `json:"registry_keys,omitempty"`
+	SaveFileInfo      map[string]interface{} `json:"save_file_info,omitempty"`
+	AllTemplates      []string               `json:"all_templates,omitempty"`
+	SectionWikitext   string                 `json:"section_wikitext,omitempty"`
+	Structured        map[string]interface{} `json:"structured,omitempty"`
+	UpdatedAt         string                 `json:"updated_at,omitempty"`
 }
 
 // PCGWSectionRow is a generic PCGW page section (Availability, Video, etc.).
@@ -71,12 +71,12 @@ type PCGWSectionRow struct {
 
 // PCGWSystemRequirement is structured min/rec specs per platform.
 type PCGWSystemRequirement struct {
-	PageID           int64                  `json:"page_id"`
-	PlatformKey      string                 `json:"platform_key"`
-	RequirementType  string                 `json:"requirement_type"`
-	Specs            map[string]interface{} `json:"specs,omitempty"`
-	SectionWikitext  string                 `json:"section_wikitext,omitempty"`
-	UpdatedAt        string                 `json:"updated_at,omitempty"`
+	PageID          int64                  `json:"page_id"`
+	PlatformKey     string                 `json:"platform_key"`
+	RequirementType string                 `json:"requirement_type"`
+	Specs           map[string]interface{} `json:"specs,omitempty"`
+	SectionWikitext string                 `json:"section_wikitext,omitempty"`
+	UpdatedAt       string                 `json:"updated_at,omitempty"`
 }
 
 // PCGWMetadata holds full-page wikitext cache and section hashes.
@@ -103,19 +103,19 @@ type PCGWParseFailure struct {
 
 // PCGWSyncRun tracks one sync execution (resumable).
 type PCGWSyncRun struct {
-	ID                string `json:"id"`
-	Mode              string `json:"mode"`
-	Status            string `json:"status"`
-	StartedAt         string `json:"started_at"`
-	FinishedAt        string `json:"finished_at,omitempty"`
-	CheckpointOffset  int    `json:"checkpoint_offset"`
-	GamesTotal        int    `json:"games_total"`
-	GamesOK           int    `json:"games_ok"`
-	GamesPartial      int    `json:"games_partial"`
-	GamesFailed       int    `json:"games_failed"`
-	GamesSkipped      int    `json:"games_skipped"`
-	AvgParseMs        int    `json:"avg_parse_ms"`
-	ErrorMessage      string `json:"error_message,omitempty"`
+	ID               string `json:"id"`
+	Mode             string `json:"mode"`
+	Status           string `json:"status"`
+	StartedAt        string `json:"started_at"`
+	FinishedAt       string `json:"finished_at,omitempty"`
+	CheckpointOffset int    `json:"checkpoint_offset"`
+	GamesTotal       int    `json:"games_total"`
+	GamesOK          int    `json:"games_ok"`
+	GamesPartial     int    `json:"games_partial"`
+	GamesFailed      int    `json:"games_failed"`
+	GamesSkipped     int    `json:"games_skipped"`
+	AvgParseMs       int    `json:"avg_parse_ms"`
+	ErrorMessage     string `json:"error_message,omitempty"`
 }
 
 // PCGWManifestMeta is singleton manifest generation state.
@@ -138,30 +138,30 @@ type ManifestV2Location struct {
 
 // ManifestV2Game is one game in manifest v2.
 type ManifestV2Game struct {
-	GameID               string                 `json:"game_id"`
-	PageName             string                 `json:"page_name,omitempty"`
-	Title                string                 `json:"title"`
-	SteamAppIDs          []string               `json:"steam_appids,omitempty"`
-	OtherIDs             map[string]string      `json:"other_ids,omitempty"`
-	Platforms            []string               `json:"platforms,omitempty"`
-	PlatformsPresent     []string               `json:"platforms_present,omitempty"`
-	Taxonomy             map[string]interface{} `json:"taxonomy,omitempty"`
-	Engines              []string               `json:"engines,omitempty"`
-	HasSaveData          bool                   `json:"has_save_data"`
-	CommonInstallPaths   []string               `json:"common_install_paths,omitempty"`
-	ProtonSupportLevel   string                 `json:"proton_support_level,omitempty"`
-	SaveLocations        []ManifestV2Location   `json:"save_locations,omitempty"`
-	ConfigLocations      []ManifestV2Location   `json:"config_locations,omitempty"`
-	CloudSync            map[string]interface{} `json:"cloud_sync,omitempty"`
-	AvailabilitySummary  map[string]interface{} `json:"availability_summary,omitempty"`
-	CoverURL             string                 `json:"cover_url,omitempty"`
-	HLTBID               string                 `json:"hltb_id,omitempty"`
-	IGDBID               string                 `json:"igdb_id,omitempty"`
-	ParseStatus          string                 `json:"parse_status,omitempty"`
-	LastUpdated          string                 `json:"last_updated,omitempty"`
-	GOGID                string                 `json:"gog_id,omitempty"`
-	EpicID               string                 `json:"epic_id,omitempty"`
-	UbisoftID            string                 `json:"ubisoft_id,omitempty"`
+	GameID              string                 `json:"game_id"`
+	PageName            string                 `json:"page_name,omitempty"`
+	Title               string                 `json:"title"`
+	SteamAppIDs         []string               `json:"steam_appids,omitempty"`
+	OtherIDs            map[string]string      `json:"other_ids,omitempty"`
+	Platforms           []string               `json:"platforms,omitempty"`
+	PlatformsPresent    []string               `json:"platforms_present,omitempty"`
+	Taxonomy            map[string]interface{} `json:"taxonomy,omitempty"`
+	Engines             []string               `json:"engines,omitempty"`
+	HasSaveData         bool                   `json:"has_save_data"`
+	CommonInstallPaths  []string               `json:"common_install_paths,omitempty"`
+	ProtonSupportLevel  string                 `json:"proton_support_level,omitempty"`
+	SaveLocations       []ManifestV2Location   `json:"save_locations,omitempty"`
+	ConfigLocations     []ManifestV2Location   `json:"config_locations,omitempty"`
+	CloudSync           map[string]interface{} `json:"cloud_sync,omitempty"`
+	AvailabilitySummary map[string]interface{} `json:"availability_summary,omitempty"`
+	CoverURL            string                 `json:"cover_url,omitempty"`
+	HLTBID              string                 `json:"hltb_id,omitempty"`
+	IGDBID              string                 `json:"igdb_id,omitempty"`
+	ParseStatus         string                 `json:"parse_status,omitempty"`
+	LastUpdated         string                 `json:"last_updated,omitempty"`
+	GOGID               string                 `json:"gog_id,omitempty"`
+	EpicID              string                 `json:"epic_id,omitempty"`
+	UbisoftID           string                 `json:"ubisoft_id,omitempty"`
 }
 
 // ManifestV2Response is GET /api/manifest/v2 payload.

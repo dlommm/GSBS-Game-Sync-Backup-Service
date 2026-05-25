@@ -28,7 +28,7 @@ type SectionResult struct {
 
 // IngestResult wraps a GameBundle with top-level ingest metadata.
 type IngestResult struct {
-	Bundle           GameBundle
-	FailedSections   []string
-	Errors           []string
+	Bundle         GameBundle
+	FailedSections []string
+	Errors         []string
 }
