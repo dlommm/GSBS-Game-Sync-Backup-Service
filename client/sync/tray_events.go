@@ -17,3 +17,6 @@ var OnPullProgress func(current, total int)
 
 // OnOutboxEnqueued is called when a failed push is queued for later retry.
 var OnOutboxEnqueued func(gameID, pathKey string)
+
+// OnQuotaError is called when push is rejected with HTTP 413 (size or storage quota).
+var OnQuotaError func(msg string)

@@ -74,5 +74,17 @@ func mergeDetectedIntoConfig(cfg *config, detected DetectedLauncherPaths) bool {
 		cfg.EAAppFolder = detected.EAAppFolder
 		merged = true
 	}
+	if detected.BottlesFolder != "" && cfg.BottlesFolder == "" {
+		cfg.BottlesFolder = detected.BottlesFolder
+		merged = true
+	}
+	if detected.PrismFolder != "" && cfg.PrismFolder == "" {
+		cfg.PrismFolder = detected.PrismFolder
+		merged = true
+	}
+	if detected.FlatpakSteamFolder != "" && cfg.FlatpakSteamFolder == "" {
+		cfg.FlatpakSteamFolder = detected.FlatpakSteamFolder
+		merged = true
+	}
 	return merged
 }

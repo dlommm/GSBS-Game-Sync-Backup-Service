@@ -8,6 +8,7 @@ From the repo root:
 
 ```bash
 go mod tidy
+./script/build-webui.sh   # requires Node.js (npx tailwindcss)
 go build -o gsbs-server ./server
 go build -o gsbs-client ./client
 ```
@@ -31,7 +32,25 @@ The server needs CGO enabled for SQLite (`CGO_ENABLED=1`, which is the default).
 go test ./server/... ./pkg/... ./client/...
 ```
 
+With race detector and coverage (matches CI):
+
+```bash
+go test -race -coverprofile=coverage.out ./server/... ./pkg/... ./client/...
+go tool cover -func=coverage.out
+```
+
 Tests live under `server/` (e.g. `server/auth/auth_test.go`, `server/store/sqlite_test.go`, `server/api/handler_test.go`). Use an in-memory SQLite DB (`:memory:`) in tests where possible.
+
+## Lint
+
+CI runs [golangci-lint](https://golangci-lint.run/) with config in [.golangci.yml](.golangci.yml). Run locally before pushing:
+
+```bash
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+golangci-lint run --timeout=5m
+```
+
+Release builds also require lint to pass (see [.github/workflows/release.yml](.github/workflows/release.yml)).
 
 ## Where to work (skills and subagents)
 

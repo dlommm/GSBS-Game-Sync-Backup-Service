@@ -41,6 +41,18 @@ func applyLauncherDetection(cfg *config, resolver *paths.Resolver) {
 		cfg.EAAppFolder = detected.EAApp
 		merged = true
 	}
+	if detected.Bottles != "" && cfg.BottlesFolder == "" {
+		cfg.BottlesFolder = detected.Bottles
+		merged = true
+	}
+	if detected.Prism != "" && cfg.PrismFolder == "" {
+		cfg.PrismFolder = detected.Prism
+		merged = true
+	}
+	if detected.FlatpakSteam != "" && cfg.FlatpakSteamFolder == "" {
+		cfg.FlatpakSteamFolder = detected.FlatpakSteam
+		merged = true
+	}
 	if merged {
 		_ = saveConfig(cfg)
 	}
@@ -71,6 +83,15 @@ func configureResolverFromConfig(cfg *config) *paths.Resolver {
 	}
 	if cfg.EAAppFolder != "" {
 		resolver.EAApp = cfg.EAAppFolder
+	}
+	if cfg.BottlesFolder != "" {
+		resolver.Bottles = cfg.BottlesFolder
+	}
+	if cfg.PrismFolder != "" {
+		resolver.Prism = cfg.PrismFolder
+	}
+	if cfg.FlatpakSteamFolder != "" {
+		resolver.FlatpakSteam = cfg.FlatpakSteamFolder
 	}
 	applyLauncherDetection(cfg, resolver)
 	resolver.InstalledSteam = discoveryState.InstalledSteam

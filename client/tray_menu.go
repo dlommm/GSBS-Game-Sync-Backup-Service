@@ -296,9 +296,22 @@ func (c *TrayController) refreshFromSnapshot() {
 		if i < len(snap.Discovered) {
 			g := snap.Discovered[i]
 			c.discoveredIDs[i] = g.GameID
-			slot.SetTitle("○ " + g.Title)
+			slot.SetTitle(formatDiscoveredRow(g))
+			tip := g.GameID
+			if g.MatchReason != "" {
+				tip += " (" + g.MatchReason + ")"
+			}
+			if g.Disabled {
+				tip += " — disabled"
+			}
+			slot.SetTooltip(tip + " — click to toggle sync")
 			slot.Enable()
 			slot.Show()
+			if g.Disabled {
+				slot.Uncheck()
+			} else {
+				slot.Check()
+			}
 		} else {
 			c.discoveredIDs[i] = ""
 			slot.Hide()
@@ -375,6 +388,31 @@ func formatStatusHeader(snap TraySnapshot) string {
 	}
 }
 
+func formatDiscoveredRow(g GameRow) string {
+	prefix := "○ "
+	if g.Disabled {
+		prefix = "⊘ "
+	}
+	title := g.Title
+	if title == "" {
+		title = g.GameID
+	}
+	if len(title) > 22 {
+		title = title[:19] + "..."
+	}
+	sub := g.Launcher
+	if sub == "" && g.MatchReason != "" {
+		sub = g.MatchReason
+	}
+	if sub != "" {
+		if len(sub) > 12 {
+			sub = sub[:10] + ".."
+		}
+		return prefix + title + " · " + sub
+	}
+	return prefix + title
+}
+
 func formatGameRow(g GameRow) string {
 	prefix := "✓ "
 	switch g.Status {
@@ -424,11 +462,22 @@ func formatAgo(t time.Time) string {
 }
 
 func formatTrayTooltip(snap TraySnapshot) string {
+	base := formatStatusHeader(snap)
+	var parts []string
+	if !snap.WatcherHealthy {
+		parts = append(parts, "watcher: recovering")
+	}
+	if snap.ManifestAge > 0 {
+		parts = append(parts, "manifest: "+formatAgo(time.Now().Add(-snap.ManifestAge)))
+	}
 	if d := snap.NextRetryIn; d > 0 {
 		sec := int(d.Round(time.Second).Seconds())
-		return fmt.Sprintf("GSBS — Last sync failed; retrying in %ds", sec)
+		parts = append(parts, fmt.Sprintf("retry in %ds", sec))
 	}
-	return formatStatusHeader(snap)
+	if len(parts) == 0 {
+		return base
+	}
+	return base + " · " + strings.Join(parts, " · ")
 }
 
 func (c *TrayController) startClickHandlers() {
@@ -580,6 +629,24 @@ func (c *TrayController) startClickHandlers() {
 					pathKey = "default"
 				}
 				openSaveVersions(cfg, gameID, pathKey)
+			}
+		}()
+	}
+	for i, slot := range c.discoveredSlots {
+		idx := i
+		go func() {
+			for range slot.ClickedCh {
+				gameID := c.discoveredIDs[idx]
+				if gameID == "" {
+					continue
+				}
+				enabled := isGameDisabled(gameID)
+				if err := toggleDiscoveredGame(gameID, !enabled); err != nil {
+					log.Printf("tray: toggle discovered game: %v", err)
+					continue
+				}
+				triggerManifestRefresh()
+				c.refreshFromSnapshot()
 			}
 		}()
 	}

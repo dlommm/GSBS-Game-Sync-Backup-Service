@@ -132,6 +132,11 @@ func main() {
 	}
 	defer st.Close()
 	log.Printf("database: opened %s", dbPath)
+	if n, err := st.DeleteExpiredSessions(context.Background(), time.Now().Add(-store.WebSessionMaxAge)); err != nil {
+		log.Printf("session GC on startup: %v", err)
+	} else if n > 0 {
+		log.Printf("session GC on startup: removed %d expired session(s)", n)
+	}
 	if adminUser := os.Getenv("GSBS_ADMIN_USERNAME"); adminUser != "" {
 		if err := st.EnsureAdminByUsername(context.Background(), adminUser); err != nil {
 			log.Printf("ensure admin username %q: %v", adminUser, err)
@@ -216,6 +221,19 @@ func main() {
 	} else {
 		_ = id2
 		log.Println("cron: stats snapshot scheduled daily 00:00")
+	}
+	if id3, err := c.AddFunc("0 4 * * *", func() {
+		n, err := st.DeleteExpiredSessions(context.Background(), time.Now().Add(-store.WebSessionMaxAge))
+		if err != nil {
+			log.Printf("cron: session GC: %v", err)
+		} else if n > 0 {
+			log.Printf("cron: session GC removed %d expired session(s)", n)
+		}
+	}); err != nil {
+		log.Printf("cron: failed to schedule session GC: %v", err)
+	} else {
+		_ = id3
+		log.Println("cron: session GC scheduled daily 04:00")
 	}
 	c.Start()
 	defer c.Stop()

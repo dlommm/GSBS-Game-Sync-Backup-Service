@@ -111,24 +111,13 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	cfg, _ := loadConfig()
 	loggedIn := cfg != nil && strings.TrimSpace(cfg.Token) != ""
 	cache := loadDiscoveryCache()
-	titles := make([]string, 0, len(cache.MatchedGameIDs))
-	seen := make(map[string]bool)
-	for _, g := range cache.InstalledGames {
-		key := g.Launcher + ":" + g.GameID
-		mgid := cache.IDMap[key]
-		if mgid == "" {
-			continue
+	titles := make([]string, 0, len(cache.MatchedGames))
+	for _, g := range cache.MatchedGames {
+		name := g.Title
+		if name == "" {
+			name = g.ManifestGameID
 		}
-		for _, mid := range cache.MatchedGameIDs {
-			if mid == mgid && !seen[mid] {
-				seen[mid] = true
-				name := g.Title
-				if name == "" {
-					name = mid
-				}
-				titles = append(titles, name)
-			}
-		}
+		titles = append(titles, name)
 	}
 	if len(titles) == 0 {
 		for _, id := range cache.MatchedGameIDs {

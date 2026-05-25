@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -27,12 +28,79 @@ type manifestResponse struct {
 
 const manifestFetchTimeout = 60 * time.Second
 
-// FetchManifest downloads the manifest from the server. Tries v2 first for richer metadata, falls back to v1.
+// manifestFetchResult holds the outcome of a manifest download (v2 or v1).
+type manifestFetchResult struct {
+	Entries     []types.GameSaveLocation
+	Games       []types.ManifestV2Game
+	DeletedIDs  []string
+	ETag        string
+	Source      string // "v2" or "v1"
+	NotModified bool
+}
+
+// FetchManifest downloads the manifest from the server. Tries v2 first, falls back to v1 on error, 404, or empty entries.
 func FetchManifest(ctx context.Context, baseURL, token, since, include string) ([]types.GameSaveLocation, error) {
-	if entries, err := fetchManifestV2(ctx, baseURL, token, since, include); err == nil && len(entries) > 0 {
-		return entries, nil
+	res, err := FetchManifestFull(ctx, baseURL, token, since, include)
+	if err != nil {
+		return nil, err
 	}
-	return fetchManifestV1(ctx, baseURL, token, since, include)
+	return res.Entries, nil
+}
+
+// FetchManifestFull downloads manifest with v2 metadata; updates on-disk cache when not a 304.
+func FetchManifestFull(ctx context.Context, baseURL, token, since, include string) (manifestFetchResult, error) {
+	cached := LoadManifestFile()
+
+	if res, err := fetchManifestV2(ctx, baseURL, token, since, include, cached); err == nil {
+		if len(res.Entries) > 0 || res.NotModified {
+			if !res.NotModified {
+				merged := mergeManifestFetch(cached, res)
+				if err := SaveManifestFile(merged); err != nil {
+					log.Println("save manifest cache:", err)
+				}
+				return manifestFetchResult{
+					Entries:     merged.Entries,
+					Games:       merged.Games,
+					DeletedIDs:  res.DeletedIDs,
+					ETag:        merged.ETag,
+					Source:      "v2",
+					NotModified: false,
+				}, nil
+			}
+			return manifestFetchResult{
+				Entries:     cached.Entries,
+				Games:       cached.Games,
+				ETag:        cached.ETag,
+				Source:      "v2",
+				NotModified: true,
+			}, nil
+		}
+	}
+
+	entries, err := fetchManifestV1(ctx, baseURL, token, since, include)
+	if err != nil {
+		return manifestFetchResult{}, err
+	}
+	f := manifestFile{
+		Entries:       entries,
+		LastFetchedAt: time.Now().UTC().Format(time.RFC3339),
+		Source:        "v1",
+	}
+	if err := SaveManifestFile(f); err != nil {
+		log.Println("save manifest cache:", err)
+	}
+	return manifestFetchResult{Entries: entries, Source: "v1"}, nil
+}
+
+func manifestPlatformParam() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "windows"
+	case "darwin":
+		return "macos"
+	default:
+		return "linux"
+	}
 }
 
 func fetchManifestV1(ctx context.Context, baseURL, token, since, include string) ([]types.GameSaveLocation, error) {
@@ -70,40 +138,57 @@ func fetchManifestV1(ctx context.Context, baseURL, token, since, include string)
 	return out.Entries, nil
 }
 
-func fetchManifestV2(ctx context.Context, baseURL, token, since, include string) ([]types.GameSaveLocation, error) {
+func fetchManifestV2(ctx context.Context, baseURL, token, since, include string, cached manifestFile) (manifestFetchResult, error) {
 	url := baseURL + "/api/manifest/v2"
-	params := []string{}
+	params := []string{"platform=" + manifestPlatformParam()}
 	if since != "" {
 		params = append(params, "since="+since)
 	}
-	if len(params) > 0 {
-		url += "?" + strings.Join(params, "&")
-	}
+	url += "?" + strings.Join(params, "&")
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return manifestFetchResult{}, err
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	if cached.ETag != "" {
+		req.Header.Set("If-None-Match", cached.ETag)
+	}
+
 	client := &http.Client{Timeout: manifestFetchTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return manifestFetchResult{}, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusNotModified || resp.StatusCode == http.StatusOK {
-		if resp.StatusCode == http.StatusNotModified {
-			return LoadManifestFromDisk(), nil
-		}
-	} else {
-		return nil, fmt.Errorf("manifest v2: %s", resp.Status)
+
+	if resp.StatusCode == http.StatusNotModified {
+		return manifestFetchResult{NotModified: true}, nil
 	}
+	if resp.StatusCode == http.StatusNotFound {
+		return manifestFetchResult{}, fmt.Errorf("manifest v2: not found")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return manifestFetchResult{}, fmt.Errorf("manifest v2: %s", resp.Status)
+	}
+
 	var out types.ManifestV2Response
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, err
+		return manifestFetchResult{}, err
 	}
-	return manifestV2ToEntries(out, include), nil
+	etag := out.ETag
+	if etag == "" {
+		etag = resp.Header.Get("ETag")
+	}
+	entries := manifestV2ToEntries(out, include)
+	return manifestFetchResult{
+		Entries:    entries,
+		Games:      out.Games,
+		DeletedIDs: out.DeletedGameIDs,
+		ETag:       etag,
+	}, nil
 }
 
 func manifestV2ToEntries(v2 types.ManifestV2Response, include string) []types.GameSaveLocation {
@@ -125,7 +210,8 @@ func manifestV2ToEntries(v2 types.ManifestV2Response, include string) []types.Ga
 						GameID: g.GameID, PCGWPageID: parsePageID(g.GameID),
 						GameTitle: g.Title, Platform: loc.Platform, PathTemplate: pt,
 						IsConfig: isConfig, UpdatedAt: g.LastUpdated, Source: "pcgw",
-						SteamAppIDs: g.SteamAppIDs, GOGID: g.GOGID, EpicID: g.EpicID, UbisoftID: g.UbisoftID,
+						Notes: loc.Notes, SteamAppIDs: g.SteamAppIDs,
+						GOGID: g.GOGID, EpicID: g.EpicID, UbisoftID: g.UbisoftID,
 					})
 				}
 			}
@@ -141,38 +227,145 @@ func parsePageID(gameID string) int64 {
 	return n
 }
 
+var manifestPathOverride string
+
 func manifestPath() string {
+	if manifestPathOverride != "" {
+		return manifestPathOverride
+	}
 	dir, _ := os.UserConfigDir()
 	return filepath.Join(dir, "gsbs", "manifest.json")
 }
 
-// manifestFile is the on-disk shape (entries + last fetch time for ?since=).
+// SetManifestPathForTest overrides the on-disk manifest cache path (tests only).
+func SetManifestPathForTest(path string) {
+	manifestPathOverride = path
+}
+
+// manifestFile is the on-disk manifest cache (flat entries + optional v2 game metadata).
 type manifestFile struct {
 	Entries       []types.GameSaveLocation `json:"entries"`
-	LastFetchedAt string                   `json:"last_fetched_at,omitempty"` // RFC3339
+	Games         []types.ManifestV2Game   `json:"games,omitempty"`
+	ETag          string                   `json:"etag,omitempty"`
+	Source        string                   `json:"source,omitempty"` // "v2" or "v1"
+	LastFetchedAt string                   `json:"last_fetched_at,omitempty"`
 }
 
 // LoadManifestFromDisk returns cached manifest entries. Returns nil if file missing or invalid.
 func LoadManifestFromDisk() []types.GameSaveLocation {
-	entries, _ := LoadManifestCache()
-	return entries
+	f := LoadManifestFile()
+	return f.Entries
 }
 
 // LoadManifestCache returns cached entries and the last fetch timestamp.
 func LoadManifestCache() ([]types.GameSaveLocation, time.Time) {
-	data, err := os.ReadFile(manifestPath())
-	if err != nil {
-		return nil, time.Time{}
-	}
-	var f manifestFile
-	if json.Unmarshal(data, &f) != nil {
-		return nil, time.Time{}
-	}
+	f := LoadManifestFile()
 	var lastFetched time.Time
 	if f.LastFetchedAt != "" {
 		lastFetched, _ = time.Parse(time.RFC3339, f.LastFetchedAt)
 	}
 	return f.Entries, lastFetched
+}
+
+// LoadManifestFile returns the full on-disk manifest cache.
+func LoadManifestFile() manifestFile {
+	data, err := os.ReadFile(manifestPath())
+	if err != nil {
+		return manifestFile{}
+	}
+	var f manifestFile
+	if json.Unmarshal(data, &f) != nil {
+		return manifestFile{}
+	}
+	return f
+}
+
+// mergeManifestFetch merges a v2 fetch delta into the cached manifest file.
+func mergeManifestFetch(cached manifestFile, res manifestFetchResult) manifestFile {
+	out := cached
+	out.ETag = res.ETag
+	out.Source = "v2"
+	out.LastFetchedAt = time.Now().UTC().Format(time.RFC3339)
+
+	if len(res.DeletedIDs) > 0 {
+		out.Entries = ApplyManifestDeletions(out.Entries, res.DeletedIDs)
+		out.Games = applyGameDeletions(out.Games, res.DeletedIDs)
+	}
+
+	if len(res.Entries) > 0 {
+		if len(cached.Entries) > 0 {
+			out.Entries = MergeManifestDelta(cached.Entries, res.Entries)
+		} else {
+			out.Entries = res.Entries
+		}
+	}
+	if len(res.Games) > 0 {
+		out.Games = mergeV2Games(cached.Games, res.Games, res.DeletedIDs)
+	} else if len(cached.Games) == 0 && len(res.Entries) > 0 {
+		out.Games = nil
+	}
+	return out
+}
+
+func mergeV2Games(existing, delta []types.ManifestV2Game, deleted []string) []types.ManifestV2Game {
+	if len(deleted) > 0 {
+		existing = applyGameDeletions(existing, deleted)
+	}
+	if len(existing) == 0 {
+		return delta
+	}
+	if len(delta) == 0 {
+		return existing
+	}
+	index := make(map[string]int, len(existing))
+	for i, g := range existing {
+		index[g.GameID] = i
+	}
+	out := make([]types.ManifestV2Game, len(existing))
+	copy(out, existing)
+	for _, g := range delta {
+		if i, ok := index[g.GameID]; ok {
+			out[i] = g
+		} else {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+func applyGameDeletions(games []types.ManifestV2Game, deleted []string) []types.ManifestV2Game {
+	if len(deleted) == 0 {
+		return games
+	}
+	del := make(map[string]bool, len(deleted))
+	for _, id := range deleted {
+		del[id] = true
+	}
+	var out []types.ManifestV2Game
+	for _, g := range games {
+		if !del[g.GameID] {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// ApplyManifestDeletions removes all entries for deleted game IDs.
+func ApplyManifestDeletions(entries []types.GameSaveLocation, deleted []string) []types.GameSaveLocation {
+	if len(deleted) == 0 {
+		return entries
+	}
+	del := make(map[string]bool, len(deleted))
+	for _, id := range deleted {
+		del[id] = true
+	}
+	var out []types.GameSaveLocation
+	for _, e := range entries {
+		if !del[e.GameID] {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // MergeManifestDelta merges delta entries into existing by (game_id, platform, path_template).
@@ -203,22 +396,28 @@ func MergeManifestDelta(existing, delta []types.GameSaveLocation) []types.GameSa
 	return out
 }
 
-// SaveManifestToDisk writes the full manifest to disk atomically (write to temp file, then rename).
-// Merge with existing if doing delta is caller's job.
+// SaveManifestToDisk writes flat entries to disk, preserving v2 metadata when present.
 func SaveManifestToDisk(entries []types.GameSaveLocation) error {
+	f := LoadManifestFile()
+	f.Entries = entries
+	f.LastFetchedAt = time.Now().UTC().Format(time.RFC3339)
+	return SaveManifestFile(f)
+}
+
+// SaveManifestFile writes the full manifest cache atomically.
+func SaveManifestFile(f manifestFile) error {
 	target := manifestPath()
 	dir := filepath.Dir(target)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(manifestFile{
-		Entries:       entries,
-		LastFetchedAt: time.Now().UTC().Format(time.RFC3339),
-	}, "", "  ")
+	if f.LastFetchedAt == "" {
+		f.LastFetchedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
 	}
-	// Write to a temp file in the same directory then rename for atomicity.
 	tmp, err := os.CreateTemp(dir, ".manifest-*.json.tmp")
 	if err != nil {
 		return err
@@ -238,6 +437,47 @@ func SaveManifestToDisk(entries []types.GameSaveLocation) error {
 		return err
 	}
 	return nil
+}
+
+// ManifestETagAge returns how long since the manifest was last fetched, or zero if unknown.
+func ManifestETagAge() time.Duration {
+	f := LoadManifestFile()
+	if f.LastFetchedAt == "" {
+		return 0
+	}
+	t, err := time.Parse(time.RFC3339, f.LastFetchedAt)
+	if err != nil {
+		return 0
+	}
+	return time.Since(t)
+}
+
+// pingManifestHealth checks server reachability via manifest v2 (fallback v1).
+func pingManifestHealth(baseURL, token string) (*http.Response, error) {
+	baseURL = strings.TrimSuffix(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return nil, fmt.Errorf("server URL is empty")
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	for _, path := range []string{"/api/manifest/v2", "/api/manifest"} {
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+path, nil)
+		if err != nil {
+			return nil, err
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusUnauthorized ||
+			resp.StatusCode == http.StatusNotModified {
+			return resp, nil
+		}
+		resp.Body.Close()
+	}
+	return nil, fmt.Errorf("manifest health check failed")
 }
 
 // PathKeyForManifestEntry returns a stable path key for (gameID, pathTemplate).
@@ -323,12 +563,11 @@ func connectSSE(ctx context.Context, baseURL, token string, onEvent func(eventTy
 }
 
 // ManifestToWatchPaths converts manifest entries to watch paths for the current OS.
-// Only includes entries where the resolved path exists. Skips config-only if we only want saves.
-// When mode is "discovered", only includes entries for game IDs in activeGameIDs.
+// When mode is "discovered", only includes entries for game IDs in activeGameIDs (or explicit config paths via mergeWatchPaths).
 func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Resolver, currentOS paths.OS, includeConfig bool, activeGameIDs map[string]bool, mode string) []watchPath {
 	var out []watchPath
 	seen := make(map[string]bool)
-	discoveredMode := mode == "discovered" && len(activeGameIDs) > 0
+	discoveredMode := mode == "discovered"
 	for _, e := range entries {
 		if discoveredMode && !activeGameIDs[e.GameID] {
 			continue

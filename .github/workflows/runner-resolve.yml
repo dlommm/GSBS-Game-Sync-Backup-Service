@@ -43,7 +43,8 @@ jobs:
               core.notice('GSBS_RUNNER_ONLINE=true — using self-hosted');
             } else if (process.env.RUNNER_CHECK_TOKEN) {
               try {
-                const { data } = await github.rest.actions.listSelfHostedRunnersForRepo({
+                const octokit = github.getOctokit(process.env.RUNNER_CHECK_TOKEN);
+                const { data } = await octokit.rest.actions.listSelfHostedRunnersForRepo({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   per_page: 100,

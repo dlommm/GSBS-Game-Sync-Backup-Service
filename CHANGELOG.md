@@ -4,6 +4,29 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- Client manifest v2 cache: ETag/`If-None-Match`, `deleted_game_ids`, persisted v2 game metadata, OS `platform` filter.
+- Discovery v2 index: `other_ids`, match reasons, tray toggle to enable/disable discovered games.
+- Config keys: `bottles_folder`, `prism_folder`, `flatpak_steam_folder`.
+- `POST /api/clients/revoke` for programmatic client token revocation.
+- Session GC on startup and periodic purge of expired web sessions.
+- Docs: [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md), [UPGRADE.md](docs/UPGRADE.md).
+- Tests: manifest v1/v2 API, client manifest fetch, store versions/clients, watcher debounce, launchers detect.
+
+### Changed
+
+- Client `discovered` watch mode watches nothing until games are matched (except explicit `watch_paths`).
+- Tray: richer discovered game rows, manifest age and watcher health in tooltip, quota errors surfaced on push.
+- WebUI: admin PCGW polish, loading skeletons, fixed admin overview SSE hooks, zerolog in critical handlers.
+- CI: `-race` and coverage artifact upload; lint job on release workflow.
+
+## [1.0.16] - 2026-05-24
+
+### Fixed
+
+- WebUI template naming and layout block collisions: admin pages, dashboard, and settings render correctly when templates are embedded in production builds.
+
 ## [1.0.17] - 2026-05-24
 
 ### Added
@@ -54,6 +77,7 @@ See [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service
 
 [Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.17...HEAD
 [1.0.17]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.16...v1.0.17
+[1.0.16]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.15...v1.0.16
 [1.0.15]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.14...v1.0.15
 [1.0.14]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/tag/v1.0.14
 [1.0.13]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/tag/v1.0.13

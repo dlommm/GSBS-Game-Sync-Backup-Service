@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
-	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/types"
+	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/store"
 )
 
@@ -72,12 +72,15 @@ type adminStats struct {
 
 type adminOverviewData struct {
 	PageData
-	Stats           adminStats
-	StatsSnapshots  []store.StatsSnapshotRow
-	SSEClients      int
-	AllowRegister   bool
-	MaxStorageBytes int64
-	ReadOnly        bool
+	Stats            adminStats
+	StatsSnapshots   []store.StatsSnapshotRow
+	SSEClients       int
+	AllowRegister    bool
+	MaxStorageBytes  int64
+	ReadOnly         bool
+	RecentJobs       []store.JobRun
+	JobRunning       bool
+	JobProgressPages int
 }
 
 type adminUsersData struct {
@@ -160,7 +163,7 @@ func (h *WebHandler) renderPartial(w http.ResponseWriter, name string, data inte
 func (h *WebHandler) render(w http.ResponseWriter, name string, data interface{}) {
 	if err := h.templates.ExecuteTemplate(w, name, data); err != nil {
 		http.Error(w, "Template error", http.StatusInternalServerError)
-		log.Printf("webui template %s: %v", name, err)
+		logx.Logger().Error().Str("template", name).Err(err).Msg("webui template render failed")
 	}
 }
 

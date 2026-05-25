@@ -5,9 +5,11 @@
     <span class="topbar-brand">GSBS</span>
   </div>
   <nav class="topbar-nav" role="navigation" aria-label="Main">
-    <a href="/dashboard" {{if eq .NavActive "dashboard"}}class="active"{{end}}>Dashboard</a>
-    {{if .IsAdmin}}<a href="/admin" {{if eq .NavActive "admin"}}class="active"{{end}}>Admin</a>{{end}}
-    <a href="/dashboard/settings" {{if eq .NavActive "settings"}}class="active"{{end}}>Settings</a>
+    <div class="topbar-nav-scroll">
+      <a href="/dashboard" {{if eq .NavActive "dashboard"}}class="active" aria-current="page"{{end}}>Dashboard</a>
+      {{if .IsAdmin}}<a href="/admin" {{if eq .NavActive "admin"}}class="active" aria-current="page"{{end}}>Admin</a>{{end}}
+      <a href="/dashboard/settings" {{if eq .NavActive "settings"}}class="active" aria-current="page"{{end}}>Settings</a>
+    </div>
   </nav>
   <div class="topbar-right">
     <span class="topbar-user">{{.Username}}</span>

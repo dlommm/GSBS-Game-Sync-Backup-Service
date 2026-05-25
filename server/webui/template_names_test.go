@@ -23,12 +23,17 @@ var handlerTemplates = []string{
 	"admin_users.html",
 	"admin_manifest.html",
 	"admin_activity.html",
+	"admin_pcgw.html",
+	"admin_pcgw_detail.html",
 	"partials/dashboard_stats.html",
 	"partials/dashboard_clients.html",
 	"partials/dashboard_saves.html",
 	"partials/dashboard_activity.html",
 	"partials/admin_manifest_table.html",
 	"partials/admin_jobs.html",
+	"partials/admin_pcgw_table.html",
+	"partials/admin_pcgw_job_status.html",
+	"partials/loading_skeleton.html",
 }
 
 // Partials referenced via {{template}} inside other templates (not called directly by handlers).
@@ -37,6 +42,7 @@ var nestedTemplateRefs = []string{
 	"partials/topbar.html",
 	"partials/admin_shell.html",
 	"partials/timeline_item.html",
+	"partials/loading_skeleton.html",
 }
 
 // Page-specific layout blocks referenced via {{template (printf "%s_*" .PageName) .}}.
@@ -49,6 +55,8 @@ var pageBlockTemplates = []string{
 	"admin_users_title", "admin_users_content",
 	"admin_manifest_title", "admin_manifest_content", "admin_manifest_scripts",
 	"admin_activity_title", "admin_activity_content", "admin_activity_scripts",
+	"admin_pcgw_title", "admin_pcgw_content", "admin_pcgw_scripts",
+	"admin_pcgw_detail_title", "admin_pcgw_detail_content", "admin_pcgw_detail_scripts",
 }
 
 func TestAllHandlerTemplatesExist(t *testing.T) {
@@ -90,6 +98,7 @@ func TestLayoutReferencesResolve(t *testing.T) {
 		{"admin_overview.html", templateTestData("admin_overview.html")},
 		{"admin_manifest.html", templateTestData("admin_manifest.html")},
 		{"admin_activity.html", templateTestData("admin_activity.html")},
+		{"admin_pcgw.html", templateTestData("admin_pcgw.html")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -218,6 +227,11 @@ func templateTestData(name string) interface{} {
 			AllowRegister:   true,
 			MaxStorageBytes: 0,
 			ReadOnly:        false,
+			RecentJobs: []store.JobRun{
+				{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
+			},
+			JobRunning:       false,
+			JobProgressPages: 0,
 		}
 	case "admin_users.html":
 		return adminUsersData{
@@ -276,6 +290,26 @@ func templateTestData(name string) interface{} {
 			JobRunning:       false,
 			JobProgressPages: 0,
 		}
+	case "admin_pcgw.html":
+		return adminPCGWData{
+			PageData: PageData{
+				PageName: "admin_pcgw", Username: "admin", IsAdmin: true, CSRFToken: "csrf-test", AdminNav: "pcgw",
+			},
+			Stats: PCGWStatsView{TotalGames: 10, OK: 8, Partial: 1, Failed: 1, ManifestVersion: 2},
+			Games: []types.PCGWGame{
+				{PageID: 123, Title: "Test Game", ParseStatus: "ok", UpdatedAt: now, SteamAppIDs: []string{"730"}, PlatformsPresent: []string{"windows"}},
+			},
+			Page: 1, PerPage: 20, Total: 1, TotalPages: 1, Start: 1, End: 1, PrevPage: 0, NextPage: 2,
+		}
+	case "admin_pcgw_detail.html":
+		return adminPCGWDetailData{
+			PageData: PageData{
+				PageName: "admin_pcgw_detail", Username: "admin", IsAdmin: true, CSRFToken: "csrf-test", AdminNav: "pcgw",
+			},
+			Game:           &types.PCGWGame{PageID: 123, Title: "Test Game", ParseStatus: "ok"},
+			GameData:       []types.PCGWGameData{{PlatformKey: "windows", PlatformRawLabel: "Windows"}},
+			ExportJSONPath: "/admin/pcgw/export/123.json",
+		}
 	case "partials/dashboard_stats.html":
 		return map[string]interface{}{
 			"Stats":      dashboardStats{ClientCount: 1, SaveCount: 2, GameCount: 1, TotalBytes: 1024},
@@ -331,6 +365,19 @@ func templateTestData(name string) interface{} {
 			"JobProgressPages": 0,
 			"CSRFToken":        "csrf-test",
 		}
+	case "partials/admin_pcgw_table.html":
+		return map[string]interface{}{
+			"Games": []types.PCGWGame{
+				{PageID: 123, Title: "Test Game", ParseStatus: "ok", UpdatedAt: now},
+			},
+			"Total": 1, "Page": 1, "TotalPages": 1, "Start": 1, "End": 1,
+		}
+	case "partials/admin_pcgw_job_status.html":
+		return map[string]interface{}{
+			"JobRunning": true, "JobProgress": 42,
+		}
+	case "partials/loading_skeleton.html":
+		return map[string]interface{}{}
 	default:
 		return pd
 	}

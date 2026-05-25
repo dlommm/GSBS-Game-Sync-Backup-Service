@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	gosync "sync"
 	"time"
@@ -65,22 +64,5 @@ func resolveConflictAction(gameID, pathKey, filePath string, choice clientsync.R
 	}
 	ClearGameConflict(gameID)
 	refreshTrayCounts()
-	triggerSyncNow()
-}
-
-func restoreSaveVersion(gameID, pathKey string, version int) {
-	c := getSyncClient()
-	if c == nil {
-		log.Printf("tray: no sync client for version restore")
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	if err := c.RestoreVersion(ctx, gameID, pathKey, version); err != nil {
-		log.Printf("tray: restore version: %v", err)
-		_ = beeep.Notify("GSBS", "Restore failed", "")
-		return
-	}
-	_ = beeep.Notify("GSBS", fmt.Sprintf("Restored version %d on server", version), "")
 	triggerSyncNow()
 }

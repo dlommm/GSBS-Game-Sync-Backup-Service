@@ -16,7 +16,7 @@ Inside that directory you will find:
 | File | Description |
 |------|-------------|
 | **config.json** | Server URL, token, client name, sync interval, optional launcher paths, `encryption_passphrase` (local E2E key), and `watch_paths`. |
-| **manifest.json** | Cached list of game save locations from the server (from `GET /api/manifest`). Supports delta fetch via `?since=`. |
+| **manifest.json** | Cached game save locations from the server. Clients call `GET /api/manifest/v2` first (ETag/304, rich per-game metadata), then fall back to v1 (`GET /api/manifest`). The cache stores flat path entries plus optional v2 game metadata and a `source` field (`"v2"` or `"v1"`). |
 | **discovery.json** | Last game discovery scan (installed games matched to manifest). |
 | **outbox/** | Pending uploads when the server was unreachable. |
 | **conflicts.json** | Detected sync conflicts (local vs server both modified). |
@@ -33,7 +33,7 @@ When started without `--console`, the client runs in the system tray.
 - **Status** — last sync time, sync-in-progress, pause state, or last error.
 - **Sync now / Pause** — manual sync and pause/resume.
 - **Synced games** — up to 12 recently synced games with status (✓ ok, ⚠ conflict, ↑ uploaded, ⏳ pending). Click a game to open version history in the browser.
-- **Discovered games** — installed games matched to the manifest; **Rescan installed games** re-runs discovery.
+- **Discovered games** — installed games matched to the manifest; click a game to enable or disable sync (checked = syncing, ⊘ = disabled). **Rescan installed games** re-runs discovery.
 - **Issues** — conflict count, pending offline uploads, last error (with link to log).
 - **Settings** — login, detect launcher paths, refresh manifest, edit config, run at startup, open data folder.
 
@@ -82,16 +82,27 @@ On Windows, update checks are skipped when `skip_sync_when_metered` is true and 
 
 Install via package manager or installer: see [INSTALL.md](INSTALL.md).
 
+## Manifest (v2-first)
+
+On each fetch the client:
+
+1. Calls **`GET /api/manifest/v2?platform=<os>`** with `If-None-Match` when a cached ETag exists → **304** skips download.
+2. Falls back to **`GET /api/manifest`** (v1 flat entries) if v2 is unavailable or returns no entries.
+
+v2 improves discovery matching (launcher IDs, titles, taxonomy). Servers before v1.0.17 serve v1 only; clients work with either. Tray **Refresh manifest** forces a re-fetch. Delete `manifest.json` only when debugging a corrupt cache.
+
+Optional `manifest_include`: `"saves"`, `"config"`, or `"both"` (default).
+
 ## Auto-discovery
 
 On startup and every `discovery_interval` (default 4h), the client scans Steam, Epic, GOG, Ubisoft, EA App, Heroic, Lutris, Bottles, and Prism Launcher for installed games. Games are matched to the server manifest using launcher external IDs (Steam App ID, GOG ID, etc.) from the PCGW sync job, with title fallback and optional Steam→PCGW lookup cached in `discovery.json`.
 
 ### Auto-watch modes
 
-- **`auto_watch_mode: "discovered"`** (default for new installs): only watch save paths for installed games matched to the manifest.
+- **`auto_watch_mode: "discovered"`** (default for new installs): only watch save paths for installed games matched to the manifest. Per-game opt-out via tray **Discovered games** (stored in `discovery.json` as `disabled_game_ids`).
 - **`auto_watch_mode: "legacy"`** (default when omitted in existing configs): watch any manifest path whose save directory already exists on disk.
 
-Optional config: `conflict_policy` (`last_write_wins`, `keep_local`, `keep_server`), `ea_app_folder`, `discovery_interval`.
+Optional config: `conflict_policy` (`last_write_wins`, `keep_local`, `keep_server`), launcher folder overrides (`heroic_folder`, `lutris_folder`, `bottles_folder`, `prism_folder`, `flatpak_steam_folder`, `ea_app_folder`), `discovery_interval`.
 
 ## Offline outbox
 

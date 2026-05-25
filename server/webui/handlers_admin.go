@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
-	"log"
 	"net/http"
 	"strings"
 
 	"github.com/gsbs/gsbs/pkg/types"
+	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/sse"
 )
 
@@ -46,18 +46,23 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 	}
 	ctx := r.Context()
 	statsSnapshots, _ := h.store.ListStatsSnapshots(ctx, 30)
+	recentJobs, _ := h.store.ListJobRuns(ctx, "pcgw_sync", 10)
+	jobRunning, jobProgress := h.jobStatus()
 	sseClients := 0
 	if h.hub != nil {
 		sseClients = h.hub.Count()
 	}
 	h.render(w, "admin_overview.html", adminOverviewData{
-		PageData:        h.adminPageData(w, r, userID, username, "overview", "admin_overview"),
-		Stats:           h.loadAdminStats(ctx),
-		StatsSnapshots:  statsSnapshots,
-		SSEClients:      sseClients,
-		AllowRegister:   h.allowRegister,
-		MaxStorageBytes: h.maxStorageBytes,
-		ReadOnly:        h.readOnly,
+		PageData:         h.adminPageData(w, r, userID, username, "overview", "admin_overview"),
+		Stats:            h.loadAdminStats(ctx),
+		StatsSnapshots:   statsSnapshots,
+		SSEClients:       sseClients,
+		AllowRegister:    h.allowRegister,
+		MaxStorageBytes:  h.maxStorageBytes,
+		ReadOnly:         h.readOnly,
+		RecentJobs:       recentJobs,
+		JobRunning:       jobRunning,
+		JobProgressPages: jobProgress,
 	})
 }
 
@@ -209,12 +214,12 @@ func (h *WebHandler) handleRevokeClient(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := h.store.RegenerateClientToken(r.Context(), clientID); err != nil {
-		log.Printf("webui admin revoke: failed client_id=%s: %v", clientID, err)
+		logx.Logger().Error().Str("client_id", clientID).Err(err).Msg("webui admin revoke failed")
 		Redirect(w, r, "/admin/users?error=revoke_failed")
 		return
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "revoke_client", clientID, "")
-	log.Printf("webui admin revoke: ok client_id=%s by username=%q", clientID, username)
+	logx.Logger().Info().Str("client_id", clientID).Str("username", username).Msg("webui admin revoke ok")
 	Redirect(w, r, "/admin/users?revoked=1")
 }
 
@@ -234,7 +239,7 @@ func (h *WebHandler) handlePushManifest(w http.ResponseWriter, r *http.Request) 
 	if h.hub != nil {
 		sent = h.hub.Count()
 		h.hub.Broadcast(sse.Event{Type: "manifest-updated", Data: "{}"})
-		log.Printf("webui admin push-manifest: broadcast to %d client(s)", sent)
+		logx.Logger().Info().Int("clients", sent).Msg("webui admin push-manifest broadcast")
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "push_manifest", "", fmt.Sprintf("sent=%d", sent))
 	Redirect(w, r, fmt.Sprintf("/admin/manifest?pushed=1&sent=%d", sent))
@@ -253,7 +258,7 @@ func (h *WebHandler) handleRunJob(w http.ResponseWriter, r *http.Request) {
 		h.jobRunner.RunPCGWSync(context.Background())
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "pcgw_sync", "")
-	log.Printf("webui admin run-job: pcgw_sync triggered by username=%q", username)
+	logx.Logger().Info().Str("username", username).Msg("webui admin run-job pcgw_sync triggered")
 	Redirect(w, r, "/admin/activity?job_started=1")
 }
 

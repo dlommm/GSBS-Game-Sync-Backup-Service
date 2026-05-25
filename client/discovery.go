@@ -17,6 +17,7 @@ type discoveryCache struct {
 	LastScanAt           string                    `json:"last_scan_at"`
 	InstalledGames       []discovery.InstalledGame `json:"installed_games"`
 	MatchedGameIDs       []string                  `json:"matched_game_ids"`
+	MatchedGames         []discovery.MatchedGame   `json:"matched_games,omitempty"`
 	DisabledGameIDs      []string                  `json:"disabled_game_ids,omitempty"`
 	IDMap                map[string]string         `json:"id_map,omitempty"`
 	FirstRunSummaryShown bool                      `json:"first_run_summary_shown,omitempty"`
@@ -68,9 +69,13 @@ var OnDiscoveryResult func(newGames int)
 // OnFirstRunDiscovery is called once when games are first discovered (summary notification).
 var OnFirstRunDiscovery func(games []discovery.MatchedGame)
 
+// OnDiscoveryUpdated is called after each discovery scan (for setup wizard / tray refresh).
+var OnDiscoveryUpdated func()
+
 // discoveryState holds the latest scan for watch-path filtering.
 var discoveryState struct {
 	MatchedGameIDs  map[string]bool
+	MatchedGames    []discovery.MatchedGame
 	DisabledGameIDs map[string]bool
 	InstalledSteam  []string
 }
@@ -91,6 +96,37 @@ func activeGameIDSet() map[string]bool {
 	return out
 }
 
+// toggleDiscoveredGame enables or disables sync for a discovered game_id.
+func toggleDiscoveredGame(gameID string, enabled bool) error {
+	cache := loadDiscoveryCache()
+	disabled := make(map[string]bool)
+	for _, id := range cache.DisabledGameIDs {
+		disabled[id] = true
+	}
+	if enabled {
+		delete(disabled, gameID)
+	} else {
+		disabled[gameID] = true
+	}
+	var disabledList []string
+	for id := range disabled {
+		disabledList = append(disabledList, id)
+	}
+	cache.DisabledGameIDs = disabledList
+	discoveryState.DisabledGameIDs = disabled
+	if err := saveDiscoveryCache(cache); err != nil {
+		return err
+	}
+	if OnDiscoveryUpdated != nil {
+		OnDiscoveryUpdated()
+	}
+	return nil
+}
+
+func isGameDisabled(gameID string) bool {
+	return discoveryState.DisabledGameIDs[gameID]
+}
+
 func installedSteamAppIDs(games []discovery.InstalledGame) []string {
 	var ids []string
 	for _, g := range games {
@@ -102,7 +138,7 @@ func installedSteamAppIDs(games []discovery.InstalledGame) []string {
 }
 
 // resolveUnmatchedSteam tries PCGW lookup for unmatched Steam games (rate-limited, cached).
-func resolveUnmatchedSteam(installed []discovery.InstalledGame, idx *discovery.ManifestIndex, idMap map[string]string) {
+func resolveUnmatchedSteam(installed []discovery.InstalledGame, idx *discovery.ManifestV2Index, idMap map[string]string) {
 	client := pcgw.NewClient()
 	for _, g := range installed {
 		if g.Launcher != "steam" {
@@ -133,7 +169,8 @@ func runDiscovery(manifestEntries []types.GameSaveLocation) int {
 		prevSet[id] = true
 	}
 
-	idx := discovery.BuildManifestIndex(manifestEntries)
+	mf := LoadManifestFile()
+	idx := discovery.BuildManifestV2Index(mf.Games, manifestEntries)
 	idMap := prev.IDMap
 	if idMap == nil {
 		idMap = make(map[string]string)
@@ -141,7 +178,7 @@ func runDiscovery(manifestEntries []types.GameSaveLocation) int {
 
 	installed := discovery.ScanInstalledGames()
 	resolveUnmatchedSteam(installed, idx, idMap)
-	matched := discovery.MatchManifestWithIndex(installed, idx, idMap)
+	matched := discovery.MatchManifestWithV2Index(installed, idx, idMap)
 
 	var matchedIDs []string
 	newCount := 0
@@ -161,12 +198,14 @@ func runDiscovery(manifestEntries []types.GameSaveLocation) int {
 		matchedSet[id] = true
 	}
 	discoveryState.MatchedGameIDs = matchedSet
+	discoveryState.MatchedGames = matched
 	discoveryState.DisabledGameIDs = disabled
 	discoveryState.InstalledSteam = installedSteamAppIDs(installed)
 
 	cache := discoveryCache{
 		InstalledGames:       installed,
 		MatchedGameIDs:       matchedIDs,
+		MatchedGames:         matched,
 		DisabledGameIDs:      prev.DisabledGameIDs,
 		IDMap:                idMap,
 		FirstRunSummaryShown: prev.FirstRunSummaryShown,
@@ -183,6 +222,9 @@ func runDiscovery(manifestEntries []types.GameSaveLocation) int {
 
 	if newCount > 0 && OnDiscoveryResult != nil {
 		OnDiscoveryResult(newCount)
+	}
+	if OnDiscoveryUpdated != nil {
+		OnDiscoveryUpdated()
 	}
 	RecordDiscovery(matched, newCount)
 	return newCount

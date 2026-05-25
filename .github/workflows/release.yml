@@ -37,10 +37,26 @@ jobs:
       - name: Install Linux tray build deps
         run: sudo apt-get update && sudo apt-get install -y $LINUX_CLIENT_DEPS
       - name: Test
-        run: go test ./server/... ./pkg/... ./client/...
+        run: go test -race ./server/... ./pkg/... ./client/...
+
+  lint:
+    needs: resolve-runner
+    runs-on: ${{ needs.resolve-runner.outputs.linux }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          install-mode: goinstall
+          args: --timeout=5m
 
   build-linux:
-    needs: [resolve-runner, test]
+    needs: [resolve-runner, test, lint]
     runs-on: ${{ needs.resolve-runner.outputs.linux }}
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +110,7 @@ jobs:
             dist/latest-client.json
 
   build-windows:
-    needs: test
+    needs: [test, lint]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -151,7 +167,7 @@ jobs:
             dist/latest-client.json
 
   docker:
-    needs: [resolve-runner, test]
+    needs: [resolve-runner, test, lint]
     runs-on: ${{ needs.resolve-runner.outputs.linux }}
     steps:
       - uses: actions/checkout@v4

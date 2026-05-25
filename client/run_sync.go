@@ -12,7 +12,6 @@ import (
 	"github.com/gsbs/gsbs/client/sync"
 	"github.com/gsbs/gsbs/pkg/paths"
 	"github.com/gsbs/gsbs/pkg/retry"
-	"github.com/gsbs/gsbs/pkg/types"
 )
 
 var errNotLoggedIn = errors.New("not logged in: run 'gsbs-client login' or use Login from the tray menu")
@@ -117,15 +116,16 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	if !lastManifestFetch.IsZero() {
 		since = lastManifestFetch.UTC().Format(time.RFC3339)
 	}
-	if entries, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
-		if since != "" && len(manifestEntries) > 0 {
-			manifestEntries = MergeManifestDelta(manifestEntries, entries)
+	if res, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
+		if !res.NotModified {
+			if since != "" && len(manifestEntries) > 0 && res.Source == "v1" {
+				manifestEntries = MergeManifestDelta(manifestEntries, res.Entries)
+			} else if len(res.Entries) > 0 {
+				manifestEntries = res.Entries
+			}
+			log.Printf("manifest: fetched %d entries from server (source=%s since=%q)", len(res.Entries), res.Source, since)
 		} else {
-			manifestEntries = entries
-		}
-		log.Printf("manifest: fetched %d entries from server (since=%q)", len(entries), since)
-		if err := SaveManifestToDisk(manifestEntries); err != nil {
-			log.Println("save manifest cache:", err)
+			log.Printf("manifest: not modified (304), using cache (%d entries)", len(manifestEntries))
 		}
 	} else {
 		log.Printf("fetch manifest (using cache with %d entries): %v", len(manifestEntries), err)
@@ -245,6 +245,10 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	if discoveryInterval <= 0 {
 		discoveryInterval = 4 * time.Hour
 	}
+	// Shorter first periodic scan after login when no matches yet.
+	if len(discoveryState.MatchedGameIDs) == 0 {
+		discoveryInterval = minDuration(discoveryInterval, 15*time.Minute)
+	}
 	discoveryTicker := time.NewTicker(discoveryInterval)
 	defer discoveryTicker.Stop()
 
@@ -275,22 +279,23 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 
 	doManifestRefresh := func(reason string) {
 		log.Printf("manifest refresh (%s): starting", reason)
-		cached, lastFetch := LoadManifestCache()
 		since := ""
-		if !lastFetch.IsZero() {
-			since = lastFetch.UTC().Format(time.RFC3339)
-		}
-		if fresh, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
-			if since != "" && len(cached) > 0 {
-				manifestEntries = MergeManifestDelta(cached, fresh)
-			} else {
-				manifestEntries = fresh
+		if lastFetch := LoadManifestFile().LastFetchedAt; lastFetch != "" {
+			if t, err := time.Parse(time.RFC3339, lastFetch); err == nil {
+				since = t.UTC().Format(time.RFC3339)
 			}
-			manifestMu.Lock()
-			// manifestEntries updated in outer scope
-			manifestMu.Unlock()
-			log.Printf("manifest refresh (%s): fetched %d entries", reason, len(fresh))
-			_ = SaveManifestToDisk(manifestEntries)
+		}
+		if res, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
+			if !res.NotModified {
+				manifestMu.Lock()
+				if res.Source == "v1" && since != "" && len(manifestEntries) > 0 {
+					manifestEntries = MergeManifestDelta(manifestEntries, res.Entries)
+				} else if len(res.Entries) > 0 {
+					manifestEntries = res.Entries
+				}
+				manifestMu.Unlock()
+				log.Printf("manifest refresh (%s): fetched %d entries (source=%s)", reason, len(res.Entries), res.Source)
+			}
 			if reason == "discovery" || reason == "sse push" || reason == "manual" {
 				runDiscovery(manifestEntries)
 				refreshResolver(cfg, resolver)
@@ -350,12 +355,19 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 }
 
-func fetchManifestWithRetry(ctx context.Context, baseURL, token, since, include string) ([]types.GameSaveLocation, error) {
-	var entries []types.GameSaveLocation
+func fetchManifestWithRetry(ctx context.Context, baseURL, token, since, include string) (manifestFetchResult, error) {
+	var res manifestFetchResult
 	err := retry.Do(ctx, retry.DefaultBackoff(), 3, func() error {
 		var err error
-		entries, err = FetchManifest(ctx, baseURL, token, since, include)
+		res, err = FetchManifestFull(ctx, baseURL, token, since, include)
 		return err
 	})
-	return entries, err
+	return res, err
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
 }

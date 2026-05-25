@@ -533,6 +533,16 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath string,
 		if resp.StatusCode == http.StatusUnauthorized {
 			return fmt.Errorf("push: 401 Unauthorized — token may be invalid or expired; try logging in again from the tray")
 		}
+		if resp.StatusCode == http.StatusRequestEntityTooLarge {
+			msg := readAPIError(resp.Body)
+			if msg == "" {
+				msg = "storage quota exceeded or save too large"
+			}
+			if OnQuotaError != nil {
+				OnQuotaError(msg)
+			}
+			return fmt.Errorf("push: 413 %s", msg)
+		}
 		return fmt.Errorf("push: status %d", resp.StatusCode)
 	}
 	return nil
@@ -614,4 +624,14 @@ func (c *Client) RestoreVersion(ctx context.Context, gameID, pathKey string, ver
 		return fmt.Errorf("restore: status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func readAPIError(body io.Reader) string {
+	var out struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(body).Decode(&out); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out.Error)
 }

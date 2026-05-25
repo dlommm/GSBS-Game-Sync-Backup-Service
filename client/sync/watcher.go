@@ -22,10 +22,18 @@ import (
 	"github.com/gsbs/gsbs/pkg/retry"
 )
 
-const (
-	debounceDelay        = 2 * time.Second
-	maxConsecutiveErrors = 5
-)
+const maxConsecutiveErrors = 5
+
+var debounceDelay = 2 * time.Second
+
+// SetDebounceDelayForTest overrides debounceDelay (tests only). Pass 0 to reset to default.
+func SetDebounceDelayForTest(d time.Duration) {
+	if d <= 0 {
+		debounceDelay = 2 * time.Second
+		return
+	}
+	debounceDelay = d
+}
 
 var errWatcherClosed = errors.New("watcher: events channel closed")
 

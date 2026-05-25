@@ -7,6 +7,9 @@ import (
 	"github.com/gsbs/gsbs/pkg/types"
 )
 
+// WebSessionMaxAge is how long an inactive browser session is kept (matches WebUI cookie lifetime).
+const WebSessionMaxAge = 7 * 24 * time.Hour
+
 // Store is the persistence layer for users, clients, and saves.
 type Store interface {
 	// User
@@ -53,6 +56,8 @@ type Store interface {
 	ListSessionsByUser(ctx context.Context, userID string) ([]SessionRow, error)
 	DeleteSession(ctx context.Context, sessionID string) error
 	DeleteSessionsByUser(ctx context.Context, userID string) error
+	// DeleteExpiredSessions removes web sessions with last_seen before cutoff.
+	DeleteExpiredSessions(ctx context.Context, cutoff time.Time) (int64, error)
 
 	// Client
 	RegisterClient(ctx context.Context, userID, name, os string) (clientID string, err error)
