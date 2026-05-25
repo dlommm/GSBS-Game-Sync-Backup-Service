@@ -14,12 +14,12 @@ import (
 var trayCtrl *TrayController
 
 func runTray() {
-	if release := acquireSingleInstance(); release == nil {
+	release := acquireSingleInstance()
+	if release == nil {
 		notifyAlreadyRunning()
 		os.Exit(0)
-	} else if release != nil {
-		defer release()
 	}
+	defer release()
 	systray.Run(onReadyLinux, onExitLinux)
 }
 
@@ -88,5 +88,3 @@ func openConfigLinux() {
 func runLoginDialogProcess() {
 	runLogin()
 }
-
-func runFirstTimeSetupIfNeeded() {}

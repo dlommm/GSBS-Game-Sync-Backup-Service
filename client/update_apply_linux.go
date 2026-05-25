@@ -55,7 +55,7 @@ func applyStagedBinary(stagedPath string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	tmpPath := exe + ".new"
 	out, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
@@ -63,7 +63,7 @@ func applyStagedBinary(stagedPath string) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
+		_ = out.Close()
 		_ = os.Remove(tmpPath)
 		return err
 	}
