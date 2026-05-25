@@ -18,7 +18,15 @@ linters:
 
 linters-settings:
   errcheck:
-    exclude-functions: '.*\\.Close,.*\\.Rollback,fmt\\.Fprint,fmt\\.Fprintf,fmt\\.Sscanf,io\\.Copy,os\\.Remove,w\\.Write'
+    exclude-functions:
+      - '.*\\.Close'
+      - '.*\\.Rollback'
+      - 'fmt\\.Fprint'
+      - 'fmt\\.Fprintf'
+      - 'fmt\\.Sscanf'
+      - 'io\\.Copy'
+      - 'os\\.Remove'
+      - 'w\\.Write'
   govet:
     enable-all: true
     disable:
