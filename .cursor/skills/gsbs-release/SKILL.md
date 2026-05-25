@@ -14,6 +14,7 @@ description: Builds and releases GSBS server and client: version ldflags, script
 - **Manifests**: `script/release-assets.sh VERSION [DIR]` — `SHA256SUMS`, `latest-client.json`.
 - **Release (local)**: `script/release.sh [VERSION]` — build, tag, gh release, Docker Hub push.
 - **Release (CI)**: `.github/workflows/release.yml` on tag `v*` — primary path; see `docs/RELEASE.md`.
+- **CI runners**: `.github/workflows/runner-resolve.yml` — Linux jobs use `self-hosted` when online, else `ubuntu-latest`; override with repo var `GSBS_USE_SELF_HOSTED=false`.
 - **Packaging**:
   - Windows: `script/packaging/windows/gsbs-client.iss`, `build-installer.sh` (Inno Setup)
   - Linux: `script/packaging/linux/nfpm.yaml`, `build-deb.sh`, `build-appimage.sh`

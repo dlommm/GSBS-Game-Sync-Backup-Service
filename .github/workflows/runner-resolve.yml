@@ -1,0 +1,51 @@
+# Reusable workflow: pick self-hosted when online, else GitHub-hosted Linux.
+# Called by ci.yml and release.yml. The resolve job always runs on ubuntu-latest
+# so it can detect an offline self-hosted runner before other jobs start.
+name: Resolve runner
+
+on:
+  workflow_call:
+    outputs:
+      linux:
+        description: Runner label for Linux jobs (self-hosted or ubuntu-latest)
+        value: ${{ jobs.resolve.outputs.linux }}
+
+permissions:
+  actions: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      linux: ${{ steps.pick.outputs.linux }}
+    steps:
+      - name: Pick Linux runner
+        id: pick
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const forceGithub = '${{ vars.GSBS_USE_SELF_HOSTED }}' === 'false';
+            let linux = 'ubuntu-latest';
+
+            if (forceGithub) {
+              core.notice('GSBS_USE_SELF_HOSTED=false — using ubuntu-latest');
+            } else {
+              try {
+                const { data } = await github.rest.actions.listSelfHostedRunnersForRepo({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  per_page: 100,
+                });
+                const online = data.runners.some((r) => r.status === 'online');
+                if (online) {
+                  linux = 'self-hosted';
+                  core.notice(`Self-hosted runner online — using self-hosted (${data.runners.filter((r) => r.status === 'online').length} online)`);
+                } else {
+                  core.notice('No online self-hosted runner — falling back to ubuntu-latest');
+                }
+              } catch (err) {
+                core.warning(`Could not list self-hosted runners (${err.message}) — falling back to ubuntu-latest`);
+              }
+            }
+
+            core.setOutput('linux', linux);

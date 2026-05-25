@@ -41,6 +41,22 @@ Configure in repository **Settings → Secrets and variables → Actions**:
 | `DOCKERHUB_TOKEN` | Docker Hub access token |
 | `GITHUB_TOKEN` | Provided automatically for release upload |
 
+## Self-hosted runner (optional)
+
+Linux CI and release jobs prefer a **self-hosted** runner when one is **online**; otherwise they fall back to `ubuntu-latest`. Windows release builds always use `windows-latest`.
+
+Resolution runs in `.github/workflows/runner-resolve.yml` at the start of each workflow (via GitHub API). No job queues on an offline self-hosted runner.
+
+**Runner setup**
+
+1. Register the runner on the repo with label `self-hosted` (GitHub’s default).
+2. Install on the host: **Docker** (with Buildx for multi-arch release images), **Go 1.25** (or let `setup-go` install it), **Node 20**, and Linux client build deps (`libayatana-appindicator3-dev`, `libgtk-3-dev`, `pkg-config`, `gcc`). Jobs use `sudo apt-get` when deps are missing.
+3. Ensure the runner user can run `sudo` non-interactively for apt, or pre-install the packages above.
+
+**Force GitHub-hosted Linux**
+
+Set repository variable `GSBS_USE_SELF_HOSTED` to `false` (Settings → Secrets and variables → Actions → Variables). Unset or any other value keeps self-hosted preference.
+
 ## Local fallback
 
 ```bash
