@@ -103,6 +103,16 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.tag }}
         run: ./script/packaging/linux/build-appimage.sh dist "$VERSION"
+      - name: Stage AppImage for artifact upload
+        run: |
+          mkdir -p dist
+          APP=$(find "$GITHUB_WORKSPACE" -name "gsbs-client-${{ needs.version.outputs.value }}-x86_64.AppImage" -type f | head -1)
+          if [ -z "$APP" ]; then
+            echo "AppImage not found under $GITHUB_WORKSPACE" >&2
+            exit 1
+          fi
+          cp "$APP" "dist/gsbs-client-${{ needs.version.outputs.value }}-x86_64.AppImage"
+          ls -la "dist/gsbs-client-${{ needs.version.outputs.value }}-x86_64.AppImage"
       - name: Generate release manifests
         env:
           VERSION: ${{ needs.version.outputs.tag }}
