@@ -15,7 +15,7 @@ This folder configures Cursor rules, subagents, and skills so work stays scoped 
 
 ## Rules (summary)
 
-- **Always applied**: `gsbs-project.mdc`, `use-subagents-when-needed.mdc`, `skills-subagents-sync.mdc`, `push-releases.mdc`
+- **Always applied**: `gsbs-project.mdc`, `use-subagents-when-needed.mdc`, `skills-subagents-sync.mdc`, `push-releases.mdc`, `github-push-includes-dockerhub.mdc`
 - **When editing Go**: `go-conventions.mdc`, `gsbs-testing.mdc`
 - **Path-scoped** (apply when you're in that path): `delegate-server.mdc` (server/), `delegate-client.mdc` (client/), `delegate-pcgw-paths.mdc` (pkg/), `delegate-release.mdc` (script/), `delegate-release-version.mdc` (**/version.go), `delegate-release-docker.mdc` (Dockerfile), `delegate-cmd.mdc` (cmd/)
 - **Security**: `gsbs-no-secrets.mdc` — never commit secrets; use env vars

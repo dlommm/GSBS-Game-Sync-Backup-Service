@@ -5,7 +5,9 @@ alwaysApply: true
 
 # Push releases (new version / new releases)
 
-When the user says **"push new version"**, **"push new releases"**, or similar (e.g. "release a new version", "cut a release", "publish release"), do the following:
+**GitHub Release and Docker Hub ship together.** Pushing a semver tag triggers CI to publish GitHub Release assets **and** `dendlomm/gsbs-server:$VERSION` + `:latest` on Docker Hub. A plain `git push origin main` does **not** update Docker Hub — see [github-push-includes-dockerhub.mdc](github-push-includes-dockerhub.mdc).
+
+When the user says **"push new version"**, **"push new releases"**, **"push to github"** (deploy intent), **"publish release"**, or similar:
 
 1. **Primary path — push a git tag** (CI builds and publishes):
    - Update [CHANGELOG.md](CHANGELOG.md) for the version.
@@ -16,6 +18,7 @@ When the user says **"push new version"**, **"push new releases"**, or similar (
      git push origin v1.0.14
      ```
    - Monitor [.github/workflows/release.yml](.github/workflows/release.yml). Requires GitHub secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
+   - **Confirm Docker Hub**: release workflow `docker` job green; image `dendlomm/gsbs-server:$VERSION` and `:latest` published.
 
 2. **What CI publishes**
    - **GitHub Release** assets:
