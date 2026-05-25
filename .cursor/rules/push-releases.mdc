@@ -1,11 +1,11 @@
 ---
-description: Run the release workflow and push all server/client builds to GitHub Releases and the Docker image to Docker Hub when the user asks for a new version or release.
+description: Run the release workflow and push server/client builds to GitHub Releases when the user asks for a new version or release.
 alwaysApply: true
 ---
 
 # Push releases (new version / new releases)
 
-**GitHub Release and Docker Hub ship together.** Pushing a semver tag triggers CI to publish GitHub Release assets **and** `dendlomm/gsbs-server:$VERSION` + `:latest` on Docker Hub. A plain `git push origin main` does **not** update Docker Hub — see [github-push-includes-dockerhub.mdc](github-push-includes-dockerhub.mdc).
+Pushing a semver tag triggers CI to publish **GitHub Release** assets (binaries, Windows installer, Linux `.deb` and AppImage, manifests). Docker Hub is **not** updated by CI — see [github-push-includes-dockerhub.mdc](github-push-includes-dockerhub.mdc).
 
 When the user says **"push new version"**, **"push new releases"**, **"push to github"** (deploy intent), **"publish release"**, or similar:
 
@@ -17,17 +17,14 @@ When the user says **"push new version"**, **"push new releases"**, **"push to g
      git tag -a v1.0.14 -m "Release v1.0.14"
      git push origin v1.0.14
      ```
-   - Monitor [.github/workflows/release.yml](.github/workflows/release.yml). Requires GitHub secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
-   - **Confirm Docker Hub**: release workflow `docker` job green; image `dendlomm/gsbs-server:$VERSION` and `:latest` published.
+   - Monitor [.github/workflows/release.yml](.github/workflows/release.yml). Confirm **build-linux**, **build-windows**, and **release** jobs are green.
 
-2. **What CI publishes**
-   - **GitHub Release** assets:
-     - Raw: `gsbs-server-windows-amd64.exe`, `gsbs-client-windows-amd64.exe`, `gsbs-server-linux-amd64`, `gsbs-client-linux-amd64`
-     - Windows installer: `gsbs-client-setup-X.Y.Z-windows-amd64.exe` (Inno Setup)
-     - Linux: `gsbs-client_X.Y.Z_amd64.deb`, `gsbs-client-X.Y.Z-x86_64.AppImage`
-     - Manifests: `SHA256SUMS`, `latest-client.json`
-   - **Docker Hub**: `dendlomm/gsbs-server:$VERSION` and `:latest`
+2. **What CI publishes** (GitHub Release):
+   - Raw: `gsbs-server-windows-amd64.exe`, `gsbs-client-windows-amd64.exe`, `gsbs-server-linux-amd64`, `gsbs-client-linux-amd64`
+   - Windows installer: `gsbs-client-setup-X.Y.Z-windows-amd64.exe` (Inno Setup)
+   - Linux: `gsbs-client_X.Y.Z_amd64.deb`, `gsbs-client-X.Y.Z-x86_64.AppImage`
+   - Manifests: `SHA256SUMS`, `latest-client.json`
 
-3. **Local fallback** — `./script/release.sh [VERSION]` from repo root when CI is unavailable. Requires `go`, `git`, `gh`, `docker`; Linux host for Linux client binary. See [docs/RELEASE.md](docs/RELEASE.md).
+3. **Local fallback** — `./script/release.sh [VERSION]` from repo root when CI is unavailable. Can also push Docker Hub if configured. See [docs/RELEASE.md](docs/RELEASE.md).
 
 Do not commit or push other code unless the user asked; this rule is for cutting and publishing releases.

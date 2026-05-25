@@ -46,6 +46,8 @@ fi
 
 export ARCH=x86_64
 export VERSION="$VERSION_VALUE"
+# CI and containerized runners often lack FUSE; extract-and-run avoids fusermount.
+export APPIMAGE_EXTRACT_AND_RUN=1
 cd "$DEPLOY_DIR"
 
 "$LINUXDEPLOY" \

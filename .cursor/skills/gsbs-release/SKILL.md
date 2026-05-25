@@ -13,7 +13,7 @@ description: Builds and releases GSBS server and client: version ldflags, script
 - **Build**: `script/build.sh VERSION [OUT_DIR] [PLATFORMS]` — WebUI CSS, four release binaries.
 - **Manifests**: `script/release-assets.sh VERSION [DIR]` — `SHA256SUMS`, `latest-client.json`.
 - **Release (local)**: `script/release.sh [VERSION]` — build, tag, gh release, Docker Hub push.
-- **Release (CI)**: `.github/workflows/release.yml` on tag `v*` — primary path; see `docs/RELEASE.md`.
+- **Release (CI)**: `.github/workflows/release.yml` on tag `v*` — GitHub Release only (no Docker in CI); see `docs/RELEASE.md`.
 - **CI runners**: `.github/workflows/runner-resolve.yml` — Linux jobs use `self-hosted` when online, else `ubuntu-latest`; override with repo var `GSBS_USE_SELF_HOSTED=false`.
 - **Packaging**:
   - Windows: `script/packaging/windows/gsbs-client.iss`, `build-installer.sh` (Inno Setup)
@@ -40,5 +40,5 @@ Windows client adds `-H windowsgui`.
 - [ ] CHANGELOG entry for version.
 - [ ] Tag `vX.Y.Z` pushed to origin (or `./script/release.sh` locally).
 - [ ] CI release workflow green; GitHub Release has binaries + installer + deb + AppImage + manifests.
-- [ ] Docker Hub image updated.
+- [ ] Docker Hub image updated locally if needed (not CI).
 - [ ] Smoke: client **Check for updates** finds release.
