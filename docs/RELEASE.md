@@ -42,7 +42,7 @@ Resolution runs in `.github/workflows/runner-resolve.yml` at the start of each w
 **Runner setup**
 
 1. Register the runner on the repo with label `self-hosted` (GitHub’s default).
-2. Install on the host: **Go 1.25** (or let `setup-go` install it), **Node 22+**, GitHub Actions runner **≥ 2.327.1** (required for Node 24 action runtimes), and Linux client build deps (`libayatana-appindicator3-dev`, `libgtk-3-dev`, `pkg-config`, `gcc`). Jobs use `sudo apt-get` when deps are missing. AppImage builds use `APPIMAGE_EXTRACT_AND_RUN` (no FUSE required).
+2. Install on the host: **Go 1.25** (or let `setup-go` install it), **Node 22+**, GitHub Actions runner **≥ 2.327.1** (required for Node 24 action runtimes), and Linux client build deps (`libayatana-appindicator3-dev`, `libgtk-3-dev`, `pkg-config`, `gcc`, `file`). Jobs use `sudo apt-get` when deps are missing. AppImage builds use `APPIMAGE_EXTRACT_AND_RUN` (no FUSE required).
 3. Ensure the runner user can run `sudo` non-interactively for apt, or pre-install the packages above.
 4. **Mark the runner online** when it starts (so CI routes Linux jobs here instead of GitHub-hosted):
 
