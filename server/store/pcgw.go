@@ -227,14 +227,14 @@ func (s *sqliteStore) migratePCGW() error {
 
 	if ftsOK {
 		triggers := []string{
-		`CREATE TRIGGER IF NOT EXISTS pcgw_games_ai AFTER INSERT ON pcgw_games BEGIN
+			`CREATE TRIGGER IF NOT EXISTS pcgw_games_ai AFTER INSERT ON pcgw_games BEGIN
 			INSERT INTO pcgw_games_fts(rowid, title, page_name) VALUES (new.page_id, new.title, new.page_name);
 		END`,
-		`CREATE TRIGGER IF NOT EXISTS pcgw_games_ad AFTER DELETE ON pcgw_games BEGIN
+			`CREATE TRIGGER IF NOT EXISTS pcgw_games_ad AFTER DELETE ON pcgw_games BEGIN
 			INSERT INTO pcgw_games_fts(pcgw_games_fts, rowid, title, page_name)
 			VALUES ('delete', old.page_id, old.title, old.page_name);
 		END`,
-		`CREATE TRIGGER IF NOT EXISTS pcgw_games_au AFTER UPDATE ON pcgw_games BEGIN
+			`CREATE TRIGGER IF NOT EXISTS pcgw_games_au AFTER UPDATE ON pcgw_games BEGIN
 			INSERT INTO pcgw_games_fts(pcgw_games_fts, rowid, title, page_name)
 			VALUES ('delete', old.page_id, old.title, old.page_name);
 			INSERT INTO pcgw_games_fts(rowid, title, page_name)
@@ -1026,23 +1026,23 @@ func (s *sqliteStore) BuildManifestV2(ctx context.Context, since, platform strin
 		avail, _ := s.GetPCGWSection(ctx, g.PageID, "availability")
 
 		mg := types.ManifestV2Game{
-			GameID:           strconv.FormatInt(g.PageID, 10),
-			PageName:         g.PageName,
-			Title:            g.Title,
-			SteamAppIDs:      g.SteamAppIDs,
-			OtherIDs:         g.OtherIDs,
-			PlatformsPresent: g.PlatformsPresent,
-			Platforms:        g.PlatformsPresent,
-			Taxonomy:         g.Taxonomy,
-			Engines:          g.Engines,
-			CoverURL:         g.CoverURL,
-			HLTBID:           g.HLTBID,
-			IGDBID:           g.IGDBID,
-			ParseStatus:      g.ParseStatus,
-			LastUpdated:      g.UpdatedAt,
-			GOGID:            g.GOGID,
-			EpicID:           g.EpicID,
-			UbisoftID:        g.UbisoftID,
+			GameID:             strconv.FormatInt(g.PageID, 10),
+			PageName:           g.PageName,
+			Title:              g.Title,
+			SteamAppIDs:        g.SteamAppIDs,
+			OtherIDs:           g.OtherIDs,
+			PlatformsPresent:   g.PlatformsPresent,
+			Platforms:          g.PlatformsPresent,
+			Taxonomy:           g.Taxonomy,
+			Engines:            g.Engines,
+			CoverURL:           g.CoverURL,
+			HLTBID:             g.HLTBID,
+			IGDBID:             g.IGDBID,
+			ParseStatus:        g.ParseStatus,
+			LastUpdated:        g.UpdatedAt,
+			GOGID:              g.GOGID,
+			EpicID:             g.EpicID,
+			UbisoftID:          g.UbisoftID,
 			ProtonSupportLevel: deriveProtonSupport(g.PlatformsPresent, gameData),
 		}
 		var installPaths []string

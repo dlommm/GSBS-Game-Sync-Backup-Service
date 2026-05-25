@@ -53,7 +53,7 @@ func TestGolden007FirstLightLinux(t *testing.T) {
 
 func TestIngestResiliencePartialSection(t *testing.T) {
 	wiki := loadFixture(t, "subnautica2.wikitext")
-	bundle := GameBundle{PageID: 1, Sections: make(map[string]SectionResult)}
+	bundle := GameBundle{Sections: make(map[string]SectionResult)}
 	rawSections := SplitWikiSections(wiki)
 	for key, sec := range rawSections {
 		sr := SectionResult{Key: key, SectionWikitext: sec.body, AllTemplates: ExtractAllTemplates(sec.body)}

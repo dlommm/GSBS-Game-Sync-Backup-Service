@@ -38,6 +38,9 @@ issues:
     - path: server/store/sqlite\.go
       linters:
         - errcheck
+    - path: server/store/pcgw\.go
+      linters:
+        - errcheck
     - path: server/main\.go
       linters:
         - errcheck

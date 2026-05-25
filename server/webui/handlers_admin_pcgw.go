@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -17,17 +16,17 @@ import (
 
 type adminPCGWData struct {
 	PageData
-	Stats       PCGWStatsView
-	Games       []types.PCGWGame
-	Query       string
-	FilterStatus string
+	Stats          PCGWStatsView
+	Games          []types.PCGWGame
+	Query          string
+	FilterStatus   string
 	FilterPlatform string
-	Page        int
-	PerPage     int
-	Total       int
-	TotalPages  int
-	JobRunning  bool
-	JobProgress int
+	Page           int
+	PerPage        int
+	Total          int
+	TotalPages     int
+	JobRunning     bool
+	JobProgress    int
 }
 
 type PCGWStatsView struct {
@@ -44,18 +43,18 @@ type PCGWStatsView struct {
 
 type adminPCGWDetailData struct {
 	PageData
-	Game              *types.PCGWGame
-	GameData          []types.PCGWGameData
-	Availability      *types.PCGWSectionRow
-	Video             *types.PCGWSectionRow
-	Input             *types.PCGWSectionRow
-	Audio             *types.PCGWSectionRow
-	Network           *types.PCGWSectionRow
-	Other             *types.PCGWSectionRow
-	Notes             *types.PCGWSectionRow
-	Metadata          *types.PCGWMetadata
-	ParseFailures     []types.PCGWParseFailure
-	ExportJSONPath    string
+	Game           *types.PCGWGame
+	GameData       []types.PCGWGameData
+	Availability   *types.PCGWSectionRow
+	Video          *types.PCGWSectionRow
+	Input          *types.PCGWSectionRow
+	Audio          *types.PCGWSectionRow
+	Network        *types.PCGWSectionRow
+	Other          *types.PCGWSectionRow
+	Notes          *types.PCGWSectionRow
+	Metadata       *types.PCGWMetadata
+	ParseFailures  []types.PCGWParseFailure
+	ExportJSONPath string
 }
 
 func (h *WebHandler) loadPCGWStats(ctx context.Context) PCGWStatsView {
@@ -258,9 +257,4 @@ func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool
 		}
 	}
 	return false
-}
-
-func pcgwStoreFullWikitextEnabled() bool {
-	v := os.Getenv("GSBS_PCGW_STORE_FULL_WIKITEXT")
-	return v == "" || v == "true" || v == "1"
 }

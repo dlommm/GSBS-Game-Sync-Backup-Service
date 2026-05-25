@@ -31,7 +31,7 @@ func (c *Client) GetPageRevision(pageID string) (*PageRevision, error) {
 	var out struct {
 		Query struct {
 			Pages map[string]struct {
-				Missing string `json:"missing"`
+				Missing   string `json:"missing"`
 				Revisions []struct {
 					RevID     int64  `json:"revid"`
 					Timestamp string `json:"timestamp"`
@@ -75,8 +75,8 @@ func (c *Client) ResolveRedirect(pageID string) (targetPageID string, targetTitl
 				To   string `json:"to"`
 			} `json:"redirects"`
 			Pages map[string]struct {
-				PageID int64  `json:"pageid"`
-				Title  string `json:"title"`
+				PageID  int64  `json:"pageid"`
+				Title   string `json:"title"`
 				Missing string `json:"missing"`
 			} `json:"pages"`
 		} `json:"query"`
@@ -99,9 +99,6 @@ func (c *Client) ResolveRedirect(pageID string) (targetPageID string, targetTitl
 		}
 		break
 	}
-	if len(out.Query.Redirects) > 0 {
-		// Follow redirect chain: query again with titles if needed.
-		// For pageids + redirects=1, pages map contains the final target.
-	}
+	// With redirects=1, pages map already contains the final target after redirects.
 	return strconv.FormatInt(resolvedID, 10), resolvedTitle, nil
 }

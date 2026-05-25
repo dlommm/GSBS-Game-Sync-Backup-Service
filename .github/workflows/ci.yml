@@ -75,5 +75,24 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.8
+          install-mode: goinstall
           args: --timeout=5m
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          tags: dendlomm/gsbs-server:ci
+          build-args: |
+            VERSION=ci-${{ github.sha }}
+            BUILD_DATE=1970-01-01T00:00:00Z
+            COMMIT=${{ github.sha }}

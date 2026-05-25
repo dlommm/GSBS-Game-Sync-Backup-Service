@@ -239,7 +239,7 @@ func templateTestData(name string) interface{} {
 			PageData: PageData{
 				PageName: "admin_manifest", Username: "admin", IsAdmin: true, CSRFToken: "csrf-test", AdminNav: "manifest",
 			},
-			Stats:    adminStats{ManifestCount: 1},
+			Stats: adminStats{ManifestCount: 1},
 			Manifest: []types.GameSaveLocation{
 				{
 					GameID: "730", GameTitle: "Counter-Strike 2", Platform: "windows",
