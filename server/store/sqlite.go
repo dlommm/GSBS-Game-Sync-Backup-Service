@@ -214,6 +214,9 @@ func (s *sqliteStore) migrate() error {
 	if err := s.migrateTokenHashes(); err != nil {
 		return err
 	}
+	if err := s.migratePCGW(); err != nil {
+		return err
+	}
 	return nil
 }
 

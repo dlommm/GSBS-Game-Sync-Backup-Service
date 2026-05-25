@@ -37,8 +37,9 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 
 ## Manifest (public or authenticated)
 
-- **Full manifest**: `GET /api/manifest` — returns `{"entries":[...]}` of `GameSaveLocation`. Each entry includes `game_id` (PCGW page ID), `game_title`, `platform`, `path_template`, optional launcher IDs (`steam_app_ids`, `gog_id`, `epic_id`, `ubisoft_id`), and metadata. Cached on server ~10 min.
+- **Full manifest (v1)**: `GET /api/manifest` — returns `{"entries":[...]}` of `GameSaveLocation`. Each entry includes `game_id` (PCGW page ID), `game_title`, `platform`, `path_template`, optional launcher IDs (`steam_app_ids`, `gog_id`, `epic_id`, `ubisoft_id`), and metadata. Cached on server ~10 min. Response headers: `ETag`, `X-Manifest-Version`.
 - **Delta**: `GET /api/manifest?since=<RFC3339>` — returns only entries updated after the given time.
+- **Manifest v2 (rich)**: `GET /api/manifest/v2` — returns grouped per-game JSON (`games[]` with taxonomy, engines, `save_locations`, `config_locations`, `has_save_data`, `proton_support_level`, etc.). Query: `?since=<RFC3339>`, `?platform=windows|linux|macos`. Supports `If-None-Match` → 304. Clients should prefer v2 when available.
 
 ## Server-Sent Events (authenticated)
 

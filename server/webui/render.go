@@ -129,6 +129,7 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 		"renderPageBlock":  renderPageBlock(t),
 		"add":              func(a, b int) int { return a + b },
 		"sub":              func(a, b int) int { return a - b },
+		"join":             strings.Join,
 	}
 }
 

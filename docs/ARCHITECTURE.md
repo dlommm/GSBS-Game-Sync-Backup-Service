@@ -46,8 +46,8 @@ Path key ensures the same logical save (e.g. “Assassin’s Creed Rogue – Ubi
 
 ## Data flow
 
-- **PCGW to Server**: A weekly job (cron, or `cmd/pcgw-sync`) lists game pages from the Cargo `Infobox_game` table, fetches each page wikitext via the MediaWiki parse API, parses save/config path templates (including `{{Game data/saves|...}}` and section/table fallback), normalizes placeholders to resolver form, and upserts into the server table `game_save_locations`. Rate limit: 1 request/second.
-- **Server to Client (manifest)**: Clients call `GET /api/manifest` (optional `?since=<RFC3339>` for delta). The server returns all (or updated) `game_save_locations` entries. Clients cache the result on disk and use it to build the effective watch list: filter by platform (windows/linux), resolve path templates for the current OS, and only watch paths where the directory exists. Config `watch_paths` are merged (user overrides first, then manifest-derived paths).
+- **PCGW to Server**: A weekly job (cron, or `cmd/pcgw-sync`) lists game pages from Cargo `Infobox_game`, fetches wikitext (2s rate limit by default), ingests **all sections** into `pcgw_*` tables, and **projects** save/config paths into `game_save_locations`. Incremental sync skips unchanged pages via `last_rev_id` + `content_hash`. Manual sync: admin WebUI `/admin/pcgw` or `POST /admin/run-job`.
+- **Server to Client (manifest)**: Clients call `GET /api/manifest/v2` (preferred) or `GET /api/manifest` v1. v2 returns rich per-game metadata for discovery; v1 remains flat path rows for compatibility.
 - **WebUI**: Users open the server in a browser. Login/register use the same auth as the API; a signed session cookie identifies the user. The dashboard shows the user registered clients and synced saves (game_id, path_key, updated_at).
 
 ```mermaid
@@ -74,7 +74,8 @@ sequenceDiagram
 
 ## Database (server)
 
-- **game_save_locations**: `id`, `game_id`, `pcgw_page_id`, `game_title`, `platform`, `path_template`, `is_config`, `updated_at`, `source`. Unique on `(game_id, platform, path_template)`. Filled by the PCGW sync job; read by the manifest API.
+- **game_save_locations**: v1 manifest projection (path rows). Unique on `(game_id, platform, path_template)`.
+- **pcgw_games**, **pcgw_game_data**, **pcgw_** section tables, **pcgw_metadata** (optional zstd full wikitext), **pcgw_sync_runs**, **pcgw_manifest_meta**: full PCGW mirror. Admin WebUI: `/admin/pcgw`.
 
 ## Server-Sent Events (SSE)
 

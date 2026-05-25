@@ -1,0 +1,15 @@
+{{Infobox game
+|developers=IO Interactive
+|platforms=Linux
+|steam appid=2345678
+}}
+
+== Game data ==
+{{Game data/saves|Linux|{{p|steam}}/steamapps/compatdata/2345678/pfx/drive_c/users/steamuser/AppData/Local/007FirstLight/}}
+{{Game data/config|Linux|{{p|heroic}}/007FirstLight/config/}}
+
+== Availability ==
+{{Availability/Steam|2345678|Linux}}
+
+== Notes ==
+Linux-only release; limited Windows data on PCGW.

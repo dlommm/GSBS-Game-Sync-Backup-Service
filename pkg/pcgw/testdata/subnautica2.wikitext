@@ -1,0 +1,21 @@
+{{Infobox game
+|cover=Subnautica 2 cover.jpg
+|developers=Unknown Worlds Entertainment
+|engines=Unity
+|platforms=Windows,Linux
+|steam appid=1234567
+}}
+
+== Game data ==
+{{Game data/saves|Windows|{{p|appdata}}\Subnautica2\}}
+{{Game data/saves|Steam Play (Linux)|{{p|steam}}/steamapps/compatdata/1234567/pfx/drive_c/users/steamuser/AppData/LocalLow/Unknown Worlds/Subnautica2/}}
+{{Game data/config|Windows|{{p|appdata}}\Subnautica2\options.cfg}}
+
+== Availability ==
+{{Availability/Steam|1234567|Windows,Linux}}
+
+== Video ==
+{{Video/Resolution|3840x2160|Windows}}
+
+== System requirements ==
+{{System requirements/Windows|Minimum|OS=Windows 10|CPU=Intel i5|RAM=8 GB}}
