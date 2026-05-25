@@ -1,0 +1,41 @@
+---
+description: When pushing to GitHub for deploy/release, always include Docker Hub (via release tag + CI). Plain main pushes do not update Docker.
+alwaysApply: true
+---
+
+# GitHub push includes Docker Hub
+
+## What updates Docker Hub
+
+| Push type | GitHub | Docker Hub (`dendlomm/gsbs-server`) |
+|-----------|--------|-------------------------------------|
+| `git push origin main` (code only) | Yes | **No** — image unchanged |
+| `git push origin vX.Y.Z` (release tag) | Yes + GitHub Release | **Yes** — `:X.Y.Z` and `:latest` via CI |
+
+Docker Hub is published by [.github/workflows/release.yml](.github/workflows/release.yml) on **version tag push** only. Requires repo secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+
+## When the user wants GitHub **and** Docker Hub updated
+
+Do **not** stop at `git push origin main`. Follow [push-releases.mdc](push-releases.mdc):
+
+1. Commit on `main`, ensure CI green.
+2. Update [CHANGELOG.md](CHANGELOG.md).
+3. Create and push semver tag:
+   ```bash
+   git tag -a v1.0.14 -m "Release v1.0.14"
+   git push origin v1.0.14
+   ```
+4. Monitor release workflow; confirm Docker job succeeded.
+5. Verify: `docker pull dendlomm/gsbs-server:1.0.14` (and `:latest`).
+
+## When the user says "push to GitHub" (ambiguous)
+
+- **Code sync only** → push branch (`main` or feature branch); note Docker Hub is not updated.
+- **Deploy / release / publish server** → treat as release: tag push + Docker Hub checklist above.
+- If unclear, ask whether they want a **release tag** (GitHub Release + Docker Hub) or a **main-only** code push.
+
+## Local fallback
+
+If CI is unavailable: `./script/release.sh [VERSION]` — builds and can push Docker locally. See [docs/RELEASE.md](docs/RELEASE.md) and [docs/DOCKER.md](docs/DOCKER.md).
+
+Never commit Docker Hub credentials; use GitHub secrets or local `docker login` only.

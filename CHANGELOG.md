@@ -4,6 +4,21 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [1.0.17] - 2026-05-24
+
+### Added
+
+- Full PCGamingWiki mirror: structured SQLite schema for games, sections, system requirements, metadata, sync runs, and parse failures.
+- `GET /api/manifest/v2` with ETag/304; clients try v2 first and fall back to v1.
+- Admin WebUI at `/admin/pcgw`: search, filters, sync controls, per-game detail, JSON export.
+- CLI tools: `cmd/pcgw-sync`, `cmd/pcgw-fetch`.
+- Path resolver: `%PUBLIC%` placeholder support.
+
+### Changed
+
+- PCGW sync: incremental updates via `last_rev_id` and content hash; section-level partial writes.
+- `pkg/pcgw`: full page ingest, wikitext parsers, placeholder tokens, zstd compression, rate limiting and 429 retry.
+
 ## [1.0.15] - 2026-05-24
 
 ### Fixed
@@ -37,7 +52,8 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 See [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases) for earlier history.
 
-[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.15...HEAD
+[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.17...HEAD
+[1.0.17]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.16...v1.0.17
 [1.0.15]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.14...v1.0.15
 [1.0.14]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/tag/v1.0.14
 [1.0.13]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/tag/v1.0.13
