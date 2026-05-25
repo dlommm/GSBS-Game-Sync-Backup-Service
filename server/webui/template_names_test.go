@@ -311,6 +311,7 @@ func templateTestData(name string) interface{} {
 				{PageID: 123, Title: "Test Game", ParseStatus: "ok", UpdatedAt: now, SteamAppIDs: []string{"730"}, PlatformsPresent: []string{"windows"}},
 			},
 			Page: 1, PerPage: 20, Total: 1, TotalPages: 1, Start: 1, End: 1, PrevPage: 0, NextPage: 2,
+			JobRunning: true, JobProgress: 42, JobProgressTotal: 100, JobGamesSkipped: 1,
 		}
 	case "admin_pcgw_detail.html":
 		return adminPCGWDetailData{

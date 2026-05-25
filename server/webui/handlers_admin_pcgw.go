@@ -32,8 +32,10 @@ type adminPCGWData struct {
 	End            int
 	PrevPage       int
 	NextPage       int
-	JobRunning     bool
-	JobProgress    int
+	JobRunning       bool
+	JobProgress      int
+	JobProgressTotal int
+	JobGamesSkipped  int
 }
 
 type PCGWStatsView struct {
@@ -126,7 +128,7 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	games, q, status, platform, page, perPage, total, totalPages, start, end, prevPage, nextPage := h.loadPCGWPage(r.Context(), r)
-	jobRunning, jobProgress := h.jobStatus()
+	jobs := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret))
 	h.render(w, "admin_pcgw.html", adminPCGWData{
 		PageData:       h.adminPageData(w, r, userID, username, "pcgw", "admin_pcgw"),
 		Stats:          h.loadPCGWStats(r.Context()),
@@ -142,8 +144,10 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 		End:            end,
 		PrevPage:       prevPage,
 		NextPage:       nextPage,
-		JobRunning:     jobRunning,
-		JobProgress:    jobProgress,
+		JobRunning:     jobs.JobRunning,
+		JobProgress:    jobs.JobProgressPages,
+		JobProgressTotal: jobs.JobProgressTotal,
+		JobGamesSkipped:  jobs.JobGamesSkipped,
 	})
 }
 
