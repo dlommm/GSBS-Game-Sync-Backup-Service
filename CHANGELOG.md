@@ -4,6 +4,26 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-25
+
+### Added
+
+- Docker Scout remediation: upgrade `golang.org/x/crypto` and `golang.org/x/sys`; non-root server container (`gsbs` UID 1000) with entrypoint volume ownership fix; Dockerfile `HEALTHCHECK`.
+- File-backed save storage (`GSBS_SAVE_ROOT`), save-path safety rules (`pkg/savepath`, `pkg/saverule`), and sync path hardening.
+- Admin analytics and settings UI; PCGW job filters, status, and configurable cron via DB/env.
+- PCGW bundle export/import; admin settings persistence.
+- Docs: [DOCKERHUB.md](docs/DOCKERHUB.md), [SYNC_REFACTOR.md](docs/SYNC_REFACTOR.md).
+
+### Changed
+
+- Client sync: improved watcher, manifest matching, and pull/push path resolution.
+- PCGW sync runner: progress ETA, filters, and admin job status badges.
+- Docker runtime: Alpine 3.23.4 base with `apk upgrade`; expanded `.dockerignore`.
+
+### Fixed
+
+- CI lint: errcheck on row close, gofmt, errorlint, and related staticcheck issues.
+
 ## [1.1.0] - 2026-05-25
 
 ### Added
@@ -77,7 +97,8 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 See [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases) for earlier history.
 
-[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.17...v1.1.0
 [1.0.17]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.16...v1.0.17
 [1.0.16]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.15...v1.0.16

@@ -88,7 +88,7 @@ func (s *sqliteStore) savesColumnState() (hasRelative bool, contentNotNull bool,
 	if err != nil {
 		return false, false, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var cid int
 		var name, ctype string
@@ -118,7 +118,7 @@ func (s *sqliteStore) migrateBlobsToFS() error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var migrated int
 	for rows.Next() {
 		var userID, gameID, pathKey string

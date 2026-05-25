@@ -355,13 +355,13 @@ type PCGWSyncRunStats struct {
 
 // PCGWImportResult summarizes a manifest bundle import.
 type PCGWImportResult struct {
-	Mode                string
-	GameSaveLocations   int
-	PCGWGames           int
-	PCGWGameData        int
-	PCGWMetadata        int
-	PCGWSections        int
-	PCGWSystemReqs      int
+	Mode              string
+	GameSaveLocations int
+	PCGWGames         int
+	PCGWGameData      int
+	PCGWMetadata      int
+	PCGWSections      int
+	PCGWSystemReqs    int
 }
 
 // PCGWImportValidation is post-import row counts and sample checks.
