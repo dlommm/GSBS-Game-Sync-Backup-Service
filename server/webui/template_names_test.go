@@ -35,6 +35,7 @@ var handlerTemplates = []string{
 	"partials/admin_jobs.html",
 	"partials/admin_pcgw_table.html",
 	"partials/admin_pcgw_job_status.html",
+	"partials/admin_analytics_pcgw_table.html",
 	"partials/loading_skeleton.html",
 }
 
@@ -85,12 +86,27 @@ func TestAdminAnalyticsTabsExecute(t *testing.T) {
 			PageName: "admin_analytics", Username: "admin", IsAdmin: true, CSRFToken: "csrf-test", AdminNav: "analytics",
 		},
 		TotalStorage: 2048, ManifestGames: 10, SaveGames: 2, PCGWCoveragePct: 20,
-		PCGWStats:             PCGWStatsView{TotalGames: 10, OK: 8, ManifestVersion: 1},
+		TotalUsers: 3, TotalClients: 2, TotalSaves: 8, SyncVolume7d: 4,
+		TopUsers: []store.UserStatRow{
+			{Username: "alice", SaveCount: 5, StorageBytes: 1024, QuotaBytes: 0},
+		},
+		TopSaveGames: []store.SaveGameStatRow{
+			{GameID: "730", GameTitle: "Counter-Strike 2", SaveCount: 3, StorageBytes: 512},
+		},
+		PCGWStats:             PCGWStatsView{TotalGames: 10, OK: 8, Partial: 1, Failed: 1, Pending: 0, ManifestVersion: 1},
 		ManifestMeta:          &types.PCGWManifestMeta{ManifestVersion: 1, ManifestETag: "e"},
 		ManifestSaveLocations: 5,
+		ParseFailureCount:     1,
+		ParseFailures: []store.PCGWParseFailureRow{
+			{PCGWParseFailure: types.PCGWParseFailure{PageID: 1, Section: "save", ErrorMessage: "parse err", CreatedAt: now}, GameTitle: "Test"},
+		},
+		Games: []types.PCGWGame{
+			{PageID: 1, Title: "Test Game", ParseStatus: "ok", UpdatedAt: now},
+		},
 		PCGWSyncRuns: []types.PCGWSyncRun{
 			{ID: "r1", Mode: "incremental", Status: "success", StartedAt: now, FinishedAt: now},
 		},
+		SyncRunsTotal: 1, SyncRunsSuccess: 1, SyncRunsSuccessPct: 100,
 	}
 	for _, tab := range []string{"overview", "pcgw", "sync"} {
 		data := base
@@ -364,11 +380,20 @@ func templateTestData(name string) interface{} {
 			},
 			Tab:              "overview",
 			TotalStorage:     2048,
+			TotalUsers:       2,
+			TotalClients:     3,
+			TotalSaves:       20,
 			ActiveClients24h: 2,
 			SyncVolume7d:     15,
 			ManifestGames:    100,
 			SaveGames:        12,
 			PCGWCoveragePct:  12,
+			TopUsers: []store.UserStatRow{
+				{Username: "admin", SaveCount: 10, StorageBytes: 1800, QuotaBytes: 0},
+			},
+			TopSaveGames: []store.SaveGameStatRow{
+				{GameID: "570", GameTitle: "Dota 2", SaveCount: 4, StorageBytes: 900},
+			},
 			StatsSnapshots: []store.StatsSnapshotRow{
 				{At: now, UserCount: 1, ClientCount: 1, SaveCount: 5, StorageBytes: 1024},
 			},
@@ -382,6 +407,12 @@ func templateTestData(name string) interface{} {
 			},
 			ManifestSaveLocations: 1200,
 			ParseFailureCount:     7,
+			ParseFailures: []store.PCGWParseFailureRow{
+				{PCGWParseFailure: types.PCGWParseFailure{PageID: 99, Section: "save", ErrorMessage: "bad wikitext", CreatedAt: now}, GameTitle: "Broken Game"},
+			},
+			Games: []types.PCGWGame{
+				{PageID: 99, Title: "Broken Game", ParseStatus: "failed", UpdatedAt: now},
+			},
 			PCGWSyncRuns: []types.PCGWSyncRun{
 				{
 					ID: "run-1", Mode: "incremental", Status: "success",
@@ -395,6 +426,7 @@ func templateTestData(name string) interface{} {
 					GamesTotal: 50, GamesFailed: 5, ErrorMessage: "rate limited",
 				},
 			},
+			SyncRunsTotal: 2, SyncRunsSuccess: 1, SyncRunsFailed: 1, SyncRunsSuccessPct: 50,
 		}
 	case "partials/dashboard_stats.html":
 		return map[string]interface{}{
@@ -455,6 +487,13 @@ func templateTestData(name string) interface{} {
 		return map[string]interface{}{
 			"Games": []types.PCGWGame{
 				{PageID: 123, Title: "Test Game", ParseStatus: "ok", UpdatedAt: now},
+			},
+			"Total": 1, "Page": 1, "TotalPages": 1, "Start": 1, "End": 1,
+		}
+	case "partials/admin_analytics_pcgw_table.html":
+		return map[string]interface{}{
+			"Games": []types.PCGWGame{
+				{PageID: 456, Title: "Analytics Game", ParseStatus: "partial", UpdatedAt: now},
 			},
 			"Total": 1, "Page": 1, "TotalPages": 1, "Start": 1, "End": 1,
 		}

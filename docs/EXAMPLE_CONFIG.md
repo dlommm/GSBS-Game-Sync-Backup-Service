@@ -68,7 +68,37 @@ Use `sync_all: true` (and omit `include_patterns`) to push every file in the dir
 
 Use tray **Detect launcher paths** to merge auto-detected values into `config.json`.
 
-To support multiple Steam libraries (e.g. another drive), extend the resolver’s `SteamLibraries` from `libraryfolders.vdf` in the Steam install directory.
+To support multiple Steam libraries (e.g. another drive), Steam reads **`libraryfolders.vdf`** automatically. Add extra roots manually when Steam does not list them (symlinks, portable installs):
+
+```json
+{
+  "steam_library_folders": [
+    "D:\\SteamLibrary",
+    "E:\\Games\\SteamLibrary"
+  ]
+}
+```
+
+**Steam user ID** (`<user-id>` in save paths) is auto-detected from `config/loginusers.vdf` on startup and saved to `launcher_user_id` when empty. Override manually for Ubisoft or multi-account setups:
+
+```json
+{
+  "launcher_user_id": "76561198012345678"
+}
+```
+
+**Custom game install folder** (for saves under `<game-install-folder>` or non-Steam installs). Discovery fills this from Steam `appmanifest` `installdir`; override per manifest `game_id`:
+
+```json
+{
+  "game_install_paths": {
+    "311560": "E:\\Games\\Assassins Creed Rogue",
+    "42": "D:\\MyGames\\CustomTitle"
+  }
+}
+```
+
+User overrides take priority over wiki hints and discovered paths.
 
 **Minimal Windows example** (one save folder, Worldwide):
 

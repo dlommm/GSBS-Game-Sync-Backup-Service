@@ -137,6 +137,39 @@ func installedSteamAppIDs(games []discovery.InstalledGame) []string {
 	return ids
 }
 
+// DiscoveredInstallRootsByGame maps manifest game_id to install folders found during discovery.
+func DiscoveredInstallRootsByGame(cache discoveryCache) map[string][]string {
+	if len(cache.InstalledGames) == 0 {
+		return nil
+	}
+	m := make(map[string][]string)
+	for _, g := range cache.InstalledGames {
+		if g.InstallPath == "" {
+			continue
+		}
+		manifestID := g.GameID
+		if cache.IDMap != nil {
+			if mapped := cache.IDMap[g.Launcher+":"+g.GameID]; mapped != "" {
+				manifestID = mapped
+			}
+		}
+		m[manifestID] = appendUniquePath(m[manifestID], g.InstallPath)
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
+func appendUniquePath(slice []string, p string) []string {
+	for _, s := range slice {
+		if s == p {
+			return slice
+		}
+	}
+	return append(slice, p)
+}
+
 // resolveUnmatchedSteam tries PCGW lookup for unmatched Steam games (rate-limited, cached).
 func resolveUnmatchedSteam(installed []discovery.InstalledGame, idx *discovery.ManifestV2Index, idMap map[string]string) {
 	client := pcgw.NewClient()

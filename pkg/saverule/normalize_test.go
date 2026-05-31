@@ -2,6 +2,7 @@ package saverule
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gsbs/gsbs/pkg/types"
@@ -148,6 +149,27 @@ func TestParseSaveRules_WitcherSettingsSeparateRule(t *testing.T) {
 	}
 	if !reflect.DeepEqual(saves.IncludePatterns, []string{"*.png", "*.sav"}) {
 		t.Fatalf("gamesaves patterns = %v", saves.IncludePatterns)
+	}
+}
+
+func TestParseSaveRules_PCGWTemplatePipesIgnored(t *testing.T) {
+	normalize := func(s string) string {
+		return strings.ReplaceAll(s, "{{p|steam}}", "<steam>")
+	}
+	raw := `{{p|steam}}/userdata/{{p|uid}}/save`
+	got := ParseSaveRules(raw, "windows", false, normalize)
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1: %+v", len(got), got)
+	}
+	if got[0].Directory != `<steam>/userdata/{{p|uid}}/save` {
+		t.Fatalf("Directory = %q", got[0].Directory)
+	}
+}
+
+func TestSplitOutsideTemplates(t *testing.T) {
+	parts := splitOutsideTemplates(`a|{{p|b}}|c`, '|')
+	if len(parts) != 3 || parts[0] != "a" || parts[1] != "{{p|b}}" || parts[2] != "c" {
+		t.Fatalf("got %#v", parts)
 	}
 }
 

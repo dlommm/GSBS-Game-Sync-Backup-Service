@@ -38,7 +38,7 @@
           <td class="col-saves">{{.SaveCount}}</td>
           <td class="col-storage cell-size">{{formatBytes .StorageBytes}}</td>
           <td class="cell-action">
-            <details class="action-menu action-menu-up">
+            <details class="action-menu">
               <summary class="btn-ghost-sm">Actions</summary>
               <div class="action-menu-panel">
                 {{if ne .ID $.CurrentUserID}}
@@ -94,17 +94,19 @@
     <div class="dialog-body">
       <h3 class="dialog-title">Create user</h3>
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <div class="form-group">
-        <label for="new_username">Username</label>
-        <input id="new_username" name="username" class="text-input" required autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label for="new_password">Password</label>
-        <input id="new_password" name="password" type="password" class="text-input" required autocomplete="new-password">
-      </div>
-      <div class="form-group">
-        <label for="new_confirm_password">Confirm password</label>
-        <input id="new_confirm_password" name="confirm_password" type="password" class="text-input" required autocomplete="new-password">
+      <div class="dialog-form-fields">
+        <div class="form-group">
+          <label for="new_username">Username</label>
+          <input id="new_username" name="username" class="text-input" required autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="new_password">Password</label>
+          <input id="new_password" name="password" type="password" class="text-input" required autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="new_confirm_password">Confirm password</label>
+          <input id="new_confirm_password" name="confirm_password" type="password" class="text-input" required autocomplete="new-password">
+        </div>
       </div>
     </div>
     <div class="dialog-actions">
@@ -121,15 +123,17 @@
       <p class="form-hint" id="quota-dialog-user"></p>
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <input type="hidden" name="user_id" id="quota-user-id">
-      <div class="quota-presets">
-        <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(5368709120)">5 GB</button>
-        <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(21474836480)">20 GB</button>
-        <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(53687091200)">50 GB</button>
-        <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(0)">Unlimited</button>
-      </div>
-      <div class="form-group">
-        <label for="quota_bytes">Custom quota (bytes, 0 = unlimited)</label>
-        <input id="quota_bytes" name="quota_bytes" type="number" min="0" step="1" class="text-input" required>
+      <div class="dialog-form-fields">
+        <div class="quota-presets">
+          <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(5368709120)">5 GB</button>
+          <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(21474836480)">20 GB</button>
+          <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(53687091200)">50 GB</button>
+          <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(0)">Unlimited</button>
+        </div>
+        <div class="form-group">
+          <label for="quota_bytes">Custom quota (bytes, 0 = unlimited)</label>
+          <input id="quota_bytes" name="quota_bytes" type="number" min="0" step="1" class="text-input" required>
+        </div>
       </div>
     </div>
     <div class="dialog-actions">
@@ -150,5 +154,56 @@ function openQuotaDialog(userId, username, quotaBytes) {
 function setQuotaPreset(bytes) {
   document.getElementById('quota_bytes').value = bytes;
 }
+function resetActionMenuPanel(panel) {
+  panel.classList.remove('is-fixed');
+  panel.style.top = '';
+  panel.style.left = '';
+  panel.style.right = '';
+  panel.style.bottom = '';
+}
+function positionActionMenu(menu) {
+  var panel = menu.querySelector('.action-menu-panel');
+  var summary = menu.querySelector('summary');
+  if (!panel || !summary) return;
+  resetActionMenuPanel(panel);
+  if (!menu.open) return;
+  panel.classList.add('is-fixed');
+  var rect = summary.getBoundingClientRect();
+  var gap = 4;
+  var left = rect.right - panel.offsetWidth;
+  if (left < 8) left = 8;
+  if (left + panel.offsetWidth > window.innerWidth - 8) {
+    left = window.innerWidth - panel.offsetWidth - 8;
+  }
+  var top = rect.bottom + gap;
+  if (top + panel.offsetHeight > window.innerHeight - 8) {
+    top = rect.top - panel.offsetHeight - gap;
+  }
+  if (top < 8) top = 8;
+  panel.style.left = left + 'px';
+  panel.style.top = top + 'px';
+}
+document.querySelectorAll('details.action-menu').forEach(function(menu) {
+  menu.addEventListener('toggle', function() {
+    if (menu.open) {
+      document.querySelectorAll('details.action-menu').forEach(function(other) {
+        if (other !== menu && other.open) other.open = false;
+      });
+      positionActionMenu(menu);
+    } else {
+      var panel = menu.querySelector('.action-menu-panel');
+      if (panel) resetActionMenuPanel(panel);
+    }
+  });
+});
+window.addEventListener('resize', function() {
+  document.querySelectorAll('details.action-menu[open]').forEach(positionActionMenu);
+});
+document.addEventListener('click', function(evt) {
+  if (evt.target.closest('details.action-menu')) return;
+  document.querySelectorAll('details.action-menu[open]').forEach(function(menu) {
+    menu.open = false;
+  });
+});
 </script>
 {{end}}

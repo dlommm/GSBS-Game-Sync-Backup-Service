@@ -210,6 +210,9 @@ type Store interface {
 	CountSyncVolume7d(ctx context.Context) (int, error)
 	CountDistinctManifestGames(ctx context.Context) (int, error)
 	CountDistinctSaveGames(ctx context.Context) (int, error)
+	CountTotalSaves(ctx context.Context) (int, error)
+	ListTopSaveGames(ctx context.Context, limit int) ([]SaveGameStatRow, error)
+	ListRecentPCGWParseFailures(ctx context.Context, limit int) ([]PCGWParseFailureRow, error)
 
 	// Close releases resources (e.g. DB connection).
 	Close() error
@@ -335,6 +338,20 @@ type SessionRow struct {
 	CreatedAt string
 	LastSeen  string
 	UserAgent string
+}
+
+// SaveGameStatRow is aggregate save stats for one game (admin analytics).
+type SaveGameStatRow struct {
+	GameID       string
+	GameTitle    string
+	SaveCount    int
+	StorageBytes int64
+}
+
+// PCGWParseFailureRow is a parse failure with optional game title for admin lists.
+type PCGWParseFailureRow struct {
+	types.PCGWParseFailure
+	GameTitle string
 }
 
 // PCGWGameListFilter filters ListPCGWGames.

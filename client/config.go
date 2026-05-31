@@ -97,6 +97,8 @@ type config struct {
 	BottlesFolder               string      `json:"bottles_folder,omitempty"`
 	PrismFolder                 string      `json:"prism_folder,omitempty"`
 	FlatpakSteamFolder          string      `json:"flatpak_steam_folder,omitempty"`
+	SteamLibraryFolders         []string    `json:"steam_library_folders,omitempty"` // extra Steam library roots (e.g. D:\SteamLibrary)
+	GameInstallPaths            map[string]string `json:"game_install_paths,omitempty"` // manifest game_id -> absolute install folder override
 	DiscoveryInterval           Duration    `json:"discovery_interval,omitempty"`    // default 4h; re-scan installed games
 	AutoWatchMode               string      `json:"auto_watch_mode,omitempty"`       // "legacy" (default) or "discovered"
 	ConflictPolicy              string      `json:"conflict_policy,omitempty"`       // last_write_wins, keep_local, keep_server

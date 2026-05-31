@@ -587,9 +587,96 @@ func LogZeroWatchPathsSummary(stats WatchPathBuildStats) {
 		stats.SkippedDiscovered, stats.SkippedPlatform, stats.SkippedMissingDir, stats.SkippedMalformed)
 }
 
+// InstallRootsByGame maps manifest game_id to PCGW install folder hints (for <game-install-folder>).
+func InstallRootsByGame(games []types.ManifestV2Game) map[string][]string {
+	if len(games) == 0 {
+		return nil
+	}
+	m := make(map[string][]string, len(games))
+	for _, g := range games {
+		if len(g.CommonInstallPaths) > 0 {
+			m[g.GameID] = append([]string(nil), g.CommonInstallPaths...)
+		}
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
+// LoadInstallRootsByGame reads v2 install hints from the on-disk manifest cache.
+func LoadInstallRootsByGame() map[string][]string {
+	return InstallRootsByGame(LoadManifestFile().Games)
+}
+
+// BuildInstallRootsByGame merges PCGW install hints, discovered install paths, and config overrides.
+// Config overrides are listed first so they take priority when resolving <game-install-folder>.
+func BuildInstallRootsByGame(cfg *config, cache discoveryCache) map[string][]string {
+	merged := InstallRootsByGame(LoadManifestFile().Games)
+	if merged == nil {
+		merged = make(map[string][]string)
+	}
+	for gameID, paths := range DiscoveredInstallRootsByGame(cache) {
+		for _, p := range paths {
+			merged[gameID] = appendUniqueInstallRoot(merged[gameID], p)
+		}
+	}
+	if cfg != nil {
+		for gameID, path := range cfg.GameInstallPaths {
+			path = strings.TrimSpace(path)
+			if path == "" {
+				continue
+			}
+			rest := merged[gameID]
+			merged[gameID] = append([]string{path}, rest...)
+			merged[gameID] = dedupeInstallRoots(merged[gameID])
+		}
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	return merged
+}
+
+func appendUniqueInstallRoot(slice []string, p string) []string {
+	for _, s := range slice {
+		if s == p {
+			return slice
+		}
+	}
+	return append(slice, p)
+}
+
+func dedupeInstallRoots(paths []string) []string {
+	seen := make(map[string]bool, len(paths))
+	var out []string
+	for _, p := range paths {
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	return out
+}
+
+func resolveManifestTemplate(resolver *paths.Resolver, template string, currentOS paths.OS, gameID string, installRootsByGame map[string][]string) []string {
+	if installRootsByGame == nil {
+		installRootsByGame = LoadInstallRootsByGame()
+	}
+	var roots []string
+	if installRootsByGame != nil {
+		roots = installRootsByGame[gameID]
+	}
+	return resolver.ResolveAllForGame(template, currentOS, roots)
+}
+
 // ManifestToWatchPaths converts manifest entries to watch paths for the current OS.
 // When mode is "discovered", only includes entries for game IDs in activeGameIDs (or explicit config paths via mergeWatchPaths).
-func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Resolver, currentOS paths.OS, includeConfig bool, activeGameIDs map[string]bool, mode string) ([]watchPath, WatchPathBuildStats) {
+func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Resolver, currentOS paths.OS, includeConfig bool, activeGameIDs map[string]bool, mode string, installRootsByGame map[string][]string) ([]watchPath, WatchPathBuildStats) {
+	if installRootsByGame == nil {
+		installRootsByGame = LoadInstallRootsByGame()
+	}
 	var out []watchPath
 	var stats WatchPathBuildStats
 	seen := make(map[string]bool)
@@ -615,7 +702,7 @@ func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Reso
 		addedRule := false
 		for _, rule := range rules {
 			ruleKey := saverule.RuleKey(e.GameID, rule)
-			resolved := resolver.ResolveAll(rule.Directory, currentOS)
+			resolved := resolveManifestTemplate(resolver, rule.Directory, currentOS, e.GameID, installRootsByGame)
 			if len(resolved) == 0 {
 				stats.SkippedMissingDir++
 				continue
@@ -722,7 +809,7 @@ func resolveSavePath(gameID, pathKey string, manifestEntries []types.GameSaveLoc
 			continue
 		}
 		if PathKeyForManifestEntry(e.GameID, e.PathTemplate) == pathKey {
-			for _, abs := range resolver.ResolveAll(e.PathTemplate, currentOS) {
+			for _, abs := range resolveManifestTemplate(resolver, e.PathTemplate, currentOS, gameID, nil) {
 				if abs == "" {
 					continue
 				}
@@ -792,7 +879,7 @@ func resolveWatchRoot(gameID, pathKey string, manifestEntries []types.GameSaveLo
 			continue
 		}
 		if PathKeyForManifestEntry(e.GameID, e.PathTemplate) == pathKey {
-			for _, abs := range resolver.ResolveAll(e.PathTemplate, currentOS) {
+			for _, abs := range resolveManifestTemplate(resolver, e.PathTemplate, currentOS, gameID, nil) {
 				if root := watchDirFromResolved(abs); root != "" {
 					return root
 				}
@@ -820,7 +907,7 @@ func resolveWatchRoot(gameID, pathKey string, manifestEntries []types.GameSaveLo
 
 func resolveWatchRootDirect(w watchPath, resolver *paths.Resolver, currentOS paths.OS) string {
 	for _, dirTemplate := range watchRootDirs(w) {
-		for _, abs := range resolver.ResolveAll(dirTemplate, currentOS) {
+		for _, abs := range resolveManifestTemplate(resolver, dirTemplate, currentOS, w.GameID, nil) {
 			if root := watchDirFromResolved(abs); root != "" {
 				return root
 			}
@@ -834,7 +921,7 @@ func resolveWatchRootByPathKeyForFile(gameID, pathKey string, w watchPath, resol
 	syncAll := syncAllForWatchPath(w)
 	patterns := w.IncludePatterns
 	for _, dirTemplate := range watchRootDirs(w) {
-		for _, root := range resolver.ResolveAll(dirTemplate, currentOS) {
+		for _, root := range resolveManifestTemplate(resolver, dirTemplate, currentOS, gameID, nil) {
 			if root == "" {
 				continue
 			}
@@ -856,7 +943,7 @@ func resolveWatchRootByPathKeyForFile(gameID, pathKey string, w watchPath, resol
 
 func resolveWatchPathDirect(w watchPath, resolver *paths.Resolver, currentOS paths.OS, gameID string, pullCtx paths.PullContext) string {
 	for _, t := range watchPathTemplates(w) {
-		for _, abs := range resolver.ResolveAll(t, currentOS) {
+		for _, abs := range resolveManifestTemplate(resolver, t, currentOS, gameID, nil) {
 			if abs == "" {
 				continue
 			}
@@ -873,7 +960,7 @@ func resolveSavePathByPathKeyForFile(gameID, pathKey string, w watchPath, resolv
 	syncAll := syncAllForWatchPath(w)
 	patterns := w.IncludePatterns
 	for _, dirTemplate := range watchRootDirs(w) {
-		for _, root := range resolver.ResolveAll(dirTemplate, currentOS) {
+		for _, root := range resolveManifestTemplate(resolver, dirTemplate, currentOS, gameID, nil) {
 			if root == "" {
 				continue
 			}

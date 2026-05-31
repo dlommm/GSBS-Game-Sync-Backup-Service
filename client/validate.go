@@ -36,12 +36,7 @@ func ValidateConfig(cfg *config) []string {
 	}
 
 	// Watch paths: check that path_templates can be resolved (optional)
-	resolver := paths.NewResolver()
-	resolver.UbisoftConnect = cfg.UbisoftConnectFolder
-	resolver.GOGGalaxy = cfg.GOGGalaxyFolder
-	resolver.EpicGames = cfg.EpicGamesFolder
-	resolver.XboxApp = cfg.XboxAppFolder
-	resolver.UserID = cfg.LauncherUserID
+	resolver := configureResolverFromConfig(cfg)
 	currentOS := paths.CurrentOS()
 	for i, wp := range cfg.WatchPaths {
 		for _, t := range wp.PathTemplates {

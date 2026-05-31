@@ -72,3 +72,18 @@ func appendSteamLibrariesFromVDF(roots []string) []string {
 	}
 	return out
 }
+
+// MergeSteamLibraries appends extra library roots, skipping duplicates and empty paths.
+func MergeSteamLibraries(base, extra []string) []string {
+	seen := make(map[string]bool, len(base)+len(extra))
+	var out []string
+	for _, r := range append(base, extra...) {
+		r = strings.TrimSpace(r)
+		if r == "" || seen[r] {
+			continue
+		}
+		seen[r] = true
+		out = append(out, r)
+	}
+	return out
+}

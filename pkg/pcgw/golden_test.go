@@ -32,6 +32,22 @@ func TestGoldenSubnautica2Sections(t *testing.T) {
 	if len(locs) < 2 {
 		t.Fatalf("expected save locations, got %d", len(locs))
 	}
+	for _, l := range locs {
+		for _, p := range l.Paths {
+			if strings.Contains(p, "{{p") || strings.HasSuffix(p, "}}") && !strings.Contains(p, "<") {
+				t.Errorf("malformed path %q for system %q", p, l.System)
+			}
+		}
+	}
+	for _, l := range locs {
+		if strings.Contains(l.System, "Windows") {
+			for _, p := range l.Paths {
+				if strings.Contains(p, "Subnautica2") && !strings.HasPrefix(p, "%APPDATA%") {
+					t.Errorf("expected normalized appdata path, got %q", p)
+				}
+			}
+		}
+	}
 }
 
 func TestGolden007FirstLightLinux(t *testing.T) {
