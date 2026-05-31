@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gsbs/gsbs/pkg/discovery"
 	"github.com/gsbs/gsbs/pkg/paths"
 	"github.com/gsbs/gsbs/pkg/saverule"
 	"github.com/gsbs/gsbs/pkg/types"
@@ -153,7 +154,7 @@ func TestManifestToWatchPaths_DiscoveredModeEmpty(t *testing.T) {
 		{GameID: "1", Platform: "linux", PathTemplate: "%USERPROFILE%/saves"},
 	}
 	resolver := pathsResolverForTest(t)
-	out, stats := ManifestToWatchPaths(entries, resolver, paths.CurrentOS(), false, map[string]bool{}, "discovered")
+	out, stats := ManifestToWatchPaths(entries, resolver, paths.CurrentOS(), false, map[string]bool{}, "discovered", nil)
 	assert.Empty(t, out)
 	assert.Equal(t, 1, stats.SkippedDiscovered)
 }
@@ -167,7 +168,7 @@ func TestManifestToWatchPaths_PlatformSkip(t *testing.T) {
 	if current == "windows" {
 		t.Skip("need non-windows platform for this test")
 	}
-	out, stats := ManifestToWatchPaths(entries, resolver, paths.CurrentOS(), false, map[string]bool{"1": true}, "discovered")
+	out, stats := ManifestToWatchPaths(entries, resolver, paths.CurrentOS(), false, map[string]bool{"1": true}, "discovered", nil)
 	assert.Empty(t, out)
 	assert.Equal(t, 1, stats.SkippedPlatform)
 }
@@ -198,4 +199,26 @@ func TestResolveSavePath_PathKeyForFile(t *testing.T) {
 func pathsResolverForTest(t *testing.T) *paths.Resolver {
 	t.Helper()
 	return paths.NewResolver()
+}
+
+func TestBuildInstallRootsByGame_MergesSources(t *testing.T) {
+	setupManifestTestDir(t)
+	require.NoError(t, SaveManifestFile(manifestFile{
+		Games: []types.ManifestV2Game{{
+			GameID:             "42",
+			CommonInstallPaths: []string{"/wiki/hint"},
+		}},
+	}))
+	cache := discoveryCache{
+		InstalledGames: []discovery.InstalledGame{{
+			GameID:      "12345",
+			Launcher:    "steam",
+			InstallPath: "/steam/common/game",
+		}},
+		IDMap: map[string]string{"steam:12345": "42"},
+	}
+	cfg := &config{GameInstallPaths: map[string]string{"42": "/custom/override"}}
+	got := BuildInstallRootsByGame(cfg, cache)
+	require.NotNil(t, got)
+	assert.Equal(t, []string{"/custom/override", "/wiki/hint", "/steam/common/game"}, got["42"])
 }

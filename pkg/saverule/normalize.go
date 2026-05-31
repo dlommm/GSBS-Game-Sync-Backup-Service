@@ -25,7 +25,7 @@ func ParseSaveRules(raw, platform string, isConfig bool, normalize NormalizeFunc
 	}
 
 	var partials []partial
-	for _, seg := range strings.Split(raw, "|") {
+	for _, seg := range splitOutsideTemplates(raw, '|') {
 		seg = strings.TrimSpace(seg)
 		if seg == "" {
 			continue
@@ -171,4 +171,40 @@ func boolStr(v bool) string {
 		return "1"
 	}
 	return "0"
+}
+
+// splitOutsideTemplates splits s on sep only when not inside nested {{...}} wikitext.
+func splitOutsideTemplates(s string, sep byte) []string {
+	if sep == 0 {
+		return []string{s}
+	}
+	var parts []string
+	var b strings.Builder
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		if i+1 < len(s) && s[i] == '{' && s[i+1] == '{' {
+			depth++
+			b.WriteByte(s[i])
+			i++
+			b.WriteByte(s[i])
+			continue
+		}
+		if i+1 < len(s) && s[i] == '}' && s[i+1] == '}' {
+			if depth > 0 {
+				depth--
+			}
+			b.WriteByte(s[i])
+			i++
+			b.WriteByte(s[i])
+			continue
+		}
+		if s[i] == sep && depth == 0 {
+			parts = append(parts, b.String())
+			b.Reset()
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	parts = append(parts, b.String())
+	return parts
 }

@@ -29,23 +29,9 @@ func runList(dryRunPull bool) {
 		os.Exit(1)
 	}
 
-	resolver := paths.NewResolver()
-	if cfg.UbisoftConnectFolder != "" {
-		resolver.UbisoftConnect = cfg.UbisoftConnectFolder
-	}
-	if cfg.GOGGalaxyFolder != "" {
-		resolver.GOGGalaxy = cfg.GOGGalaxyFolder
-	}
-	if cfg.EpicGamesFolder != "" {
-		resolver.EpicGames = cfg.EpicGamesFolder
-	}
-	if cfg.XboxAppFolder != "" {
-		resolver.XboxApp = cfg.XboxAppFolder
-	}
-	if cfg.LauncherUserID != "" {
-		resolver.UserID = cfg.LauncherUserID
-	}
+	resolver := configureResolverFromConfig(cfg)
 	currentOS := paths.CurrentOS()
+	installRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
 
 	// Load manifest (server or cache)
 	ctx := context.Background()
@@ -89,7 +75,8 @@ func runList(dryRunPull bool) {
 		if e.Platform != string(currentOS) {
 			continue
 		}
-		resolved := resolver.Resolve(e.PathTemplate, currentOS)
+		roots := installRoots[e.GameID]
+		resolved := resolver.ResolveAllForGame(e.PathTemplate, currentOS, roots)
 		for _, abs := range resolved {
 			if abs == "" {
 				continue
@@ -213,7 +200,7 @@ func runList(dryRunPull bool) {
 
 	if dryRunPull && cfg.Token != "" {
 		// Report what would be written by a pull (same resolution as sync).
-		effectiveWatchPaths, _ := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, nil, "legacy")
+		effectiveWatchPaths, _ := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, nil, "legacy", nil)
 		effectiveWatchPaths = mergeWatchPaths(effectiveWatchPaths, cfg.WatchPaths)
 		resolvePath := func(gameID, pathKey string) string {
 			for _, w := range effectiveWatchPaths {

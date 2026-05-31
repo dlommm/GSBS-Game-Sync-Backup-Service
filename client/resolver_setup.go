@@ -53,6 +53,10 @@ func applyLauncherDetection(cfg *config, resolver *paths.Resolver) {
 		cfg.FlatpakSteamFolder = detected.FlatpakSteam
 		merged = true
 	}
+	if detected.SteamUserID != "" && cfg.LauncherUserID == "" {
+		cfg.LauncherUserID = detected.SteamUserID
+		merged = true
+	}
 	if merged {
 		_ = saveConfig(cfg)
 	}
@@ -92,6 +96,9 @@ func configureResolverFromConfig(cfg *config) *paths.Resolver {
 	}
 	if cfg.FlatpakSteamFolder != "" {
 		resolver.FlatpakSteam = cfg.FlatpakSteamFolder
+	}
+	if len(cfg.SteamLibraryFolders) > 0 {
+		resolver.SteamLibraries = paths.MergeSteamLibraries(resolver.SteamLibraries, cfg.SteamLibraryFolders)
 	}
 	applyLauncherDetection(cfg, resolver)
 	resolver.InstalledSteam = discoveryState.InstalledSteam

@@ -43,8 +43,44 @@ func TestNormalizePathTemplate_KnownMappings(t *testing.T) {
 func TestNormalizePathTemplate_UnknownPreserved(t *testing.T) {
 	in := "{{p|future}}\\save and {{p|game}}\\data"
 	got := NormalizePathTemplate(in)
-	if got != "{{p|future}}/save and {{p|game}}/data" {
-		t.Fatalf("unknown placeholders should be preserved: got %q", got)
+	if got != "{{p|future}}/save and <game-install-folder>/data" {
+		t.Fatalf("unknown preserved, game mapped: got %q", got)
+	}
+}
+
+func TestSplitNormalizePathTemplates_PCGWNestedPlaceholders(t *testing.T) {
+	raw := `{{p|steam}}/userdata/{{p|uid}}/222940/remote/kofxiii/`
+	got := SplitNormalizePathTemplates(raw)
+	want := `<SteamLibrary-folder>/userdata/<user-id>/222940/remote/kofxiii/`
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %v, want [%q]", got, want)
+	}
+}
+
+func TestSplitNormalizePathTemplates_GameProfile(t *testing.T) {
+	raw := `{{p|game}}/Profiles`
+	got := SplitNormalizePathTemplates(raw)
+	want := `<game-install-folder>/Profiles`
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %v, want [%q]", got, want)
+	}
+}
+
+func TestSplitNormalizePathTemplates_UserDocuments(t *testing.T) {
+	raw := `{{p|userprofile\Documents}}\PlanetExplorers\`
+	got := SplitNormalizePathTemplates(raw)
+	want := `%USERPROFILE%/Documents/PlanetExplorers/`
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %v, want [%q]", got, want)
+	}
+}
+
+func TestSplitNormalizePathTemplates_PipeSeparatedRealPaths(t *testing.T) {
+	raw := `{{p|appdata}}\GameA\|{{p|localappdata}}\GameB\`
+	got := SplitNormalizePathTemplates(raw)
+	want := []string{`%APPDATA%/GameA/`, `%LOCALAPPDATA%/GameB/`}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }
 

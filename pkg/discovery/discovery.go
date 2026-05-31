@@ -13,9 +13,10 @@ import (
 
 // InstalledGame represents a game detected on the local machine.
 type InstalledGame struct {
-	GameID   string `json:"game_id"` // primary ID (Steam app ID, etc.)
-	Title    string `json:"title,omitempty"`
-	Launcher string `json:"launcher"` // steam, epic, gog, ubisoft, heroic, lutris, bottles, flatpak
+	GameID      string `json:"game_id"` // primary ID (Steam app ID, etc.)
+	Title       string `json:"title,omitempty"`
+	Launcher    string `json:"launcher"` // steam, epic, gog, ubisoft, heroic, lutris, bottles, flatpak
+	InstallPath string `json:"install_path,omitempty"` // absolute install folder when known (e.g. Steam common/)
 }
 
 // ScanInstalledGames returns all games detected across supported launchers.
@@ -65,6 +66,7 @@ func ScanInstalledGames() []InstalledGame {
 
 var steamAppIDRe = regexp.MustCompile(`(?m)"appid"\s+"(\d+)"`)
 var steamNameRe = regexp.MustCompile(`(?m)"name"\s+"(.+)"`)
+var steamInstalldirRe = regexp.MustCompile(`(?m)"installdir"\s+"([^"]+)"`)
 
 func scanSteam() []InstalledGame {
 	var out []InstalledGame
@@ -87,10 +89,18 @@ func scanSteam() []InstalledGame {
 			if nm := steamNameRe.FindStringSubmatch(text); len(nm) >= 2 {
 				title = nm[1]
 			}
+			installPath := ""
+			if im := steamInstalldirRe.FindStringSubmatch(text); len(im) >= 2 {
+				candidate := filepath.Join(steamapps, "common", im[1])
+				if _, err := os.Stat(candidate); err == nil {
+					installPath = candidate
+				}
+			}
 			out = append(out, InstalledGame{
-				GameID:   idMatch[1],
-				Title:    title,
-				Launcher: "steam",
+				GameID:      idMatch[1],
+				Title:       title,
+				Launcher:    "steam",
+				InstallPath: installPath,
 			})
 		}
 	}

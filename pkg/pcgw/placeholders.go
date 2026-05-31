@@ -8,52 +8,65 @@ import (
 	"github.com/gsbs/gsbs/pkg/types"
 )
 
-// pPlaceholderRe matches PCGW Path shorthand {{p|...}} or {{P|...}}.
-var pPlaceholderRe = regexp.MustCompile(`(?i)\{\{[pP]\|([^}]+)\}\}`)
+// pathPlaceholderRe matches PCGW Path templates: {{p|...}}, {{P|...}}, {{Path|...}}.
+var pathPlaceholderRe = regexp.MustCompile(`(?i)\{\{(?:path|[pP])\|([^}]+)\}\}`)
 
 // placeholderMap maps normalized PCGW {{p|key}} names to resolver-friendly tokens.
+// See https://www.pcgamingwiki.com/wiki/PCGamingWiki:Editing_guide/Game_data
 var placeholderMap = map[string]string{
-	"appdata":                "%APPDATA%",
-	"localappdata":           "%LOCALAPPDATA%",
-	"userprofile":            "%USERPROFILE%",
-	"userprofile/documents":  "%USERPROFILE%/Documents",
-	"userprofile\\documents": "%USERPROFILE%/Documents",
-	"public":                 "%PUBLIC%",
-	"programdata":            "%PROGRAMDATA%",
-	"programfiles":           "%PROGRAMFILES%",
-	"uid":                    "<user-id>",
-	"steam":                  "<SteamLibrary-folder>",
-	"uplay":                  "<Ubisoft-Connect-folder>",
-	"gog":                    "<GOG-Galaxy-folder>",
-	"epic":                   "<Epic-Games-folder>",
-	"ea":                     "<EA-App-folder>",
-	"origin":                 "<EA-App-folder>",
-	"xbox":                   "<Xbox-App-folder>",
-	"microsoft":              "<Xbox-App-folder>",
-	"heroic":                 "<Heroic-folder>",
-	"lutris":                 "<Lutris-folder>",
-	"bottles":                "<Bottles-folder>",
-	"prism":                  "<Prism-folder>",
-	"flatpak":                "<Flatpak-Steam-folder>",
-	"flatpak-steam":          "<Flatpak-Steam-folder>",
-	"flatpaksteam":           "<Flatpak-Steam-folder>",
-	"linuxhome":              "%USERPROFILE%",
-	"osxhome":                "%USERPROFILE%",
-	"machome":                "%USERPROFILE%",
-	"xdgdatahome":            "%LOCALAPPDATA%",
-	"xdgconfighome":          "%APPDATA%",
+	"game":                          "<game-install-folder>",
+	"appdata":                       "%APPDATA%",
+	"localappdata":                  "%LOCALAPPDATA%",
+	"userprofile":                   "%USERPROFILE%",
+	"userprofile/documents":         "%USERPROFILE%/Documents",
+	"userprofile\\documents":        "%USERPROFILE%/Documents",
+	"userprofile/documents/my games": "%USERPROFILE%/Documents/My Games",
+	"userprofile\\documents\\my games": "%USERPROFILE%/Documents/My Games",
+	"userprofile/saved games":       "%USERPROFILE%/Saved Games",
+	"userprofile\\saved games":      "%USERPROFILE%/Saved Games",
+	"userprofile/appdata/locallow":  "%USERPROFILE%/AppData/LocalLow",
+	"userprofile\\appdata\\locallow": "%USERPROFILE%/AppData/LocalLow",
+	"public":                        "%PUBLIC%",
+	"programdata":                   "%PROGRAMDATA%",
+	"programfiles":                  "%PROGRAMFILES%",
+	"programfiles(x86)":             "%PROGRAMFILES(x86)%",
+	"programfiles (x86)":            "%PROGRAMFILES(x86)%",
+	"uid":                           "<user-id>",
+	"steam":                         "<SteamLibrary-folder>",
+	"uplay":                         "<Ubisoft-Connect-folder>",
+	"gog":                           "<GOG-Galaxy-folder>",
+	"epic":                          "<Epic-Games-folder>",
+	"ea":                            "<EA-App-folder>",
+	"origin":                        "<EA-App-folder>",
+	"xbox":                          "<Xbox-App-folder>",
+	"microsoft":                     "<Xbox-App-folder>",
+	"heroic":                        "<Heroic-folder>",
+	"lutris":                        "<Lutris-folder>",
+	"bottles":                       "<Bottles-folder>",
+	"prism":                         "<Prism-folder>",
+	"flatpak":                       "<Flatpak-Steam-folder>",
+	"flatpak-steam":                 "<Flatpak-Steam-folder>",
+	"flatpaksteam":                  "<Flatpak-Steam-folder>",
+	"linuxhome":                     "%USERPROFILE%",
+	"osxhome":                       "%USERPROFILE%",
+	"machome":                       "%USERPROFILE%",
+	"winhome":                       "%USERPROFILE%",
+	"xdgdatahome":                   "%LOCALAPPDATA%",
+	"xdgconfighome":                 "%APPDATA%",
+	"xdgcachehome":                  "%LOCALAPPDATA%/cache",
 }
 
-// NormalizePathTemplate converts PCGW {{p|...}} placeholders to resolver-friendly form.
+// NormalizePathTemplate converts PCGW {{p|...}} / {{Path|...}} placeholders to resolver-friendly form.
 // Known keys are mapped; unknown {{p|...}} tokens are preserved literally.
-// Non-p templates (e.g. {{Game data/...}}) are never stripped.
+// Non-path templates (e.g. {{Game data/...}}) are never stripped.
 func NormalizePathTemplate(raw string) string {
-	s := pPlaceholderRe.ReplaceAllStringFunc(raw, func(match string) string {
-		sub := pPlaceholderRe.FindStringSubmatch(match)
+	s := pathPlaceholderRe.ReplaceAllStringFunc(raw, func(match string) string {
+		sub := pathPlaceholderRe.FindStringSubmatch(match)
 		if len(sub) < 2 {
 			return match
 		}
 		key := strings.ToLower(strings.TrimSpace(sub[1]))
+		key = strings.ReplaceAll(key, "\\", "/")
 		if mapped, ok := placeholderMap[key]; ok {
 			return mapped
 		}

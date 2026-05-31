@@ -111,7 +111,7 @@ When no watch paths are built at startup or after a manifest refresh, the client
 
 Example log line: `sync: no watch paths — skipped discovered=12 platform=40 missing_dir=3 malformed=0`
 
-Optional config: `conflict_policy` (`last_write_wins`, `keep_local`, `keep_server`), launcher folder overrides (`heroic_folder`, `lutris_folder`, `bottles_folder`, `prism_folder`, `flatpak_steam_folder`, `ea_app_folder`), `discovery_interval`.
+Optional config: `conflict_policy` (`last_write_wins`, `keep_local`, `keep_server`), launcher folder overrides (`heroic_folder`, `lutris_folder`, `bottles_folder`, `prism_folder`, `flatpak_steam_folder`, `ea_app_folder`), `steam_library_folders` (extra Steam library roots when not in `libraryfolders.vdf`), `game_install_paths` (per-game install folder override for `<game-install-folder>` resolution), `launcher_user_id` (auto-detected from Steam when empty; tray **Detect launcher paths** merges it into config), `discovery_interval`.
 
 ### Manual watch paths
 

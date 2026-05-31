@@ -1,0 +1,52 @@
+{{define "partials/admin_analytics_pcgw_table.html"}}
+{{if .Games}}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Title</th><th>Page ID</th><th>Steam</th><th>Platforms</th><th>Status</th><th>Updated</th></tr></thead>
+    <tbody>
+    {{range .Games}}
+    <tr>
+      <td class="cell-primary"><a href="/admin/pcgw/{{.PageID}}">{{.Title}}</a></td>
+      <td class="cell-muted">{{.PageID}}</td>
+      <td class="cell-muted">{{join .SteamAppIDs ", "}}</td>
+      <td class="cell-muted">{{join .PlatformsPresent ", "}}</td>
+      <td>
+        {{if eq .ParseStatus "ok"}}<span class="badge-success">ok</span>
+        {{else if eq .ParseStatus "partial"}}<span class="badge-warn">partial</span>
+        {{else if eq .ParseStatus "failed"}}<span class="badge-failed">failed</span>
+        {{else}}<span class="cell-muted">{{.ParseStatus}}</span>{{end}}
+      </td>
+      <td class="cell-muted">{{formatTime .UpdatedAt}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{if gt .TotalPages 1}}
+<div class="manifest-pagination">
+  <span class="manifest-pagination-summary">
+    {{if gt .Total 0}}{{.Start}}–{{.End}} of {{.Total}}{{else}}0 games{{end}}
+  </span>
+  <div class="manifest-pagination-links">
+    {{if gt .Page 1}}<a href="/admin/analytics?tab=pcgw&amp;q={{urlquery .Query}}&amp;status={{urlquery .FilterStatus}}&amp;platform={{urlquery .FilterPlatform}}&amp;page={{.PrevPage}}" class="btn-ghost-sm">← Prev</a>{{end}}
+    <span class="cell-muted">Page {{.Page}} / {{.TotalPages}}</span>
+    {{if lt .Page .TotalPages}}<a href="/admin/analytics?tab=pcgw&amp;q={{urlquery .Query}}&amp;status={{urlquery .FilterStatus}}&amp;platform={{urlquery .FilterPlatform}}&amp;page={{.NextPage}}" class="btn-ghost-sm">Next →</a>{{end}}
+  </div>
+</div>
+{{else if gt .Total 0}}
+<div class="manifest-pagination">
+  <span class="manifest-pagination-summary">{{.Total}} games</span>
+</div>
+{{end}}
+{{else if or .Query .FilterStatus .FilterPlatform}}
+<div class="panel-empty">
+  <p>No games match your filters.</p>
+  <p class="hint"><a href="/admin/analytics?tab=pcgw">Clear filters</a></p>
+</div>
+{{else}}
+<div class="panel-empty">
+  <p>No PCGW games indexed yet.</p>
+  <p class="hint"><a href="/admin/pcgw">Open PCGW admin</a> to run a sync.</p>
+</div>
+{{end}}
+{{end}}

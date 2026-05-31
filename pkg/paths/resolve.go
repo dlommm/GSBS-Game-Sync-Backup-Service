@@ -187,6 +187,37 @@ func (r *Resolver) ResolveAll(template string, targetOS OS) []string {
 	return nil
 }
 
+// ResolveAllForGame expands placeholders and resolves <game-install-folder> using per-game install roots.
+func (r *Resolver) ResolveAllForGame(template string, targetOS OS, installRoots []string) []string {
+	template = strings.TrimSpace(template)
+	if template == "" {
+		return nil
+	}
+	if strings.Contains(template, "<game-install-folder>") {
+		if len(installRoots) == 0 {
+			return nil
+		}
+		var out []string
+		seen := make(map[string]bool)
+		for _, root := range installRoots {
+			root = strings.TrimSpace(root)
+			if root == "" {
+				continue
+			}
+			root = strings.TrimRight(root, `/\`)
+			expanded := strings.ReplaceAll(template, "<game-install-folder>", root)
+			for _, p := range r.ResolveAll(expanded, targetOS) {
+				if p != "" && !seen[p] {
+					seen[p] = true
+					out = append(out, p)
+				}
+			}
+		}
+		return out
+	}
+	return r.ResolveAll(template, targetOS)
+}
+
 func cleanResolvedPath(p string) string {
 	if p == "" {
 		return ""
@@ -209,6 +240,7 @@ func (r *Resolver) expandOne(template string, targetOS OS) string {
 	s = replaceEnv(s, "%APPDATA%", r.AppData)
 	s = replaceEnv(s, "%PROGRAMDATA%", r.ProgramData)
 	s = replaceEnv(s, "%PROGRAMFILES%", r.ProgramFiles)
+	s = replaceEnv(s, "%PROGRAMFILES(x86)%", r.programFilesX86())
 	s = replaceEnv(s, "%PUBLIC%", r.publicFolder())
 	s = replaceEnv(s, "<user-id>", r.UserID)
 	s = replaceEnv(s, "<Ubisoft-Connect-folder>", r.UbisoftConnect)
@@ -248,6 +280,19 @@ func (r *Resolver) expandOne(template string, targetOS OS) string {
 		s = filepath.FromSlash(strings.ReplaceAll(s, "/", string(filepath.Separator)))
 	}
 	return cleanResolvedPath(s)
+}
+
+func (r *Resolver) programFilesX86() string {
+	if runtime.GOOS == "windows" {
+		if p := os.Getenv("ProgramFiles(x86)"); p != "" {
+			return p
+		}
+		pf := r.ProgramFiles
+		if pf != "" {
+			return filepath.Join(filepath.Dir(pf), "Program Files (x86)")
+		}
+	}
+	return ""
 }
 
 func replaceEnv(s, key, value string) string {

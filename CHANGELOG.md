@@ -4,6 +4,28 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-05-30
+
+### Added
+
+- Client: auto-detect Steam user ID from `loginusers.vdf` (saved to `launcher_user_id` when empty).
+- Client config: `steam_library_folders` for extra Steam library roots; `game_install_paths` per-game install folder overrides for `<game-install-folder>`.
+- Client discovery: record Steam install path from `appmanifest` `installdir` and merge with PCGW hints when resolving save paths.
+- PCGW placeholder map: `%USERPROFILE%`, `%APPDATA%`, `%LOCALAPPDATA%`, `%PROGRAMFILES(x86)%`, Saved Games, Documents, launcher/XDG paths; `{{p|game}}` → `<game-install-folder>`.
+- Admin analytics: expanded Overview/PCGW/Sync tabs, HTMX PCGW catalog search, richer breakdowns and partial table.
+- Tests: PCGW path splitting, placeholder normalization, Steam loginusers parsing, analytics store queries.
+
+### Changed
+
+- Client path resolution: split save rules on `|` only outside `{{...}}` templates; `ResolveAllForGame` for install-folder placeholders.
+- Admin Settings and Users pages: form layout, dark-theme inputs, compact action menus (fixed dropdown clipping).
+- Docs: `CLIENT.md` and `EXAMPLE_CONFIG.md` document new path override options.
+
+### Fixed
+
+- PCGW manifest paths corrupted by splitting inside `{{p|key}}` placeholders (e.g. `{{p`, `steam}}/userdata/...`).
+- Admin WebUI Settings (PCGW sync schedule/filters) and Users (create dialog, actions menu) broken styling/layout.
+
 ## [1.2.2] - 2026-05-30
 
 ### Added

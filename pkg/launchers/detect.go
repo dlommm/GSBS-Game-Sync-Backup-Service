@@ -11,6 +11,7 @@ import (
 // DetectedPaths holds launcher install/config paths detected on this machine.
 type DetectedPaths struct {
 	SteamLibraries []string
+	SteamUserID    string
 	UbisoftConnect string
 	GOGGalaxy      string
 	EpicGames      string
@@ -38,6 +39,9 @@ func DetectPaths() DetectedPaths {
 	var out DetectedPaths
 
 	out.SteamLibraries = paths.GetSteamLibraryRoots(home)
+	if uid := paths.DetectSteamUserID(out.SteamLibraries); uid != "" {
+		out.SteamUserID = uid
+	}
 	if runtime.GOOS == "linux" {
 		flatpakSteam := filepath.Join(home, ".var", "app", "com.valvesoftware.Steam", "data", "Steam")
 		if pathExists(flatpakSteam) {
@@ -127,6 +131,9 @@ func appendUnique(slice []string, p string) []string {
 func (d DetectedPaths) ApplyToResolver(r *paths.Resolver) {
 	if len(d.SteamLibraries) > 0 {
 		r.SteamLibraries = mergeRoots(r.SteamLibraries, d.SteamLibraries)
+	}
+	if d.SteamUserID != "" && r.UserID == "" {
+		r.UserID = d.SteamUserID
 	}
 	if d.UbisoftConnect != "" && r.UbisoftConnect == "" {
 		r.UbisoftConnect = d.UbisoftConnect
