@@ -375,7 +375,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 				oldWP := append([]watchPath(nil), effectiveWatchPaths...)
 				wpMu.RUnlock()
 				installRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
-			manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, installRoots)
+				manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, installRoots)
 				newWP := mergeWatchPaths(manifestWP, cfg.WatchPaths)
 				added, removed := watchPathDiff(oldWP, newWP)
 				wpMu.Lock()

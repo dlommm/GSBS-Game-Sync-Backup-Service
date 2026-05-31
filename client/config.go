@@ -73,39 +73,39 @@ func parseDurationFlex(s string) (time.Duration, error) {
 }
 
 type config struct {
-	ServerURL                   string      `json:"server_url"`
-	Token                       string      `json:"token"`
-	ClientName                  string      `json:"client_name,omitempty"` // name shown on server for this machine
-	SyncInterval                Duration    `json:"sync_interval"`
-	UbisoftConnectFolder        string      `json:"ubisoft_connect_folder,omitempty"`          // e.g. C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher
-	GOGGalaxyFolder             string      `json:"gog_galaxy_folder,omitempty"`               // e.g. C:\Program Files (x86)\GOG Galaxy
-	EpicGamesFolder             string      `json:"epic_games_folder,omitempty"`               // e.g. C:\Program Files\Epic Games
-	XboxAppFolder               string      `json:"xbox_app_folder,omitempty"`                 // e.g. C:\XboxGames
-	LauncherUserID              string      `json:"launcher_user_id,omitempty"`                // launcher user ID for paths like savegames\<user-id>\895
-	BackupOnPull                bool        `json:"backup_on_pull,omitempty"`                  // if true, copy existing file to .gsbs.bak before overwriting on pull
-	SkipOverwriteWhenLocalNewer bool        `json:"skip_overwrite_when_local_newer,omitempty"` // if true, on pull do not overwrite when local file is newer than server
-	ManifestInclude             string      `json:"manifest_include,omitempty"`                // "saves", "config", or "both" (default) — which manifest entries to fetch
-	MaxSyncKbps                 int         `json:"max_sync_kbps,omitempty"`                   // optional max sync bandwidth in KiB/s; 0 = no limit
-	SyncPaused                  bool        `json:"sync_paused,omitempty"`                     // if true, do not run periodic pull or watcher push until resumed
-	SkipSyncWhenMetered         bool        `json:"skip_sync_when_metered,omitempty"`          // Windows: skip pull/push when connection is metered
-	WatchExclude                []string    `json:"watch_exclude,omitempty"`                   // glob patterns for files to ignore when watching (e.g. "*.tmp", "*.bak")
-	UseCompression              bool        `json:"use_compression,omitempty"`                 // use gzip for push/pull request and response bodies
-	VerboseLog                  bool        `json:"verbose_log,omitempty"`                     // when true, log extra detail (per-file sync, resolved paths)
-	HeroicFolder                string      `json:"heroic_folder,omitempty"`
-	LutrisFolder                string      `json:"lutris_folder,omitempty"`
-	EAAppFolder                 string      `json:"ea_app_folder,omitempty"`
-	BottlesFolder               string      `json:"bottles_folder,omitempty"`
-	PrismFolder                 string      `json:"prism_folder,omitempty"`
-	FlatpakSteamFolder          string      `json:"flatpak_steam_folder,omitempty"`
-	SteamLibraryFolders         []string    `json:"steam_library_folders,omitempty"` // extra Steam library roots (e.g. D:\SteamLibrary)
-	GameInstallPaths            map[string]string `json:"game_install_paths,omitempty"` // manifest game_id -> absolute install folder override
-	DiscoveryInterval           Duration    `json:"discovery_interval,omitempty"`    // default 4h; re-scan installed games
-	AutoWatchMode               string      `json:"auto_watch_mode,omitempty"`       // "legacy" (default) or "discovered"
-	ConflictPolicy              string      `json:"conflict_policy,omitempty"`       // last_write_wins, keep_local, keep_server
-	EncryptionPassphrase        string      `json:"encryption_passphrase,omitempty"` // local E2E key; never sent to server
-	UpdateCheckEnabled          *bool       `json:"update_check_enabled,omitempty"`  // default true; set false to disable client update checks
-	UpdateRepo                  string      `json:"update_repo,omitempty"`           // GitHub owner/repo override for release checks
-	WatchPaths                  []watchPath `json:"watch_paths"`
+	ServerURL                   string            `json:"server_url"`
+	Token                       string            `json:"token"`
+	ClientName                  string            `json:"client_name,omitempty"` // name shown on server for this machine
+	SyncInterval                Duration          `json:"sync_interval"`
+	UbisoftConnectFolder        string            `json:"ubisoft_connect_folder,omitempty"`          // e.g. C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher
+	GOGGalaxyFolder             string            `json:"gog_galaxy_folder,omitempty"`               // e.g. C:\Program Files (x86)\GOG Galaxy
+	EpicGamesFolder             string            `json:"epic_games_folder,omitempty"`               // e.g. C:\Program Files\Epic Games
+	XboxAppFolder               string            `json:"xbox_app_folder,omitempty"`                 // e.g. C:\XboxGames
+	LauncherUserID              string            `json:"launcher_user_id,omitempty"`                // launcher user ID for paths like savegames\<user-id>\895
+	BackupOnPull                bool              `json:"backup_on_pull,omitempty"`                  // if true, copy existing file to .gsbs.bak before overwriting on pull
+	SkipOverwriteWhenLocalNewer bool              `json:"skip_overwrite_when_local_newer,omitempty"` // if true, on pull do not overwrite when local file is newer than server
+	ManifestInclude             string            `json:"manifest_include,omitempty"`                // "saves", "config", or "both" (default) — which manifest entries to fetch
+	MaxSyncKbps                 int               `json:"max_sync_kbps,omitempty"`                   // optional max sync bandwidth in KiB/s; 0 = no limit
+	SyncPaused                  bool              `json:"sync_paused,omitempty"`                     // if true, do not run periodic pull or watcher push until resumed
+	SkipSyncWhenMetered         bool              `json:"skip_sync_when_metered,omitempty"`          // Windows: skip pull/push when connection is metered
+	WatchExclude                []string          `json:"watch_exclude,omitempty"`                   // glob patterns for files to ignore when watching (e.g. "*.tmp", "*.bak")
+	UseCompression              bool              `json:"use_compression,omitempty"`                 // use gzip for push/pull request and response bodies
+	VerboseLog                  bool              `json:"verbose_log,omitempty"`                     // when true, log extra detail (per-file sync, resolved paths)
+	HeroicFolder                string            `json:"heroic_folder,omitempty"`
+	LutrisFolder                string            `json:"lutris_folder,omitempty"`
+	EAAppFolder                 string            `json:"ea_app_folder,omitempty"`
+	BottlesFolder               string            `json:"bottles_folder,omitempty"`
+	PrismFolder                 string            `json:"prism_folder,omitempty"`
+	FlatpakSteamFolder          string            `json:"flatpak_steam_folder,omitempty"`
+	SteamLibraryFolders         []string          `json:"steam_library_folders,omitempty"` // extra Steam library roots (e.g. D:\SteamLibrary)
+	GameInstallPaths            map[string]string `json:"game_install_paths,omitempty"`    // manifest game_id -> absolute install folder override
+	DiscoveryInterval           Duration          `json:"discovery_interval,omitempty"`    // default 4h; re-scan installed games
+	AutoWatchMode               string            `json:"auto_watch_mode,omitempty"`       // "legacy" (default) or "discovered"
+	ConflictPolicy              string            `json:"conflict_policy,omitempty"`       // last_write_wins, keep_local, keep_server
+	EncryptionPassphrase        string            `json:"encryption_passphrase,omitempty"` // local E2E key; never sent to server
+	UpdateCheckEnabled          *bool             `json:"update_check_enabled,omitempty"`  // default true; set false to disable client update checks
+	UpdateRepo                  string            `json:"update_repo,omitempty"`           // GitHub owner/repo override for release checks
+	WatchPaths                  []watchPath       `json:"watch_paths"`
 }
 
 type watchPath struct {
