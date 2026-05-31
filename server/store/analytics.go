@@ -61,7 +61,7 @@ func (s *sqliteStore) ListTopSaveGames(ctx context.Context, limit int) ([]SaveGa
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []SaveGameStatRow
 	for rows.Next() {
 		var row SaveGameStatRow
@@ -87,7 +87,7 @@ func (s *sqliteStore) ListRecentPCGWParseFailures(ctx context.Context, limit int
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []PCGWParseFailureRow
 	for rows.Next() {
 		var row PCGWParseFailureRow

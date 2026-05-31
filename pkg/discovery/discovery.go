@@ -15,7 +15,7 @@ import (
 type InstalledGame struct {
 	GameID      string `json:"game_id"` // primary ID (Steam app ID, etc.)
 	Title       string `json:"title,omitempty"`
-	Launcher    string `json:"launcher"` // steam, epic, gog, ubisoft, heroic, lutris, bottles, flatpak
+	Launcher    string `json:"launcher"`               // steam, epic, gog, ubisoft, heroic, lutris, bottles, flatpak
 	InstallPath string `json:"install_path,omitempty"` // absolute install folder when known (e.g. Steam common/)
 }
 

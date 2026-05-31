@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	steamLoginUserIDRe  = regexp.MustCompile(`"(7656119\d+)"`)
-	steamMostRecentRe   = regexp.MustCompile(`"MostRecent"\s+"1"`)
+	steamLoginUserIDRe = regexp.MustCompile(`"(7656119\d+)"`)
+	steamMostRecentRe  = regexp.MustCompile(`"MostRecent"\s+"1"`)
 )
 
 // DetectSteamUserID returns the SteamID64 of the most recently used Steam account,
