@@ -23,10 +23,10 @@ type adminAnalyticsData struct {
 	StatsSnapshots   []store.StatsSnapshotRow
 
 	// PCGW tab
-	PCGWStats              PCGWStatsView
-	ManifestMeta           *types.PCGWManifestMeta
-	ManifestSaveLocations  int
-	ParseFailureCount      int
+	PCGWStats             PCGWStatsView
+	ManifestMeta          *types.PCGWManifestMeta
+	ManifestSaveLocations int
+	ParseFailureCount     int
 
 	// Sync tab
 	PCGWSyncRuns []types.PCGWSyncRun
