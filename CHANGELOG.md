@@ -4,6 +4,22 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-05-30
+
+### Added
+
+- `pkg/ico`: shared Windows `.ico` encoder (multi-size, XOR + AND mask); used by client tray icons and `cmd/write-ico`.
+- Admin analytics: PCGW sync run history tab and parse-failure count; store `ListPCGWSyncRuns` and `CountPCGWParseFailures`.
+
+### Changed
+
+- Client tray: embed `client/icon.ico` (16×16 + 32×32); state icons generated via `pkg/ico`.
+- Admin analytics and users pages: layout and styling polish.
+
+### Fixed
+
+- CI lint job: install Linux systray build deps so `client/` typechecks on Ubuntu runners.
+
 ## [1.2.1] - 2026-05-25
 
 ### Fixed
