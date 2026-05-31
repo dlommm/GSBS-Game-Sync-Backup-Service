@@ -77,6 +77,31 @@ func TestAllHandlerTemplatesExist(t *testing.T) {
 	}
 }
 
+func TestAdminAnalyticsTabsExecute(t *testing.T) {
+	tmpl := parseTemplates()
+	now := time.Now().UTC().Format(time.RFC3339)
+	base := adminAnalyticsData{
+		PageData: PageData{
+			PageName: "admin_analytics", Username: "admin", IsAdmin: true, CSRFToken: "csrf-test", AdminNav: "analytics",
+		},
+		TotalStorage: 2048, ManifestGames: 10, SaveGames: 2, PCGWCoveragePct: 20,
+		PCGWStats:             PCGWStatsView{TotalGames: 10, OK: 8, ManifestVersion: 1},
+		ManifestMeta:          &types.PCGWManifestMeta{ManifestVersion: 1, ManifestETag: "e"},
+		ManifestSaveLocations: 5,
+		PCGWSyncRuns: []types.PCGWSyncRun{
+			{ID: "r1", Mode: "incremental", Status: "success", StartedAt: now, FinishedAt: now},
+		},
+	}
+	for _, tab := range []string{"overview", "pcgw", "sync"} {
+		data := base
+		data.Tab = tab
+		var buf bytes.Buffer
+		if err := tmpl.ExecuteTemplate(&buf, "admin_analytics.html", data); err != nil {
+			t.Fatalf("tab %q: %v", tab, err)
+		}
+	}
+}
+
 func TestAllHandlerTemplatesExecute(t *testing.T) {
 	tmpl := parseTemplates()
 	for _, name := range handlerTemplates {
@@ -337,6 +362,7 @@ func templateTestData(name string) interface{} {
 			PageData: PageData{
 				PageName: "admin_analytics", Username: "admin", IsAdmin: true, CSRFToken: "csrf-test", AdminNav: "analytics",
 			},
+			Tab:              "overview",
 			TotalStorage:     2048,
 			ActiveClients24h: 2,
 			SyncVolume7d:     15,
@@ -345,6 +371,29 @@ func templateTestData(name string) interface{} {
 			PCGWCoveragePct:  12,
 			StatsSnapshots: []store.StatsSnapshotRow{
 				{At: now, UserCount: 1, ClientCount: 1, SaveCount: 5, StorageBytes: 1024},
+			},
+			PCGWStats: PCGWStatsView{
+				TotalGames: 500, OK: 400, Partial: 50, Failed: 30, Pending: 20,
+				LastSyncAt: now, AvgParseMs: 120, DBWikitextBytes: 1 << 20, ManifestVersion: 3,
+			},
+			ManifestMeta: &types.PCGWManifestMeta{
+				ManifestVersion: 3, ManifestETag: "sha256:abc",
+				LastIncrementalAt: now, LastFullSyncAt: now, DBWikitextBytes: 1 << 20,
+			},
+			ManifestSaveLocations: 1200,
+			ParseFailureCount:     7,
+			PCGWSyncRuns: []types.PCGWSyncRun{
+				{
+					ID: "run-1", Mode: "incremental", Status: "success",
+					StartedAt: now, FinishedAt: now,
+					GamesTotal: 100, GamesOK: 95, GamesPartial: 3, GamesFailed: 2, GamesSkipped: 0,
+					AvgParseMs: 85,
+				},
+				{
+					ID: "run-2", Mode: "full", Status: "failed",
+					StartedAt: now, FinishedAt: now,
+					GamesTotal: 50, GamesFailed: 5, ErrorMessage: "rate limited",
+				},
 			},
 		}
 	case "partials/dashboard_stats.html":

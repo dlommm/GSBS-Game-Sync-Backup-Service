@@ -175,12 +175,16 @@ type Store interface {
 
 	InsertPCGWParseFailure(ctx context.Context, f *types.PCGWParseFailure) error
 	ListPCGWParseFailures(ctx context.Context, pageID int64, limit int) ([]types.PCGWParseFailure, error)
+	// CountPCGWParseFailures returns total rows in pcgw_parse_failures (admin analytics).
+	CountPCGWParseFailures(ctx context.Context) (int, error)
 
 	StartPCGWSyncRun(ctx context.Context, mode string) (runID string, err error)
 	StartPCGWSyncRunWithResume(ctx context.Context, mode, resumedFromRunID, notes string) (runID string, err error)
 	UpdatePCGWSyncRunCheckpoint(ctx context.Context, runID string, offset int, stats PCGWSyncRunStats) error
 	FinishPCGWSyncRun(ctx context.Context, runID, status, errMsg string, stats PCGWSyncRunStats) error
 	GetLatestPCGWSyncRun(ctx context.Context) (*types.PCGWSyncRun, error)
+	// ListPCGWSyncRuns returns recent sync runs, newest first.
+	ListPCGWSyncRuns(ctx context.Context, limit int) ([]types.PCGWSyncRun, error)
 	GetResumablePCGWSyncRun(ctx context.Context, mode string) (*types.PCGWSyncRun, error)
 	ReconcileStalePCGWSyncRuns(ctx context.Context) error
 	HasRunningPCGWSync(ctx context.Context) bool
