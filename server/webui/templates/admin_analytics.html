@@ -1,34 +1,153 @@
 {{template "layout" .}}
 {{define "admin_analytics_title"}}Analytics — GSBS Admin{{end}}
 {{define "admin_analytics_content"}}
-<section class="analytics-cards stats-row stats-row-4" aria-label="Analytics summary">
-  <div class="stat-card analytics-card"><div class="stat-value">{{formatBytes .TotalStorage}}</div><div class="stat-label">Total storage</div></div>
-  <div class="stat-card analytics-card"><div class="stat-value">{{.ActiveClients24h}}</div><div class="stat-label">Active clients (24h)</div></div>
-  <div class="stat-card analytics-card"><div class="stat-value">{{.SyncVolume7d}}</div><div class="stat-label">Save syncs (7d)</div></div>
-  <div class="stat-card analytics-card"><div class="stat-value">{{printf "%.1f" .PCGWCoveragePct}}%</div><div class="stat-label">PCGW coverage</div></div>
-</section>
+<nav class="analytics-tabs" aria-label="Analytics sections">
+  <a href="/admin/analytics?tab=overview" class="analytics-tab{{if eq .Tab "overview"}} active{{end}}">Overview</a>
+  <a href="/admin/analytics?tab=pcgw" class="analytics-tab{{if eq .Tab "pcgw"}} active{{end}}">PCGW Catalog</a>
+  <a href="/admin/analytics?tab=sync" class="analytics-tab{{if eq .Tab "sync"}} active{{end}}">Sync History</a>
+</nav>
 
-<section class="panel panel-compact">
-  <div class="panel-header"><h2>Coverage detail</h2></div>
-  <div class="config-grid">
-    <div class="config-item"><span class="config-key">Manifest games</span><span class="config-val">{{.ManifestGames}}</span></div>
-    <div class="config-item"><span class="config-key">Games with saves</span><span class="config-val">{{.SaveGames}}</span></div>
-    <div class="config-item"><span class="config-key">Coverage</span><span class="config-val">{{.SaveGames}} / {{.ManifestGames}} games with at least one save</span></div>
-  </div>
-</section>
+{{if eq .Tab "overview"}}
+<div class="analytics-panel active">
+  <section class="analytics-cards stats-row stats-row-4" aria-label="Analytics summary">
+    <div class="stat-card analytics-card"><div class="stat-value">{{formatBytes .TotalStorage}}</div><div class="stat-label">Total storage</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">{{.ActiveClients24h}}</div><div class="stat-label">Active clients (24h)</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">{{.SyncVolume7d}}</div><div class="stat-label">Save syncs (7d)</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">{{printf "%.1f" .PCGWCoveragePct}}%</div><div class="stat-label">PCGW coverage</div></div>
+  </section>
 
-{{if .StatsSnapshots}}
-<section class="panel">
-  <div class="panel-header"><h2>Trends</h2></div>
-  <div class="chart-wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem;">
-    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Users</h3>{{chartLineSVG .StatsSnapshots "users" 400 120}}</div>
-    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Clients</h3>{{chartLineSVG .StatsSnapshots "clients" 400 120}}</div>
-    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Saves</h3>{{chartLineSVG .StatsSnapshots "saves" 400 120}}</div>
-    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Storage</h3>{{chartLineSVG .StatsSnapshots "storage" 400 120}}</div>
-  </div>
-</section>
-{{else}}
-<section class="panel panel-empty"><p>No stats snapshots yet. Daily snapshots are recorded at midnight.</p></section>
+  <section class="panel panel-compact">
+    <div class="panel-header"><h2>Coverage detail</h2></div>
+    <div class="config-grid">
+      <div class="config-item"><span class="config-key">Manifest games</span><span class="config-val">{{.ManifestGames}}</span></div>
+      <div class="config-item"><span class="config-key">Games with saves</span><span class="config-val">{{.SaveGames}}</span></div>
+      <div class="config-item"><span class="config-key">Coverage</span><span class="config-val">{{.SaveGames}} / {{.ManifestGames}} games with at least one save</span></div>
+    </div>
+  </section>
+
+  {{if .StatsSnapshots}}
+  <section class="panel">
+    <div class="panel-header"><h2>Trends</h2></div>
+    <div class="chart-wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem;">
+      <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Users</h3>{{chartLineSVG .StatsSnapshots "users" 400 120}}</div>
+      <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Clients</h3>{{chartLineSVG .StatsSnapshots "clients" 400 120}}</div>
+      <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Saves</h3>{{chartLineSVG .StatsSnapshots "saves" 400 120}}</div>
+      <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Storage</h3>{{chartLineSVG .StatsSnapshots "storage" 400 120}}</div>
+    </div>
+  </section>
+  {{else}}
+  <section class="panel panel-empty"><p>No stats snapshots yet. Daily snapshots are recorded at midnight.</p></section>
+  {{end}}
+</div>
+{{end}}
+
+{{if eq .Tab "pcgw"}}
+<div class="analytics-panel active">
+  <section class="analytics-cards stats-row stats-row-6" aria-label="PCGW catalog summary">
+    <div class="stat-card analytics-card"><div class="stat-value">{{.PCGWStats.TotalGames}}</div><div class="stat-label">Catalog games</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">{{.PCGWStats.OK}}</div><div class="stat-label">Parse OK</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">{{.PCGWStats.Partial}}</div><div class="stat-label">Partial</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">{{.PCGWStats.Failed}}</div><div class="stat-label">Failed</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">{{.PCGWStats.Pending}}</div><div class="stat-label">Pending</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">v{{.PCGWStats.ManifestVersion}}</div><div class="stat-label">Manifest version</div></div>
+  </section>
+
+  <section class="panel panel-compact">
+    <div class="panel-header"><h2>Manifest &amp; storage</h2></div>
+    <div class="config-grid">
+      <div class="config-item"><span class="config-key">Save locations</span><span class="config-val">{{.ManifestSaveLocations}}</span></div>
+      <div class="config-item"><span class="config-key">Wikitext in DB</span><span class="config-val">{{formatBytes .PCGWStats.DBWikitextBytes}}</span></div>
+      {{if .ManifestMeta}}
+      <div class="config-item"><span class="config-key">Manifest ETag</span><span class="config-val"><code class="code-inline">{{truncate .ManifestMeta.ManifestETag 48}}</code></span></div>
+      {{if .ManifestMeta.LastIncrementalAt}}
+      <div class="config-item"><span class="config-key">Last incremental</span><span class="config-val">{{formatTime .ManifestMeta.LastIncrementalAt}}</span></div>
+      {{end}}
+      {{if .ManifestMeta.LastFullSyncAt}}
+      <div class="config-item"><span class="config-key">Last full sync</span><span class="config-val">{{formatTime .ManifestMeta.LastFullSyncAt}}</span></div>
+      {{end}}
+      {{end}}
+      {{if .PCGWStats.LastSyncAt}}
+      <div class="config-item"><span class="config-key">Latest sync run</span><span class="config-val">{{formatTime .PCGWStats.LastSyncAt}}</span></div>
+      {{end}}
+      {{if gt .PCGWStats.AvgParseMs 0}}
+      <div class="config-item"><span class="config-key">Avg parse (last run)</span><span class="config-val">{{.PCGWStats.AvgParseMs}} ms</span></div>
+      {{end}}
+      <div class="config-item"><span class="config-key">Parse failures logged</span><span class="config-val">{{.ParseFailureCount}}</span></div>
+    </div>
+  </section>
+
+  <section class="panel panel-compact">
+    <div class="panel-header"><h2>User save coverage</h2></div>
+    <div class="config-grid">
+      <div class="config-item"><span class="config-key">Manifest games (distinct)</span><span class="config-val">{{.ManifestGames}}</span></div>
+      <div class="config-item"><span class="config-key">Games with user saves</span><span class="config-val">{{.SaveGames}}</span></div>
+      <div class="config-item"><span class="config-key">Coverage</span><span class="config-val">{{printf "%.1f" .PCGWCoveragePct}}%</span></div>
+    </div>
+  </section>
+</div>
+{{end}}
+
+{{if eq .Tab "sync"}}
+<div class="analytics-panel active">
+  <section class="panel panel-compact">
+    <div class="panel-header"><h2>Latest sync summary</h2></div>
+    <div class="config-grid">
+      {{if .PCGWStats.LastSyncAt}}
+      <div class="config-item"><span class="config-key">Last activity</span><span class="config-val">{{formatTime .PCGWStats.LastSyncAt}}</span></div>
+      {{else}}
+      <div class="config-item"><span class="config-key">Last activity</span><span class="config-val cell-muted">No sync runs yet</span></div>
+      {{end}}
+      <div class="config-item"><span class="config-key">Catalog games</span><span class="config-val">{{.PCGWStats.TotalGames}}</span></div>
+      <div class="config-item"><span class="config-key">Manifest version</span><span class="config-val">v{{.PCGWStats.ManifestVersion}}</span></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header"><h2>Recent PCGW sync runs</h2></div>
+    {{if .PCGWSyncRuns}}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Started</th>
+            <th>Mode</th>
+            <th>Status</th>
+            <th>Games</th>
+            <th>OK / Partial / Failed / Skipped</th>
+            <th>Avg parse</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .PCGWSyncRuns}}
+          <tr>
+            <td class="cell-muted">{{formatTime .StartedAt}}</td>
+            <td><code class="code-inline">{{.Mode}}</code></td>
+            <td>
+              {{if eq .Status "success"}}<span class="badge-success">{{.Status}}</span>
+              {{else if eq .Status "running"}}<span class="badge-running">{{.Status}}</span>
+              {{else if eq .Status "failed"}}<span class="badge-failed">{{.Status}}</span>
+              {{else}}<span class="badge-warn">{{.Status}}</span>{{end}}
+            </td>
+            <td>{{.GamesTotal}}</td>
+            <td class="cell-muted">{{.GamesOK}} / {{.GamesPartial}} / {{.GamesFailed}} / {{.GamesSkipped}}</td>
+            <td class="cell-muted">{{if gt .AvgParseMs 0}}{{.AvgParseMs}} ms{{else}}—{{end}}</td>
+            <td class="cell-muted">{{formatDuration .StartedAt .FinishedAt}}</td>
+          </tr>
+          {{if .ErrorMessage}}
+          <tr>
+            <td colspan="7" class="cell-muted" style="font-size:0.8125rem;padding-top:0;">{{.ErrorMessage}}</td>
+          </tr>
+          {{end}}
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <div class="panel-empty"><p>No PCGW sync runs recorded yet.</p></div>
+    {{end}}
+  </section>
+</div>
 {{end}}
 {{end}}
 {{define "admin_analytics_scripts"}}{{end}}

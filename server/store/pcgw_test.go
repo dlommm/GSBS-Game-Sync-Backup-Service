@@ -88,6 +88,26 @@ func TestPCGWGameCRUD(t *testing.T) {
 	if err != nil || stats.TotalGames != 1 {
 		t.Fatalf("stats: %+v", stats)
 	}
+
+	runID, err := st.StartPCGWSyncRun(ctx, "incremental")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.FinishPCGWSyncRun(ctx, runID, "success", "", PCGWSyncRunStats{
+		GamesTotal: 1, GamesOK: 1, AvgParseMs: 42,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runs, err := st.ListPCGWSyncRuns(ctx, 10)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("ListPCGWSyncRuns: %v len=%d", err, len(runs))
+	}
+	if runs[0].Mode != "incremental" || runs[0].Status != "success" || runs[0].GamesOK != 1 {
+		t.Fatalf("run: %+v", runs[0])
+	}
+	if n, err := st.CountPCGWParseFailures(ctx); err != nil || n != 0 {
+		t.Fatalf("parse failures count: %d %v", n, err)
+	}
 }
 
 func TestPCGWBackfillFromManifest(t *testing.T) {

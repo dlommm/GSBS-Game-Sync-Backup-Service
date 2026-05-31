@@ -912,6 +912,43 @@ func (s *sqliteStore) GetLatestPCGWSyncRun(ctx context.Context) (*types.PCGWSync
 		FROM pcgw_sync_runs ORDER BY started_at DESC LIMIT 1`)
 }
 
+func (s *sqliteStore) ListPCGWSyncRuns(ctx context.Context, limit int) ([]types.PCGWSyncRun, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, mode, status, started_at, finished_at, checkpoint_offset,
+			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message,
+			resumed_from_run_id, notes
+		FROM pcgw_sync_runs ORDER BY started_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []types.PCGWSyncRun
+	for rows.Next() {
+		var r types.PCGWSyncRun
+		var finished, errMsg, resumedFrom, notes sql.NullString
+		if err := rows.Scan(&r.ID, &r.Mode, &r.Status, &r.StartedAt, &finished, &r.CheckpointOffset,
+			&r.GamesTotal, &r.GamesOK, &r.GamesPartial, &r.GamesFailed, &r.GamesSkipped, &r.AvgParseMs, &errMsg,
+			&resumedFrom, &notes); err != nil {
+			return nil, err
+		}
+		r.FinishedAt = finished.String
+		r.ErrorMessage = errMsg.String
+		r.ResumedFromRunID = resumedFrom.String
+		r.Notes = notes.String
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *sqliteStore) CountPCGWParseFailures(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pcgw_parse_failures`).Scan(&n)
+	return n, err
+}
+
 func (s *sqliteStore) GetResumablePCGWSyncRun(ctx context.Context, mode string) (*types.PCGWSyncRun, error) {
 	return s.scanPCGWSyncRun(ctx, `
 		SELECT id, mode, status, started_at, finished_at, checkpoint_offset,

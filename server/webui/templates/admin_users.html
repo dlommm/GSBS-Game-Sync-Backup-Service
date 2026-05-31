@@ -1,27 +1,20 @@
 {{template "layout" .}}
 {{define "admin_users_title"}}Admin Users — GSBS{{end}}
 {{define "admin_users_content"}}
-<section class="panel">
+<section class="panel panel-users">
   <div class="panel-header-actions">
     <h2>Users</h2>
     <button type="button" class="btn-primary-sm" onclick="document.getElementById('create-user-dialog').showModal()">Create user</button>
   </div>
   {{if .Users}}
-  <div class="table-wrap">
-    <table class="data-table">
-      <thead><tr><th>Username</th><th>Clients</th><th>Saves</th><th>Storage</th><th>Quota</th><th>Status</th><th class="th-action">Actions</th></tr></thead>
+  <div class="table-wrap users-table-wrap">
+    <table class="data-table users-table">
+      <thead><tr><th>Username</th><th>Status</th><th>Quota</th><th class="col-clients">Clients</th><th class="col-saves">Saves</th><th class="col-storage">Storage</th><th class="th-action">Actions</th></tr></thead>
       <tbody>
         {{range .Users}}
         <tr>
           <td class="cell-primary">{{.Username}}</td>
-          <td>
-            <div class="client-bar-wrap">
-              {{.ClientCount}}
-              <div class="client-bar-track"><div class="client-bar-fill" style="width:{{clientBarWidth .ClientCount $.MaxClientCount}}%;"></div></div>
-            </div>
-          </td>
-          <td>{{.SaveCount}}</td>
-          <td class="cell-size">{{formatBytes .StorageBytes}}</td>
+          <td>{{if .Disabled}}<span class="badge-failed">disabled</span>{{else}}<span class="badge-success">active</span>{{end}}</td>
           <td class="quota-cell">
             {{if eq .QuotaBytes 0}}
             <span class="cell-muted">Unlimited</span>
@@ -36,9 +29,16 @@
             </div>
             {{end}}
           </td>
-          <td>{{if .Disabled}}<span class="badge-failed">disabled</span>{{else}}<span class="badge-success">active</span>{{end}}</td>
+          <td class="col-clients">
+            <div class="client-bar-wrap">
+              {{.ClientCount}}
+              <div class="client-bar-track"><div class="client-bar-fill" style="width:{{clientBarWidth .ClientCount $.MaxClientCount}}%;"></div></div>
+            </div>
+          </td>
+          <td class="col-saves">{{.SaveCount}}</td>
+          <td class="col-storage cell-size">{{formatBytes .StorageBytes}}</td>
           <td class="cell-action">
-            <details class="action-menu">
+            <details class="action-menu action-menu-up">
               <summary class="btn-ghost-sm">Actions</summary>
               <div class="action-menu-panel">
                 {{if ne .ID $.CurrentUserID}}
@@ -90,16 +90,22 @@
 </section>
 
 <dialog id="create-user-dialog">
-  <form method="post" action="/admin/user/create">
+  <form method="post" action="/admin/user/create" class="dialog-form">
     <div class="dialog-body">
-      <h3 style="margin:0 0 1rem;">Create user</h3>
+      <h3 class="dialog-title">Create user</h3>
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <label for="new_username">Username</label>
-      <input id="new_username" name="username" required autocomplete="off">
-      <label for="new_password">Password</label>
-      <input id="new_password" name="password" type="password" required autocomplete="new-password">
-      <label for="new_confirm_password">Confirm password</label>
-      <input id="new_confirm_password" name="confirm_password" type="password" required autocomplete="new-password">
+      <div class="form-group">
+        <label for="new_username">Username</label>
+        <input id="new_username" name="username" class="text-input" required autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="new_password">Password</label>
+        <input id="new_password" name="password" type="password" class="text-input" required autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="new_confirm_password">Confirm password</label>
+        <input id="new_confirm_password" name="confirm_password" type="password" class="text-input" required autocomplete="new-password">
+      </div>
     </div>
     <div class="dialog-actions">
       <button type="button" class="btn-ghost-sm" onclick="this.closest('dialog').close()">Cancel</button>
@@ -109,10 +115,10 @@
 </dialog>
 
 <dialog id="quota-dialog">
-  <form method="post" action="/admin/user/quota">
+  <form method="post" action="/admin/user/quota" class="dialog-form">
     <div class="dialog-body">
-      <h3 style="margin:0 0 0.5rem;">Set storage quota</h3>
-      <p class="cell-muted" id="quota-dialog-user" style="margin:0 0 1rem;font-size:0.875rem;"></p>
+      <h3 class="dialog-title">Set storage quota</h3>
+      <p class="form-hint" id="quota-dialog-user"></p>
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <input type="hidden" name="user_id" id="quota-user-id">
       <div class="quota-presets">
@@ -121,8 +127,10 @@
         <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(53687091200)">50 GB</button>
         <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(0)">Unlimited</button>
       </div>
-      <label for="quota_bytes">Custom quota (bytes, 0 = unlimited)</label>
-      <input id="quota_bytes" name="quota_bytes" type="number" min="0" step="1" required>
+      <div class="form-group">
+        <label for="quota_bytes">Custom quota (bytes, 0 = unlimited)</label>
+        <input id="quota_bytes" name="quota_bytes" type="number" min="0" step="1" class="text-input" required>
+      </div>
     </div>
     <div class="dialog-actions">
       <button type="button" class="btn-ghost-sm" onclick="this.closest('dialog').close()">Cancel</button>

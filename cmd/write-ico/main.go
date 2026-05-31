@@ -1,12 +1,14 @@
-// One-off: creates server/icon.ico from client/icon_32.png for Windows exe icon.
+// Generates client/icon.ico (tray + Windows resources) from client/icon_32.png.
 // Run from repo root: go run ./cmd/write-ico
 package main
 
 import (
-	"encoding/binary"
 	"image"
 	"image/png"
 	"os"
+
+	"github.com/gsbs/gsbs/pkg/ico"
+	"golang.org/x/image/draw"
 )
 
 func main() {
@@ -15,40 +17,26 @@ func main() {
 		panic(err)
 	}
 	defer f.Close()
-	img, err := png.Decode(f)
+	img32, err := png.Decode(f)
 	if err != nil {
 		panic(err)
 	}
-	ico := pngToICO(img)
-	if err := os.WriteFile("server/icon.ico", ico, 0644); err != nil {
+	img16 := resize(img32, 16)
+	icoBytes := ico.EncodeImages(img16, img32)
+	if len(icoBytes) == 0 {
+		panic("empty ico")
+	}
+	if err := os.WriteFile("client/icon.ico", icoBytes, 0644); err != nil {
+		panic(err)
+	}
+	// Server Windows build embeds server/rsrc.syso from the same asset.
+	if err := os.WriteFile("server/icon.ico", icoBytes, 0644); err != nil {
 		panic(err)
 	}
 }
 
-func pngToICO(img image.Image) []byte {
-	bounds := img.Bounds()
-	w := bounds.Dx()
-	h := bounds.Dy()
-	imgSize := 40 + w*h*4
-	buf := make([]byte, 0, 6+16+imgSize)
-	buf = append(buf, 0, 0, 1, 0, 1, 0)
-	buf = append(buf, byte(w), byte(h), 0, 0, 1, 0, 32, 0)
-	var tmp [4]byte
-	binary.LittleEndian.PutUint32(tmp[:], uint32(imgSize))
-	buf = append(buf, tmp[:]...)
-	binary.LittleEndian.PutUint32(tmp[:], 22)
-	buf = append(buf, tmp[:]...)
-	buf = append(buf, 40, 0, 0, 0)
-	binary.LittleEndian.PutUint32(tmp[:], uint32(w))
-	buf = append(buf, tmp[:]...)
-	binary.LittleEndian.PutUint32(tmp[:], uint32(h*2))
-	buf = append(buf, tmp[:]...)
-	buf = append(buf, 1, 0, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-	for y := h - 1; y >= 0; y-- {
-		for x := 0; x < w; x++ {
-			r, g, b, a := img.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
-			buf = append(buf, byte(b>>8), byte(g>>8), byte(r>>8), byte(a>>8))
-		}
-	}
-	return buf
+func resize(src image.Image, size int) image.Image {
+	dst := image.NewRGBA(image.Rect(0, 0, size, size))
+	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Over, nil)
+	return dst
 }
