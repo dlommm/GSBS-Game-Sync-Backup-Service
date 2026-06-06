@@ -30,6 +30,9 @@ func StartSetupServer() string {
 	mux.HandleFunc("/login", handleSetupLogin)
 	mux.HandleFunc("/open-log", handleOpenLog)
 	mux.HandleFunc("/status", handleSetupStatus)
+	mux.HandleFunc("/games", handleAddGamePage)
+	mux.HandleFunc("/games/search", handleGamesSearch)
+	mux.HandleFunc("/games/add", handleGamesAdd)
 
 	for port := setupPortStart; port < setupPortEnd; port++ {
 		addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -246,6 +249,141 @@ func writeSetupHTML(w http.ResponseWriter, serverURL, clientName, errMsg string,
   </script>
 </body>
 </html>`, status, htmlEsc(serverURL), htmlEsc(clientName))
+	w.Write([]byte(page))
+}
+
+// handleGamesSearch returns manifest matches for the add-game UI as JSON.
+func handleGamesSearch(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	results := searchManifestGames(q, 40)
+	if results == nil {
+		results = []manualGameResult{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"results": results})
+}
+
+// handleGamesAdd processes the add-game form and writes a config watch path.
+func handleGamesAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/games", http.StatusSeeOther)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		writeAddGameHTML(w, "Invalid form.", "")
+		return
+	}
+	gameID := strings.TrimSpace(r.Form.Get("game_id"))
+	title := strings.TrimSpace(r.Form.Get("title"))
+	directory := strings.TrimSpace(r.Form.Get("directory"))
+	syncAll := r.Form.Get("sync_all") != "" || strings.TrimSpace(r.Form.Get("patterns")) == ""
+	var patterns []string
+	for _, p := range strings.Split(r.Form.Get("patterns"), ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			patterns = append(patterns, p)
+		}
+	}
+	if err := addManualWatchPath(gameID, title, directory, syncAll, patterns); err != nil {
+		writeAddGameHTML(w, err.Error(), "")
+		return
+	}
+	name := title
+	if name == "" {
+		name = gameID
+	}
+	writeAddGameHTML(w, "", fmt.Sprintf("Added %q. Sync restarted — saves in %s will now upload on change.", name, directory))
+}
+
+func handleAddGamePage(w http.ResponseWriter, r *http.Request) {
+	writeAddGameHTML(w, "", "")
+}
+
+func writeAddGameHTML(w http.ResponseWriter, errMsg, okMsg string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	status := ""
+	if errMsg != "" {
+		status = fmt.Sprintf(`<p class="err">%s</p>`, htmlEsc(errMsg))
+	} else if okMsg != "" {
+		status = fmt.Sprintf(`<p class="ok">%s</p>`, htmlEsc(okMsg))
+	}
+	page := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>GSBS — Add a game</title>
+  <style>
+    body { font-family: Segoe UI, sans-serif; max-width: 560px; margin: 40px auto; padding: 20px; }
+    h1 { font-size: 1.3em; }
+    label { display: block; margin-top: 10px; font-weight: 600; }
+    input[type=text] { width: 100%%; padding: 6px; box-sizing: border-box; }
+    .err { color: #c00; }
+    .ok { color: #080; }
+    button { margin-top: 14px; padding: 8px 16px; cursor: pointer; }
+    .hint { font-size: 0.9em; color: #666; margin-top: 2px; }
+    #results { list-style: none; padding: 0; margin: 8px 0; }
+    #results li { border: 1px solid #ddd; border-radius: 6px; padding: 8px; margin-bottom: 6px; }
+    #results .meta { font-size: 0.85em; color: #666; }
+    #results .use { float: right; }
+    .badge { font-size: 0.75em; padding: 1px 6px; border-radius: 8px; }
+    .badge.found { background: #e6f7e6; color: #080; }
+    .badge.missing { background: #fdeaea; color: #c00; }
+  </style>
+</head>
+<body>
+  <h1>Add a game to sync</h1>
+  %s
+  <p class="hint">Search the server manifest by name, then click <em>Use this</em> to fill the folder. Or paste a save-folder path manually. The folder must already exist on this PC.</p>
+
+  <label>Search games</label>
+  <input type="text" id="search" placeholder="e.g. Witcher 3" autocomplete="off">
+  <ul id="results"></ul>
+
+  <form method="post" action="/games/add">
+    <label>Game ID</label>
+    <input type="text" name="game_id" id="game_id" required placeholder="manifest game id">
+    <label>Title (optional)</label>
+    <input type="text" name="title" id="title" placeholder="display name">
+    <label>Save folder (absolute path)</label>
+    <input type="text" name="directory" id="directory" required placeholder="e.g. C:\Users\you\Documents\The Witcher 3">
+    <span class="hint">The folder must exist. Subfolders are watched too.</span>
+    <label>Include patterns (optional, comma-separated)</label>
+    <input type="text" name="patterns" id="patterns" placeholder="*.sav, *.save (leave blank to sync all files)">
+    <button type="submit">Add game</button>
+  </form>
+  <p class="hint" style="margin-top:18px"><a href="/">← Back to setup</a></p>
+
+  <script>
+  var t;
+  var box = document.getElementById('search');
+  box.addEventListener('input', function() {
+    clearTimeout(t);
+    t = setTimeout(runSearch, 250);
+  });
+  function runSearch() {
+    fetch('/games/search?q=' + encodeURIComponent(box.value)).then(function(r){return r.json();}).then(function(d){
+      var ul = document.getElementById('results');
+      ul.innerHTML = '';
+      (d.results || []).forEach(function(g){
+        var li = document.createElement('li');
+        var badge = g.exists ? '<span class="badge found">folder found</span>' : '<span class="badge missing">folder missing</span>';
+        var btn = '<button type="button" class="use">Use this</button>';
+        li.innerHTML = btn + '<strong>' + esc(g.title) + '</strong> ' + badge +
+          '<div class="meta">' + esc(g.game_id) + (g.directory ? ' · ' + esc(g.directory) : ' · (no path resolved)') + '</div>';
+        li.querySelector('.use').addEventListener('click', function(){
+          document.getElementById('game_id').value = g.game_id;
+          document.getElementById('title').value = g.title;
+          document.getElementById('directory').value = g.directory || '';
+          window.scrollTo(0, document.body.scrollHeight);
+        });
+        ul.appendChild(li);
+      });
+    }).catch(function(){});
+  }
+  function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  runSearch();
+  </script>
+</body>
+</html>`, status)
 	w.Write([]byte(page))
 }
 

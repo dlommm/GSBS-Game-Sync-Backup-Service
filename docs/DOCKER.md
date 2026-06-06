@@ -95,6 +95,7 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_DB` | `gsbs.db` | Path to the SQLite database file. Use a path under a mounted volume for persistence. |
 | `GSBS_SAVE_ROOT` | (unset) | When set, save file bytes are stored on disk under this directory (metadata stays in SQLite). Recommended: `/app/data/gamesaves` on the same volume as `GSBS_DB`. When unset, saves are stored as BLOBs in the database (legacy behavior). |
 | `GSBS_MIGRATE_BLOBS_TO_FS` | (unset) | Set to `1` on startup to export existing BLOB saves to files under `GSBS_SAVE_ROOT` (requires `GSBS_SAVE_ROOT`). |
+| `GSBS_DRY_RUN_MIGRATION` | (unset) | Set to `1` to preview the 2.0 schema migration (logs row counts and warnings) without writing any changes. Remove after previewing. |
 | `GSBS_SESSION_SECRET` | (insecure default) | Secret used to sign WebUI session cookies. **Set in production.** Expired browser sessions are purged automatically on startup and daily (no extra env var). |
 | `GSBS_ADMIN_USERNAME` | (empty) | If set, only this user can access the `/admin` page (stats and revoke client tokens). |
 | `GSBS_MAX_STORAGE_BYTES` | (unlimited) | Global storage limit in bytes; 0 or unset = unlimited. |
@@ -200,12 +201,63 @@ healthcheck:
   interval: 30s
   timeout: 5s
   retries: 3
-  start_period: 5s
+  start_period: 15s
 ```
 
 ### Data backup
 
-The SQLite database is stored in the volume (e.g. `gsbs-data`). Back up that volume (or the host path it’s bound to) regularly. You can use `docker cp`, a volume backup tool, or your host’s backup solution.
+The SQLite database is stored in the volume (e.g. `gsbs-data`). GSBS runs SQLite in **WAL mode**, so a simple `cp gsbs.db` while the server is running may miss in-flight transactions or produce an inconsistent snapshot. Use one of the following safe methods:
+
+**Option A — stop the container first (simplest):**
+```bash
+docker stop gsbs
+cp /path/to/gsbs-data/gsbs.db /path/to/backup/gsbs.db
+cp /path/to/gsbs-data/gsbs.db-wal /path/to/backup/gsbs.db-wal 2>/dev/null || true
+cp /path/to/gsbs-data/gsbs.db-shm /path/to/backup/gsbs.db-shm 2>/dev/null || true
+docker start gsbs
+```
+
+**Option B — live backup with SQLite (no downtime):**
+```bash
+# Using sqlite3 (requires sqlite3 on the host or inside the container)
+sqlite3 /path/to/gsbs-data/gsbs.db ".backup /path/to/backup/gsbs-backup.db"
+
+# Or use VACUUM INTO (SQLite 3.27+) — writes a clean, WAL-checkpointed copy
+sqlite3 /path/to/gsbs-data/gsbs.db "VACUUM INTO '/path/to/backup/gsbs-backup.db'"
+```
+
+Both options produce a consistent single-file backup with no in-flight transaction risk. If `GSBS_SAVE_ROOT` is set, also back up that directory (it holds save file bytes outside SQLite).
+
+### Upgrading
+
+> **Back up your data volume before upgrading.** The 2.0 release runs a one-way schema migration on startup. It cannot be automatically rolled back.
+
+**Preview migration changes before upgrading (dry run):**
+```bash
+GSBS_DRY_RUN_MIGRATION=1 docker run --rm \
+  -v gsbs-data:/app/data \
+  -e GSBS_DB=/app/data/gsbs.db \
+  dendlomm/gsbs-server:X.Y.Z
+```
+Check the logs for row counts and any warnings; no data is written.
+
+**Upgrade:**
+```bash
+docker compose pull   # or docker pull dendlomm/gsbs-server:X.Y.Z
+docker compose up -d  # restarts container; migration runs on startup
+```
+
+After the migration, clients perform a one-time re-sync check on their next run (no data loss — see `docs/CLIENT.md` for details).
+
+### Pin to a specific version tag in production
+
+Avoid using `:latest` in production compose files — it makes upgrade timing unpredictable. Instead, pin to a specific version tag and bump it deliberately:
+
+```yaml
+image: dendlomm/gsbs-server:1.0.14
+```
+
+This lets you control when migrations run and makes rollbacks straightforward (restore backup → roll back image tag).
 
 ---
 

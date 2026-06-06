@@ -16,253 +16,6 @@ import (
 	"github.com/gsbs/gsbs/pkg/types"
 )
 
-func (s *sqliteStore) migratePCGW() error {
-	stmts := []string{
-		`CREATE TABLE IF NOT EXISTS pcgw_games (
-			page_id INTEGER PRIMARY KEY,
-			page_name TEXT NOT NULL,
-			title TEXT NOT NULL,
-			is_disambiguation INTEGER NOT NULL DEFAULT 0,
-			redirects_to TEXT,
-			steam_appids TEXT NOT NULL DEFAULT '[]',
-			gog_id TEXT,
-			epic_id TEXT,
-			ubisoft_id TEXT,
-			microsoft_id TEXT,
-			battlenet_id TEXT,
-			itch_id TEXT,
-			other_ids TEXT NOT NULL DEFAULT '{}',
-			developers TEXT NOT NULL DEFAULT '[]',
-			publishers TEXT NOT NULL DEFAULT '[]',
-			release_dates TEXT NOT NULL DEFAULT '[]',
-			engines TEXT NOT NULL DEFAULT '[]',
-			taxonomy TEXT NOT NULL DEFAULT '{}',
-			infobox TEXT NOT NULL DEFAULT '{}',
-			cover_url TEXT,
-			hltb_id TEXT,
-			igdb_id TEXT,
-			cargo_last_updated TEXT,
-			platforms_present TEXT NOT NULL DEFAULT '[]',
-			last_rev_id INTEGER,
-			last_rev_timestamp TEXT,
-			last_fetched_at TEXT,
-			parse_status TEXT NOT NULL DEFAULT 'pending',
-			parse_error TEXT,
-			parse_duration_ms INTEGER NOT NULL DEFAULT 0,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_pcgw_games_title ON pcgw_games(title)`,
-		`CREATE INDEX IF NOT EXISTS idx_pcgw_games_page_name ON pcgw_games(page_name)`,
-		`CREATE INDEX IF NOT EXISTS idx_pcgw_games_parse_status ON pcgw_games(parse_status)`,
-		`CREATE INDEX IF NOT EXISTS idx_pcgw_games_last_fetched ON pcgw_games(last_fetched_at)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_game_data (
-			page_id INTEGER NOT NULL REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			platform_key TEXT NOT NULL,
-			platform_raw_label TEXT,
-			save_locations TEXT NOT NULL DEFAULT '[]',
-			config_locations TEXT NOT NULL DEFAULT '[]',
-			save_game_cloud_sync TEXT NOT NULL DEFAULT '{}',
-			install_locations TEXT NOT NULL DEFAULT '[]',
-			registry_keys TEXT NOT NULL DEFAULT '[]',
-			save_file_info TEXT NOT NULL DEFAULT '{}',
-			all_templates TEXT NOT NULL DEFAULT '[]',
-			section_wikitext TEXT,
-			structured TEXT NOT NULL DEFAULT '{}',
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (page_id, platform_key)
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_pcgw_game_data_page ON pcgw_game_data(page_id)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_availability (
-			page_id INTEGER PRIMARY KEY REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			data TEXT NOT NULL DEFAULT '{}',
-			all_templates TEXT NOT NULL DEFAULT '[]',
-			section_wikitext TEXT,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_monetization (
-			page_id INTEGER PRIMARY KEY REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			data TEXT NOT NULL DEFAULT '{}',
-			all_templates TEXT NOT NULL DEFAULT '[]',
-			section_wikitext TEXT,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_video (
-			page_id INTEGER PRIMARY KEY REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			data TEXT NOT NULL DEFAULT '{}',
-			all_templates TEXT NOT NULL DEFAULT '[]',
-			section_wikitext TEXT,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_input (
-			page_id INTEGER PRIMARY KEY REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			data TEXT NOT NULL DEFAULT '{}',
-			all_templates TEXT NOT NULL DEFAULT '[]',
-			section_wikitext TEXT,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_audio (
-			page_id INTEGER PRIMARY KEY REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			data TEXT NOT NULL DEFAULT '{}',
-			all_templates TEXT NOT NULL DEFAULT '[]',
-			section_wikitext TEXT,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_network (
-			page_id INTEGER PRIMARY KEY REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			data TEXT NOT NULL DEFAULT '{}',
-			all_templates TEXT NOT NULL DEFAULT '[]',
-			section_wikitext TEXT,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_other (
-			page_id INTEGER PRIMARY KEY REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			data TEXT NOT NULL DEFAULT '{}',
-			all_templates TEXT NOT NULL DEFAULT '[]',
-			section_wikitext TEXT,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_notes (
-			page_id INTEGER PRIMARY KEY REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			data TEXT NOT NULL DEFAULT '{}',
-			all_templates TEXT NOT NULL DEFAULT '[]',
-			section_wikitext TEXT,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_references (
-			page_id INTEGER PRIMARY KEY REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			data TEXT NOT NULL DEFAULT '{}',
-			all_templates TEXT NOT NULL DEFAULT '[]',
-			section_wikitext TEXT,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_external_links (
-			page_id INTEGER PRIMARY KEY REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			data TEXT NOT NULL DEFAULT '{}',
-			all_templates TEXT NOT NULL DEFAULT '[]',
-			section_wikitext TEXT,
-			updated_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_system_requirements (
-			page_id INTEGER NOT NULL REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			platform_key TEXT NOT NULL,
-			requirement_type TEXT NOT NULL,
-			specs TEXT NOT NULL DEFAULT '{}',
-			section_wikitext TEXT,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (page_id, platform_key, requirement_type)
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_metadata (
-			page_id INTEGER PRIMARY KEY REFERENCES pcgw_games(page_id) ON DELETE CASCADE,
-			full_wikitext_zstd BLOB,
-			content_hash TEXT,
-			section_hashes TEXT NOT NULL DEFAULT '{}',
-			parsed_sections TEXT NOT NULL DEFAULT '{}',
-			uncompressed_size INTEGER NOT NULL DEFAULT 0,
-			last_fetched_at TEXT NOT NULL
-		)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_parse_failures (
-			id TEXT PRIMARY KEY,
-			page_id INTEGER NOT NULL,
-			sync_run_id TEXT,
-			section TEXT NOT NULL,
-			error_message TEXT NOT NULL,
-			wikitext_snippet TEXT,
-			created_at TEXT NOT NULL
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_pcgw_parse_failures_page ON pcgw_parse_failures(page_id)`,
-		`CREATE INDEX IF NOT EXISTS idx_pcgw_parse_failures_run ON pcgw_parse_failures(sync_run_id)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_sync_runs (
-			id TEXT PRIMARY KEY,
-			mode TEXT NOT NULL,
-			status TEXT NOT NULL,
-			started_at TEXT NOT NULL,
-			finished_at TEXT,
-			checkpoint_offset INTEGER NOT NULL DEFAULT 0,
-			games_total INTEGER NOT NULL DEFAULT 0,
-			games_ok INTEGER NOT NULL DEFAULT 0,
-			games_partial INTEGER NOT NULL DEFAULT 0,
-			games_failed INTEGER NOT NULL DEFAULT 0,
-			games_skipped INTEGER NOT NULL DEFAULT 0,
-			avg_parse_ms INTEGER NOT NULL DEFAULT 0,
-			error_message TEXT
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_pcgw_sync_runs_started ON pcgw_sync_runs(started_at)`,
-		`CREATE TABLE IF NOT EXISTS pcgw_manifest_meta (
-			id INTEGER PRIMARY KEY CHECK (id = 1),
-			manifest_version INTEGER NOT NULL DEFAULT 0,
-			manifest_etag TEXT NOT NULL DEFAULT '',
-			last_incremental_at TEXT,
-			last_full_sync_at TEXT,
-			db_wikitext_bytes INTEGER NOT NULL DEFAULT 0
-		)`,
-		`INSERT OR IGNORE INTO pcgw_manifest_meta (id, manifest_version, manifest_etag) VALUES (1, 0, '')`,
-	}
-	for _, stmt := range stmts {
-		if _, err := s.db.Exec(stmt); err != nil {
-			return fmt.Errorf("migrate pcgw: %w", err)
-		}
-	}
-	for _, col := range []string{
-		`ALTER TABLE pcgw_sync_runs ADD COLUMN resumed_from_run_id TEXT`,
-		`ALTER TABLE pcgw_sync_runs ADD COLUMN notes TEXT`,
-	} {
-		if _, err := s.db.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate") {
-			return fmt.Errorf("migrate pcgw: %w", err)
-		}
-	}
-
-	// FTS5 virtual table (optional — some SQLite builds lack fts5)
-	ftsOK := false
-	if _, err := s.db.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS pcgw_games_fts USING fts5(
-		title, page_name, content='pcgw_games', content_rowid='page_id'
-	)`); err == nil {
-		ftsOK = true
-	}
-
-	// Backfill from existing manifest rows (before triggers so inserts don't fire FTS yet)
-	if _, err := s.db.Exec(`
-		INSERT OR IGNORE INTO pcgw_games (
-			page_id, page_name, title, steam_appids, gog_id, epic_id, ubisoft_id,
-			parse_status, created_at, updated_at
-		)
-		SELECT DISTINCT
-			pcgw_page_id, game_title, game_title,
-			COALESCE(steam_app_ids, '[]'), COALESCE(gog_id, ''), COALESCE(epic_id, ''), COALESCE(ubisoft_id, ''),
-			'pending', datetime('now'), datetime('now')
-		FROM game_save_locations
-		WHERE pcgw_page_id > 0`); err != nil {
-		return fmt.Errorf("migrate pcgw backfill: %w", err)
-	}
-
-	if ftsOK {
-		triggers := []string{
-			`CREATE TRIGGER IF NOT EXISTS pcgw_games_ai AFTER INSERT ON pcgw_games BEGIN
-			INSERT INTO pcgw_games_fts(rowid, title, page_name) VALUES (new.page_id, new.title, new.page_name);
-		END`,
-			`CREATE TRIGGER IF NOT EXISTS pcgw_games_ad AFTER DELETE ON pcgw_games BEGIN
-			INSERT INTO pcgw_games_fts(pcgw_games_fts, rowid, title, page_name)
-			VALUES ('delete', old.page_id, old.title, old.page_name);
-		END`,
-			`CREATE TRIGGER IF NOT EXISTS pcgw_games_au AFTER UPDATE ON pcgw_games BEGIN
-			INSERT INTO pcgw_games_fts(pcgw_games_fts, rowid, title, page_name)
-			VALUES ('delete', old.page_id, old.title, old.page_name);
-			INSERT INTO pcgw_games_fts(rowid, title, page_name)
-			VALUES (new.page_id, new.title, new.page_name);
-		END`,
-		}
-		for _, t := range triggers {
-			if _, err := s.db.Exec(t); err != nil {
-				return fmt.Errorf("migrate pcgw fts trigger: %w", err)
-			}
-		}
-		if _, err := s.db.Exec(`INSERT INTO pcgw_games_fts(pcgw_games_fts) VALUES('rebuild')`); err != nil {
-			return fmt.Errorf("migrate pcgw fts rebuild: %w", err)
-		}
-	}
-	return nil
-}
-
 func pcgwJSON(v interface{}) string {
 	if v == nil {
 		return "{}"
@@ -1182,8 +935,8 @@ func (s *sqliteStore) BuildManifestV2(ctx context.Context, since, platform strin
 			}
 			rawLabelByPlatform[gd.PlatformKey] = gd.PlatformRawLabel
 			if !useManifestEntries {
-				for _, sl := range gd.SaveLocations {
-					rules := saveRulesFromPathTemplates(sl.PathTemplates, gd.PlatformKey, false)
+				for i, sl := range gd.SaveLocations {
+					rules := saveRulesFromPathTemplates(sl.PathTemplates, gd.PlatformKey, false, strconv.Itoa(i))
 					mg.SaveLocations = append(mg.SaveLocations, types.ManifestV2Location{
 						Platform: gd.PlatformKey, PlatformRawLabel: gd.PlatformRawLabel,
 						PathTemplates: sl.PathTemplates, SaveRules: rules, IsConfig: false, Notes: sl.Notes,
@@ -1192,8 +945,8 @@ func (s *sqliteStore) BuildManifestV2(ctx context.Context, since, platform strin
 						mg.HasSaveData = true
 					}
 				}
-				for _, cl := range gd.ConfigLocations {
-					rules := saveRulesFromPathTemplates(cl.PathTemplates, gd.PlatformKey, true)
+				for i, cl := range gd.ConfigLocations {
+					rules := saveRulesFromPathTemplates(cl.PathTemplates, gd.PlatformKey, true, strconv.Itoa(i))
 					mg.ConfigLocations = append(mg.ConfigLocations, types.ManifestV2Location{
 						Platform: gd.PlatformKey, PlatformRawLabel: gd.PlatformRawLabel,
 						PathTemplates: cl.PathTemplates, SaveRules: rules, IsConfig: true, Notes: cl.Notes,
@@ -1245,18 +998,39 @@ func (s *sqliteStore) BuildManifestV2(ctx context.Context, since, platform strin
 		}
 		games = append(games, mg)
 	}
+
+	var deletedIDs []string
+	if since != "" {
+		delRows, err := s.db.QueryContext(ctx,
+			`SELECT game_id FROM pcgw_manifest_deletions WHERE deleted_at > ? ORDER BY deleted_at`, since)
+		if err == nil {
+			for delRows.Next() {
+				var gid string
+				if delRows.Scan(&gid) == nil && gid != "" {
+					deletedIDs = append(deletedIDs, gid)
+				}
+			}
+			_ = delRows.Close()
+		}
+	}
+
 	return &types.ManifestV2Response{
-		Version:     meta.ManifestVersion,
-		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
-		ETag:        meta.ManifestETag,
-		Games:       games,
+		SchemaVersion:  1,
+		Version:        meta.ManifestVersion,
+		GeneratedAt:    time.Now().UTC().Format(time.RFC3339),
+		ETag:           meta.ManifestETag,
+		Games:          games,
+		DeletedGameIDs: deletedIDs,
 	}, nil
 }
 
-func saveRulesFromPathTemplates(templates []string, platform string, isConfig bool) []types.SaveRule {
+func saveRulesFromPathTemplates(templates []string, platform string, isConfig bool, slotLabel string) []types.SaveRule {
 	var rules []types.SaveRule
 	for _, pt := range templates {
-		rules = append(rules, pcgw.ParseSaveRules(pt, platform, isConfig)...)
+		for _, r := range pcgw.ParseSaveRules(pt, platform, isConfig) {
+			r.SlotLabel = slotLabel
+			rules = append(rules, r)
+		}
 	}
 	return rules
 }
@@ -1323,8 +1097,11 @@ func (s *sqliteStore) ExportPCGWGameJSON(ctx context.Context, pageID int64) ([]b
 	return json.MarshalIndent(export, "", "  ")
 }
 
-// ManifestETagFromGames computes etag hash for manifest bump.
+// ManifestETagFromGames computes a stable ETag for the manifest at the given version.
+// The result is purely content-derived: identical inputs always produce the same ETag,
+// so clients can use If-None-Match and skip re-downloading unchanged manifests.
+// Callers should pass the new version that will be stored (i.e. current + 1).
 func ManifestETagFromGames(version int) string {
-	h := sha256.Sum256([]byte(fmt.Sprintf("manifest-v%d-%d", version, time.Now().UnixNano())))
+	h := sha256.Sum256([]byte(fmt.Sprintf("manifest-v%d", version)))
 	return "sha256:" + hex.EncodeToString(h[:16])
 }

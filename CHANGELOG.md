@@ -2,7 +2,69 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [1.5.0] - 2026-06-06
+
+### Added
+
+- **Cross-OS save sync**: `path_key` is now OS-independent for PCGW-sourced games — Windows and Linux/Steam Deck saves for the same game converge to a single server slot.
+- **Proton/compatdata path resolution**: client synthesizes `compatdata/<appid>/pfx/...` paths for Windows-template games running under Proton/Steam on Linux; multi-library and multi-account detection with ModTime-based fallback.
+- **Versioned DB migrations**: `PRAGMA user_version`-based transactional migrations with a 3-second backup warning on destructive steps; `GSBS_DRY_RUN_MIGRATION=1` dry-run mode.
+- **Migration step 16**: merge-aware collapse of per-OS save slots into OS-neutral keys; loser preserved in version history.
+- **Optimistic-concurrency push**: `X-GSBS-If-Hash` request header enables conflict detection; server returns HTTP 409 with the current hash and version on mismatch.
+- **SSE reliability**: 30-second heartbeat keeps connections alive; per-user connection cap of 5 prevents ghost accumulation; 64 KB line buffer with appropriately sized `bufio.Scanner`.
+- **Manifest `schema_version`** field in manifest v2 responses for forward-compatibility signaling.
+- `xdgcachehome` placeholder resolves to `$XDG_CACHE_HOME` / `~/.cache` on Linux.
+- Client: **per-game sync-readiness diagnostics** — each discovered game is classified (`ready`, `no_manifest_entry`, `wrong_platform`, `save_dir_missing`, `malformed_rules`, `disabled`); shown inline in the tray, tooltips, `debug-sync` output, and `game_sync_readiness` structured logs.
+- Client tray: **"Add a game manually…"** item opens a local browser page to search the manifest or add a save folder by path; writes a `watch_paths` entry and restarts sync.
+- Client tray: grouped items into **Account & Setup** and **Advanced** submenus for a cleaner top-level menu.
+- Client: structured sync logging via `client/logx` (`GSBS_LOG_LEVEL=debug|info|warn|error`) with `game_id`, `path_key`, `relative_path`, and error fields on watcher, outbox, and push paths.
+- Client CLI: **`gsbs-client debug-sync <game_id> [--dry-run]`** — inspect resolved watch paths and optionally force-push saves for a single game.
+- Client: persisted push-dedup cache (`push_hash_cache.json`) survives restarts; bounded to 4 concurrent pushes; graceful shutdown flushes the watcher debounce and drains the outbox.
+- Client tray: push-failure and auth-error toasts (`OnPushError`, `OnAuthError`).
+- Server manifest v2: `deleted_game_ids` on delta responses when games are removed from the PCGW catalog.
+- `pkg/saverule`: `ValidateRule` / `FilterValidRules` for save-rules sanity checks.
+
+### Changed
+
+- **`GSBS_SESSION_SECRET` is required**: server exits with a clear error on startup if the env var is unset.
+- `backup_on_pull` defaults to `true` for new installs.
+- Docker release pipeline: platform builds must all succeed before the image is pushed to Docker Hub.
+- golangci-lint upgraded to v2.12.2; explicit `.golangci.yml` config committed.
+- Manifest ETag is now content-derived (stable across identical responses; eliminates spurious re-downloads).
+- Redundant token re-validation on push eliminated; `clientID` is passed via request context.
+- `docker-entrypoint.sh` volume chown is conditional (top-level only, not recursive) to avoid delays on large mounts.
+- `-trimpath -s -w` added to all release builds.
+- Client outbox: stores `relative_path` and file references (re-read at send time) instead of base64 blobs; dedupes pending entries per `(game_id, path_key)`; mutex prevents concurrent drains.
+- Client watcher: exclude patterns support relative-path globs (e.g. `cache/*`); debounced pushes are cancelled when their watch root is removed.
+- Client manifest v2: a successful empty v2 response is now authoritative (no spurious v1 fallback); delta merge keys include save-rule identity.
+- Client `resolveSavePath`: uses discovered/config install roots from `BuildInstallRootsByGame` (Proton/Steam libs/launchers).
+- Client push: reloads token from config once on HTTP 401 before surfacing an auth error.
+- Discovery: Steam/PCGW lookups use shared `pkg/pcgw` rate limiting; lookup failures are logged.
+
+### Fixed
+
+- Pulled saves, `.gsbs.bak` backups, and `conflicts.json` are now written atomically (tmp + rename), eliminating torn-file corruption on crash or power loss.
+- Shutdown flush uses a fresh context so saves in flight at SIGTERM are not dropped.
+- Manifest cache slice was mutated and shared across goroutines; fixed with a copy-before-filter.
+- `handleRestoreSaveVersion` now respects read-only mode.
+- `UpsertSaveWithMeta` is wrapped in a transaction, eliminating version conflicts under concurrent pushes.
+- `migrateTokenHashes` and `migrateBlobsToFS` deadlock on upgrade fixed (collect all rows, then update).
+- `DeleteUser` is now fully transactional.
+- `Client.token` / `authRetried` and `discoveryState` data races eliminated.
+- Pull→push echo suppressed via `markPushed` after applying a pulled save.
+- Outbox: backoff reset per entry; lock released across network I/O; stale entries are re-pushed instead of dropped.
+- PCGW client retries on 5xx and transient network errors; MediaWiki `error`-field-on-200 responses are detected and surfaced.
+- `<br>`-separated multi-paths in PCGW wikitext templates are now split correctly.
+- Registry templates (`{{p|hkcu}}` etc.) excluded from the client manifest projection.
+- Path templates containing `..` traversal are rejected at ingest.
+- `ExtractAllTemplates` recovers from malformed `{{` instead of halting.
+- Auto-update refuses to apply a binary when the SHA256 checksum is absent from `latest-client.json`.
+- `GSBS_METRICS_TOKEN` is required when metrics are enabled; comparison uses constant-time equality.
+- SQLite `_busy_timeout=5000` added; `MaxOpenConns` raised from 1 to 5 for WAL-mode concurrency.
+- PCGW background job is drained on graceful shutdown; `last_seen` update moved inline.
+- Client watcher: `<game-install-folder>` save templates now resolve correctly (install roots were used for path building but not attached to the watcher).
+- Outbox replay no longer drops `X-Relative-Path` for multi-file save slots (was routing retries to the wrong server slot).
+- `MergeManifestDelta` collision when multiple save_rules shared the same directory.
 
 ## [1.2.3] - 2026-05-30
 
@@ -142,7 +204,10 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 See [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases) for earlier history.
 
-[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.3...v2.0.0
+[1.2.3]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.2...v1.2.3
+[1.5.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.1...v1.5.0
 [1.2.1]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.17...v1.1.0

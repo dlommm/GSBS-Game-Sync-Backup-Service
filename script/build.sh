@@ -29,7 +29,7 @@ VERSION_VALUE="${VERSION#v}"
 BUILD_DATE="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 COMMIT="${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 HOST_GOOS="$(go env GOOS)"
-LDFLAGS="-X main.Version=${VERSION_VALUE} -X main.BuildDate=${BUILD_DATE} -X main.Commit=${COMMIT}"
+LDFLAGS="-s -w -X main.Version=${VERSION_VALUE} -X main.BuildDate=${BUILD_DATE} -X main.Commit=${COMMIT}"
 
 mkdir -p "$OUT_DIR"
 
@@ -60,18 +60,18 @@ want_platform() {
 
 build_windows() {
   export GOOS=windows GOARCH=amd64 CGO_ENABLED=0
-  go build -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-server-windows-amd64.exe" ./server
+  go build -trimpath -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-server-windows-amd64.exe" ./server
   echo "Built gsbs-server-windows-amd64.exe"
-  go build -ldflags "-H windowsgui ${LDFLAGS}" -o "${OUT_DIR}/gsbs-client-windows-amd64.exe" ./client
+  go build -trimpath -ldflags "-H windowsgui ${LDFLAGS}" -o "${OUT_DIR}/gsbs-client-windows-amd64.exe" ./client
   echo "Built gsbs-client-windows-amd64.exe"
 }
 
 build_linux() {
   export GOOS=linux GOARCH=amd64
-  go build -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-server-linux-amd64" ./server
+  go build -trimpath -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-server-linux-amd64" ./server
   echo "Built gsbs-server-linux-amd64"
   if [ "$HOST_GOOS" = "linux" ]; then
-    go build -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-client-linux-amd64" ./client
+    go build -trimpath -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-client-linux-amd64" ./client
     echo "Built gsbs-client-linux-amd64"
   else
     echo "Skipping gsbs-client-linux-amd64 (systray requires Linux host; use CI or linux-amd64 runner)"
@@ -81,9 +81,9 @@ build_linux() {
 build_darwin() {
   local arch="$1"
   export GOOS=darwin GOARCH="$arch" CGO_ENABLED=0
-  go build -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-server-darwin-${arch}" ./server
+  go build -trimpath -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-server-darwin-${arch}" ./server
   echo "Built gsbs-server-darwin-${arch}"
-  go build -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-client-darwin-${arch}" ./client
+  go build -trimpath -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-client-darwin-${arch}" ./client
   echo "Built gsbs-client-darwin-${arch}"
 }
 

@@ -118,12 +118,22 @@ func notifyAuthError(msg string) {
 	_ = beeep.Alert("GSBS", truncateMsg(msg, 120), "")
 }
 
+func notifyPushError(gameID, pathKey, msg string) {
+	title := gameTitleFor(gameID)
+	_ = beeep.Alert("GSBS", truncateMsg(fmt.Sprintf("Upload failed for %s: %s", title, msg), 120), "")
+	log.Printf("tray notify: push error game=%s path_key=%s: %s", gameID, pathKey, msg)
+}
+
 func notifyQuotaError(msg string) {
 	if msg == "" {
 		msg = "Storage quota exceeded — free space on the server or contact your admin"
 	}
 	_ = beeep.Alert("GSBS", truncateMsg("Upload failed: "+msg, 120), "")
 	log.Printf("tray notify: quota error: %s", msg)
+}
+
+func notifyAddGameUnavailable() {
+	_ = beeep.Alert("GSBS", "Can't open the Add-game page — the local setup server isn't running. Try restarting GSBS.", "")
 }
 
 func notifyAlreadyRunning() {

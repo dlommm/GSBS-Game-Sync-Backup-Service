@@ -3,6 +3,8 @@ package pcgw
 import "strings"
 
 // ExtractAllTemplates returns every top-level {{...}} invocation in wikitext.
+// An unterminated {{ (malformed template) is skipped so that valid templates
+// appearing later on the same page are still extracted.
 func ExtractAllTemplates(wikitext string) []string {
 	var out []string
 	seen := make(map[string]bool)
@@ -15,7 +17,9 @@ func ExtractAllTemplates(wikitext string) []string {
 		start += i
 		end := findTemplateEnd(wikitext, start+2)
 		if end < 0 {
-			break
+			// Unterminated {{: advance past the opener and continue.
+			i = start + 2
+			continue
 		}
 		tmpl := wikitext[start:end]
 		if !seen[tmpl] {

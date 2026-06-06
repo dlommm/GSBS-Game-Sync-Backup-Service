@@ -46,10 +46,26 @@ Token expired or revoked. Open tray **Login…** or run `gsbs-client login`. Cre
 
 ### Saves not syncing
 
-- **Discovered mode** (`auto_watch_mode: "discovered"`): only installed, matched games sync. Check tray **Discovered games** — unchecked entries are disabled.
+A game can appear under tray **Discovered games** but still not sync. The tray now shows the reason inline next to each game, and `debug-sync` prints it. Reasons:
+
+| Tray label | Reason | Fix |
+|---|---|---|
+| `✓ <game>` | Ready — will sync | Nothing to do |
+| `⚠ <game> — not in server manifest` | `no_manifest_entry`: the game's save locations aren't in the server manifest | Run the PCGW sync on the server, or use **Add a game manually…** to point at the save folder |
+| `⚠ <game> — no saves for this OS` | `wrong_platform`: manifest only has save paths for another OS | Use **Add a game manually…** with the local folder |
+| `⚠ <game> — save folder not found` | `save_dir_missing`: path resolves but the folder doesn't exist | Launch the game once, or set `game_install_paths` in config |
+| `⚠ <game> — no valid save rule` | `malformed_rules`: server save rules failed validation | Fix the manifest entry on the server |
+| `⊘ <game>` | `disabled`: you turned sync off | Click the entry to re-enable, then **Refresh manifest** |
+
+Other checks:
+
+- **Discovered mode** (`auto_watch_mode: "discovered"`): only installed, matched, enabled games sync. Ready+enabled games auto-sync — no extra step needed.
 - **Folder-exists rule**: the client never creates save directories; the game must have run at least once so the folder exists.
+- **Add a game manually**: tray → **Discovered games** → **Add a game manually…** opens a local browser page. Search the manifest by name (e.g. "Witcher 3") and click *Use this*, or paste an absolute save-folder path. It writes a `watch_paths` entry and restarts sync.
 - Verify `sync_paused` is false and Windows metered-connection skip is not blocking sync.
-- Inspect `gsbs.log` for pull/push errors and `outbox/` for queued uploads.
+- Inspect `gsbs.log` for pull/push errors and `outbox/` for queued uploads. When zero watch paths are built, the log includes a `game_sync_readiness` line per game with the reason.
+- Run **`gsbs-client debug-sync <game_id> --dry-run`** to print the readiness reason, resolved watch dirs, `path_key`, and `relative_path` for each file that would upload (no network write). Omit `--dry-run` to force-push all matched files (requires login).
+- Set **`GSBS_LOG_LEVEL=debug`** (environment variable) for structured sync logs with `game_id`, `path_key`, and `relative_path` fields in `gsbs.log`.
 
 ### Manifest fetch fails
 
@@ -63,7 +79,7 @@ Clients try `GET /api/manifest/v2` first, then fall back to v1. Upgrade the serv
 | Client config | Same directory, `config.json` |
 | Server (Docker) | `docker compose logs` |
 
-Set `GSBS_LOG_LEVEL=debug` on the server or `"verbose_log": true` in client config for more detail.
+Set `GSBS_LOG_LEVEL=debug` on the server or client (environment variable) for structured sync diagnostics. Use `"verbose_log": true` in client config for extra per-file size lines during push/pull.
 
 ## Still stuck?
 

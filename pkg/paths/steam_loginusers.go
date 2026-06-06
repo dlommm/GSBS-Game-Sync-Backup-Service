@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 )
 
 var (
@@ -74,6 +75,23 @@ func detectSteamUserFromUserdata(steamRoot string) string {
 	}
 	if len(ids) == 1 {
 		return ids[0]
+	}
+	if len(ids) > 1 {
+		// When multiple accounts exist and no MostRecent flag was found in the VDF,
+		// pick the account whose userdata/<id> directory was most recently modified.
+		var bestID string
+		var bestTime time.Time
+		for _, id := range ids {
+			info, err := os.Stat(filepath.Join(userdata, id))
+			if err != nil {
+				continue
+			}
+			if info.ModTime().After(bestTime) {
+				bestTime = info.ModTime()
+				bestID = id
+			}
+		}
+		return bestID
 	}
 	return ""
 }

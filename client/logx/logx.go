@@ -41,3 +41,26 @@ func Logger() *slog.Logger {
 	}
 	return slog.Default()
 }
+
+// Sync returns a logger tagged for client sync operations.
+func Sync() *slog.Logger {
+	return Logger().With("component", "sync")
+}
+
+// Event logs a structured sync event at info level with op and optional fields.
+func Event(op string, attrs ...any) {
+	args := append([]any{"op", op}, attrs...)
+	Sync().Info("sync event", args...)
+}
+
+// EventDebug logs at debug level.
+func EventDebug(op string, attrs ...any) {
+	args := append([]any{"op", op}, attrs...)
+	Sync().Debug("sync event", args...)
+}
+
+// EventWarn logs at warn level.
+func EventWarn(op string, attrs ...any) {
+	args := append([]any{"op", op}, attrs...)
+	Sync().Warn("sync event", args...)
+}

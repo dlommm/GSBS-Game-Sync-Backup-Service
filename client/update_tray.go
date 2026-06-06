@@ -19,11 +19,17 @@ var (
 	updateCheckPeriod = 24 * time.Hour
 )
 
-func (c *TrayController) wireUpdateMenu() {
-	c.mVersion = systray.AddMenuItem(versionMenuTitle(), "Installed client version")
+func (c *TrayController) wireUpdateMenu(parent *systray.MenuItem) {
+	addItem := func(title, tooltip string) *systray.MenuItem {
+		if parent != nil {
+			return parent.AddSubMenuItem(title, tooltip)
+		}
+		return systray.AddMenuItem(title, tooltip)
+	}
+	c.mVersion = addItem(versionMenuTitle(), "Installed client version")
 	c.mVersion.Disable()
-	c.mCheckUpdate = systray.AddMenuItem("Check for updates...", "Check GitHub for a newer client")
-	c.mApplyUpdate = systray.AddMenuItem("", "Download and install update")
+	c.mCheckUpdate = addItem("Check for updates...", "Check GitHub for a newer client")
+	c.mApplyUpdate = addItem("", "Download and install update")
 	c.mApplyUpdate.Hide()
 	c.mApplyUpdate.Disable()
 }

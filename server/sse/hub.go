@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 )
 
 // Event is a server-sent event.
@@ -24,9 +25,10 @@ func (e Event) Format() string {
 
 // subscriber is one SSE client connection.
 type subscriber struct {
-	ch       chan Event
-	clientID string
-	userID   string
+	ch        chan Event
+	clientID  string
+	userID    string
+	createdAt time.Time
 }
 
 // Hub manages SSE client connections and broadcasts events.
@@ -45,6 +47,13 @@ func NewHub() *Hub {
 
 // Subscribe registers a new SSE client for userID. Returns the event channel and unsubscribe func.
 func (h *Hub) Subscribe(userID string) (<-chan Event, func()) {
+	return h.SubscribeCapped(userID, 0)
+}
+
+// SubscribeCapped registers a new SSE client for userID. If the user already has maxPerUser
+// active connections (maxPerUser > 0), the oldest one is evicted before adding the new one.
+// Returns the event channel and unsubscribe func.
+func (h *Hub) SubscribeCapped(userID string, maxPerUser int) (<-chan Event, func()) {
 	h.mu.Lock()
 	if h.closed {
 		ch := make(chan Event)
@@ -52,10 +61,41 @@ func (h *Hub) Subscribe(userID string) (<-chan Event, func()) {
 		h.mu.Unlock()
 		return ch, func() {}
 	}
+
+	if maxPerUser > 0 {
+		// Collect all subscriptions for this user.
+		var userSubs []*subscriber
+		for sub := range h.subscribers {
+			if sub.userID == userID {
+				userSubs = append(userSubs, sub)
+			}
+		}
+		// Evict oldest until we are below the cap.
+		for len(userSubs) >= maxPerUser {
+			oldest := userSubs[0]
+			for _, s := range userSubs[1:] {
+				if s.createdAt.Before(oldest.createdAt) {
+					oldest = s
+				}
+			}
+			delete(h.subscribers, oldest)
+			close(oldest.ch)
+			// Remove evicted entry from the local slice.
+			for i, s := range userSubs {
+				if s == oldest {
+					userSubs = append(userSubs[:i], userSubs[i+1:]...)
+					break
+				}
+			}
+			log.Printf("sse: evicted oldest connection for user %s (cap %d)", userID, maxPerUser)
+		}
+	}
+
 	sub := &subscriber{
-		ch:       make(chan Event, 16),
-		clientID: userID,
-		userID:   userID,
+		ch:        make(chan Event, 16),
+		clientID:  userID,
+		userID:    userID,
+		createdAt: time.Now(),
 	}
 	h.subscribers[sub] = struct{}{}
 	h.mu.Unlock()

@@ -193,7 +193,11 @@ func (s *sqliteStore) ImportPCGWManifestBundle(ctx context.Context, data []byte,
 	}
 	result.PCGWSystemReqs = len(bundle.SystemRequirements)
 
-	etag := ManifestETagFromGames(0)
+	newVersion := 1
+	if meta, err := s.GetPCGWManifestMeta(ctx); err == nil && meta != nil {
+		newVersion = meta.ManifestVersion + 1
+	}
+	etag := ManifestETagFromGames(newVersion)
 	if _, err := s.BumpManifestVersion(ctx, etag); err != nil {
 		return result, err
 	}

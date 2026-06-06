@@ -2,8 +2,10 @@ package pcgw
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,6 +18,9 @@ import (
 const (
 	max429Retries     = 5
 	default429Backoff = 60 * time.Second
+	max5xxRetries     = 3
+	init5xxBackoff    = 1 * time.Second
+	max5xxBackoffDur  = 30 * time.Second
 	defaultBaseURL    = "https://www.pcgamingwiki.com"
 	defaultUserAgent  = "GSBS/1.0 (https://github.com/gsbs/gsbs; game-save-sync)"
 	defaultRateLimit  = 2 * time.Second
@@ -26,6 +31,8 @@ type Client struct {
 	HTTP *http.Client
 	// BaseURL overrides the API origin (for tests). Empty uses defaultBaseURL.
 	BaseURL string
+	// testBackoff overrides 5xx/network retry sleep duration (zero means use real backoff).
+	testBackoff time.Duration
 
 	mu          sync.Mutex
 	lastRequest time.Time
@@ -87,34 +94,70 @@ func (c *Client) doGet(u string) (*http.Response, error) {
 }
 
 func (c *Client) getWith429Retry(req *http.Request) (*http.Response, error) {
-	var lastResp *http.Response
-	for attempt := 0; attempt <= max429Retries; attempt++ {
+	retries429 := 0
+	retries5xx := 0
+	for {
 		reqCopy := req.Clone(req.Context())
 		resp, err := c.HTTP.Do(reqCopy)
 		if err != nil {
+			if retries5xx < max5xxRetries && isTransientNetworkError(err) {
+				time.Sleep(c.calc5xxBackoff(retries5xx))
+				retries5xx++
+				continue
+			}
 			return nil, err
 		}
-		if resp.StatusCode != http.StatusTooManyRequests {
+		switch {
+		case resp.StatusCode == http.StatusTooManyRequests:
+			if retries429 >= max429Retries {
+				io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+				return nil, fmt.Errorf("rate limited (429) after %d retries", max429Retries)
+			}
+			backoff := default429Backoff
+			if s := resp.Header.Get("Retry-After"); s != "" {
+				if sec, err2 := strconv.Atoi(s); err2 == nil && sec > 0 {
+					backoff = time.Duration(sec) * time.Second
+				}
+			}
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			retries429++
+			time.Sleep(backoff)
+		case resp.StatusCode >= 500:
+			if retries5xx >= max5xxRetries {
+				return resp, nil
+			}
+			io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			time.Sleep(c.calc5xxBackoff(retries5xx))
+			retries5xx++
+		default:
 			return resp, nil
 		}
-		backoff := default429Backoff
-		if s := resp.Header.Get("Retry-After"); s != "" {
-			if sec, err := strconv.Atoi(s); err == nil && sec > 0 {
-				backoff = time.Duration(sec) * time.Second
-			}
-		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-		lastResp = resp
-		if attempt < max429Retries {
-			time.Sleep(backoff)
-		}
 	}
-	if lastResp != nil {
-		lastResp.Body.Close()
-		return nil, fmt.Errorf("rate limited (429) after %d retries", max429Retries)
+}
+
+// calc5xxBackoff returns the sleep duration for the given 5xx attempt index using
+// exponential backoff (1s → 2s → 4s …, capped at max5xxBackoffDur).
+// Tests may override by setting Client.testBackoff to a short duration.
+func (c *Client) calc5xxBackoff(attempt int) time.Duration {
+	if c != nil && c.testBackoff > 0 {
+		return c.testBackoff
 	}
-	return nil, fmt.Errorf("rate limited (429)")
+	d := init5xxBackoff << uint(attempt)
+	if d > max5xxBackoffDur {
+		d = max5xxBackoffDur
+	}
+	return d
+}
+
+func isTransientNetworkError(err error) bool {
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return netErr.Timeout()
+	}
+	return false
 }
 
 // GetPageIDBySteamAppID returns the PCGW page ID for a Steam App ID.
@@ -229,9 +272,20 @@ func (c *Client) ParsePageWikitext(pageID string) (string, error) {
 				Content string `json:"*"`
 			} `json:"wikitext"`
 		} `json:"parse"`
+		Error *struct {
+			Code string `json:"code"`
+			Info string `json:"info"`
+		} `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return "", err
+	}
+	if out.Error != nil {
+		info := out.Error.Info
+		if info == "" {
+			info = out.Error.Code
+		}
+		return "", fmt.Errorf("mediawiki API error: %s", info)
 	}
 	return out.Parse.Wikitext.Content, nil
 }

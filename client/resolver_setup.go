@@ -101,7 +101,9 @@ func configureResolverFromConfig(cfg *config) *paths.Resolver {
 		resolver.SteamLibraries = paths.MergeSteamLibraries(resolver.SteamLibraries, cfg.SteamLibraryFolders)
 	}
 	applyLauncherDetection(cfg, resolver)
+	discoveryMu.RLock()
 	resolver.InstalledSteam = discoveryState.InstalledSteam
+	discoveryMu.RUnlock()
 	return resolver
 }
 
@@ -119,9 +121,12 @@ func buildPullContext(cfg *config) paths.PullContext {
 	if legacy {
 		active = nil
 	}
+	discoveryMu.RLock()
+	installedSteam := discoveryState.InstalledSteam
+	discoveryMu.RUnlock()
 	return paths.PullContext{
 		LegacyMode:         legacy,
 		InstalledGameIDs:   active,
-		InstalledSteamApps: discoveryState.InstalledSteam,
+		InstalledSteamApps: installedSteam,
 	}
 }

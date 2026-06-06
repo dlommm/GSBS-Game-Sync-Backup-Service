@@ -42,6 +42,7 @@ type Resolver struct {
 	Bottles        string   // Bottles data root (Flatpak)
 	Prism          string   // Prism Launcher data root
 	FlatpakSteam   string   // Flatpak Steam data root
+	XDGCacheHome   string   // XDG cache dir: $XDG_CACHE_HOME on Linux (default ~/.cache), %LOCALAPPDATA%\cache on Windows
 	InstalledSteam []string // Steam App IDs installed locally (for Proton path expansion)
 }
 
@@ -72,12 +73,14 @@ func NewResolver() *Resolver {
 		}
 		programFiles = os.Getenv("ProgramFiles")
 	}
+	xdgCacheHome := getXDGCacheHome(home, localAppData)
 	r := &Resolver{
 		Home:           home,
 		LocalAppData:   localAppData,
 		AppData:        appData,
 		ProgramData:    programData,
 		ProgramFiles:   programFiles,
+		XDGCacheHome:   xdgCacheHome,
 		SteamLibraries: getSteamLibraryRoots(home),
 		GOGGalaxy:      getDefaultGOGGalaxy(home),
 		EpicGames:      getDefaultEpicGames(home),
@@ -127,6 +130,19 @@ func getDefaultXboxApp(localAppData string) string {
 		return filepath.Join(localAppData, "Packages")
 	}
 	return ""
+}
+
+// getXDGCacheHome returns the XDG cache directory.
+// On Linux: $XDG_CACHE_HOME if set, otherwise ~/.cache.
+// On Windows: %LOCALAPPDATA%\cache (mirrors common usage by ported Linux games).
+func getXDGCacheHome(home, localAppData string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.Join(localAppData, "cache")
+	}
+	if v := os.Getenv("XDG_CACHE_HOME"); v != "" {
+		return v
+	}
+	return filepath.Join(home, ".cache")
 }
 
 func getSteamLibraryRoots(home string) []string {
@@ -253,6 +269,7 @@ func (r *Resolver) expandOne(template string, targetOS OS) string {
 	s = replaceEnv(s, "<Bottles-folder>", r.Bottles)
 	s = replaceEnv(s, "<Prism-folder>", r.Prism)
 	s = replaceEnv(s, "<Flatpak-Steam-folder>", r.FlatpakSteam)
+	s = replaceEnv(s, "<xdg-cache-home>", r.XDGCacheHome)
 	// Steam: first library that exists (when expandOne called without pre-replaced steam root)
 	if strings.Contains(s, "<SteamLibrary-folder>") {
 		for _, root := range r.SteamLibraries {

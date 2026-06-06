@@ -23,6 +23,7 @@ type sqliteStore struct {
 	db               *sql.DB
 	versionRetention int
 	saveRoot         string // non-empty enables filesystem storage (GSBS_SAVE_ROOT)
+	dbPath           string // original path, used to skip migration sleep for :memory: DBs
 }
 
 // NewSQLite creates a SQLite-backed store.
@@ -33,13 +34,17 @@ func NewSQLite(path string) (Store, error) {
 			retention = n
 		}
 	}
-	// WAL mode improves concurrent read performance; single connection avoids "database is locked" under concurrent writes.
-	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on&_journal_mode=WAL")
+	// WAL mode enables concurrent readers. _busy_timeout=5000 (ms) covers the rare
+	// write-write contention window (e.g. cmd/pcgw-sync running alongside the server).
+	// MaxOpenConns>1 lets concurrent read queries use separate connections while WAL
+	// serialises writes internally. MaxIdleConns=1 avoids idle-connection bloat.
+	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
-	s := &sqliteStore{db: db, versionRetention: retention, saveRoot: saveRootFromEnv()}
+	db.SetMaxOpenConns(5)
+	db.SetMaxIdleConns(1)
+	s := &sqliteStore{db: db, versionRetention: retention, saveRoot: saveRootFromEnv(), dbPath: path}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -54,190 +59,6 @@ func NewSQLite(path string) (Store, error) {
 
 func (s *sqliteStore) Close() error {
 	return s.db.Close()
-}
-
-func (s *sqliteStore) migrate() error {
-	_, err := s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS users (
-			id TEXT PRIMARY KEY,
-			username TEXT UNIQUE NOT NULL,
-			password_hash TEXT NOT NULL,
-			created_at TEXT NOT NULL
-		);
-		CREATE TABLE IF NOT EXISTS clients (
-			id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL REFERENCES users(id),
-			name TEXT NOT NULL,
-			os TEXT NOT NULL,
-			token TEXT UNIQUE,
-			last_seen TEXT,
-			created_at TEXT NOT NULL
-		);
-		CREATE TABLE IF NOT EXISTS saves (
-			user_id TEXT NOT NULL,
-			game_id TEXT NOT NULL,
-			path_key TEXT NOT NULL,
-			content BLOB NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (user_id, game_id, path_key),
-			FOREIGN KEY (user_id) REFERENCES users(id)
-		);
-		CREATE TABLE IF NOT EXISTS game_save_locations (
-			id TEXT PRIMARY KEY,
-			game_id TEXT NOT NULL,
-			pcgw_page_id INTEGER NOT NULL,
-			game_title TEXT NOT NULL,
-			platform TEXT NOT NULL,
-			path_template TEXT NOT NULL,
-			is_config INTEGER NOT NULL,
-			updated_at TEXT NOT NULL,
-			source TEXT NOT NULL,
-			notes TEXT,
-			UNIQUE(game_id, platform, path_template)
-		);
-		CREATE TABLE IF NOT EXISTS job_runs (
-			id TEXT PRIMARY KEY,
-			job_name TEXT NOT NULL,
-			started_at TEXT NOT NULL,
-			finished_at TEXT,
-			status TEXT NOT NULL,
-			error_message TEXT,
-			entries_count INTEGER NOT NULL DEFAULT 0
-		);
-		CREATE TABLE IF NOT EXISTS manifest_fetches (
-			id TEXT PRIMARY KEY,
-			client_id TEXT,
-			client_name TEXT,
-			username TEXT,
-			entries_count INTEGER NOT NULL DEFAULT 0,
-			fetched_at TEXT NOT NULL
-		);
-		CREATE TABLE IF NOT EXISTS save_versions (
-			user_id TEXT NOT NULL,
-			game_id TEXT NOT NULL,
-			path_key TEXT NOT NULL,
-			version INTEGER NOT NULL,
-			content BLOB NOT NULL,
-			updated_at TEXT NOT NULL,
-			PRIMARY KEY (user_id, game_id, path_key, version),
-			FOREIGN KEY (user_id) REFERENCES users(id)
-		);
-		CREATE INDEX IF NOT EXISTS idx_save_versions_slot ON save_versions(user_id, game_id, path_key);
-		CREATE INDEX IF NOT EXISTS idx_clients_token ON clients(token);
-		CREATE INDEX IF NOT EXISTS idx_saves_user ON saves(user_id);
-		CREATE INDEX IF NOT EXISTS idx_manifest_updated ON game_save_locations(updated_at);
-		CREATE INDEX IF NOT EXISTS idx_job_runs_name ON job_runs(job_name, started_at);
-		CREATE INDEX IF NOT EXISTS idx_manifest_fetches_at ON manifest_fetches(fetched_at);
-	`)
-	if err != nil {
-		return err
-	}
-	// Optional column for manifest entries (backward compatible)
-	_, err = s.db.Exec(`ALTER TABLE game_save_locations ADD COLUMN notes TEXT`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate") {
-		return err
-	}
-	// Role-based admin: users.role 'user' | 'admin'
-	_, err = s.db.Exec(`ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate") {
-		return err
-	}
-	// User management: disabled flag and storage quota
-	_, err = s.db.Exec(`ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate") {
-		return err
-	}
-	_, err = s.db.Exec(`ALTER TABLE users ADD COLUMN storage_quota_bytes INTEGER`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate") {
-		return err
-	}
-	_, err = s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS audit_log (
-			id TEXT PRIMARY KEY,
-			at TEXT NOT NULL,
-			actor_user_id TEXT NOT NULL,
-			actor_username TEXT NOT NULL,
-			action TEXT NOT NULL,
-			target_id TEXT,
-			details TEXT
-		);
-		CREATE INDEX IF NOT EXISTS idx_audit_log_at ON audit_log(at);
-	`)
-	if err != nil {
-		return err
-	}
-	_, err = s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS stats_snapshots (
-			id TEXT PRIMARY KEY,
-			at TEXT NOT NULL,
-			user_count INTEGER NOT NULL,
-			client_count INTEGER NOT NULL,
-			save_count INTEGER NOT NULL,
-			storage_bytes INTEGER NOT NULL
-		);
-		CREATE INDEX IF NOT EXISTS idx_stats_snapshots_at ON stats_snapshots(at);
-	`)
-	if err != nil {
-		return err
-	}
-	_, err = s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS sessions (
-			id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL REFERENCES users(id),
-			created_at TEXT NOT NULL,
-			last_seen TEXT NOT NULL,
-			user_agent TEXT
-		);
-		CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
-	`)
-	if err != nil {
-		return err
-	}
-	_, err = s.db.Exec(`ALTER TABLE users ADD COLUMN totp_secret TEXT`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate") {
-		return err
-	}
-	_, err = s.db.Exec(`ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0`)
-	if err != nil && !strings.Contains(err.Error(), "duplicate") {
-		return err
-	}
-	for _, stmt := range []string{
-		`ALTER TABLE saves ADD COLUMN content_hash TEXT`,
-		`ALTER TABLE saves ADD COLUMN content_size INTEGER`,
-		`ALTER TABLE saves ADD COLUMN client_id TEXT`,
-		`ALTER TABLE save_versions ADD COLUMN content_hash TEXT`,
-		`ALTER TABLE game_save_locations ADD COLUMN steam_app_ids TEXT`,
-		`ALTER TABLE game_save_locations ADD COLUMN gog_id TEXT`,
-		`ALTER TABLE game_save_locations ADD COLUMN epic_id TEXT`,
-		`ALTER TABLE game_save_locations ADD COLUMN ubisoft_id TEXT`,
-		`ALTER TABLE game_save_locations ADD COLUMN save_rules_json TEXT`,
-		`ALTER TABLE users ADD COLUMN encryption_enabled INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE saves ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE clients ADD COLUMN token_created_at TEXT`,
-	} {
-		_, err = s.db.Exec(stmt)
-		if err != nil && !strings.Contains(err.Error(), "duplicate") {
-			return err
-		}
-	}
-	if err := s.migrateTokenHashes(); err != nil {
-		return err
-	}
-	if err := s.migratePCGW(); err != nil {
-		return err
-	}
-	if err := s.migrateSaveFilesystem(); err != nil {
-		return err
-	}
-	_, err = s.db.Exec(`
-		CREATE TABLE IF NOT EXISTS admin_settings (
-			key TEXT PRIMARY KEY,
-			value TEXT NOT NULL
-		)`)
-	if err != nil {
-		return err
-	}
-	return s.seedAdminSettings()
 }
 
 func hashToken(token string) string {
@@ -265,31 +86,6 @@ func tokenMaxAge() time.Duration {
 		}
 	}
 	return d
-}
-
-func (s *sqliteStore) migrateTokenHashes() error {
-	_, err := s.db.Exec(`UPDATE clients SET token_created_at = COALESCE(token_created_at, created_at) WHERE token_created_at IS NULL OR token_created_at = ''`)
-	if err != nil {
-		return err
-	}
-	rows, err := s.db.Query(`SELECT id, token FROM clients WHERE token IS NOT NULL AND token != ''`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id, token string
-		if err := rows.Scan(&id, &token); err != nil {
-			return err
-		}
-		if isTokenHashed(token) {
-			continue
-		}
-		if _, err := s.db.Exec(`UPDATE clients SET token = ? WHERE id = ?`, hashToken(token), id); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
 }
 
 func (s *sqliteStore) CreateUser(ctx context.Context, username, passwordHash string) (string, error) {
@@ -378,7 +174,11 @@ func (s *sqliteStore) EnableUser(ctx context.Context, userID string) error {
 }
 
 // DeleteUser removes the user and all their clients, saves, and save_versions.
+// SQL deletions are wrapped in a single transaction; FS cleanup happens after commit.
 func (s *sqliteStore) DeleteUser(ctx context.Context, userID string) error {
+	// Collect filesystem paths before the transaction so we don't hold the
+	// connection inside a tx while also trying to query via s.db.
+	var fsPaths []string
 	if s.filesystemEnabled() {
 		rows, err := s.db.QueryContext(ctx, `SELECT storage_path FROM saves WHERE user_id = ? AND storage_path IS NOT NULL AND storage_path != ''`, userID)
 		if err != nil {
@@ -390,24 +190,42 @@ func (s *sqliteStore) DeleteUser(ctx context.Context, userID string) error {
 				rows.Close()
 				return err
 			}
-			removeSaveFile(p)
+			fsPaths = append(fsPaths, p)
 		}
 		rows.Close()
 		if err := rows.Err(); err != nil {
 			return err
 		}
 	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM save_versions WHERE user_id = ?`, userID); err != nil {
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM saves WHERE user_id = ?`, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM save_versions WHERE user_id = ?`, userID); err != nil {
+		_ = tx.Rollback()
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM clients WHERE user_id = ?`, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM saves WHERE user_id = ?`, userID); err != nil {
+		_ = tx.Rollback()
 		return err
 	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM clients WHERE user_id = ?`, userID); err != nil {
+		_ = tx.Rollback()
 		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, userID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// FS cleanup after commit — partial cleanup is acceptable if the process is
+	// interrupted here; the DB rows are already gone.
+	for _, p := range fsPaths {
+		removeSaveFile(p)
 	}
 	s.removeUserStorageDir(userID)
 	return nil
@@ -673,6 +491,26 @@ func (s *sqliteStore) GetSaveHash(ctx context.Context, userID, gameID, pathKey s
 	return hash.String, nil
 }
 
+func (s *sqliteStore) GetSaveHashAndVersion(ctx context.Context, userID, gameID, pathKey string) (string, int, error) {
+	var hash sql.NullString
+	var version sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT s.content_hash, COALESCE(MAX(v.version), 0)
+		 FROM saves s
+		 LEFT JOIN save_versions v ON v.user_id = s.user_id AND v.game_id = s.game_id AND v.path_key = s.path_key
+		 WHERE s.user_id = ? AND s.game_id = ? AND s.path_key = ?
+		 GROUP BY s.content_hash`,
+		userID, gameID, pathKey,
+	).Scan(&hash, &version)
+	if err == sql.ErrNoRows {
+		return "", 0, nil
+	}
+	if err != nil {
+		return "", 0, err
+	}
+	return hash.String, int(version.Int64), nil
+}
+
 func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pathKey string, content []byte, meta *SaveMeta) (skipped bool, err error) {
 	retention := s.versionRetention
 	if retention < 5 {
@@ -723,7 +561,14 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 		dbContent = nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err = s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		if s.filesystemEnabled() && storagePath != "" {
+			removeSaveFile(storagePath)
+		}
+		return false, err
+	}
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO saves (user_id, game_id, path_key, content, relative_path, storage_path, updated_at, content_hash, content_size, client_id, encrypted)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id, game_id, path_key) DO UPDATE SET
@@ -733,37 +578,43 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 		userID, gameID, pathKey, dbContent, nullIfEmpty(relPath), nullIfEmpty(storagePath), now, contentHash, contentSize, nullIfEmpty(clientID), encrypted,
 	)
 	if err != nil {
+		_ = tx.Rollback()
 		if s.filesystemEnabled() && storagePath != "" {
 			removeSaveFile(storagePath)
 		}
 		return false, err
 	}
 	var nextVer int
-	err = s.db.QueryRowContext(ctx,
+	err = tx.QueryRowContext(ctx,
 		`SELECT COALESCE(MAX(version), 0) + 1 FROM save_versions WHERE user_id = ? AND game_id = ? AND path_key = ?`,
 		userID, gameID, pathKey,
 	).Scan(&nextVer)
 	if err != nil {
+		_ = tx.Rollback()
 		return false, err
 	}
-	_, err = s.db.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO save_versions (user_id, game_id, path_key, version, content, updated_at, content_hash)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		userID, gameID, pathKey, nextVer, content, now, contentHash,
 	)
 	if err != nil {
+		_ = tx.Rollback()
 		return false, err
 	}
 	var cutoff sql.NullInt64
-	_ = s.db.QueryRowContext(ctx,
+	_ = tx.QueryRowContext(ctx,
 		`SELECT version FROM save_versions WHERE user_id = ? AND game_id = ? AND path_key = ? ORDER BY version DESC LIMIT 1 OFFSET ?`,
 		userID, gameID, pathKey, retention-1,
 	).Scan(&cutoff)
 	if cutoff.Valid {
-		_, _ = s.db.ExecContext(ctx,
+		_, _ = tx.ExecContext(ctx,
 			`DELETE FROM save_versions WHERE user_id = ? AND game_id = ? AND path_key = ? AND version < ?`,
 			userID, gameID, pathKey, cutoff.Int64,
 		)
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
 	}
 	return false, nil
 }

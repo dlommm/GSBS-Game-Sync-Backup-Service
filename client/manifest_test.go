@@ -55,29 +55,52 @@ func TestFetchManifestFull_V2Success(t *testing.T) {
 	assert.Equal(t, "Test Game", res.Entries[0].GameTitle)
 }
 
-func TestFetchManifestFull_V2EmptyFallsBackV1(t *testing.T) {
+func TestFetchManifestFull_V2EmptyIsAuthoritative(t *testing.T) {
 	setupManifestTestDir(t)
+	require.NoError(t, SaveManifestFile(manifestFile{
+		Entries: []types.GameSaveLocation{{GameID: "old", Platform: "linux", PathTemplate: "/old"}},
+		ETag:    "etag-prev",
+	}))
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		switch r.URL.Path {
-		case "/api/manifest/v2":
-			_ = json.NewEncoder(w).Encode(types.ManifestV2Response{Version: 2, Games: nil})
-		case "/api/manifest":
-			_ = json.NewEncoder(w).Encode(manifestResponse{
-				Entries: []types.GameSaveLocation{{GameID: "1", Platform: "linux", PathTemplate: "/a"}},
-			})
-		default:
-			http.NotFound(w, r)
+		if r.URL.Path == "/api/manifest/v2" {
+			_ = json.NewEncoder(w).Encode(types.ManifestV2Response{Version: 2, ETag: "etag-new", Games: nil})
+			return
 		}
+		http.NotFound(w, r)
 	}))
 	defer srv.Close()
 
 	res, err := FetchManifestFull(context.Background(), srv.URL, "", "", "both")
 	require.NoError(t, err)
-	assert.Equal(t, "v1", res.Source)
-	assert.Len(t, res.Entries, 1)
-	assert.GreaterOrEqual(t, calls, 2)
+	assert.Equal(t, "v2", res.Source)
+	assert.Empty(t, res.Entries)
+	assert.Equal(t, 1, calls)
+}
+
+func TestFetchManifestFull_V2EmptyDeltaKeepsCache(t *testing.T) {
+	setupManifestTestDir(t)
+	require.NoError(t, SaveManifestFile(manifestFile{
+		Entries:       []types.GameSaveLocation{{GameID: "cached", Platform: "linux", PathTemplate: "/cached"}},
+		ETag:          "etag-prev",
+		LastFetchedAt: "2026-01-01T00:00:00Z",
+	}))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/manifest/v2" {
+			assert.NotEmpty(t, r.URL.Query().Get("since"))
+			_ = json.NewEncoder(w).Encode(types.ManifestV2Response{Version: 2, ETag: "etag-prev", Games: nil})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	res, err := FetchManifestFull(context.Background(), srv.URL, "", "2026-01-01T00:00:00Z", "both")
+	require.NoError(t, err)
+	assert.Equal(t, "v2", res.Source)
+	require.Len(t, res.Entries, 1)
+	assert.Equal(t, "cached", res.Entries[0].GameID)
 }
 
 func TestFetchManifestFull_V2ErrorFallsBackV1(t *testing.T) {
@@ -192,7 +215,7 @@ func TestResolveSavePath_PathKeyForFile(t *testing.T) {
 		RuleKey:         ruleKey,
 		Directory:       dir,
 		IncludePatterns: []string{"*.sav"},
-	}}, resolver, paths.CurrentOS(), paths.PullContext{})
+	}}, resolver, paths.CurrentOS(), paths.PullContext{}, nil)
 	assert.Equal(t, saveFile, abs)
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net/url"
 	"strings"
 	gosync "sync"
 	"sync/atomic"
@@ -80,6 +81,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		return errNotLoggedIn
 	}
 	log.Printf("client sync: starting server=%s", cfg.ServerURL)
+	warnPlainHTTP(cfg.ServerURL)
 
 	// Startup order (single goroutine until the select loop):
 	//  1. Restore discovery cache → filter manifest watch paths in discovered mode
@@ -96,6 +98,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	initDiscoveryState()
 	// Restore discovery state from cache for watch filtering before first scan.
 	if cached := loadDiscoveryCache(); len(cached.MatchedGameIDs) > 0 {
+		discoveryMu.Lock()
 		for _, id := range cached.MatchedGameIDs {
 			discoveryState.MatchedGameIDs[id] = true
 		}
@@ -103,6 +106,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 			discoveryState.DisabledGameIDs[id] = true
 		}
 		discoveryState.InstalledSteam = installedSteamAppIDs(cached.InstalledGames)
+		discoveryMu.Unlock()
 	}
 	currentOS := paths.CurrentOS()
 	watchMode := cfg.effectiveAutoWatchMode()
@@ -158,6 +162,13 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	if err != nil {
 		return err
 	}
+	client.TokenReload = func() string {
+		c, err := loadConfig()
+		if err != nil {
+			return ""
+		}
+		return c.Token
+	}
 	if enc, err := client.FetchAccountSettings(ctx); err == nil {
 		client.SetEncryption(enc, cfg.EncryptionPassphrase)
 	} else {
@@ -167,14 +178,37 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	SetSyncClient(client)
 	setupTrayCallbacks()
 	wireSyncTrayHooks()
+	// Flush push hash cache at most once per 5 s; final flush on shutdown.
+	sync.StartHashCacheFlusher(ctx)
 
 	activeIDs := activeGameIDSet()
 	installRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
 	manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, installRoots)
 	effectiveWatchPaths := mergeWatchPaths(manifestWP, cfg.WatchPaths)
 	log.Printf("sync: %d active watch paths (mode=%s)", len(effectiveWatchPaths), watchMode)
+
+	// Detect a path_key scheme change (e.g. server upgraded to SlotLabel-based keys).
+	// Build the set of known composite slot keys from the current watch paths and evict
+	// any cache entries that no longer match. The watcher is event-driven so an empty
+	// cache causes no immediate re-upload storm — files are re-checked only when next changed.
+	{
+		knownSlotKeys := make(map[string]bool, len(effectiveWatchPaths))
+		for _, wp := range effectiveWatchPaths {
+			key := wp.RuleKey
+			if key == "" {
+				key = wp.PathKey
+			}
+			if wp.GameID != "" && key != "" {
+				knownSlotKeys[wp.GameID+"\x00"+key] = true
+			}
+		}
+		if sync.MaybeEvictStaleHashCache(knownSlotKeys) {
+			log.Printf("sync: path_key scheme updated — push hash cache cleared; files will be re-checked on next change")
+		}
+	}
 	if len(effectiveWatchPaths) == 0 {
 		LogZeroWatchPathsSummary(wpStats)
+		logActiveGamesReadiness(activeIDs)
 	}
 
 	// Mutex protects effectiveWatchPaths, which is read by resolvePath (called
@@ -183,6 +217,9 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	// a future change introduces concurrency.
 	var wpMu gosync.RWMutex
 	var manifestMu gosync.RWMutex
+	// installRootsMu guards the cached install roots used by resolvePath.
+	// Roots are rebuilt on discovery/manifest refresh, not on every pull call.
+	var installRootsMu gosync.RWMutex
 
 	resolvePath := func(gameID, pathKey string) string {
 		wpMu.RLock()
@@ -191,7 +228,10 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		manifestMu.RLock()
 		entries := manifestEntries
 		manifestMu.RUnlock()
-		return resolveSavePath(gameID, pathKey, entries, wp, resolver, currentOS, pullOpts.PullContext)
+		installRootsMu.RLock()
+		roots := installRoots
+		installRootsMu.RUnlock()
+		return resolveSavePath(gameID, pathKey, entries, wp, resolver, currentOS, pullOpts.PullContext, roots)
 	}
 	watchRoot := func(gameID, pathKey string) string {
 		wpMu.RLock()
@@ -238,6 +278,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	if err != nil {
 		return err
 	}
+	watcher.SetInstallRoots(installRoots)
 	watchPaths := getSyncWatchPaths()
 	if err := watcher.AddPaths(watchPaths); err != nil {
 		log.Println("watch paths:", err)
@@ -264,7 +305,10 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		discoveryInterval = 4 * time.Hour
 	}
 	// Shorter first periodic scan after login when no matches yet.
-	if len(discoveryState.MatchedGameIDs) == 0 {
+	discoveryMu.RLock()
+	noMatches := len(discoveryState.MatchedGameIDs) == 0
+	discoveryMu.RUnlock()
+	if noMatches {
 		discoveryInterval = minDuration(discoveryInterval, 15*time.Minute)
 	}
 	discoveryTicker := time.NewTicker(discoveryInterval)
@@ -319,24 +363,29 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 				refreshResolver(cfg, resolver)
 				pullOpts.PullContext = buildPullContext(cfg)
 			}
-			activeIDs := activeGameIDSet()
-			wpMu.RLock()
-			oldWP := append([]watchPath(nil), effectiveWatchPaths...)
-			wpMu.RUnlock()
-			installRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
-			manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, installRoots)
-			newWP := mergeWatchPaths(manifestWP, cfg.WatchPaths)
-			added, removed := watchPathDiff(oldWP, newWP)
-			wpMu.Lock()
-			effectiveWatchPaths = newWP
-			wpMu.Unlock()
-			newSyncWP := getSyncWatchPaths()
-			_ = watcher.AddPaths(newSyncWP)
-			watcher.RemoveStalePaths(newSyncWP)
-			log.Printf("manifest refresh (%s): watch paths +%d -%d (now %d)", reason, added, removed, len(newWP))
-			if len(newWP) == 0 {
-				LogZeroWatchPathsSummary(wpStats)
-			}
+		activeIDs := activeGameIDSet()
+		wpMu.RLock()
+		oldWP := append([]watchPath(nil), effectiveWatchPaths...)
+		wpMu.RUnlock()
+		newInstallRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
+		installRootsMu.Lock()
+		installRoots = newInstallRoots
+		installRootsMu.Unlock()
+		manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, newInstallRoots)
+		newWP := mergeWatchPaths(manifestWP, cfg.WatchPaths)
+		added, removed := watchPathDiff(oldWP, newWP)
+		wpMu.Lock()
+		effectiveWatchPaths = newWP
+		wpMu.Unlock()
+		watcher.SetInstallRoots(newInstallRoots)
+		newSyncWP := getSyncWatchPaths()
+		_ = watcher.AddPaths(newSyncWP)
+		watcher.RemoveStalePaths(newSyncWP)
+		log.Printf("manifest refresh (%s): watch paths +%d -%d (now %d)", reason, added, removed, len(newWP))
+		if len(newWP) == 0 {
+			LogZeroWatchPathsSummary(wpStats)
+			logActiveGamesReadiness(activeIDs)
+		}
 		} else {
 			log.Printf("manifest refresh (%s): fetch failed: %v", reason, err)
 		}
@@ -346,6 +395,13 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	for {
 		select {
 		case <-ctx.Done():
+			log.Printf("client sync: shutting down — flushing watcher and outbox")
+			flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			watcher.FlushPending(flushCtx)
+			if n := sync.ProcessOutbox(flushCtx, client); n > 0 {
+				log.Printf("outbox: sent %d pending upload(s) on shutdown", n)
+			}
+			flushCancel()
 			_ = watcher.Close()
 			return nil
 		case <-ticker.C:
@@ -369,26 +425,31 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 				log.Printf("discovery: periodic scan found %d new game(s)", n)
 				doManifestRefresh("discovery")
 			} else {
-				// Rebuild watch paths in case save dirs appeared without new games
-				activeIDs := activeGameIDSet()
-				wpMu.RLock()
-				oldWP := append([]watchPath(nil), effectiveWatchPaths...)
-				wpMu.RUnlock()
-				installRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
-				manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, installRoots)
-				newWP := mergeWatchPaths(manifestWP, cfg.WatchPaths)
-				added, removed := watchPathDiff(oldWP, newWP)
-				wpMu.Lock()
-				effectiveWatchPaths = newWP
-				wpMu.Unlock()
-				newSyncWP := getSyncWatchPaths()
-				_ = watcher.AddPaths(newSyncWP)
-				watcher.RemoveStalePaths(newSyncWP)
+			// Rebuild watch paths in case save dirs appeared without new games
+			activeIDs := activeGameIDSet()
+			wpMu.RLock()
+			oldWP := append([]watchPath(nil), effectiveWatchPaths...)
+			wpMu.RUnlock()
+			periodicInstallRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
+			installRootsMu.Lock()
+			installRoots = periodicInstallRoots
+			installRootsMu.Unlock()
+			manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, periodicInstallRoots)
+			newWP := mergeWatchPaths(manifestWP, cfg.WatchPaths)
+			added, removed := watchPathDiff(oldWP, newWP)
+			wpMu.Lock()
+			effectiveWatchPaths = newWP
+			wpMu.Unlock()
+			watcher.SetInstallRoots(periodicInstallRoots)
+			newSyncWP := getSyncWatchPaths()
+			_ = watcher.AddPaths(newSyncWP)
+			watcher.RemoveStalePaths(newSyncWP)
 				if added > 0 || removed > 0 {
 					log.Printf("discovery rebuild: watch paths +%d -%d (now %d)", added, removed, len(newWP))
 				}
 				if len(newWP) == 0 {
 					LogZeroWatchPathsSummary(wpStats)
+					logActiveGamesReadiness(activeIDs)
 				}
 			}
 		}
@@ -418,6 +479,21 @@ func watchPathIdentity(wp watchPath) string {
 		key = wp.RuleKey
 	}
 	return wp.GameID + "\x00" + key
+}
+
+// warnPlainHTTP logs a prominent warning when the server URL uses plain HTTP
+// on a non-local host, which would expose the bearer token in cleartext.
+func warnPlainHTTP(serverURL string) {
+	u, err := url.Parse(serverURL)
+	if err != nil || strings.ToLower(u.Scheme) != "http" {
+		return
+	}
+	host := u.Hostname()
+	switch host {
+	case "localhost", "127.0.0.1", "::1":
+		return
+	}
+	log.Printf("WARNING: server_url uses plain HTTP on a non-local host (%s); your sync token will be transmitted in cleartext. Use HTTPS in production.", host)
 }
 
 func watchPathDiff(old, new []watchPath) (added, removed int) {
