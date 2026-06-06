@@ -50,10 +50,10 @@ func (s *sqliteStore) migrate() error {
 	}
 
 	if pending > 0 {
-		log.Printf("GSBS: DB migration required (schema %d → %d). Back up your database before proceeding. Continuing in 3 seconds...",
-			current, schemaVersion)
-		// Skip sleep for in-memory databases used in tests.
-		if !strings.Contains(s.dbPath, ":memory:") {
+		// Skip the warning banner and sleep for in-memory databases used in tests.
+		if !isInMemoryPath(s.dbPath) {
+			log.Printf("GSBS: DB migration required (schema %d → %d). Back up your database before proceeding. Continuing in 3 seconds...",
+				current, schemaVersion)
 			time.Sleep(3 * time.Second)
 		}
 	}
