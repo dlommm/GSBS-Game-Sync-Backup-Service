@@ -9,9 +9,8 @@ linters:
     - govet
     - staticcheck
     - ineffassign
-
-issues:
-  exclude-rules:
-    # QF* codes are cosmetic refactoring suggestions, not bugs
-    - linters: [staticcheck]
-      text: "^QF"
+  exclusions:
+    rules:
+      # QF* codes are cosmetic refactoring suggestions, not bugs
+      - linters: [staticcheck]
+        text: "^QF"
