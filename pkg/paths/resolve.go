@@ -49,8 +49,7 @@ type Resolver struct {
 // NewResolver builds a resolver with current environment.
 func NewResolver() *Resolver {
 	home, _ := os.UserHomeDir()
-	localAppData := home
-	appData := home
+	var localAppData, appData string
 	if runtime.GOOS == "windows" {
 		localAppData = os.Getenv("LOCALAPPDATA")
 		if localAppData == "" {
