@@ -38,11 +38,19 @@ func NewSQLite(path string) (Store, error) {
 	// write-write contention window (e.g. cmd/pcgw-sync running alongside the server).
 	// MaxOpenConns>1 lets concurrent read queries use separate connections while WAL
 	// serialises writes internally. MaxIdleConns=1 avoids idle-connection bloat.
+	//
+	// For in-memory databases (:memory:) each SQLite connection gets its own separate
+	// database, so multiple open connections would create multiple isolated DBs. Pin
+	// to a single connection so migration and subsequent queries always see the same DB.
 	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(5)
+	if isInMemoryPath(path) {
+		db.SetMaxOpenConns(1)
+	} else {
+		db.SetMaxOpenConns(5)
+	}
 	db.SetMaxIdleConns(1)
 	s := &sqliteStore{db: db, versionRetention: retention, saveRoot: saveRootFromEnv(), dbPath: path}
 	if err := s.migrate(); err != nil {
@@ -59,6 +67,12 @@ func NewSQLite(path string) (Store, error) {
 
 func (s *sqliteStore) Close() error {
 	return s.db.Close()
+}
+
+// isInMemoryPath reports whether a SQLite path refers to an in-memory database.
+// Handles ":memory:", URI form "file::memory:?...", and mode=memory query strings.
+func isInMemoryPath(path string) bool {
+	return strings.Contains(path, ":memory:") || strings.Contains(path, "mode=memory")
 }
 
 func hashToken(token string) string {
