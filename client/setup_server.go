@@ -123,9 +123,7 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 		titles = append(titles, name)
 	}
 	if len(titles) == 0 {
-		for _, id := range cache.MatchedGameIDs {
-			titles = append(titles, id)
-		}
+		titles = append(titles, cache.MatchedGameIDs...)
 	}
 	resp := setupStatusResponse{
 		LoggedIn:     loggedIn,

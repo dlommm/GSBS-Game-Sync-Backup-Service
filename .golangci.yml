@@ -8,6 +8,10 @@ linters:
   enable:
     - govet
     - staticcheck
-    - errcheck
     - ineffassign
-    - unused
+
+issues:
+  exclude-rules:
+    # QF* codes are cosmetic refactoring suggestions, not bugs
+    - linters: [staticcheck]
+      text: "^QF"

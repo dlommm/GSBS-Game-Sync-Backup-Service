@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -191,7 +192,7 @@ func TestGetSteamLibraryRoots(t *testing.T) {
 	}
 	found := false
 	for _, root := range got {
-		if root == home || filepath.HasPrefix(root, home) {
+		if root == home || strings.HasPrefix(root, home+string(filepath.Separator)) {
 			found = true
 			break
 		}
