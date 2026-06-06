@@ -23,6 +23,7 @@ type Runner struct {
 	invalidator ManifestCacheInvalidator
 
 	mu            sync.Mutex
+	wg            sync.WaitGroup
 	running       map[string]bool               // job name -> is running
 	cancelFuncs   map[string]context.CancelFunc // job name -> cancel
 	jobRunIDs     map[string]string             // job name -> job_runs id
@@ -75,6 +76,30 @@ func (r *Runner) RunPCGWSyncFull(ctx context.Context) (bool, error) {
 	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{Full: true, ForceFull: true})
 }
 
+// CancelAll cancels every in-flight job. Used during graceful shutdown.
+func (r *Runner) CancelAll() {
+	r.mu.Lock()
+	for _, cancel := range r.cancelFuncs {
+		cancel()
+	}
+	r.mu.Unlock()
+}
+
+// WaitJobs blocks until all running job goroutines have exited or ctx is done.
+func (r *Runner) WaitJobs(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		r.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // CancelPCGWSync cancels the in-flight PCGW sync. Returns true if a cancel was sent.
 func (r *Runner) CancelPCGWSync(ctx context.Context) bool {
 	r.mu.Lock()
@@ -108,11 +133,13 @@ func (r *Runner) tryRunPCGWSync(ctx context.Context, opts PCGWSyncOptions) (bool
 	r.running[jobName] = true
 	r.mu.Unlock()
 
+	r.wg.Add(1)
 	go r.runPCGWSync(ctx, jobName, opts)
 	return true, nil
 }
 
 func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCGWSyncOptions) {
+	defer r.wg.Done()
 	defer func() {
 		r.mu.Lock()
 		r.running[jobName] = false

@@ -190,7 +190,13 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 }
 
 func bumpManifestAndReturn(ctx context.Context, st store.Store, n int) (int, error) {
-	etag := store.ManifestETagFromGames(0)
+	// Derive a stable ETag from the next version number so identical content
+	// always produces the same ETag (no time.Now() noise).
+	newVersion := 1
+	if meta, err := st.GetPCGWManifestMeta(ctx); err == nil && meta != nil {
+		newVersion = meta.ManifestVersion + 1
+	}
+	etag := store.ManifestETagFromGames(newVersion)
 	if v, err := st.BumpManifestVersion(ctx, etag); err == nil {
 		log.Printf("pcgw sync: manifest version bumped to %d", v)
 	}
@@ -340,14 +346,21 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 	// Project manifest v1 — only if game_data parsed OK or we have save locations
 	var entries []types.GameSaveLocation
 	if gameDataOK || len(b.SaveLocations) > 0 {
+		// slotCounts tracks per-(platform, isConfig) position so that the Windows
+		// and Linux templates for the same logical save slot share the same SlotLabel.
+		slotCounts := map[string]int{}
 		for _, t := range b.SaveLocations {
 			platform := pcgw.SystemToPlatform(t.System)
+			sk := platform + "\x00" + strconv.FormatBool(t.IsConfig)
+			slotLabel := strconv.Itoa(slotCounts[sk])
+			slotCounts[sk]++
 			for _, path := range t.Paths {
 				rules := pcgw.ParseSaveRules(path, platform, t.IsConfig)
 				for _, rule := range rules {
 					if filters.ShouldExcludePath(rule.Directory) {
 						continue
 					}
+					rule.SlotLabel = slotLabel
 					entries = append(entries, types.GameSaveLocation{
 						GameID: gameID, PCGWPageID: b.PageID, GameTitle: b.PageInfo.Title,
 						Platform: platform, PathTemplate: rule.Directory, IsConfig: t.IsConfig,

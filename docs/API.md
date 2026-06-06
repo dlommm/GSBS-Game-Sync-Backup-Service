@@ -19,9 +19,12 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 ## Saves (authenticated)
 
 - **Pull all saves**: `GET /api/saves` — returns JSON `{"saves":[{"game_id","path_key","updated_at","content","encrypted"}]}`. `content` is base64-encoded. `encrypted` is true when the blob was stored with client-side E2E encryption. Supports gzip when `Accept-Encoding: gzip`.
+  - Pagination: `?limit=N&offset=M` (max limit 500). When paginating, response also includes `"total":<int>` (total saves for the user).
 - **Pull single save**: `GET /api/saves?game_id=...&path_key=...` — returns one save in the same format.
 - **Save summaries only**: `GET /api/saves?summaries=1` — returns `{"saves":[{"game_id","path_key","game_title","size_bytes","updated_at","content_hash","encrypted"}]}` (no content). Use for conditional sync.
+  - Pagination: `?limit=N&offset=M` (max limit 500). When paginating, response also includes `"total":<int>`.
 - **Push a save**: `POST /api/saves` with body = raw file bytes (optional `Content-Encoding: gzip`). Headers: `X-Game-ID`, `X-Path-Key` (required), `X-Relative-Path` (required when server uses `GSBS_SAVE_ROOT` — path relative to the save rule directory, forward slashes), `X-File-Path` (optional log metadata), `X-Content-Hash` (SHA256 hex of wire bytes), `X-Content-Size`, `X-Encrypted: 1` when content is client-encrypted. Max body 50 MiB. Returns 200 `{"status":"ok"}`, `{"status":"unchanged"}` if hash matches, or 4xx.
+  - Optimistic concurrency: include `X-GSBS-If-Hash: <expected_hash>` to guard against overwriting a newer server version. If the server's current hash differs, returns 409 `{"error":"conflict","current_hash":"<server_hash>","current_version":<N>}`. Omit the header for last-write-wins (backward-compatible default).
 - **Delete a save**: `DELETE /api/saves?game_id=...&path_key=...`. Returns 200 `{"status":"ok"}` or 4xx.
 - **List versions**: `GET /api/saves/versions?game_id=...&path_key=...` — returns `{"versions":[{"version","updated_at","size_bytes"}]}`.
 - **Get a version**: `GET /api/saves/versions/download?game_id=...&path_key=...&version=N` — returns JSON with `content` (base64).
@@ -39,12 +42,26 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 ## Manifest (public or authenticated)
 
 - **Full manifest (v1)**: `GET /api/manifest` — returns `{"entries":[...]}` of `GameSaveLocation`. Each entry includes `game_id`, `game_title`, `platform`, `path_template` (directory template for compat), optional `save_rules` (`directory`, `include_patterns`, `recursive`, `sync_all`), launcher IDs, and metadata. Cached on server ~10 min. Response headers: `ETag`, `X-Manifest-Version`.
-- **Delta**: `GET /api/manifest?since=<RFC3339>` — returns only entries updated after the given time.
+  - Pagination: `?limit=N&offset=M` (max limit 500). When paginating, response includes `"total":<int>` (total entries before pagination).
+  - Filtering: `?include=saves` (save locations only) or `?include=config` (config locations only). Default returns all.
+  - Delta: `?since=<RFC3339>` — returns only entries updated after the given time.
 - **Manifest v2 (rich)**: `GET /api/manifest/v2` — returns grouped per-game JSON (`games[]` with taxonomy, engines, `save_locations` / `config_locations` each with `path_templates` and `save_rules`, `has_save_data`, `proton_support_level`, etc.). Query: `?since=<RFC3339>`, `?platform=windows|linux|macos`. Supports `If-None-Match` → 304. Clients should prefer v2 when available.
 
 ## Server-Sent Events (authenticated)
 
-- **Stream**: `GET /api/events` with `Authorization: Bearer <token>`. Long-lived stream; event type e.g. `manifest-updated`. Clients can reconnect with exponential backoff.
+- **Stream**: `GET /api/events` with `Authorization: Bearer <token>`. Long-lived stream. At most 5 concurrent SSE connections per user (oldest evicted if exceeded). Clients should reconnect with exponential backoff.
+- **Heartbeat**: The server sends an SSE comment (`: heartbeat`) immediately on connect and every 30 seconds to keep the connection alive through proxies.
+
+**Event types:**
+
+| Event type | Scope | Data | Meaning |
+|---|---|---|---|
+| `manifest-updated` | broadcast | `{}` | PCGW manifest was updated; clients should re-fetch `/api/manifest`. |
+| `job-progress` | broadcast | `{"job":"pcgw_sync","pages":<N>}` | PCGW sync job progress; page count processed so far. |
+| `job-finished` | broadcast | `{"job":"pcgw_sync","status":"ok"\|"error"}` | PCGW sync job completed (success or error). |
+| `audit-updated` | broadcast | `{}` | Admin audit log updated (e.g. admin action). |
+| `server-shutting-down` | broadcast | `{}` | Server is about to shut down; clients should stop polling and reconnect later. |
+| `save-updated` | per-user | `{"game_id":"...","path_key":"..."}` | A save was pushed successfully for the authenticated user. |
 
 ## Metrics (optional)
 

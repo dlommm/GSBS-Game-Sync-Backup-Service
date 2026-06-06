@@ -77,6 +77,9 @@ type Store interface {
 	// UpsertSaveWithMeta upserts with optional hash/size/client; skips write if hash matches existing.
 	UpsertSaveWithMeta(ctx context.Context, userID, gameID, pathKey string, content []byte, meta *SaveMeta) (skipped bool, err error)
 	GetSaveHash(ctx context.Context, userID, gameID, pathKey string) (hash string, err error)
+	// GetSaveHashAndVersion returns the current content hash and latest version number for a save slot.
+	// Returns ("", 0, nil) when no save exists yet.
+	GetSaveHashAndVersion(ctx context.Context, userID, gameID, pathKey string) (hash string, version int, err error)
 	ListSaves(ctx context.Context, userID string) ([]types.SaveBlob, error)
 	// ListSavesPaginated returns a page of saves and total count. limit/offset 0 means no pagination (returns all).
 	ListSavesPaginated(ctx context.Context, userID string, limit, offset int) ([]types.SaveBlob, int, error)

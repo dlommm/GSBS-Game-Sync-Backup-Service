@@ -50,6 +50,7 @@ type TrayController struct {
 	mDiscoveredMenu *systray.MenuItem
 	discoveredSlots []*systray.MenuItem
 	discoveredIDs   [maxDiscoveredSlots]string
+	mAddGame        *systray.MenuItem
 	mRescan         *systray.MenuItem
 
 	// Issues
@@ -60,6 +61,8 @@ type TrayController struct {
 	mLastError      *systray.MenuItem
 
 	// Settings
+	mAccountMenu  *systray.MenuItem
+	mAdvancedMenu *systray.MenuItem
 	mServer       *systray.MenuItem
 	mInterval     *systray.MenuItem
 	mLogin        *systray.MenuItem
@@ -147,6 +150,7 @@ func (c *TrayController) buildMenu(cfg *config) {
 		slot.Hide()
 		c.discoveredSlots = append(c.discoveredSlots, slot)
 	}
+	c.mAddGame = c.mDiscoveredMenu.AddSubMenuItem("Add a game manually…", "Search by name or add a save folder by path")
 	c.mRescan = c.mDiscoveredMenu.AddSubMenuItem("Rescan installed games", "Re-scan launchers and refresh manifest")
 
 	systray.AddSeparator()
@@ -163,30 +167,35 @@ func (c *TrayController) buildMenu(cfg *config) {
 	c.mLastError.Hide()
 
 	systray.AddSeparator()
-	c.mServer = systray.AddMenuItem("Server: (not set)", "Current server URL")
+	// Account & Setup submenu — connection and login.
+	c.mAccountMenu = systray.AddMenuItem("Account & Setup", "Server connection and login")
+	c.mServer = c.mAccountMenu.AddSubMenuItem("Server: (not set)", "Current server URL")
 	c.mServer.Disable()
-	c.mInterval = systray.AddMenuItem("Sync every 5m", "Current sync interval")
+	c.mInterval = c.mAccountMenu.AddSubMenuItem("Sync every 5m", "Current sync interval")
 	c.mInterval.Disable()
-
-	c.mLogin = systray.AddMenuItem("Login...", "Connect to server")
+	c.mLogin = c.mAccountMenu.AddSubMenuItem("Login...", "Connect to server")
 	if c.platform.HasNativeLogin {
 		c.mLogin.SetTitle("Login...")
 	} else {
 		c.mLogin.SetTitle("Login / Setup...")
 	}
 	if c.platform.HasNativeLogin {
-		c.mLoginBrowser = systray.AddMenuItem("Login (browser)...", "Open setup page in browser")
+		c.mLoginBrowser = c.mAccountMenu.AddSubMenuItem("Login (browser)...", "Open setup page in browser")
 	}
 	if c.platform.HasConsoleLogin {
-		c.mLoginConsole = systray.AddMenuItem("Login (console)...", "Open console to log in")
+		c.mLoginConsole = c.mAccountMenu.AddSubMenuItem("Login (console)...", "Open console to log in")
 	}
-	c.mDetect = systray.AddMenuItem("Detect launcher paths", "Auto-detect launcher install paths")
-	c.mRefresh = systray.AddMenuItem("Refresh manifest", "Re-fetch save locations from server")
-	c.mEditConfig = systray.AddMenuItem("Edit config file", "Open config in editor")
-	c.mAutostart = systray.AddMenuItemCheckbox("Run at startup", "Start GSBS when the system starts", RunAtStartupEnabled())
-	c.mViewLog = systray.AddMenuItem("View log", "Open client log file")
-	c.mDataFolder = systray.AddMenuItem("Open data folder", "Open GSBS data folder")
-	c.wireUpdateMenu()
+	c.mDetect = c.mAccountMenu.AddSubMenuItem("Detect launcher paths", "Auto-detect launcher install paths")
+	c.mRefresh = c.mAccountMenu.AddSubMenuItem("Refresh manifest", "Re-fetch save locations from server")
+
+	// Advanced submenu — config, logs, updates.
+	c.mAdvancedMenu = systray.AddMenuItem("Advanced", "Config, logs, and updates")
+	c.mEditConfig = c.mAdvancedMenu.AddSubMenuItem("Edit config file", "Open config in editor")
+	c.mViewLog = c.mAdvancedMenu.AddSubMenuItem("View log", "Open client log file")
+	c.mDataFolder = c.mAdvancedMenu.AddSubMenuItem("Open data folder", "Open GSBS data folder")
+	c.mAutostart = c.mAdvancedMenu.AddSubMenuItemCheckbox("Run at startup", "Start GSBS when the system starts", RunAtStartupEnabled())
+	c.wireUpdateMenu(c.mAdvancedMenu)
+
 	systray.AddSeparator()
 	c.mQuit = systray.AddMenuItem("Quit", "Exit GSBS")
 
@@ -303,6 +312,8 @@ func (c *TrayController) refreshFromSnapshot() {
 			}
 			if g.Disabled {
 				tip += " — disabled"
+			} else if g.SyncReason != "" {
+				tip += " — " + SyncReason(g.SyncReason).Friendly()
 			}
 			slot.SetTooltip(tip + " — click to toggle sync")
 			slot.Enable()
@@ -389,9 +400,15 @@ func formatStatusHeader(snap TraySnapshot) string {
 }
 
 func formatDiscoveredRow(g GameRow) string {
+	notReady := g.SyncReason != "" && g.SyncReason != string(SyncReasonReady)
 	prefix := "○ "
-	if g.Disabled {
+	switch {
+	case g.Disabled:
 		prefix = "⊘ "
+	case g.SyncReason == string(SyncReasonReady):
+		prefix = "✓ "
+	case notReady:
+		prefix = "⚠ "
 	}
 	title := g.Title
 	if title == "" {
@@ -399,6 +416,10 @@ func formatDiscoveredRow(g GameRow) string {
 	}
 	if len(title) > 22 {
 		title = title[:19] + "..."
+	}
+	// For games that won't sync, show the reason inline so the user knows why.
+	if notReady && !g.Disabled {
+		return prefix + title + " — " + SyncReason(g.SyncReason).Friendly()
 	}
 	sub := g.Launcher
 	if sub == "" && g.MatchReason != "" {
@@ -516,6 +537,11 @@ func (c *TrayController) startClickHandlers() {
 	go func() {
 		for range c.mRescan.ClickedCh {
 			triggerManifestRefresh()
+		}
+	}()
+	go func() {
+		for range c.mAddGame.ClickedCh {
+			c.openAddGamePage()
 		}
 	}()
 	go func() {
@@ -649,6 +675,19 @@ func (c *TrayController) startClickHandlers() {
 				c.refreshFromSnapshot()
 			}
 		}()
+	}
+}
+
+// openAddGamePage opens the local browser page for manually adding a game.
+func (c *TrayController) openAddGamePage() {
+	url := GetSetupURL()
+	if url == "" {
+		notifyAddGameUnavailable()
+		log.Printf("tray: add game page unavailable (setup server not running)")
+		return
+	}
+	if err := openURL(url + "/games"); err != nil {
+		log.Printf("tray: open add-game page: %v", err)
 	}
 }
 

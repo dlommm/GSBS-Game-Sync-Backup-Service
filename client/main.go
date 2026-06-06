@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"runtime"
+	"syscall"
 )
 
 func main() {
@@ -29,7 +31,7 @@ func main() {
 	alsoStderr := runtime.GOOS != "windows" || consoleMode()
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "login", "login-dialog", "list":
+		case "login", "login-dialog", "list", "debug-sync":
 			alsoStderr = true
 		}
 	}
@@ -52,6 +54,20 @@ func main() {
 				}
 			}
 			runList(dryRunPull)
+			return
+		case "debug-sync":
+			if len(os.Args) < 3 {
+				fmt.Fprintln(os.Stderr, "usage: gsbs-client debug-sync <game_id> [--dry-run]")
+				os.Exit(1)
+			}
+			gameID := os.Args[2]
+			dryRun := false
+			for _, a := range os.Args[3:] {
+				if a == "--dry-run" {
+					dryRun = true
+				}
+			}
+			runDebugSync(gameID, dryRun)
 			return
 		}
 	}
@@ -79,7 +95,7 @@ func main() {
 	}()
 
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
 	cancel()
 	log.Println("shutdown")

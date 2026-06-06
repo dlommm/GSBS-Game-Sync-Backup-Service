@@ -5,7 +5,90 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestGetWith5xxRetry_SucceedsAfterTransient(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts <= 2 {
+			w.WriteHeader(http.StatusServiceUnavailable) // 503
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"parse":{"wikitext":{"*":"hello"}}}`))
+	}))
+	defer srv.Close()
+
+	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL, testBackoff: time.Millisecond}
+	wikitext, err := c.ParsePageWikitext("5")
+	if err != nil {
+		t.Fatalf("expected success after retries: %v", err)
+	}
+	if wikitext != "hello" {
+		t.Fatalf("unexpected wikitext: %q", wikitext)
+	}
+	if attempts != 3 {
+		t.Fatalf("expected 3 attempts (2 failures + 1 success), got %d", attempts)
+	}
+}
+
+func TestGetWith5xxRetry_ExhaustsRetries(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusInternalServerError) // 500 every time
+	}))
+	defer srv.Close()
+
+	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL, testBackoff: time.Millisecond}
+	resp, err := c.doGet(srv.URL + "/w/api.php?action=parse&format=json&pageid=5&prop=wikitext")
+	if err != nil {
+		t.Fatalf("expected 500 response returned (not error) after retries: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500 status, got %d", resp.StatusCode)
+	}
+	if attempts != max5xxRetries+1 {
+		t.Fatalf("expected %d attempts, got %d", max5xxRetries+1, attempts)
+	}
+}
+
+func TestParsePageWikitext_MediaWikiError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"error":{"code":"nosuchpageid","info":"There is no page with ID 99999."}}`))
+	}))
+	defer srv.Close()
+
+	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL}
+	_, err := c.ParsePageWikitext("99999")
+	if err == nil {
+		t.Fatal("expected error for MediaWiki error response")
+	}
+	if !strings.Contains(err.Error(), "nosuchpageid") && !strings.Contains(err.Error(), "There is no page") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGetPageRevision_MediaWikiError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"error":{"code":"invalidtitle","info":"Bad title \"???\"."}}`))
+	}))
+	defer srv.Close()
+
+	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL}
+	_, err := c.GetPageRevision("???")
+	if err == nil {
+		t.Fatal("expected error for MediaWiki error response")
+	}
+	if !strings.Contains(err.Error(), "invalidtitle") && !strings.Contains(err.Error(), "Bad title") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
 
 func TestCargoQueryReturnsAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -126,6 +209,35 @@ func TestGetPageRevisionMock(t *testing.T) {
 	}
 	if rev.RevID != 99 {
 		t.Fatalf("rev: %+v", rev)
+	}
+}
+
+func TestExtractAllTemplates_SkipsMalformed(t *testing.T) {
+	// An unterminated {{ must not prevent extraction of valid templates that follow.
+	input := `Some text {{malformed and never closed` +
+		"\n" + `{{Game data/saves|Windows|%APPDATA%/Game}}`
+	got := ExtractAllTemplates(input)
+	if len(got) == 0 {
+		t.Fatal("expected at least one template after the malformed one")
+	}
+	found := false
+	for _, tmpl := range got {
+		if strings.Contains(tmpl, "Game data/saves") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("valid template not found in %v", got)
+	}
+}
+
+func TestExtractAllTemplates_MalformedMidPage(t *testing.T) {
+	// Multiple templates: first valid, then malformed, then valid again.
+	input := `{{Infobox game|title=Foo}} {{broken` + "\n" + `{{Game data/saves|Linux|/home/user/.config/game}}`
+	got := ExtractAllTemplates(input)
+	if len(got) < 2 {
+		t.Fatalf("expected at least 2 templates, got %d: %v", len(got), got)
 	}
 }
 

@@ -241,6 +241,9 @@ func DownloadUpdate(info *UpdateInfo) (string, error) {
 	if info == nil || info.DownloadURL == "" {
 		return "", fmt.Errorf("invalid update info")
 	}
+	if info.SHA256 == "" {
+		return "", fmt.Errorf("update manifest is missing SHA256 checksum; refusing to apply unverified update")
+	}
 	dir := filepath.Join(ClientDataDir(), "updates")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", err

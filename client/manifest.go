@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	clientlogx "github.com/gsbs/gsbs/client/logx"
 	"github.com/gsbs/gsbs/pkg/paths"
 	"github.com/gsbs/gsbs/pkg/pcgw"
 	"github.com/gsbs/gsbs/pkg/retry"
@@ -38,6 +39,7 @@ type manifestFetchResult struct {
 	ETag        string
 	Source      string // "v2" or "v1"
 	NotModified bool
+	DeltaOnly   bool // true when request used since= (empty payload means no changes)
 }
 
 // FetchManifest downloads the manifest from the server. Tries v2 first, falls back to v1 on error, 404, or empty entries.
@@ -54,21 +56,8 @@ func FetchManifestFull(ctx context.Context, baseURL, token, since, include strin
 	cached := LoadManifestFile()
 
 	if res, err := fetchManifestV2(ctx, baseURL, token, since, include, cached); err == nil {
-		if len(res.Entries) > 0 || res.NotModified {
-			if !res.NotModified {
-				merged := mergeManifestFetch(cached, res)
-				if err := SaveManifestFile(merged); err != nil {
-					log.Println("save manifest cache:", err)
-				}
-				return manifestFetchResult{
-					Entries:     merged.Entries,
-					Games:       merged.Games,
-					DeletedIDs:  res.DeletedIDs,
-					ETag:        merged.ETag,
-					Source:      "v2",
-					NotModified: false,
-				}, nil
-			}
+		if res.NotModified {
+			clientlogx.Event("manifest_not_modified", "entries", len(cached.Entries), "etag", cached.ETag)
 			return manifestFetchResult{
 				Entries:     cached.Entries,
 				Games:       cached.Games,
@@ -77,6 +66,21 @@ func FetchManifestFull(ctx context.Context, baseURL, token, since, include strin
 				NotModified: true,
 			}, nil
 		}
+		merged := mergeManifestFetch(cached, res)
+		if err := SaveManifestFile(merged); err != nil {
+			log.Println("save manifest cache:", err)
+		}
+		clientlogx.Event("manifest_v2_fetched", "entries", len(merged.Entries), "games", len(merged.Games),
+			"deleted", len(res.DeletedIDs), "etag", merged.ETag)
+		return manifestFetchResult{
+			Entries:     merged.Entries,
+			Games:       merged.Games,
+			DeletedIDs:  res.DeletedIDs,
+			ETag:        merged.ETag,
+			Source:      "v2",
+			NotModified: false,
+			DeltaOnly:   res.DeltaOnly,
+		}, nil
 	}
 
 	entries, err := fetchManifestV1(ctx, baseURL, token, since, include)
@@ -190,6 +194,7 @@ func fetchManifestV2(ctx context.Context, baseURL, token, since, include string,
 		Games:      out.Games,
 		DeletedIDs: out.DeletedGameIDs,
 		ETag:       etag,
+		DeltaOnly:  since != "",
 	}, nil
 }
 
@@ -309,6 +314,9 @@ func mergeManifestFetch(cached manifestFile, res manifestFetchResult) manifestFi
 		} else {
 			out.Entries = res.Entries
 		}
+	} else if !res.DeltaOnly && len(res.Games) == 0 && len(res.DeletedIDs) == 0 {
+		// Full v2 fetch with no games: authoritative empty manifest.
+		out.Entries = nil
 	}
 	if len(res.Games) > 0 {
 		out.Games = mergeV2Games(cached.Games, res.Games, res.DeletedIDs)
@@ -379,7 +387,7 @@ func ApplyManifestDeletions(entries []types.GameSaveLocation, deleted []string) 
 	return out
 }
 
-// MergeManifestDelta merges delta entries into existing by (game_id, platform, path_template).
+// MergeManifestDelta merges delta entries into existing by game_id, platform, and rule identity.
 func MergeManifestDelta(existing, delta []types.GameSaveLocation) []types.GameSaveLocation {
 	if len(delta) == 0 {
 		return existing
@@ -388,7 +396,13 @@ func MergeManifestDelta(existing, delta []types.GameSaveLocation) []types.GameSa
 		return delta
 	}
 	key := func(e types.GameSaveLocation) string {
-		return e.GameID + "\x00" + e.Platform + "\x00" + e.PathTemplate
+		ruleID := e.PathTemplate
+		if len(e.SaveRules) == 1 {
+			ruleID = saverule.RuleKey(e.GameID, e.SaveRules[0])
+		} else if len(e.SaveRules) > 1 {
+			ruleID = saverule.RuleKey(e.GameID, e.SaveRules[0]) + "+" + fmt.Sprintf("%d", len(e.SaveRules))
+		}
+		return e.GameID + "\x00" + e.Platform + "\x00" + ruleID
 	}
 	index := make(map[string]int, len(existing))
 	for i, e := range existing {
@@ -583,6 +597,9 @@ type WatchPathBuildStats struct {
 
 // LogZeroWatchPathsSummary logs skip-reason counts when no watch paths were built.
 func LogZeroWatchPathsSummary(stats WatchPathBuildStats) {
+	clientlogx.Event("watch_paths_zero", "skipped_discovered", stats.SkippedDiscovered,
+		"skipped_platform", stats.SkippedPlatform, "skipped_missing_dir", stats.SkippedMissingDir,
+		"skipped_malformed", stats.SkippedMalformed)
 	log.Printf("sync: no watch paths — skipped discovered=%d platform=%d missing_dir=%d malformed=%d",
 		stats.SkippedDiscovered, stats.SkippedPlatform, stats.SkippedMissingDir, stats.SkippedMalformed)
 }
@@ -671,6 +688,28 @@ func resolveManifestTemplate(resolver *paths.Resolver, template string, currentO
 	return resolver.ResolveAllForGame(template, currentOS, roots)
 }
 
+// resolveProtonPaths resolves a Windows-style save rule as a Proton compatdata path on Linux.
+// For each Steam AppID it queries every known Steam library for an installed compatdata directory.
+// Returns nil when no Steam libraries are configured, no AppIDs are provided, or no installed
+// compatdata directories are found (i.e. the game is not installed via Proton on this machine).
+func resolveProtonPaths(resolver *paths.Resolver, rule types.SaveRule, appIDs []string) []string {
+	if len(appIDs) == 0 || len(resolver.SteamLibraries) == 0 {
+		return nil
+	}
+	var out []string
+	seen := make(map[string]bool)
+	for _, appID := range appIDs {
+		pp, _ := paths.ResolveWindowsTemplateAsProton(rule.Directory, appID, resolver.SteamLibraries)
+		for _, p := range pp {
+			if p != "" && !seen[p] {
+				seen[p] = true
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
 // ManifestToWatchPaths converts manifest entries to watch paths for the current OS.
 // When mode is "discovered", only includes entries for game IDs in activeGameIDs (or explicit config paths via mergeWatchPaths).
 func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Resolver, currentOS paths.OS, includeConfig bool, activeGameIDs map[string]bool, mode string, installRootsByGame map[string][]string) ([]watchPath, WatchPathBuildStats) {
@@ -687,7 +726,10 @@ func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Reso
 			continue
 		}
 		platform := e.Platform
-		if platform != string(currentOS) {
+		// On Linux, a Windows-platform rule for a Steam game can be served via Proton.
+		// Treat such entries as candidates and resolve via compatdata rather than skipping them.
+		protonCandidate := currentOS == paths.Linux && platform == string(paths.Windows) && len(e.SteamAppIDs) > 0
+		if platform != string(currentOS) && !protonCandidate {
 			stats.SkippedPlatform++
 			continue
 		}
@@ -702,7 +744,12 @@ func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Reso
 		addedRule := false
 		for _, rule := range rules {
 			ruleKey := saverule.RuleKey(e.GameID, rule)
-			resolved := resolveManifestTemplate(resolver, rule.Directory, currentOS, e.GameID, installRootsByGame)
+			var resolved []string
+			if protonCandidate {
+				resolved = resolveProtonPaths(resolver, rule, e.SteamAppIDs)
+			} else {
+				resolved = resolveManifestTemplate(resolver, rule.Directory, currentOS, e.GameID, installRootsByGame)
+			}
 			if len(resolved) == 0 {
 				stats.SkippedMissingDir++
 				continue
@@ -747,7 +794,11 @@ func saveRulesForEntry(e types.GameSaveLocation) []types.SaveRule {
 	if len(rules) == 0 && strings.TrimSpace(e.PathTemplate) != "" {
 		rules = []types.SaveRule{{Directory: e.PathTemplate, SyncAll: true, Platform: e.Platform, IsConfig: e.IsConfig}}
 	}
-	return rules
+	valid, skipReasons := saverule.FilterValidRules(rules, e.Platform)
+	for _, reason := range skipReasons {
+		clientlogx.EventWarn("save_rule_invalid", "game_id", e.GameID, "reason", reason)
+	}
+	return valid
 }
 
 // resolveSavePath finds the local absolute path for a save slot.
@@ -785,13 +836,13 @@ func syncAllForWatchPath(w watchPath) bool {
 	return len(w.IncludePatterns) == 0
 }
 
-func resolveSavePath(gameID, pathKey string, manifestEntries []types.GameSaveLocation, watchPaths []watchPath, resolver *paths.Resolver, currentOS paths.OS, pullCtx paths.PullContext) string {
+func resolveSavePath(gameID, pathKey string, manifestEntries []types.GameSaveLocation, watchPaths []watchPath, resolver *paths.Resolver, currentOS paths.OS, pullCtx paths.PullContext, installRootsByGame map[string][]string) string {
 	for _, w := range watchPaths {
 		if w.GameID != gameID {
 			continue
 		}
 		if w.PathKey == pathKey || w.RuleKey == pathKey {
-			if abs := resolveWatchPathDirect(w, resolver, currentOS, gameID, pullCtx); abs != "" {
+			if abs := resolveWatchPathDirect(w, resolver, currentOS, gameID, pullCtx, installRootsByGame); abs != "" {
 				return abs
 			}
 		}
@@ -800,7 +851,7 @@ func resolveSavePath(gameID, pathKey string, manifestEntries []types.GameSaveLoc
 		if w.GameID != gameID {
 			continue
 		}
-		if abs := resolveSavePathByPathKeyForFile(gameID, pathKey, w, resolver, currentOS, pullCtx); abs != "" {
+		if abs := resolveSavePathByPathKeyForFile(gameID, pathKey, w, resolver, currentOS, pullCtx, installRootsByGame); abs != "" {
 			return abs
 		}
 	}
@@ -808,8 +859,21 @@ func resolveSavePath(gameID, pathKey string, manifestEntries []types.GameSaveLoc
 		if e.GameID != gameID {
 			continue
 		}
+		// On Linux, try Proton compatdata paths for Windows-platform entries before falling
+		// back to native resolution (which would produce incorrect native Linux paths).
+		if currentOS == paths.Linux && e.Platform == string(paths.Windows) && len(e.SteamAppIDs) > 0 {
+			for _, rule := range saveRulesForEntry(e) {
+				if saverule.RuleKey(gameID, rule) == pathKey {
+					for _, abs := range resolveProtonPaths(resolver, rule, e.SteamAppIDs) {
+						if resolved := eligiblePullPath(abs, gameID, pullCtx); resolved != "" {
+							return resolved
+						}
+					}
+				}
+			}
+		}
 		if PathKeyForManifestEntry(e.GameID, e.PathTemplate) == pathKey {
-			for _, abs := range resolveManifestTemplate(resolver, e.PathTemplate, currentOS, gameID, nil) {
+			for _, abs := range resolveManifestTemplate(resolver, e.PathTemplate, currentOS, gameID, installRootsByGame) {
 				if abs == "" {
 					continue
 				}
@@ -826,7 +890,7 @@ func resolveSavePath(gameID, pathKey string, manifestEntries []types.GameSaveLoc
 					Directory: rule.Directory, IncludePatterns: rule.IncludePatterns,
 					Recursive: rule.Recursive, SyncAll: rule.SyncAll,
 				}
-				if abs := resolveWatchPathDirect(wp, resolver, currentOS, gameID, pullCtx); abs != "" {
+				if abs := resolveWatchPathDirect(wp, resolver, currentOS, gameID, pullCtx, installRootsByGame); abs != "" {
 					return abs
 				}
 			}
@@ -835,11 +899,12 @@ func resolveSavePath(gameID, pathKey string, manifestEntries []types.GameSaveLoc
 				Directory: rule.Directory, IncludePatterns: rule.IncludePatterns,
 				Recursive: rule.Recursive, SyncAll: rule.SyncAll,
 			}
-			if abs := resolveSavePathByPathKeyForFile(gameID, pathKey, wp, resolver, currentOS, pullCtx); abs != "" {
+			if abs := resolveSavePathByPathKeyForFile(gameID, pathKey, wp, resolver, currentOS, pullCtx, installRootsByGame); abs != "" {
 				return abs
 			}
 		}
 	}
+	clientlogx.EventDebug("resolve_save_path_miss", "game_id", gameID, "path_key", pathKey)
 	return ""
 }
 
@@ -941,9 +1006,9 @@ func resolveWatchRootByPathKeyForFile(gameID, pathKey string, w watchPath, resol
 	return ""
 }
 
-func resolveWatchPathDirect(w watchPath, resolver *paths.Resolver, currentOS paths.OS, gameID string, pullCtx paths.PullContext) string {
+func resolveWatchPathDirect(w watchPath, resolver *paths.Resolver, currentOS paths.OS, gameID string, pullCtx paths.PullContext, installRootsByGame map[string][]string) string {
 	for _, t := range watchPathTemplates(w) {
-		for _, abs := range resolveManifestTemplate(resolver, t, currentOS, gameID, nil) {
+		for _, abs := range resolveManifestTemplate(resolver, t, currentOS, gameID, installRootsByGame) {
 			if abs == "" {
 				continue
 			}
@@ -955,12 +1020,12 @@ func resolveWatchPathDirect(w watchPath, resolver *paths.Resolver, currentOS pat
 	return ""
 }
 
-func resolveSavePathByPathKeyForFile(gameID, pathKey string, w watchPath, resolver *paths.Resolver, currentOS paths.OS, pullCtx paths.PullContext) string {
+func resolveSavePathByPathKeyForFile(gameID, pathKey string, w watchPath, resolver *paths.Resolver, currentOS paths.OS, pullCtx paths.PullContext, installRootsByGame map[string][]string) string {
 	ruleKey := ruleKeyForWatchPath(w)
 	syncAll := syncAllForWatchPath(w)
 	patterns := w.IncludePatterns
 	for _, dirTemplate := range watchRootDirs(w) {
-		for _, root := range resolveManifestTemplate(resolver, dirTemplate, currentOS, gameID, nil) {
+		for _, root := range resolveManifestTemplate(resolver, dirTemplate, currentOS, gameID, installRootsByGame) {
 			if root == "" {
 				continue
 			}

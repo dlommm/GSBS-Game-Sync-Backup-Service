@@ -26,7 +26,11 @@ jobs:
     outputs:
       tag: ${{ steps.ver.outputs.tag }}
       value: ${{ steps.ver.outputs.value }}
+      commit_date: ${{ steps.ver.outputs.commit_date }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
       - name: Resolve version
         id: ver
         run: |
@@ -38,6 +42,7 @@ jobs:
           RAW="${RAW#v}"
           echo "tag=v${RAW}" >> "$GITHUB_OUTPUT"
           echo "value=${RAW}" >> "$GITHUB_OUTPUT"
+          echo "commit_date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
 
   resolve-runner:
     needs: version
@@ -72,8 +77,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.64.8
-          install-mode: goinstall
+          version: v2.12.2
           args: --timeout=5m
 
   build-linux:
@@ -110,7 +114,7 @@ jobs:
       - name: Generate release manifests
         env:
           VERSION: ${{ needs.version.outputs.tag }}
-          RELEASED_AT: ${{ github.event.head_commit.timestamp }}
+          RELEASED_AT: ${{ needs.version.outputs.commit_date }}
         run: ./script/release-assets.sh "$VERSION" dist
       - name: Upload linux artifacts
         uses: actions/upload-artifact@v6
@@ -173,7 +177,7 @@ jobs:
             dist/latest-client.json
 
   docker:
-    needs: [version, resolve-runner, test, lint]
+    needs: [version, resolve-runner, test, lint, build-linux, build-windows]
     runs-on: ${{ needs.resolve-runner.outputs.linux }}
     steps:
       - uses: actions/checkout@v5
@@ -198,7 +202,7 @@ jobs:
             ${{ env.DOCKERHUB_IMAGE }}:latest
           build-args: |
             VERSION=${{ needs.version.outputs.value }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_DATE=${{ needs.version.outputs.commit_date }}
             COMMIT=${{ github.sha }}
 
   release:

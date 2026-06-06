@@ -33,9 +33,12 @@ When started without `--console`, the client runs in the system tray.
 - **Status** — last sync time, sync-in-progress, pause state, or last error.
 - **Sync now / Pause** — manual sync and pause/resume.
 - **Synced games** — up to 12 recently synced games with status (✓ ok, ⚠ conflict, ↑ uploaded, ⏳ pending). Click a game to open version history in the browser.
-- **Discovered games** — installed games matched to the manifest; click a game to enable or disable sync (checked = syncing, ⊘ = disabled). **Rescan installed games** re-runs discovery.
+- **Discovered games** — installed games matched to the manifest. Each entry shows its sync readiness: `✓` ready (auto-syncing), `⚠ <reason>` not ready (e.g. *save folder not found*, *not in server manifest*), `⊘` disabled. Click to enable/disable sync. **Add a game manually…** opens a local browser page to search the manifest by name or add a save folder by path. **Rescan installed games** re-runs discovery.
 - **Issues** — conflict count, pending offline uploads, last error (with link to log).
-- **Settings** — login, detect launcher paths, refresh manifest, edit config, run at startup, open data folder.
+- **Account & Setup** (submenu) — server URL, sync interval, login, **Detect launcher paths**, **Refresh manifest**.
+- **Advanced** (submenu) — edit config, view log, open data folder, run at startup, version, check/install updates.
+
+Ready + enabled discovered games sync automatically; there is no separate "add to sync" step for games the manifest covers and whose save folder exists. For games the manifest doesn't cover (or with a non-standard folder), use **Add a game manually…**.
 
 ### Notifications
 
@@ -113,7 +116,36 @@ Example log line: `sync: no watch paths — skipped discovered=12 platform=40 mi
 
 Optional config: `conflict_policy` (`last_write_wins`, `keep_local`, `keep_server`), launcher folder overrides (`heroic_folder`, `lutris_folder`, `bottles_folder`, `prism_folder`, `flatpak_steam_folder`, `ea_app_folder`), `steam_library_folders` (extra Steam library roots when not in `libraryfolders.vdf`), `game_install_paths` (per-game install folder override for `<game-install-folder>` resolution), `launcher_user_id` (auto-detected from Steam when empty; tray **Detect launcher paths** merges it into config), `discovery_interval`.
 
-### Manual watch paths
+### Cross-OS sync (Windows ↔ Linux / Steam Deck)
+
+GSBS 2.0 supports syncing saves between Windows and Linux for games tracked by PCGamingWiki.
+
+### How it works
+
+Each PCGW-sourced save rule carries a `slot_label` — an OS-neutral integer index assigned during server PCGW ingest. The client derives `path_key` from `(game_id, slot_label, is_config)` rather than the raw path, so:
+
+- A Windows client watching `%APPDATA%\Elden Ring\<user-id>\` and a Linux client watching `~/.local/share/EldenRing/` both produce the **same `path_key`** for the same logical save slot.
+- The server stores one record per `(user, game_id, path_key)`. When either machine syncs, it gets the other's save and writes it to its local OS-native path.
+
+### Proton / Steam Deck
+
+For Windows-native games running via Steam/Proton on Linux, the client resolves the Proton `compatdata` path:
+
+```
+<SteamLibrary-folder>/steamapps/compatdata/<SteamAppID>/pfx/users/steamuser/AppData/Roaming/<Game>/
+```
+
+This is synthesized automatically from the Steam library and app ID. No manual path configuration is needed for PCGW-tracked games.
+
+### User-defined `watch_paths` are OS-specific
+
+Entries in `watch_paths` in `config.json` are manually configured and use a per-OS `path_key` (hash of the full rule). They do **not** cross-sync between Windows and Linux — each machine only pushes and pulls its own copy. This is intentional: manual paths are machine-specific.
+
+### One-time re-sync after upgrading to 2.0
+
+When upgrading from a pre-2.0 client, the client detects that its push hash cache was built under the old `path_key` scheme and clears it automatically on first run. This triggers a one-time re-sync check (the client re-evaluates each save against the server). No data is lost — the server still holds all saves; the client simply re-confirms which are already up to date.
+
+## Manual watch paths
 
 `watch_paths` in `config.json` can override or supplement manifest paths. Each entry supports:
 

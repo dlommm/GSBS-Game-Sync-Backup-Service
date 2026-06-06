@@ -11,6 +11,9 @@ import (
 // pathPlaceholderRe matches PCGW Path templates: {{p|...}}, {{P|...}}, {{Path|...}}.
 var pathPlaceholderRe = regexp.MustCompile(`(?i)\{\{(?:path|[pP])\|([^}]+)\}\}`)
 
+// brTagRe matches all variants of the HTML <br> tag used as a path separator in PCGW wikitext.
+var brTagRe = regexp.MustCompile(`(?i)<br\s*/?>`)
+
 // placeholderMap maps normalized PCGW {{p|key}} names to resolver-friendly tokens.
 // See https://www.pcgamingwiki.com/wiki/PCGamingWiki:Editing_guide/Game_data
 var placeholderMap = map[string]string{
@@ -53,7 +56,9 @@ var placeholderMap = map[string]string{
 	"winhome":                          "%USERPROFILE%",
 	"xdgdatahome":                      "%LOCALAPPDATA%",
 	"xdgconfighome":                    "%APPDATA%",
-	"xdgcachehome":                     "%LOCALAPPDATA%/cache",
+	// xdgcachehome uses an OS-aware token: on Linux resolves to $XDG_CACHE_HOME
+	// (default ~/.cache); on Windows resolves to %LOCALAPPDATA%\cache.
+	"xdgcachehome":                     "<xdg-cache-home>",
 }
 
 // NormalizePathTemplate converts PCGW {{p|...}} / {{Path|...}} placeholders to resolver-friendly form.
@@ -85,6 +90,10 @@ func ParseSaveRules(raw, platform string, isConfig bool) []types.SaveRule {
 // SplitNormalizePathTemplates splits pipe-separated PCGW path strings, normalizes each
 // segment, strips trailing file globs (/*, /*.ext) to directory-only paths, deduplicates,
 // and returns non-empty results in stable order.
+//
+// Alternate paths separated by <br>, <br/>, or <br /> inside one template argument
+// are normalized to the | separator before splitting.
 func SplitNormalizePathTemplates(raw string) []string {
+	raw = brTagRe.ReplaceAllString(raw, "|")
 	return saverule.Directories(ParseSaveRules(raw, "", false))
 }

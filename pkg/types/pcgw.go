@@ -170,6 +170,10 @@ type ManifestV2Game struct {
 
 // ManifestV2Response is GET /api/manifest/v2 payload.
 type ManifestV2Response struct {
+	// SchemaVersion identifies the manifest shape. Increment when SaveRule or
+	// manifest structure changes in a backward-incompatible way so clients can
+	// negotiate or skip unsupported schemas.
+	SchemaVersion  int              `json:"schema_version"`
 	Version        int              `json:"version"`
 	GeneratedAt    string           `json:"generated_at"`
 	ETag           string           `json:"etag"`

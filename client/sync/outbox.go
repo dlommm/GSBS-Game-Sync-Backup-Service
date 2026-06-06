@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/retry"
@@ -15,16 +16,21 @@ import (
 
 const outboxMaxAge = 7 * 24 * time.Hour
 
+var outboxMu sync.Mutex
+
 // OutboxEntry is a failed push persisted for later retry.
 type OutboxEntry struct {
-	ID          string    `json:"id"`
-	GameID      string    `json:"game_id"`
-	PathKey     string    `json:"path_key"`
-	FilePath    string    `json:"file_path"`
-	Content     string    `json:"content"` // base64
-	CreatedAt   time.Time `json:"created_at"`
-	Attempts    int       `json:"attempts"`
-	NextRetryAt time.Time `json:"next_retry_at,omitempty"`
+	ID           string    `json:"id"`
+	GameID       string    `json:"game_id"`
+	PathKey      string    `json:"path_key"`
+	FilePath     string    `json:"file_path"`
+	RelativePath string    `json:"relative_path,omitempty"`
+	Content      string    `json:"content,omitempty"`      // legacy base64 inline payload
+	ContentHash  string    `json:"content_hash,omitempty"` // expected wire hash when Content empty
+	ContentSize  int64     `json:"content_size,omitempty"` // plaintext size hint
+	CreatedAt    time.Time `json:"created_at"`
+	Attempts     int       `json:"attempts"`
+	NextRetryAt  time.Time `json:"next_retry_at,omitempty"`
 }
 
 func outboxDir() string {
@@ -32,22 +38,59 @@ func outboxDir() string {
 	return filepath.Join(dir, "gsbs", "outbox")
 }
 
+func outboxSlotKey(gameID, pathKey string) string {
+	return gameID + "\x00" + pathKey
+}
+
 // EnqueueOutbox persists a failed push for later retry.
-func EnqueueOutbox(gameID, pathKey, filePath string, content []byte) error {
+// When wireHash is non-empty, the file is re-read at send time instead of storing base64 content.
+func EnqueueOutbox(gameID, pathKey, filePath, relativePath string, content []byte, wireHash string) error {
+	outboxMu.Lock()
+	defer outboxMu.Unlock()
+
 	dir := outboxDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
+
+	// Collapse duplicate pending entries for the same slot (keep newest).
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var existing OutboxEntry
+		if json.Unmarshal(data, &existing) != nil {
+			continue
+		}
+		if outboxSlotKey(existing.GameID, existing.PathKey) == outboxSlotKey(gameID, pathKey) {
+			_ = os.Remove(path)
+			logSyncInfo("outbox_dedup", "game_id", gameID, "path_key", pathKey, "removed_id", existing.ID)
+		}
+	}
+
 	id := fmt.Sprintf("%d", time.Now().UnixNano())
 	entry := OutboxEntry{
-		ID:          id,
-		GameID:      gameID,
-		PathKey:     pathKey,
-		FilePath:    filePath,
-		Content:     base64.StdEncoding.EncodeToString(content),
-		CreatedAt:   time.Now(),
-		NextRetryAt: time.Now().Add(retry.OutboxBackoff().Initial),
+		ID:           id,
+		GameID:       gameID,
+		PathKey:      pathKey,
+		FilePath:     filePath,
+		RelativePath: relativePath,
+		CreatedAt:    time.Now(),
+		NextRetryAt:  time.Now().Add(retry.OutboxBackoff().Initial),
+		ContentSize:  int64(len(content)),
 	}
+	if wireHash != "" {
+		entry.ContentHash = wireHash
+	} else if len(content) > 0 {
+		entry.Content = base64.StdEncoding.EncodeToString(content)
+	}
+
 	data, err := json.Marshal(entry)
 	if err != nil {
 		return err
@@ -57,24 +100,70 @@ func EnqueueOutbox(gameID, pathKey, filePath string, content []byte) error {
 	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	logSyncInfo("outbox_enqueue", "game_id", gameID, "path_key", pathKey, "relative_path", relativePath,
+		"bytes", len(content), "id", id, "wire_hash", wireHash != "")
+	return nil
+}
+
+func loadOutboxContent(entry *OutboxEntry, client *Client) ([]byte, error) {
+	if entry.Content != "" {
+		return base64.StdEncoding.DecodeString(entry.Content)
+	}
+	if entry.FilePath == "" {
+		return nil, fmt.Errorf("outbox entry missing content and file_path")
+	}
+	info, err := os.Stat(entry.FilePath)
+	if err != nil {
+		return nil, fmt.Errorf("outbox file missing: %w", err)
+	}
+	if info.Size() == 0 {
+		return nil, fmt.Errorf("outbox file empty")
+	}
+	content, err := os.ReadFile(entry.FilePath)
+	if err != nil {
+		return nil, err
+	}
+	if entry.ContentHash != "" {
+		hash, err := client.ContentWireHash(content)
+		if err != nil {
+			return nil, err
+		}
+		if hash != entry.ContentHash {
+			// File changed since enqueue: push the current content rather than
+			// dropping the entry. Update the stored hash so retry persists correctly.
+			logSyncInfo("outbox_hash_updated", "game_id", entry.GameID, "path_key", entry.PathKey,
+				"old_hash", entry.ContentHash, "new_hash", hash)
+			entry.ContentHash = hash
+		}
+	}
+	return content, nil
 }
 
 // ProcessOutbox retries pending outbox entries due for retry. Returns count sent.
 func ProcessOutbox(ctx context.Context, client *Client) int {
+	// Phase 1: snapshot candidates under lock so EnqueueOutbox is not blocked
+	// during network I/O.
+	outboxMu.Lock()
 	dir := outboxDir()
-	entries, err := os.ReadDir(dir)
+	dirEntries, err := os.ReadDir(dir)
 	if err != nil {
+		outboxMu.Unlock()
 		if os.IsNotExist(err) {
 			return 0
 		}
-		log.Printf("outbox: read dir: %v", err)
+		logSyncWarn("outbox_read_dir", "error", err)
 		return 0
 	}
+	type candidate struct {
+		entry OutboxEntry
+		path  string
+	}
 	now := time.Now()
-	sent := 0
-	bo := retry.OutboxBackoff()
-	for _, e := range entries {
+	var candidates []candidate
+	for _, e := range dirEntries {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
 			continue
 		}
@@ -89,41 +178,77 @@ func ProcessOutbox(ctx context.Context, client *Client) int {
 			continue
 		}
 		if now.Sub(entry.CreatedAt) > outboxMaxAge {
-			log.Printf("outbox: dropping expired id=%s age=%s", entry.ID, now.Sub(entry.CreatedAt).Round(time.Minute))
+			logSyncInfo("outbox_expired", "id", entry.ID, "game_id", entry.GameID, "path_key", entry.PathKey,
+				"age", now.Sub(entry.CreatedAt).Round(time.Minute).String())
 			_ = os.Remove(path)
 			continue
 		}
 		if !entry.NextRetryAt.IsZero() && now.Before(entry.NextRetryAt) {
 			continue
 		}
-		content, err := base64.StdEncoding.DecodeString(entry.Content)
-		if err != nil {
-			_ = os.Remove(path)
+		candidates = append(candidates, candidate{entry, path})
+	}
+	outboxMu.Unlock()
+
+	// Phase 2: process each candidate — no lock held during network I/O.
+	sent := 0
+	for _, c := range candidates {
+		entry := c.entry
+		path := c.path
+
+		content, loadErr := loadOutboxContent(&entry, client)
+		if loadErr != nil {
+			logSyncWarn("outbox_load", "id", entry.ID, "game_id", entry.GameID, "path_key", entry.PathKey, "error", loadErr)
+			if errors.Is(loadErr, os.ErrNotExist) {
+				// File gone — entry can never be pushed; remove it.
+				outboxMu.Lock()
+				_ = os.Remove(path)
+				outboxMu.Unlock()
+			}
 			continue
 		}
-		if err := client.pushOnce(ctx, entry.GameID, entry.PathKey, entry.FilePath, "", content); err != nil {
+
+		relPath := entry.RelativePath
+		if err := client.pushOnce(ctx, entry.GameID, entry.PathKey, entry.FilePath, relPath, content); err != nil {
 			if !retry.IsRetryableError(err) {
-				log.Printf("outbox: non-retryable id=%s: %v — removing", entry.ID, err)
+				logSyncWarn("outbox_non_retryable", "id", entry.ID, "game_id", entry.GameID, "path_key", entry.PathKey, "error", err)
+				outboxMu.Lock()
 				_ = os.Remove(path)
+				outboxMu.Unlock()
 				continue
 			}
+			// Fix 5: fresh backoff per entry so earlier entries don't inflate later delays.
+			bo := retry.OutboxBackoff()
 			entry.Attempts++
 			for i := 0; i < entry.Attempts; i++ {
 				bo.Next()
 			}
 			entry.NextRetryAt = now.Add(bo.Current())
+			outboxMu.Lock()
 			if updated, err := json.Marshal(entry); err == nil {
-				_ = os.WriteFile(path, updated, 0600)
+				tmp := path + ".tmp"
+				if writeErr := os.WriteFile(tmp, updated, 0600); writeErr == nil {
+					_ = os.Rename(tmp, path)
+				}
 			}
-			log.Printf("outbox: retry failed id=%s attempts=%d next=%s: %v", entry.ID, entry.Attempts, entry.NextRetryAt.Format(time.RFC3339), err)
+			outboxMu.Unlock()
+			logSyncWarn("outbox_retry_failed", "id", entry.ID, "game_id", entry.GameID, "path_key", entry.PathKey,
+				"attempts", entry.Attempts, "next_retry", entry.NextRetryAt.Format(time.RFC3339), "error", err)
 			continue
 		}
+
+		outboxMu.Lock()
 		if err := os.Remove(path); err != nil {
-			log.Printf("outbox: remove %s: %v", path, err)
+			logSyncWarn("outbox_remove", "path", path, "error", err)
 		} else {
 			sent++
-			log.Printf("outbox: sent game=%s file=%s", entry.GameID, entry.FilePath)
+			logSyncInfo("outbox_sent", "game_id", entry.GameID, "path_key", entry.PathKey, "relative_path", relPath,
+				"bytes", len(content))
+			if OnSaveEvent != nil {
+				OnSaveEvent(entry.GameID, entry.PathKey, "", SaveDirPush, nil)
+			}
 		}
+		outboxMu.Unlock()
 	}
 	return sent
 }

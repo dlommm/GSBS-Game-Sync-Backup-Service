@@ -3,7 +3,7 @@ package types
 // SaveEntry identifies a single logical save (game + path key).
 type SaveEntry struct {
 	GameID      string `json:"game_id"`  // e.g. PCGW page name or Steam App ID
-	PathKey     string `json:"path_key"` // stable key for this path (same across OSes)
+	PathKey     string `json:"path_key"` // save slot key: PCGW-sourced = OS-neutral (derived from game_id+slot_label+is_config); user-defined = per-OS hash
 	UpdatedAt   string `json:"updated_at,omitempty"`
 	Encrypted   bool   `json:"encrypted,omitempty"`
 	ContentHash string `json:"content_hash,omitempty"` // SHA256 hex of content
@@ -37,6 +37,13 @@ type SaveRule struct {
 	Platform        string   `json:"platform,omitempty"`
 	IsConfig        bool     `json:"is_config"`
 	SyncAll         bool     `json:"sync_all,omitempty"` // explicit opt-in when IncludePatterns is empty
+	// SlotLabel is an OS-neutral identifier for this save slot, assigned during PCGW ingest.
+	// When non-empty, path_key is derived from (game_id, slot_label, is_config) instead of the
+	// full rule — making the key identical across Windows and Linux for the same logical save.
+	// Format: "<slot_index>" (e.g. "0", "1") — the 0-based index of the logical save slot
+	// within the game, as assigned by the server PCGW ingest step.
+	// Empty for user-defined rules (they keep the legacy hash-of-full-rule key).
+	SlotLabel string `json:"slot_label,omitempty"`
 }
 
 // GameSaveLocation is a single manifest entry: where a game stores saves/config per platform.

@@ -117,3 +117,30 @@ func TestNormalizePathTemplate_NonPathTemplatesPreserved(t *testing.T) {
 		t.Fatalf("non-p templates must not be stripped: got %q", got)
 	}
 }
+
+func TestSplitNormalizePathTemplates_BrSeparated(t *testing.T) {
+	// <br>-separated paths inside one template argument must produce two separate entries.
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{"br", `%APPDATA%/Game/saves<br>%LOCALAPPDATA%/Game/saves`},
+		{"br-self-close", `%APPDATA%/Game/saves<br/>%LOCALAPPDATA%/Game/saves`},
+		{"br-xhtml", `%APPDATA%/Game/saves<br />%LOCALAPPDATA%/Game/saves`},
+		{"br-upper", `%APPDATA%/Game/saves<BR>%LOCALAPPDATA%/Game/saves`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := SplitNormalizePathTemplates(tt.raw)
+			if len(got) != 2 {
+				t.Fatalf("expected 2 paths, got %d: %v", len(got), got)
+			}
+			if got[0] != `%APPDATA%/Game/saves` {
+				t.Errorf("path[0] = %q, want %%APPDATA%%/Game/saves", got[0])
+			}
+			if got[1] != `%LOCALAPPDATA%/Game/saves` {
+				t.Errorf("path[1] = %q, want %%LOCALAPPDATA%%/Game/saves", got[1])
+			}
+		})
+	}
+}

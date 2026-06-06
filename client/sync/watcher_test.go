@@ -18,12 +18,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func testSyncClient(t *testing.T, srvURL string) *Client {
+	t.Helper()
+	ResetPushHashCacheForTest()
+	resolver := paths.NewResolver()
+	client, err := NewClient(srvURL, "test-token", resolver, paths.CurrentOS(), 0, false, false)
+	require.NoError(t, err)
+	return client
+}
+
 func TestWatcherExcludePatterns(t *testing.T) {
 	w := &Watcher{ExcludePatterns: []string{"*.tmp", "*.bak", "thumb.db"}}
-	assert.True(t, w.excludeMatch("/game/save.tmp"))
-	assert.True(t, w.excludeMatch("/game/autosave.bak"))
-	assert.False(t, w.excludeMatch("/game/save.dat"))
-	assert.False(t, w.excludeMatch("/game/profile.bin"))
+	assert.True(t, w.excludeMatch("/game/save.tmp", "save.tmp"))
+	assert.True(t, w.excludeMatch("/game/autosave.bak", "autosave.bak"))
+	assert.False(t, w.excludeMatch("/game/save.dat", "save.dat"))
+	assert.False(t, w.excludeMatch("/game/profile.bin", "profile.bin"))
+}
+
+func TestWatcherExcludePatterns_RelativePathGlob(t *testing.T) {
+	w := &Watcher{ExcludePatterns: []string{"cache/*", "nested/temp/*.tmp"}}
+	assert.True(t, w.excludeMatch("/game/saves/cache/foo.dat", "cache/foo.dat"))
+	assert.True(t, w.excludeMatch("/game/saves/nested/temp/x.tmp", "nested/temp/x.tmp"))
+	assert.False(t, w.excludeMatch("/game/saves/save.dat", "save.dat"))
 }
 
 func TestMatchInclude_PatternFilter(t *testing.T) {
@@ -88,9 +104,8 @@ func TestWatcherPatternFilter_IgnoresNonMatching(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	client := testSyncClient(t, srv.URL)
 	resolver := paths.NewResolver()
-	client, err := NewClient(srv.URL, "test-token", resolver, paths.CurrentOS(), 0, false, false)
-	require.NoError(t, err)
 
 	w, err := NewWatcher(resolver, paths.CurrentOS(), client)
 	require.NoError(t, err)
@@ -128,9 +143,8 @@ func TestWatcherDebounce(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	client := testSyncClient(t, srv.URL)
 	resolver := paths.NewResolver()
-	client, err := NewClient(srv.URL, "test-token", resolver, paths.CurrentOS(), 0, false, false)
-	require.NoError(t, err)
 
 	w, err := NewWatcher(resolver, paths.CurrentOS(), client)
 	require.NoError(t, err)
@@ -177,9 +191,8 @@ func TestWatcherDebounceSeparateFiles(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	client := testSyncClient(t, srv.URL)
 	resolver := paths.NewResolver()
-	client, err := NewClient(srv.URL, "test-token", resolver, paths.CurrentOS(), 0, false, false)
-	require.NoError(t, err)
 
 	w, err := NewWatcher(resolver, paths.CurrentOS(), client)
 	require.NoError(t, err)
@@ -210,7 +223,7 @@ func TestWatcherDebounceSeparateFiles(t *testing.T) {
 func TestWatcherPushRelativePathHeader(t *testing.T) {
 	dir := t.TempDir()
 	saveFile := filepath.Join(dir, "save.dat")
-	require.NoError(t, os.WriteFile(saveFile, []byte("content"), 0644))
+	require.NoError(t, os.WriteFile(saveFile, []byte("unique-content-for-rel-header-test"), 0644))
 
 	var relHeader atomic.Value
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -221,9 +234,8 @@ func TestWatcherPushRelativePathHeader(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	client := testSyncClient(t, srv.URL)
 	resolver := paths.NewResolver()
-	client, err := NewClient(srv.URL, "test-token", resolver, paths.CurrentOS(), 0, false, false)
-	require.NoError(t, err)
 
 	w, err := NewWatcher(resolver, paths.CurrentOS(), client)
 	require.NoError(t, err)

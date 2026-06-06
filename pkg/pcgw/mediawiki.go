@@ -38,9 +38,20 @@ func (c *Client) GetPageRevision(pageID string) (*PageRevision, error) {
 				} `json:"revisions"`
 			} `json:"pages"`
 		} `json:"query"`
+		Error *struct {
+			Code string `json:"code"`
+			Info string `json:"info"`
+		} `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, err
+	}
+	if out.Error != nil {
+		info := out.Error.Info
+		if info == "" {
+			info = out.Error.Code
+		}
+		return nil, fmt.Errorf("mediawiki API error: %s", info)
 	}
 	for _, page := range out.Query.Pages {
 		if page.Missing != "" || len(page.Revisions) == 0 {

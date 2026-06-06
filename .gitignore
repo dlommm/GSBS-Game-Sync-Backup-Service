@@ -25,3 +25,4 @@ gsbs.db
 .DS_Store
 *.swp
 *.swo
+coverage.out

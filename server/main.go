@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -95,21 +95,23 @@ func logRequests(next http.Handler, mc *metrics.Collector) http.Handler {
 func rateLimiterFromEnv(envKey string, defaultLimit int, defaultWindow time.Duration) *ratelimit.Limiter {
 	if v := os.Getenv(envKey); v != "" {
 		if limit, window := parseRateLimit(v); limit > 0 && window > 0 {
-			log.Printf("rate limit: %s %d per %s", envKey, limit, window)
+			logx.Logger().Info().Str("key", envKey).Int("limit", limit).Dur("window", window).Msg("rate limit: custom")
 			return ratelimit.New(limit, window)
 		}
 	}
-	log.Printf("rate limit: %s default %d per %s", envKey, defaultLimit, defaultWindow)
+	logx.Logger().Info().Str("key", envKey).Int("limit", defaultLimit).Dur("window", defaultWindow).Msg("rate limit: default")
 	return ratelimit.New(defaultLimit, defaultWindow)
 }
 
 func metricsAuth(token string, next http.Handler) http.Handler {
-	if token == "" {
-		return next
-	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimSpace(auth[7:]) != token {
+		hdr := r.Header.Get("Authorization")
+		if !strings.HasPrefix(hdr, "Bearer ") {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		provided := strings.TrimSpace(hdr[7:])
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -129,25 +131,25 @@ func main() {
 	}
 	st, err := store.NewSQLite(dbPath)
 	if err != nil {
-		log.Fatal("store:", err)
+		logx.Logger().Fatal().Err(err).Msg("store: open failed")
 	}
 	defer st.Close()
-	log.Printf("database: opened %s", dbPath)
+	logx.Logger().Info().Str("path", dbPath).Msg("database: opened")
 	ctx := context.Background()
 	if err := st.ReconcileStaleJobRuns(ctx); err != nil {
-		log.Printf("reconcile stale job_runs: %v", err)
+		logx.Logger().Error().Err(err).Msg("reconcile stale job_runs")
 	}
 	if err := st.ReconcileStalePCGWSyncRuns(ctx); err != nil {
-		log.Printf("reconcile stale pcgw_sync_runs: %v", err)
+		logx.Logger().Error().Err(err).Msg("reconcile stale pcgw_sync_runs")
 	}
 	if n, err := st.DeleteExpiredSessions(ctx, time.Now().Add(-store.WebSessionMaxAge)); err != nil {
-		log.Printf("session GC on startup: %v", err)
+		logx.Logger().Error().Err(err).Msg("session GC on startup")
 	} else if n > 0 {
-		log.Printf("session GC on startup: removed %d expired session(s)", n)
+		logx.Logger().Info().Int64("count", n).Msg("session GC on startup: removed expired sessions")
 	}
 	if adminUser := os.Getenv("GSBS_ADMIN_USERNAME"); adminUser != "" {
 		if err := st.EnsureAdminByUsername(context.Background(), adminUser); err != nil {
-			log.Printf("ensure admin username %q: %v", adminUser, err)
+			logx.Logger().Error().Str("username", adminUser).Err(err).Msg("ensure admin username")
 		}
 	}
 
@@ -156,12 +158,12 @@ func main() {
 	allowRegister := true
 	if v := os.Getenv("GSBS_ALLOW_REGISTER"); strings.EqualFold(v, "false") || v == "0" {
 		allowRegister = false
-		log.Println("Public registration is DISABLED (set GSBS_ALLOW_REGISTER=true to enable)")
+		logx.Logger().Info().Msg("public registration is DISABLED (set GSBS_ALLOW_REGISTER=true to enable)")
 	}
 
 	sessionSecret := os.Getenv("GSBS_SESSION_SECRET")
-	if sessionSecret == "" || sessionSecret == "gsbs-default-secret-change-me" {
-		log.Println("WARNING: GSBS_SESSION_SECRET is not set or is default; set a strong secret in production")
+	if sessionSecret == "" {
+		logx.Logger().Fatal().Msg("GSBS_SESSION_SECRET must be set; generate with: openssl rand -base64 32")
 	}
 
 	hub := sse.NewHub()
@@ -178,13 +180,13 @@ func main() {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
 			maxStorageBytes = n
 			if n > 0 {
-				log.Printf("global storage limit: %d bytes", n)
+				logx.Logger().Info().Int64("bytes", n).Msg("global storage limit set")
 			}
 		}
 	}
 	readOnly := strings.EqualFold(os.Getenv("GSBS_READ_ONLY"), "true") || os.Getenv("GSBS_READ_ONLY") == "1"
 	if readOnly {
-		log.Println("server is in READ-ONLY mode (push/delete disabled)")
+		logx.Logger().Warn().Msg("server is in READ-ONLY mode (push/delete disabled)")
 	}
 	apiHandler := api.NewHandler(st, authSvc, allowRegister, hub, authLimiter, pushLimiter, pullLimiter, generalLimiter, manifestLimiter, maxStorageBytes, readOnly, sessionSecret, Version)
 	runner = job.NewRunner(st, hub, apiHandler)
@@ -197,57 +199,63 @@ func main() {
 	mux.Handle("/", webHandler)
 	var metricsCollector *metrics.Collector
 	if os.Getenv("GSBS_METRICS") == "1" {
-		metricsCollector = metrics.NewCollector(st, hub)
-		metricsHandler := metricsAuth(os.Getenv("GSBS_METRICS_TOKEN"), metricsCollector)
-		mux.Handle("/metrics", metricsHandler)
-		if os.Getenv("GSBS_METRICS_TOKEN") != "" {
-			log.Println("metrics: enabled at GET /metrics (Bearer token required)")
-		} else {
-			log.Println("metrics: enabled at GET /metrics")
+		metricsToken := os.Getenv("GSBS_METRICS_TOKEN")
+		if metricsToken == "" {
+			// Auto-generate a token so /metrics is never exposed without auth.
+			// Set GSBS_METRICS_TOKEN to make it permanent across restarts.
+			b := make([]byte, 16)
+			if _, randErr := rand.Read(b); randErr == nil {
+				metricsToken = hex.EncodeToString(b)
+			}
+			logx.Logger().Warn().Str("token", metricsToken).Msg("metrics: GSBS_METRICS_TOKEN not set; using auto-generated token (set env var to persist)")
 		}
+		metricsCollector = metrics.NewCollector(st, hub)
+		metricsHandler := metricsAuth(metricsToken, metricsCollector)
+		mux.Handle("/metrics", metricsHandler)
+		logx.Logger().Info().Msg("metrics: enabled at GET /metrics (Bearer token required)")
 	}
 	handler := logRequests(mux, metricsCollector)
 
 	if err := pcgwCronSched.Start(ctx); err != nil {
-		log.Printf("cron: failed to schedule PCGW sync: %v", err)
+		logx.Logger().Error().Err(err).Msg("cron: failed to schedule PCGW sync")
 	}
 	if shouldAutoRunPCGWOnFirstStart(ctx, st) {
 		go func() {
 			started, err := runner.TryRunPCGWSync(context.Background())
 			if err != nil {
-				log.Printf("first-start pcgw sync: %v", err)
+				logx.Logger().Error().Err(err).Msg("first-start pcgw sync")
 				return
 			}
 			if started {
 				if err := st.SetAdminSetting(context.Background(), store.AdminSettingPCGWFirstRunDone, "true"); err != nil {
-					log.Printf("first-start pcgw sync: set marker: %v", err)
+					logx.Logger().Error().Err(err).Msg("first-start pcgw sync: set marker")
 				}
-				log.Println("first-start pcgw sync started")
+				logx.Logger().Info().Msg("first-start pcgw sync started")
 			}
 		}()
 	}
 	if id2, err := c.AddFunc("0 0 * * *", func() {
 		if err := st.AppendStatsSnapshot(context.Background()); err != nil {
-			log.Printf("cron: stats snapshot: %v", err)
+			logx.Logger().Error().Err(err).Msg("cron: stats snapshot")
 		}
 	}); err != nil {
-		log.Printf("cron: failed to schedule stats snapshot: %v", err)
+		logx.Logger().Error().Err(err).Msg("cron: failed to schedule stats snapshot")
 	} else {
 		_ = id2
-		log.Println("cron: stats snapshot scheduled daily 00:00")
+		logx.Logger().Info().Msg("cron: stats snapshot scheduled daily 00:00")
 	}
 	if id3, err := c.AddFunc("0 4 * * *", func() {
 		n, err := st.DeleteExpiredSessions(context.Background(), time.Now().Add(-store.WebSessionMaxAge))
 		if err != nil {
-			log.Printf("cron: session GC: %v", err)
+			logx.Logger().Error().Err(err).Msg("cron: session GC")
 		} else if n > 0 {
-			log.Printf("cron: session GC removed %d expired session(s)", n)
+			logx.Logger().Info().Int64("count", n).Msg("cron: session GC removed expired sessions")
 		}
 	}); err != nil {
-		log.Printf("cron: failed to schedule session GC: %v", err)
+		logx.Logger().Error().Err(err).Msg("cron: failed to schedule session GC")
 	} else {
 		_ = id3
-		log.Println("cron: session GC scheduled daily 04:00")
+		logx.Logger().Info().Msg("cron: session GC scheduled daily 04:00")
 	}
 	c.Start()
 	defer c.Stop()
@@ -258,24 +266,35 @@ func main() {
 	}
 	srv := &http.Server{Addr: addr, Handler: handler}
 	go func() {
-		log.Printf("listen: %s", addr)
+		logx.Logger().Info().Str("addr", addr).Msg("listening")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			logx.Logger().Fatal().Err(err).Msg("listen failed")
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
-	log.Println("shutting down server...")
+	logx.Logger().Info().Msg("shutting down server...")
 	atomic.StoreInt32(&draining, 1)
 	hub.Shutdown()
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("server shutdown: %v", err)
+
+	// Cancel in-flight jobs and wait up to 10s before closing the HTTP server and DB.
+	if runner != nil {
+		runner.CancelAll()
+		jobDrainCtx, jobDrainCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer jobDrainCancel()
+		if err := runner.WaitJobs(jobDrainCtx); err != nil {
+			logx.Logger().Warn().Err(err).Msg("shutdown: job drain timed out; some writes may be incomplete")
+		}
 	}
-	log.Println("server stopped")
+
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer shutCancel()
+	if err := srv.Shutdown(shutCtx); err != nil {
+		logx.Logger().Error().Err(err).Msg("server shutdown")
+	}
+	logx.Logger().Info().Msg("server stopped")
 }
 
 // parseRateLimit parses "N,duration" e.g. "60,1m" -> (60, 1*time.Minute). Returns 0,0 on parse error.

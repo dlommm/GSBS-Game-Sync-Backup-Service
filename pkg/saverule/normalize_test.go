@@ -182,3 +182,34 @@ func TestParseSaveRules_IsConfigAndPlatform(t *testing.T) {
 		t.Fatalf("metadata not set: %+v", got[0])
 	}
 }
+
+func TestParseSaveRules_RegistryPathsExcluded(t *testing.T) {
+	registryCases := []string{
+		// PCGW {{p|hkcu}} placeholder (preserved by NormalizePathTemplate since unknown)
+		`{{p|hkcu}}\Software\GameCo\MyGame`,
+		`{{p|hklm}}\Software\GameCo`,
+		`{{p|hkcr}}\GameCo.SaveFile`,
+		`{{p|hku}}\S-1-5-21\Software`,
+		// Literal registry paths
+		`HKEY_CURRENT_USER\Software\GameCo`,
+		`HKEY_LOCAL_MACHINE\SOFTWARE\GameCo`,
+	}
+	for _, raw := range registryCases {
+		got := ParseSaveRules(raw, "windows", false, identityNormalize)
+		if len(got) != 0 {
+			t.Errorf("registry path %q should be excluded, got %+v", raw, got)
+		}
+	}
+}
+
+func TestParseSaveRules_RegistryMixedWithValid(t *testing.T) {
+	// Valid path mixed with a registry path — only valid path should survive.
+	raw := `%APPDATA%/Game/saves|HKEY_CURRENT_USER\Software\Game`
+	got := ParseSaveRules(raw, "windows", false, identityNormalize)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 rule, got %d: %+v", len(got), got)
+	}
+	if got[0].Directory != `%APPDATA%/Game/saves` {
+		t.Errorf("Directory = %q", got[0].Directory)
+	}
+}

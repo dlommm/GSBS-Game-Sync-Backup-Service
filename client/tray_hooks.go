@@ -21,6 +21,8 @@ func wireSyncTrayHooks() {
 	clientsync.OnPullProgress = UpdateSyncProgress
 	clientsync.OnOutboxEnqueued = RecordPendingUpload
 	clientsync.OnQuotaError = notifyQuotaError
+	clientsync.OnAuthError = notifyAuthError
+	clientsync.OnPushError = notifyPushError
 }
 
 func cacheGameTitle(gameID, title string) {

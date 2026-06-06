@@ -59,7 +59,7 @@ func RecordConflict(rec ConflictRecord) {
 	}
 	filtered = append(filtered, rec)
 	if data, err := json.MarshalIndent(filtered, "", "  "); err == nil {
-		_ = os.WriteFile(conflictsPath(), data, 0644)
+		_ = atomicWriteFile(conflictsPath(), data, 0644)
 	}
 }
 
@@ -107,7 +107,7 @@ func ClearConflict(gameID, pathKey string) {
 		return
 	}
 	if data, err := json.MarshalIndent(out, "", "  "); err == nil {
-		_ = os.WriteFile(conflictsPath(), data, 0644)
+		_ = atomicWriteFile(conflictsPath(), data, 0644)
 	}
 }
 

@@ -24,10 +24,13 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const maxConcurrentPushes = 4
+
 // Client talks to the GSBS server for push/pull.
 type Client struct {
 	baseURL           string
 	token             string
+	tokenMu           sync.RWMutex // guards token and authRetried
 	resolver          *paths.Resolver
 	currentOS         paths.OS
 	http              *http.Client
@@ -37,6 +40,9 @@ type Client struct {
 	passphrase        string
 	pushMu            sync.Mutex
 	lastPushedHash    map[string]string // gameID+pathKey -> content hash
+	pushSem           chan struct{}
+	authRetried       bool
+	TokenReload       func() string // optional: reload token from config on 401
 }
 
 // HTTP timeout for sync requests (pull can return large payloads).
@@ -73,11 +79,19 @@ func NewClient(baseURL, token string, resolver *paths.Resolver, currentOS paths.
 		http:           httpClient,
 		useCompression: useCompression,
 		verbose:        verbose,
+		pushSem:        make(chan struct{}, maxConcurrentPushes),
+	}
+	loaded := loadPushHashCache()
+	if loaded != nil {
+		c.lastPushedHash = make(map[string]string, len(loaded))
+		for k, v := range loaded {
+			c.lastPushedHash[k] = v
+		}
 	}
 	// Preserve Authorization on redirect: Go's client strips it when following redirects to another host.
 	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if c.token != "" {
-			req.Header.Set("Authorization", "Bearer "+c.token)
+		if tok := c.getToken(); tok != "" {
+			req.Header.Set("Authorization", "Bearer "+tok)
 		}
 		return nil
 	}
@@ -164,7 +178,7 @@ func (c *Client) pullSummaries(ctx context.Context) (*SummaryResponse, error) {
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Authorization", "Bearer "+c.token)
+		req.Header.Set("Authorization", "Bearer "+c.getToken())
 		resp, err := c.http.Do(req)
 		if err != nil {
 			return err
@@ -191,7 +205,7 @@ func (c *Client) pullSingle(ctx context.Context, gameID, pathKey string) (*PullR
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Authorization", "Bearer "+c.token)
+		req.Header.Set("Authorization", "Bearer "+c.getToken())
 		if c.useCompression {
 			req.Header.Set("Accept-Encoding", "gzip")
 		}
@@ -227,7 +241,7 @@ func (c *Client) pullOnce(ctx context.Context) (*PullResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.getToken())
 	if c.useCompression {
 		req.Header.Set("Accept-Encoding", "gzip")
 	}
@@ -455,7 +469,7 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 	if opts.BackupBeforeOverwrite {
 		if _, err := os.Stat(absPath); err == nil {
 			if data, err := os.ReadFile(absPath); err == nil {
-				_ = os.WriteFile(absPath+".gsbs.bak", data, 0644)
+				_ = atomicWriteFile(absPath+".gsbs.bak", data, 0644)
 			}
 		}
 	}
@@ -464,8 +478,13 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 			return err
 		}
 	}
-	if err := os.WriteFile(absPath, content, 0644); err != nil {
+	if err := atomicWriteFile(absPath, content, 0644); err != nil {
 		return err
+	}
+	// Suppress watcher echo: mark this content as already pushed so the
+	// fsnotify Write event for the file we just wrote doesn't trigger a re-upload.
+	if wireHash, whErr := c.ContentWireHash(content); whErr == nil {
+		c.markPushed(gameID, pathKey, wireHash)
 	}
 	if c.verbose {
 		log.Printf("pull: wrote game=%s path=%s size=%d", gameID, absPath, len(content))
@@ -501,11 +520,64 @@ func (c *Client) ShouldSkipPush(gameID, pathKey, hash string) bool {
 
 func (c *Client) markPushed(gameID, pathKey, hash string) {
 	c.pushMu.Lock()
-	defer c.pushMu.Unlock()
 	if c.lastPushedHash == nil {
 		c.lastPushedHash = make(map[string]string)
 	}
 	c.lastPushedHash[c.pushSlotKey(gameID, pathKey)] = hash
+	snapshot := make(map[string]string, len(c.lastPushedHash))
+	for k, v := range c.lastPushedHash {
+		snapshot[k] = v
+	}
+	c.pushMu.Unlock()
+	// Debounced: marks dirty; background flusher writes at most once per 5 s.
+	markHashCacheDirty(snapshot)
+}
+
+func (c *Client) acquirePushSlot(ctx context.Context) error {
+	select {
+	case c.pushSem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (c *Client) releasePushSlot() {
+	select {
+	case <-c.pushSem:
+	default:
+	}
+}
+
+func (c *Client) tryReloadToken() bool {
+	if c.TokenReload == nil {
+		return false
+	}
+	newTok := strings.TrimSpace(c.TokenReload())
+	if newTok == "" {
+		return false
+	}
+	c.tokenMu.Lock()
+	defer c.tokenMu.Unlock()
+	if newTok == c.token {
+		return false
+	}
+	c.token = newTok
+	c.authRetried = true
+	logSyncInfo("push_token_reload", "success", true)
+	return true
+}
+
+func (c *Client) getToken() string {
+	c.tokenMu.RLock()
+	defer c.tokenMu.RUnlock()
+	return c.token
+}
+
+func (c *Client) getAuthRetried() bool {
+	c.tokenMu.RLock()
+	defer c.tokenMu.RUnlock()
+	return c.authRetried
 }
 
 func (c *Client) encodeContent(plaintext []byte) (wire []byte, encrypted bool, err error) {
@@ -530,13 +602,18 @@ func (c *Client) decodeContent(wire []byte, encrypted bool) ([]byte, error) {
 }
 
 func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relativePath string, content []byte) error {
+	if err := c.acquirePushSlot(ctx); err != nil {
+		return err
+	}
+	defer c.releasePushSlot()
+
 	wire, encrypted, err := c.encodeContent(content)
 	if err != nil {
 		return err
 	}
 	hash := FileHash(wire)
 	if c.ShouldSkipPush(gameID, pathKey, hash) {
-		log.Printf("push skipped: unchanged content game=%s path_key=%s file=%s", gameID, pathKey, filePath)
+		logSyncDebug("push_skip_unchanged", "game_id", gameID, "path_key", pathKey, "relative_path", relativePath, "file", filePath)
 		return nil
 	}
 	var body io.Reader = bytes.NewReader(wire)
@@ -555,7 +632,7 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.getToken())
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("X-Content-Hash", hash)
 	req.Header.Set("X-Content-Size", fmt.Sprintf("%d", len(wire)))
@@ -571,6 +648,13 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 	if relativePath != "" {
 		req.Header.Set("X-Relative-Path", filepath.ToSlash(relativePath))
 	}
+	// Send the last-known hash for optimistic-concurrency conflict detection (HTTP 409).
+	c.pushMu.Lock()
+	lastHash := c.lastPushedHash[c.pushSlotKey(gameID, pathKey)]
+	c.pushMu.Unlock()
+	if lastHash != "" {
+		req.Header.Set("X-GSBS-If-Hash", lastHash)
+	}
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return err
@@ -578,7 +662,15 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 	defer closeIO(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized {
-			return fmt.Errorf("push: 401 Unauthorized — token may be invalid or expired; try logging in again from the tray")
+			msg := "push: 401 Unauthorized — token may be invalid or expired; try logging in again from the tray"
+			if !c.getAuthRetried() && c.tryReloadToken() {
+				return c.pushOnce(ctx, gameID, pathKey, filePath, relativePath, content)
+			}
+			if OnAuthError != nil {
+				OnAuthError(msg)
+			}
+			logSyncError("push_auth_failed", "game_id", gameID, "path_key", pathKey, "relative_path", relativePath, "error", msg)
+			return fmt.Errorf("%s", msg)
 		}
 		if resp.StatusCode == http.StatusRequestEntityTooLarge {
 			msg := readAPIError(resp.Body)
@@ -590,6 +682,32 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 			}
 			return fmt.Errorf("push: 413 %s", msg)
 		}
+		if resp.StatusCode == http.StatusConflict {
+			// Server rejected push due to hash mismatch (optimistic concurrency).
+			// Do NOT retry; record the conflict and surface it to the user.
+			var conflictResp struct {
+				Error          string `json:"error"`
+				CurrentHash    string `json:"current_hash"`
+				CurrentVersion int    `json:"current_version"`
+			}
+			respBody, _ := io.ReadAll(resp.Body)
+			_ = json.Unmarshal(respBody, &conflictResp)
+			log.Printf("WARNING: push conflict detected for game=%s path=%s; server has hash=%s, local has hash=%s. Use 'gsbs conflicts' or the web UI to resolve.",
+				gameID, pathKey, conflictResp.CurrentHash, hash)
+			RecordConflict(ConflictRecord{
+				GameID:    gameID,
+				PathKey:   pathKey,
+				FilePath:  filePath,
+				LocalHash: hash,
+				ServerHash: conflictResp.CurrentHash,
+				PolicyApplied: "push_conflict",
+			})
+			if OnConflictDetected != nil {
+				OnConflictDetected(gameID, pathKey, filePath)
+			}
+			logSyncWarn("push_conflict_409", "game_id", gameID, "path_key", pathKey, "server_hash", conflictResp.CurrentHash, "local_hash", hash)
+			return fmt.Errorf("push: conflict for game=%s path=%s (server hash differs; resolve via tray or web UI)", gameID, pathKey)
+		}
 		return fmt.Errorf("push: status %d", resp.StatusCode)
 	}
 	respBody, _ := io.ReadAll(resp.Body)
@@ -599,7 +717,9 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 	_ = json.Unmarshal(respBody, &status)
 	c.markPushed(gameID, pathKey, hash)
 	if status.Status == "unchanged" {
-		log.Printf("push skipped: server unchanged game=%s path_key=%s file=%s", gameID, pathKey, filePath)
+		logSyncDebug("push_skip_server_unchanged", "game_id", gameID, "path_key", pathKey, "relative_path", relativePath, "file", filePath)
+	} else {
+		logSyncInfo("push_ok", "game_id", gameID, "path_key", pathKey, "relative_path", relativePath, "bytes", len(wire), "file", filePath)
 	}
 	return nil
 }
@@ -617,7 +737,7 @@ func (c *Client) FetchAccountSettings(ctx context.Context) (encryptionEnabled bo
 	if err != nil {
 		return false, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.getToken())
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return false, err
@@ -642,7 +762,7 @@ func (c *Client) ListVersions(ctx context.Context, gameID, pathKey string) ([]ma
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.getToken())
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
@@ -669,7 +789,7 @@ func (c *Client) RestoreVersion(ctx context.Context, gameID, pathKey string, ver
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+c.getToken())
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {

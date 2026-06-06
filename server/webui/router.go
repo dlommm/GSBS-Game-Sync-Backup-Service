@@ -35,9 +35,6 @@ type WebHandler struct {
 
 // NewWebHandler creates a WebHandler. loginLimiter may be nil (no rate limit on WebUI login).
 func NewWebHandler(st store.Store, authSvc *auth.Service, secret, adminUsername string, allowRegister bool, hub *sse.Hub, apiHandler *api.Handler, jobRunner *job.Runner, pcgwCron *schedule.PCGWCron, gsbsVersion string, maxStorageBytes int64, readOnly bool, loginLimiter *ratelimit.Limiter) *WebHandler {
-	if secret == "" {
-		secret = "gsbs-default-secret-change-me"
-	}
 	return &WebHandler{
 		store: st, auth: authSvc, secret: secret, adminUsername: adminUsername,
 		allowRegister: allowRegister, templates: parseTemplates(), hub: hub,

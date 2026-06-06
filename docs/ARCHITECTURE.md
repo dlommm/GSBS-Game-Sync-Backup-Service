@@ -16,7 +16,10 @@
 - **Saves**: `user_id`, `game_id`, `path_key`, `updated_at`, optional `relative_path`, optional `storage_path`, optional inline `content` BLOB (legacy). One current version per (user, game_id, path_key). When `GSBS_SAVE_ROOT` is set, file bytes live on disk under `{GSBS_SAVE_ROOT}/{user_id}/{game_id}/…`; SQLite holds metadata only.
 - **Manifest save rules**: PCGW paths are normalized into `SaveRule` records (`directory`, `include_patterns`, `recursive`, `sync_all`) stored in `game_save_locations.save_rules_json` and exposed on manifest v2 as `save_rules`. Clients watch **directories only** and filter uploads by `include_patterns`.
 
-Path keys: `rule_key` = hash(game + rule); per-file slots use `path_key` = hash(rule_key + relative path). Legacy single-file slots keep one blob per rule_key.
+**Path key scheme (2.0):**
+- **PCGW-sourced rules** — `path_key` is derived from `(game_id, slot_label, is_config)`. `slot_label` is an OS-neutral integer index assigned during PCGW ingest (e.g. `"0"`, `"1"`). Because the key does not include any OS-specific path content, the same logical save slot produces the **same `path_key` on Windows and Linux**, enabling cross-OS sync.
+- **User-defined rules** (`watch_paths` in config) — `path_key` is a hash of the full rule definition and is therefore OS-specific. Two machines running different OSes will not share the same `path_key` for a manually configured path. This is intentional: user-defined paths are inherently per-machine.
+- **Per-file slots** — for rules that produce multiple files, `path_key` = hash(rule_key + relative_path). Legacy single-file slots keep one blob per rule_key.
 
 ## Sync flow
 
@@ -34,8 +37,19 @@ Path keys: `rule_key` = hash(game + rule); per-file slots use `path_key` = hash(
 - **Placeholders** (from PCGW or config):
   - Windows: `%USERPROFILE%`, `%LOCALAPPDATA%`, `%APPDATA%`, etc.
   - Both: `<SteamLibrary-folder>`, `<Ubisoft-Connect-folder>`, `<GOG-Galaxy-folder>`, `<Epic-Games-folder>`, `<Xbox-App-folder>`, `<user-id>` (from launcher).
-- **Resolution**: Client replaces placeholders from environment and known install paths (Steam library paths, Ubisoft Connect path, etc.). Under Linux, Proton paths: `<SteamLibrary-folder>/steamapps/compatdata/<AppID>/pfx/...`.
+- **Resolution**: Client replaces placeholders from environment and known install paths (Steam library paths, Ubisoft Connect path, etc.). Under Linux, Proton paths: `<SteamLibrary-folder>/steamapps/compatdata/<AppID>/pfx/...` — the client synthesizes these `compatdata` paths for Windows games running under Steam/Proton.
 - **Folder-exists rule**: Before writing a pulled save, client checks directory existence; if missing, skip and optionally log “game not installed”.
+
+## Cross-OS sync (Windows ↔ Linux)
+
+For PCGW-tracked games, the same logical save location maps to the same `slot_label` on the server, and therefore the same `path_key`, regardless of OS. The sync flow is:
+
+1. **Windows client** watches `%APPDATA%\<Game>\saves\` → pushes with `path_key` derived from `(game_id, "0", false)`.
+2. **Linux client** watches `~/.local/share/<Game>/saves/` (or a Proton `compatdata` path) → pushes with the **same** `path_key` because both rules share `slot_label = "0"`.
+3. Server stores one record under `(user, game_id, path_key)`.
+4. Both machines pull each other's saves and write to their respective OS-native paths.
+
+**User-defined rules** (`watch_paths` in `config.json`) are OS-specific by design: they hash the full rule and do not share a `slot_label`. Two machines with manually configured paths will not cross-sync with each other unless they use the same rule definition.
 
 ## PCGamingWiki integration
 
@@ -135,3 +149,20 @@ Premium WebUI under `server/webui/`: Tailwind-compiled `static/app.css`, embedde
 - WebUI uses a signed session cookie (set `GSBS_SESSION_SECRET` in production). Session and CSRF cookies use the `Secure` flag when the request is over TLS or `X-Forwarded-Proto: https`.
 - WebUI state-changing forms (login, register, logout, admin actions) are protected with CSRF: a signed token is set on GET and validated on POST.
 - Optional TLS for server and client–server communication.
+
+## 2.0 schema migration
+
+GSBS 2.0 introduces a one-way DB migration that:
+- Adds `slot_label` to `save_rules_json` for all existing PCGW-sourced `game_save_locations` rows.
+- Backfills `path_key` for any `saves` rows that can be re-keyed to the new OS-neutral scheme.
+
+**The migration is one-way and cannot be automatically rolled back.** Recommended procedure:
+
+1. **Back up your data volume** before upgrading (see `docs/DOCKER.md` for WAL-safe backup instructions).
+2. **Preview** the migration without writing any changes:
+   ```bash
+   GSBS_DRY_RUN_MIGRATION=1 docker run --rm -v gsbs-data:/app/data -e GSBS_DB=/app/data/gsbs.db dendlomm/gsbs-server:2.0.0
+   ```
+   Check the logs for row counts and any warnings.
+3. **Upgrade for real** by restarting the container without `GSBS_DRY_RUN_MIGRATION`. The migration runs automatically on startup.
+4. After the migration, existing clients will re-sync saves for PCGW-tracked games using the new `path_key` scheme (a one-time re-sync check — no data loss).

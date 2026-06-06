@@ -31,6 +31,11 @@ import (
 // MaxSaveSize is the maximum allowed body size for POST /api/saves (50 MiB).
 const MaxSaveSize = 50 * 1024 * 1024
 
+// contextKey is a typed key for values stored in request contexts.
+type contextKey string
+
+const contextClientID contextKey = "client_id"
+
 const maxGameIDLen = 512
 const maxPathKeyLen = 1024
 
@@ -386,7 +391,9 @@ func (h *Handler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // withAuth wraps a handler requiring auth. Passes userID to the handler.
-// Also updates client last_seen on every authenticated request.
+// Also updates client last_seen on every authenticated request and stashes
+// clientID in the request context (retrievable via contextClientID) so handlers
+// can use it without a second token validation round-trip.
 func (h *Handler) withAuth(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := getToken(r)
@@ -400,13 +407,12 @@ func (h *Handler) withAuth(fn func(http.ResponseWriter, *http.Request, string)) 
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 			return
 		}
-		clientIDCopy := clientID
-		go func() {
-			ctx := context.Background()
-			if err := h.store.UpdateClientLastSeen(ctx, clientIDCopy); err != nil {
-				logx.Logger().Debug().Str("client_id", clientIDCopy).Err(err).Msg("update last_seen failed")
-			}
-		}()
+		// Update last_seen inline (cheap single-row UPDATE; request context keeps it bounded).
+		if err := h.store.UpdateClientLastSeen(r.Context(), clientID); err != nil {
+			logx.Logger().Debug().Str("client_id", clientID).Err(err).Msg("update last_seen failed")
+		}
+		// Stash clientID so downstream handlers avoid a redundant ValidateToken call.
+		r = r.WithContext(context.WithValue(r.Context(), contextClientID, clientID))
 		fn(w, r, userID)
 	}
 }
@@ -416,7 +422,7 @@ func (h *Handler) handleChangePassword(w http.ResponseWriter, r *http.Request, u
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
@@ -554,12 +560,16 @@ func (h *Handler) handleGetSaveVersion(w http.ResponseWriter, r *http.Request, u
 }
 
 func (h *Handler) handleRestoreSaveVersion(w http.ResponseWriter, r *http.Request, userID string) {
+	if h.readOnly {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "server is in read-only mode"})
+		return
+	}
 	var req struct {
 		GameID  string `json:"game_id"`
 		PathKey string `json:"path_key"`
 		Version int    `json:"version"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
@@ -757,16 +767,33 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			return
 		}
 	}
+	// Optimistic concurrency: if X-GSBS-If-Hash is provided, reject if server hash differs.
+	if ifHash := strings.TrimSpace(r.Header.Get("X-GSBS-If-Hash")); ifHash != "" {
+		serverHash, serverVer, err := h.store.GetSaveHashAndVersion(r.Context(), userID, gameID, pathKey)
+		if err != nil {
+			logx.Logger().Error().
+				Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).
+				Err(err).Msg("api push hash check failed")
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "hash check failed"})
+			return
+		}
+		if serverHash != ifHash {
+			writeJSON(w, http.StatusConflict, map[string]interface{}{
+				"error":           "conflict",
+				"current_hash":    serverHash,
+				"current_version": serverVer,
+			})
+			return
+		}
+	}
 	logx.Logger().Debug().
 		Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).
 		Str("file", filePath).Int("size", len(content)).Msg("push")
 	contentHash := strings.TrimSpace(r.Header.Get("X-Content-Hash"))
 	contentSize, _ := strconv.ParseInt(r.Header.Get("X-Content-Size"), 10, 64)
 	encrypted := r.Header.Get("X-Encrypted") == "1"
-	clientID := ""
-	if _, cid, err := h.auth.ValidateToken(r.Context(), getToken(r)); err == nil {
-		clientID = cid
-	}
+	// clientID was stashed in context by withAuth; no need to re-validate the token.
+	clientID, _ := r.Context().Value(contextClientID).(string)
 	meta := &store.SaveMeta{
 		ContentHash:  contentHash,
 		ContentSize:  contentSize,
@@ -867,7 +894,7 @@ func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request) {
 		include = "both"
 	}
 	if include == "saves" || include == "config" {
-		filtered := entries[:0]
+		filtered := make([]types.GameSaveLocation, 0, len(entries))
 		for _, e := range entries {
 			if include == "saves" && !e.IsConfig {
 				filtered = append(filtered, e)
@@ -992,12 +1019,17 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request, userID strin
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	ch, unsub := h.hub.Subscribe(userID)
+	// Cap at 5 concurrent SSE connections per user; oldest is evicted if exceeded.
+	ch, unsub := h.hub.SubscribeCapped(userID, 5)
 	defer unsub()
 
 	// Send initial heartbeat so the client knows the connection is live.
 	fmt.Fprint(w, ": heartbeat\n\n")
 	flusher.Flush()
+
+	// Periodic heartbeat keeps the connection alive through proxies that drop idle SSE streams.
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -1008,6 +1040,11 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request, userID strin
 				return
 			}
 			fmt.Fprint(w, evt.Format())
+			flusher.Flush()
+		case <-ticker.C:
+			if _, err := fmt.Fprint(w, ": heartbeat\n\n"); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}

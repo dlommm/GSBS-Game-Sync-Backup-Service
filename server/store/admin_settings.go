@@ -93,16 +93,3 @@ func parseExcludeJSON(raw string) []string {
 	}
 	return out
 }
-
-func (s *sqliteStore) seedAdminSettings() error {
-	_, err := s.db.Exec(`
-		INSERT OR IGNORE INTO admin_settings (key, value) VALUES (?, ?)`,
-		AdminSettingPCGWCron, DefaultPCGWCron)
-	if err != nil {
-		return err
-	}
-	_, err = s.db.Exec(`
-		INSERT OR IGNORE INTO admin_settings (key, value) VALUES (?, ?)`,
-		AdminSettingPCGWPathExcludes, DefaultPCGWPathExcludesJSON)
-	return err
-}

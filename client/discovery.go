@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/discovery"
@@ -73,6 +74,8 @@ var OnFirstRunDiscovery func(games []discovery.MatchedGame)
 var OnDiscoveryUpdated func()
 
 // discoveryState holds the latest scan for watch-path filtering.
+// All accesses must hold discoveryMu (RLock for reads, Lock for writes).
+var discoveryMu sync.RWMutex
 var discoveryState struct {
 	MatchedGameIDs  map[string]bool
 	MatchedGames    []discovery.MatchedGame
@@ -81,12 +84,16 @@ var discoveryState struct {
 }
 
 func initDiscoveryState() {
+	discoveryMu.Lock()
 	discoveryState.MatchedGameIDs = make(map[string]bool)
 	discoveryState.DisabledGameIDs = make(map[string]bool)
+	discoveryMu.Unlock()
 }
 
 // activeGameIDSet returns manifest game IDs to watch (matched minus disabled).
 func activeGameIDSet() map[string]bool {
+	discoveryMu.RLock()
+	defer discoveryMu.RUnlock()
 	out := make(map[string]bool)
 	for id := range discoveryState.MatchedGameIDs {
 		if !discoveryState.DisabledGameIDs[id] {
@@ -113,7 +120,9 @@ func toggleDiscoveredGame(gameID string, enabled bool) error {
 		disabledList = append(disabledList, id)
 	}
 	cache.DisabledGameIDs = disabledList
+	discoveryMu.Lock()
 	discoveryState.DisabledGameIDs = disabled
+	discoveryMu.Unlock()
 	if err := saveDiscoveryCache(cache); err != nil {
 		return err
 	}
@@ -124,6 +133,8 @@ func toggleDiscoveredGame(gameID string, enabled bool) error {
 }
 
 func isGameDisabled(gameID string) bool {
+	discoveryMu.RLock()
+	defer discoveryMu.RUnlock()
 	return discoveryState.DisabledGameIDs[gameID]
 }
 
@@ -186,11 +197,11 @@ func resolveUnmatchedSteam(installed []discovery.InstalledGame, idx *discovery.M
 		}
 		pageID, err := client.GetPageIDBySteamAppID(g.GameID)
 		if err != nil {
+			log.Printf("discovery: PCGW lookup failed steam:%s: %v", g.GameID, err)
 			continue
 		}
 		idMap[key] = pageID
 		log.Printf("discovery: resolved steam:%s -> manifest %s", g.GameID, pageID)
-		time.Sleep(500 * time.Millisecond)
 	}
 }
 
@@ -230,10 +241,12 @@ func runDiscovery(manifestEntries []types.GameSaveLocation) int {
 	for _, id := range matchedIDs {
 		matchedSet[id] = true
 	}
+	discoveryMu.Lock()
 	discoveryState.MatchedGameIDs = matchedSet
 	discoveryState.MatchedGames = matched
 	discoveryState.DisabledGameIDs = disabled
 	discoveryState.InstalledSteam = installedSteamAppIDs(installed)
+	discoveryMu.Unlock()
 
 	cache := discoveryCache{
 		InstalledGames:       installed,

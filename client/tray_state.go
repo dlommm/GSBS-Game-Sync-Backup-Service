@@ -49,6 +49,7 @@ type GameRow struct {
 	Title         string         `json:"title"`
 	Launcher      string         `json:"launcher,omitempty"`
 	MatchReason   string         `json:"match_reason,omitempty"`
+	SyncReason    string         `json:"sync_reason,omitempty"` // why a discovered game is/ isn't syncing
 	Disabled      bool           `json:"disabled,omitempty"`
 	LastSyncAt    time.Time      `json:"last_sync_at,omitempty"`
 	LastDirection SaveDirection  `json:"last_direction,omitempty"`
@@ -377,6 +378,13 @@ func RecordGameConflict(gameID, pathKey string) {
 
 // RecordDiscovery updates discovered games from a scan.
 func RecordDiscovery(matched []discovery.MatchedGame, newCount int) {
+	// Compute sync readiness before taking the lock (it loads config/manifest/resolver).
+	ids := make([]string, 0, len(matched))
+	for _, g := range matched {
+		ids = append(ids, g.ManifestGameID)
+	}
+	readiness := diagnoseGamesReadiness(ids)
+
 	globalTrayState.mu.Lock()
 	seen := make(map[string]bool)
 	for _, g := range matched {
@@ -387,6 +395,7 @@ func RecordDiscovery(matched []discovery.MatchedGame, newCount int) {
 			title = gameTitleFor(id)
 		}
 		globalTrayState.titleCache[id] = title
+		reason := string(readiness[id].Reason)
 		if _, synced := globalTrayState.games[id]; synced {
 			continue
 		}
@@ -395,6 +404,7 @@ func RecordDiscovery(matched []discovery.MatchedGame, newCount int) {
 			Title:       title,
 			Launcher:    g.Launcher,
 			MatchReason: g.MatchReason,
+			SyncReason:  reason,
 			Disabled:    isGameDisabled(id),
 			Status:      GameStatusOK,
 		}
@@ -403,6 +413,7 @@ func RecordDiscovery(matched []discovery.MatchedGame, newCount int) {
 		if seen[id] {
 			if row := globalTrayState.discovered[id]; row != nil {
 				row.Disabled = isGameDisabled(id)
+				row.SyncReason = string(readiness[id].Reason)
 			}
 			continue
 		}

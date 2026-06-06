@@ -19,6 +19,7 @@ When invoked:
 5. **Sync**: Push on watcher change; pull uses summary+hash. `ManifestToWatchPaths(..., activeGameIDs, mode)`. `resolveSavePath` resolves from watch paths + full manifest.
 
 6. **SSE / Manifest / Tray**: unchanged patterns; tray has conflict resolve and dashboard link for version restore.
+8. **Sync diagnostics & add-game**: `DiagnoseGameSync` (`client/sync_diagnostics.go`) classifies each discovered game (`ready`/`no_manifest_entry`/`wrong_platform`/`save_dir_missing`/`malformed_rules`/`disabled`); shown on tray discovered rows (`GameRow.SyncReason`), in `debug-sync`, and logged via `logActiveGamesReadiness`. Manual add: `client/addgame.go` (`searchManifestGames`, `addManualWatchPath`) served by `setup_server.go` (`/games*`), opened from tray **Add a game manually…**. Watcher resolves `<game-install-folder>` via `watcher.SetInstallRoots`. Tray groups settings under **Account & Setup** / **Advanced** submenus.
 
 7. **Auto-update**: `client/update.go`, `update_apply_*.go`, `update_tray.go`; GitHub Releases + `latest-client.json`; tray **Version**, **Check for updates**, **Install update**; config `update_check_enabled`, `update_repo`; `main.go` `--apply-update`.
 

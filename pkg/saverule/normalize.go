@@ -34,6 +34,14 @@ func ParseSaveRules(raw, platform string, isConfig bool, normalize NormalizeFunc
 		if norm == "" {
 			continue
 		}
+		if isRegistryPath(norm) {
+			// Registry paths (HKCU/HKLM/etc.) are not file-system locations; skip them.
+			continue
+		}
+		if hasPathTraversal(norm) {
+			// Reject path traversal to prevent writes outside the intended save root.
+			continue
+		}
 		p := parseNormalizedSegment(norm)
 		if p.directory == "" {
 			continue
@@ -171,6 +179,29 @@ func boolStr(v bool) string {
 		return "1"
 	}
 	return "0"
+}
+
+// registryTokens are lowercase PCGW {{p|...}} placeholders that represent Windows
+// registry hives rather than filesystem paths.
+var registryTokens = []string{
+	"{{p|hkcu}}", "{{p|hklm}}", "{{p|hkcr}}", "{{p|hku}}",
+}
+
+// isRegistryPath reports whether a normalized path segment refers to a registry location.
+// Such paths are not file-system directories and must be excluded from save rules.
+func isRegistryPath(s string) bool {
+	lower := strings.ToLower(s)
+	for _, tok := range registryTokens {
+		if strings.Contains(lower, tok) {
+			return true
+		}
+	}
+	return strings.Contains(s, "HKEY_")
+}
+
+// hasPathTraversal reports whether s contains a ".." path traversal component.
+func hasPathTraversal(s string) bool {
+	return strings.Contains(s, "..")
 }
 
 // splitOutsideTemplates splits s on sep only when not inside nested {{...}} wikitext.

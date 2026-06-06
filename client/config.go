@@ -149,6 +149,7 @@ func blankConfig() *config {
 		SyncInterval:   Duration(5 * time.Minute),
 		AutoWatchMode:  "discovered",
 		ConflictPolicy: "last_write_wins",
+		BackupOnPull:   true,
 		WatchPaths:     []watchPath{},
 	}
 }

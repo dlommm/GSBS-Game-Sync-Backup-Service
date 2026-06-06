@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestParseLoginUsersVDF_MostRecent(t *testing.T) {
@@ -53,6 +54,35 @@ func TestDetectSteamUserID_FromUserdataFallback(t *testing.T) {
 	got := DetectSteamUserID([]string{root})
 	if got != "76561198044444444" {
 		t.Fatalf("got %q want 76561198044444444", got)
+	}
+}
+
+func TestDetectSteamUserID_MultiAccount_PicksMostRecentlyModified(t *testing.T) {
+	root := t.TempDir()
+	olderID := "76561198011111111"
+	newerID := "76561198022222222"
+	olderDir := filepath.Join(root, "userdata", olderID)
+	newerDir := filepath.Join(root, "userdata", newerID)
+	if err := os.MkdirAll(olderDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(newerDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Set olderDir's mtime to a fixed time in the past.
+	oldTime := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(olderDir, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+	// Set newerDir's mtime to a more recent time.
+	newTime := time.Now().Add(-1 * time.Hour)
+	if err := os.Chtimes(newerDir, newTime, newTime); err != nil {
+		t.Fatal(err)
+	}
+	// No loginusers.vdf — fallback to userdata dir modification time.
+	got := DetectSteamUserID([]string{root})
+	if got != newerID {
+		t.Fatalf("got %q want %q (most recently modified userdata dir)", got, newerID)
 	}
 }
 
