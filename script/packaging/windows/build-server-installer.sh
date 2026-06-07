@@ -50,10 +50,23 @@ mkdir -p "$WORK"
 cp "$SERVER_BIN" "$WORK/gsbs-server-windows-amd64.exe"
 cp "$LAUNCHER" "$WORK/gsbs-server-launcher.cmd"
 
+to_iscc_path() {
+  local p="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -aw "$p"
+  else
+    printf '%s\n' "$p"
+  fi
+}
+
+WORK_PATH="$(to_iscc_path "$WORK")"
+OUT_PATH="$(to_iscc_path "${ROOT}/${OUT_DIR}")"
+ISS_PATH="$(to_iscc_path "${SCRIPT_DIR}/gsbs-server.iss")"
+
 "$ISCC_PATH" \
   "/DMyAppVersion=${VERSION_VALUE}" \
-  "/DSourceDir=${WORK}" \
-  "/O${ROOT}/${OUT_DIR}" \
-  "${SCRIPT_DIR}/gsbs-server.iss"
+  "/DSourceDir=${WORK_PATH}" \
+  "/O${OUT_PATH}" \
+  "${ISS_PATH}"
 
 echo "Built ${OUT_DIR}/gsbs-server-setup-${VERSION_VALUE}-windows-amd64.exe"

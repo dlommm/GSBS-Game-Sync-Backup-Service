@@ -43,11 +43,23 @@ rm -rf "$WORK"
 mkdir -p "$WORK"
 cp "$CLIENT_BIN" "$WORK/gsbs-client-windows-amd64.exe"
 
-# GitHub Actions Windows bash accepts mixed paths; keep args as single quoted tokens.
+to_iscc_path() {
+  local p="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -aw "$p"
+  else
+    printf '%s\n' "$p"
+  fi
+}
+
+WORK_PATH="$(to_iscc_path "$WORK")"
+OUT_PATH="$(to_iscc_path "${ROOT}/${OUT_DIR}")"
+ISS_PATH="$(to_iscc_path "${SCRIPT_DIR}/gsbs-client.iss")"
+
 "$ISCC_PATH" \
   "/DMyAppVersion=${VERSION_VALUE}" \
-  "/DSourceDir=${WORK}" \
-  "/O${ROOT}/${OUT_DIR}" \
-  "${SCRIPT_DIR}/gsbs-client.iss"
+  "/DSourceDir=${WORK_PATH}" \
+  "/O${OUT_PATH}" \
+  "${ISS_PATH}"
 
 echo "Built ${OUT_DIR}/gsbs-client-setup-${VERSION_VALUE}-windows-amd64.exe"
