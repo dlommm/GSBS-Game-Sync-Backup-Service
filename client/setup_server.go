@@ -30,6 +30,16 @@ func StartSetupServer() string {
 	mux.HandleFunc("/login", handleSetupLogin)
 	mux.HandleFunc("/open-log", handleOpenLog)
 	mux.HandleFunc("/status", handleSetupStatus)
+	mux.HandleFunc("/dashboard", handleDashboardPage)
+	mux.HandleFunc("/api/sync-now", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST only", http.StatusMethodNotAllowed)
+			return
+		}
+		triggerSyncNow()
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true}`))
+	})
 	mux.HandleFunc("/games", handleAddGamePage)
 	mux.HandleFunc("/games/search", handleGamesSearch)
 	mux.HandleFunc("/games/add", handleGamesAdd)
@@ -103,11 +113,18 @@ func handleSetupLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 type setupStatusResponse struct {
-	LoggedIn     bool     `json:"logged_in"`
-	LastScanAt   string   `json:"last_scan_at,omitempty"`
-	MatchedGames int      `json:"matched_games"`
-	GameTitles   []string `json:"game_titles,omitempty"`
-	ServerURL    string   `json:"server_url,omitempty"`
+	LoggedIn       bool     `json:"logged_in"`
+	LastScanAt     string   `json:"last_scan_at,omitempty"`
+	MatchedGames   int      `json:"matched_games"`
+	GameTitles     []string `json:"game_titles,omitempty"`
+	ServerURL      string   `json:"server_url,omitempty"`
+	LastSyncAt     string   `json:"last_sync_at,omitempty"`
+	LastSyncOK     bool     `json:"last_sync_ok"`
+	LastSyncErr    string   `json:"last_sync_err,omitempty"`
+	WatcherHealthy bool     `json:"watcher_healthy"`
+	PendingUploads int      `json:"pending_uploads"`
+	ConflictCount  int      `json:"conflict_count"`
+	WatchedPaths   int      `json:"watched_paths"`
 }
 
 func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
@@ -125,11 +142,26 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	if len(titles) == 0 {
 		titles = append(titles, cache.MatchedGameIDs...)
 	}
+
+	snap := GetTraySnapshot()
+	syncAt, syncErr := getLastSync()
+
 	resp := setupStatusResponse{
-		LoggedIn:     loggedIn,
-		LastScanAt:   cache.LastScanAt,
-		MatchedGames: len(cache.MatchedGameIDs),
-		GameTitles:   titles,
+		LoggedIn:       loggedIn,
+		LastScanAt:     cache.LastScanAt,
+		MatchedGames:   len(cache.MatchedGameIDs),
+		GameTitles:     titles,
+		WatcherHealthy: WatcherHealthy.Load(),
+		PendingUploads: snap.PendingUploads,
+		ConflictCount:  snap.ConflictCount,
+		WatchedPaths:   len(snap.Games) + len(snap.Discovered),
+		LastSyncOK:     syncErr == nil,
+	}
+	if !syncAt.IsZero() {
+		resp.LastSyncAt = syncAt.UTC().Format("2006-01-02T15:04:05Z")
+	}
+	if syncErr != nil {
+		resp.LastSyncErr = syncErr.Error()
 	}
 	if cfg != nil {
 		resp.ServerURL = cfg.ServerURL
@@ -160,20 +192,38 @@ func handleOpenLog(w http.ResponseWriter, r *http.Request) {
 
 func writeSetupHTML(w http.ResponseWriter, serverURL, clientName, errMsg string, success, done bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	status := ""
+
+	var statusHTML string
 	if errMsg != "" {
-		status = fmt.Sprintf("<p class=\"err\">%s</p>", htmlEsc(errMsg))
+		statusHTML = fmt.Sprintf(`
+<div class="mb-5 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+  <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+  <span>%s</span>
+</div>`, htmlEsc(errMsg))
 	} else if done || success {
-		status = `<div id="discoveryPanel" class="ok">
-  <p><strong>Step 2 — Discovery</strong></p>
-  <p id="discStatus">Scanning installed games…</p>
-  <ul id="gameList"></ul>
-  <p class="hint">When games appear below, close this page. Sync continues from the tray icon.</p>
-  <p><a id="dashLink" href="#" target="_blank" rel="noopener">Open dashboard</a></p>
+		statusHTML = `
+<div id="discoveryPanel" class="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-900/20">
+  <div class="mb-2 flex items-center gap-2">
+    <svg class="h-5 w-5 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+    <span class="font-semibold text-emerald-700 dark:text-emerald-300">Connected — Step 2: Discovery</span>
+  </div>
+  <p id="discStatus" class="text-sm text-emerald-700 dark:text-emerald-400">Scanning installed games…</p>
+  <ul id="gameList" class="mt-2 space-y-1 text-sm text-emerald-800 dark:text-emerald-300"></ul>
+  <p class="mt-3 text-xs text-emerald-600 dark:text-emerald-500">When your games appear, close this page — sync continues from the tray icon.</p>
+  <div class="mt-3 flex gap-3">
+    <a id="dashLink" href="#" target="_blank" rel="noopener"
+       class="text-sm font-medium text-emerald-700 underline hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-200">
+      Open server dashboard →
+    </a>
+    <a href="/dashboard"
+       class="text-sm font-medium text-emerald-700 underline hover:text-emerald-900 dark:text-emerald-400 dark:hover:text-emerald-200">
+      Local status →
+    </a>
+  </div>
 </div>
 <script>
 (function poll() {
-  fetch('/status').then(r => r.json()).then(function(s) {
+  fetch('/status').then(function(r){return r.json();}).then(function(s) {
     var el = document.getElementById('discStatus');
     if (!el) return;
     if (s.matched_games > 0) {
@@ -181,10 +231,10 @@ func writeSetupHTML(w http.ResponseWriter, serverURL, clientName, errMsg string,
       var ul = document.getElementById('gameList');
       if (ul && s.game_titles) {
         ul.innerHTML = s.game_titles.slice(0, 12).map(function(t) {
-          return '<li>' + t.replace(/</g,'&lt;') + '</li>';
+          return '<li class="flex items-center gap-1"><span class="text-emerald-500">✓</span>' + t.replace(/</g,'&lt;') + '</li>';
         }).join('');
         if (s.matched_games > 12) {
-          ul.innerHTML += '<li>… and ' + (s.matched_games - 12) + ' more</li>';
+          ul.innerHTML += '<li class="text-emerald-600">… and ' + (s.matched_games - 12) + ' more</li>';
         }
       }
     } else if (s.logged_in) {
@@ -199,54 +249,113 @@ func writeSetupHTML(w http.ResponseWriter, serverURL, clientName, errMsg string,
 })();
 </script>`
 	}
+
 	page := fmt.Sprintf(`<!DOCTYPE html>
-<html>
+<html lang="en" class="h-full">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GSBS — Setup</title>
-  <style>
-    body { font-family: Segoe UI, sans-serif; max-width: 420px; margin: 40px auto; padding: 20px; }
-    h1 { font-size: 1.3em; }
-    label { display: block; margin-top: 10px; }
-    input[type=text], input[type=password] { width: 100%%; padding: 6px; box-sizing: border-box; }
-    .err { color: #c00; }
-    .ok { color: #080; }
-    button { margin-top: 14px; padding: 8px 16px; }
-    .hint { font-size: 0.9em; color: #666; margin-top: 2px; }
-  </style>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={darkMode:'media'}</script>
 </head>
-<body>
-  <h1>GSBS — Setup Wizard</h1>
-  <p class="hint"><strong>Step 1.</strong> Server URL &amp; login. <strong>Step 2.</strong> After login, the client auto-discovers installed games. <strong>Step 3.</strong> Close this page — sync runs from the tray.</p>
-  %s
-  <form method="post" action="/login" id="loginForm" onsubmit="return validateForm(this);">
-    <label>Server URL</label>
-    <input type="text" name="server_url" id="server_url" value="%s" placeholder="https://your-server:8080" required>
-    <span class="hint">e.g. https://your-server:8080 or http://localhost:8080</span>
-    <label>Username</label>
-    <input type="text" name="username" id="username" required>
-    <label>Password</label>
-    <input type="password" name="password" id="password" required>
-    <label>Client name</label>
-    <input type="text" name="client_name" value="%s" placeholder="(optional, default: this PC name)">
-    <button type="submit">Login</button>
-  </form>
-  <p style="margin-top: 20px;"><strong>Optional:</strong> <a href="/open-log">Open log file</a> (for troubleshooting). After login, use the tray menu to add launcher paths or edit config.</p>
-  <script>
-    function validateForm(form) {
-      var server = (form.server_url && form.server_url.value) ? form.server_url.value.trim() : '';
-      if (!server) { alert('Please enter the server URL.'); return false; }
-      if (server.indexOf('http://') !== 0 && server.indexOf('https://') !== 0) {
-        alert('Server URL should start with http:// or https://');
-        return false;
-      }
-      if (!form.username.value.trim()) { alert('Please enter username.'); return false; }
-      if (!form.password.value) { alert('Please enter password.'); return false; }
-      return true;
-    }
-  </script>
+<body class="h-full bg-gray-50 dark:bg-gray-900">
+<div class="flex min-h-full items-center justify-center p-4">
+  <div class="w-full max-w-md">
+
+    <div class="mb-6 flex items-center gap-3">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 shadow">
+        <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold text-gray-900 dark:text-white">GSBS Setup</h1>
+        <p class="text-xs text-gray-500 dark:text-gray-400">Game Sync &amp; Backup Service</p>
+      </div>
+    </div>
+
+    <div class="mb-6 flex items-center gap-2 text-xs font-medium">
+      <span class="rounded-full bg-emerald-600 px-2.5 py-0.5 text-white">1 — Connect</span>
+      <span class="text-gray-400">→</span>
+      <span class="rounded-full bg-gray-200 px-2.5 py-0.5 text-gray-500 dark:bg-gray-700 dark:text-gray-400">2 — Discover</span>
+      <span class="text-gray-400">→</span>
+      <span class="rounded-full bg-gray-200 px-2.5 py-0.5 text-gray-500 dark:bg-gray-700 dark:text-gray-400">3 — Sync</span>
+    </div>
+
+    %s
+
+    <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+      <div class="p-6">
+        <h2 class="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Server connection</h2>
+        <form method="post" action="/login" id="loginForm" onsubmit="return validateForm(this);" class="space-y-4">
+          <div>
+            <label for="server_url" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Server URL
+            </label>
+            <input type="text" name="server_url" id="server_url" value="%s"
+              placeholder="https://your-server:8080"
+              required
+              class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder:text-gray-500">
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">e.g. https://your-server:8080 or http://localhost:8080</p>
+          </div>
+          <div>
+            <label for="username" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Username
+            </label>
+            <input type="text" name="username" id="username" required autocomplete="username"
+              class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+          </div>
+          <div>
+            <label for="password" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Password
+            </label>
+            <input type="password" name="password" id="password" required autocomplete="current-password"
+              class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+          </div>
+          <div>
+            <label for="client_name" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Client name <span class="font-normal text-gray-400">(optional)</span>
+            </label>
+            <input type="text" name="client_name" id="client_name" value="%s"
+              placeholder="this PC name"
+              class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder:text-gray-500">
+          </div>
+          <div class="flex gap-3 pt-1">
+            <button type="submit"
+              class="flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800">
+              Connect
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <p class="mt-4 text-center text-xs text-gray-400 dark:text-gray-500">
+      <a href="/open-log" class="hover:underline">Open log file</a>
+      &nbsp;·&nbsp;
+      <a href="/dashboard" class="hover:underline">Local status</a>
+      &nbsp;·&nbsp;
+      <a href="/games" class="hover:underline">Add a game</a>
+    </p>
+  </div>
+</div>
+<script>
+function validateForm(form) {
+  var server = (form.server_url && form.server_url.value) ? form.server_url.value.trim() : '';
+  if (!server) { alert('Please enter the server URL.'); return false; }
+  if (server.indexOf('http://') !== 0 && server.indexOf('https://') !== 0) {
+    alert('Server URL should start with http:// or https://');
+    return false;
+  }
+  if (!form.username.value.trim()) { alert('Please enter username.'); return false; }
+  if (!form.password.value) { alert('Please enter password.'); return false; }
+  return true;
+}
+</script>
 </body>
-</html>`, status, htmlEsc(serverURL), htmlEsc(clientName))
+</html>`, statusHTML, htmlEsc(serverURL), htmlEsc(clientName))
 	w.Write([]byte(page))
 }
 
@@ -298,95 +407,352 @@ func handleAddGamePage(w http.ResponseWriter, r *http.Request) {
 
 func writeAddGameHTML(w http.ResponseWriter, errMsg, okMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	status := ""
+	var bannerHTML string
 	if errMsg != "" {
-		status = fmt.Sprintf(`<p class="err">%s</p>`, htmlEsc(errMsg))
+		bannerHTML = fmt.Sprintf(`
+<div class="mb-5 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+  <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+  <span>%s</span>
+</div>`, htmlEsc(errMsg))
 	} else if okMsg != "" {
-		status = fmt.Sprintf(`<p class="ok">%s</p>`, htmlEsc(okMsg))
+		bannerHTML = fmt.Sprintf(`
+<div class="mb-5 flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
+  <svg class="mt-0.5 h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+  <span>%s</span>
+</div>`, htmlEsc(okMsg))
 	}
+
 	page := fmt.Sprintf(`<!DOCTYPE html>
-<html>
+<html lang="en" class="h-full">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GSBS — Add a game</title>
-  <style>
-    body { font-family: Segoe UI, sans-serif; max-width: 560px; margin: 40px auto; padding: 20px; }
-    h1 { font-size: 1.3em; }
-    label { display: block; margin-top: 10px; font-weight: 600; }
-    input[type=text] { width: 100%%; padding: 6px; box-sizing: border-box; }
-    .err { color: #c00; }
-    .ok { color: #080; }
-    button { margin-top: 14px; padding: 8px 16px; cursor: pointer; }
-    .hint { font-size: 0.9em; color: #666; margin-top: 2px; }
-    #results { list-style: none; padding: 0; margin: 8px 0; }
-    #results li { border: 1px solid #ddd; border-radius: 6px; padding: 8px; margin-bottom: 6px; }
-    #results .meta { font-size: 0.85em; color: #666; }
-    #results .use { float: right; }
-    .badge { font-size: 0.75em; padding: 1px 6px; border-radius: 8px; }
-    .badge.found { background: #e6f7e6; color: #080; }
-    .badge.missing { background: #fdeaea; color: #c00; }
-  </style>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={darkMode:'media'}</script>
 </head>
-<body>
-  <h1>Add a game to sync</h1>
+<body class="bg-gray-50 dark:bg-gray-900">
+<div class="mx-auto max-w-xl px-4 py-8">
+
+  <div class="mb-6 flex items-center gap-3">
+    <a href="/" class="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      Back
+    </a>
+    <span class="text-gray-300 dark:text-gray-600">|</span>
+    <h1 class="text-lg font-bold text-gray-900 dark:text-white">Add a game to sync</h1>
+  </div>
+
   %s
-  <p class="hint">Search the server manifest by name, then click <em>Use this</em> to fill the folder. Or paste a save-folder path manually. The folder must already exist on this PC.</p>
 
-  <label>Search games</label>
-  <input type="text" id="search" placeholder="e.g. Witcher 3" autocomplete="off">
-  <ul id="results"></ul>
+  <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+    <div class="p-6">
+      <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+        Search by game name to fill the save folder automatically, or paste the full path manually.
+        The save folder must already exist on this PC.
+      </p>
 
-  <form method="post" action="/games/add">
-    <label>Game ID</label>
-    <input type="text" name="game_id" id="game_id" required placeholder="manifest game id">
-    <label>Title (optional)</label>
-    <input type="text" name="title" id="title" placeholder="display name">
-    <label>Save folder (absolute path)</label>
-    <input type="text" name="directory" id="directory" required placeholder="e.g. C:\Users\you\Documents\The Witcher 3">
-    <span class="hint">The folder must exist. Subfolders are watched too.</span>
-    <label>Include patterns (optional, comma-separated)</label>
-    <input type="text" name="patterns" id="patterns" placeholder="*.sav, *.save (leave blank to sync all files)">
-    <button type="submit">Add game</button>
-  </form>
-  <p class="hint" style="margin-top:18px"><a href="/">← Back to setup</a></p>
+      <div class="mb-4">
+        <label for="search" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Search games
+        </label>
+        <input type="text" id="search" placeholder="e.g. Witcher 3" autocomplete="off"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder:text-gray-500">
+      </div>
 
-  <script>
-  var t;
-  var box = document.getElementById('search');
-  box.addEventListener('input', function() {
-    clearTimeout(t);
-    t = setTimeout(runSearch, 250);
-  });
-  function runSearch() {
-    fetch('/games/search?q=' + encodeURIComponent(box.value)).then(function(r){return r.json();}).then(function(d){
-      var ul = document.getElementById('results');
-      ul.innerHTML = '';
-      (d.results || []).forEach(function(g){
-        var li = document.createElement('li');
-        var badge = g.exists ? '<span class="badge found">folder found</span>' : '<span class="badge missing">folder missing</span>';
-        var btn = '<button type="button" class="use">Use this</button>';
-        li.innerHTML = btn + '<strong>' + esc(g.title) + '</strong> ' + badge +
-          '<div class="meta">' + esc(g.game_id) + (g.directory ? ' · ' + esc(g.directory) : ' · (no path resolved)') + '</div>';
-        li.querySelector('.use').addEventListener('click', function(){
-          document.getElementById('game_id').value = g.game_id;
-          document.getElementById('title').value = g.title;
-          document.getElementById('directory').value = g.directory || '';
-          window.scrollTo(0, document.body.scrollHeight);
-        });
-        ul.appendChild(li);
+      <ul id="results" class="mb-4 space-y-2"></ul>
+    </div>
+  </div>
+
+  <div class="mt-4 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+    <div class="p-6">
+      <h2 class="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-300">Save folder details</h2>
+      <form method="post" action="/games/add" class="space-y-4">
+        <div>
+          <label for="game_id" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Game ID</label>
+          <input type="text" name="game_id" id="game_id" required placeholder="manifest game id"
+            class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder:text-gray-500">
+        </div>
+        <div>
+          <label for="title" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Title <span class="font-normal text-gray-400">(optional)</span>
+          </label>
+          <input type="text" name="title" id="title" placeholder="display name"
+            class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder:text-gray-500">
+        </div>
+        <div>
+          <label for="directory" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Save folder (absolute path)</label>
+          <input type="text" name="directory" id="directory" required
+            placeholder="e.g. C:\Users\you\Documents\The Witcher 3"
+            class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder:text-gray-500">
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Subfolders are watched too. The folder must exist.</p>
+        </div>
+        <div>
+          <label for="patterns" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Include patterns <span class="font-normal text-gray-400">(optional, comma-separated)</span>
+          </label>
+          <input type="text" name="patterns" id="patterns"
+            placeholder="*.sav, *.save  (leave blank to sync all files)"
+            class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder:text-gray-500">
+        </div>
+        <button type="submit"
+          class="w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800">
+          Add game
+        </button>
+      </form>
+    </div>
+  </div>
+
+</div>
+<script>
+var searchTimer;
+var searchBox = document.getElementById('search');
+searchBox.addEventListener('input', function() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(runSearch, 250);
+});
+function runSearch() {
+  var q = searchBox.value;
+  fetch('/games/search?q=' + encodeURIComponent(q)).then(function(r){return r.json();}).then(function(d){
+    var ul = document.getElementById('results');
+    ul.innerHTML = '';
+    (d.results || []).forEach(function(g){
+      var li = document.createElement('li');
+      var badgeCls = g.exists
+        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+        : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400';
+      var badgeText = g.exists ? 'folder found' : 'folder missing';
+      li.className = 'rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-750';
+      li.innerHTML =
+        '<div class="flex items-start justify-between gap-2">' +
+          '<div>' +
+            '<div class="flex items-center gap-2">' +
+              '<span class="font-medium text-gray-900 dark:text-white text-sm">' + esc(g.title) + '</span>' +
+              '<span class="rounded-full px-2 py-0.5 text-xs font-medium ' + badgeCls + '">' + badgeText + '</span>' +
+            '</div>' +
+            '<div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">' + esc(g.game_id) + (g.directory ? ' &middot; ' + esc(g.directory) : ' &middot; (no path resolved)') + '</div>' +
+          '</div>' +
+          '<button type="button" class="use shrink-0 rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-emerald-900/30 dark:hover:text-emerald-400">Use this</button>' +
+        '</div>';
+      li.querySelector('.use').addEventListener('click', function(){
+        document.getElementById('game_id').value = g.game_id;
+        document.getElementById('title').value = g.title;
+        document.getElementById('directory').value = g.directory || '';
+        window.scrollTo(0, document.body.scrollHeight);
       });
-    }).catch(function(){});
-  }
-  function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  runSearch();
-  </script>
+      ul.appendChild(li);
+    });
+  }).catch(function(){});
+}
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+runSearch();
+</script>
 </body>
-</html>`, status)
+</html>`, bannerHTML)
 	w.Write([]byte(page))
 }
 
+func handleDashboardPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(dashboardPageHTML))
+}
+
+const dashboardPageHTML = `<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GSBS — Local Status</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={darkMode:'media'}</script>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 min-h-full">
+<div class="mx-auto max-w-2xl px-4 py-8">
+
+  <div class="mb-6 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 shadow">
+        <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-gray-900 dark:text-white">GSBS — Local Status</h1>
+        <p id="refreshLabel" class="text-xs text-gray-400 dark:text-gray-500">Loading…</p>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <button id="syncNowBtn" onclick="triggerSync()"
+        class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50">
+        Sync now
+      </button>
+      <a id="serverDashLink" href="#" target="_blank" rel="noopener"
+        class="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:hover:bg-gray-750">
+        Server dashboard →
+      </a>
+    </div>
+  </div>
+
+  <div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+      <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Connection</p>
+      <div id="connStatus" class="mt-1 flex items-center gap-1.5">
+        <span class="h-2 w-2 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+        <span class="text-sm font-semibold text-gray-900 dark:text-white">—</span>
+      </div>
+      <p id="serverURLLabel" class="mt-1 truncate text-xs text-gray-400 dark:text-gray-500"></p>
+    </div>
+    <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+      <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Last sync</p>
+      <div id="lastSyncStatus" class="mt-1 flex items-center gap-1.5">
+        <span class="h-2 w-2 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+        <span class="text-sm font-semibold text-gray-900 dark:text-white">—</span>
+      </div>
+      <p id="lastSyncErr" class="mt-1 truncate text-xs text-red-500 dark:text-red-400"></p>
+    </div>
+    <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+      <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Watcher</p>
+      <div id="watcherStatus" class="mt-1 flex items-center gap-1.5">
+        <span class="h-2 w-2 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+        <span class="text-sm font-semibold text-gray-900 dark:text-white">—</span>
+      </div>
+    </div>
+    <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+      <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Discovered</p>
+      <p id="discoveredCount" class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">—</p>
+      <p class="mt-0.5 text-xs text-gray-400 dark:text-gray-500">games matched</p>
+    </div>
+  </div>
+
+  <div class="mb-4 grid grid-cols-2 gap-3">
+    <div id="pendingCard" class="hidden rounded-xl bg-amber-50 p-4 shadow-sm ring-1 ring-amber-200 dark:bg-amber-900/20 dark:ring-amber-800">
+      <p class="text-xs font-medium text-amber-600 dark:text-amber-400">Pending uploads</p>
+      <p id="pendingCount" class="mt-1 text-2xl font-bold text-amber-700 dark:text-amber-300">0</p>
+    </div>
+    <div id="conflictCard" class="hidden rounded-xl bg-red-50 p-4 shadow-sm ring-1 ring-red-200 dark:bg-red-900/20 dark:ring-red-800">
+      <p class="text-xs font-medium text-red-600 dark:text-red-400">Conflicts</p>
+      <p id="conflictCount" class="mt-1 text-2xl font-bold text-red-700 dark:text-red-300">0</p>
+      <p class="mt-0.5 text-xs text-red-500 dark:text-red-400">Use tray menu to resolve</p>
+    </div>
+  </div>
+
+  <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+    <div class="border-b border-gray-100 px-4 py-3 dark:border-gray-700">
+      <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-300">Matched games</h2>
+    </div>
+    <ul id="gameList" class="divide-y divide-gray-100 dark:divide-gray-700">
+      <li class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500">Loading…</li>
+    </ul>
+  </div>
+
+  <p class="mt-4 text-center text-xs text-gray-400 dark:text-gray-500">
+    <a href="/" class="hover:underline">Setup</a>
+    &nbsp;·&nbsp;
+    <a href="/games" class="hover:underline">Add a game</a>
+    &nbsp;·&nbsp;
+    <a href="/open-log" class="hover:underline">Open log</a>
+  </p>
+
+</div>
+<script>
+function timeAgo(iso) {
+  if (!iso) return '—';
+  var d = new Date(iso);
+  var sec = Math.floor((Date.now() - d) / 1000);
+  if (sec < 5) return 'just now';
+  if (sec < 60) return sec + 's ago';
+  if (sec < 3600) return Math.floor(sec/60) + 'm ago';
+  if (sec < 86400) return (sec/3600).toFixed(1) + 'h ago';
+  return Math.floor(sec/86400) + 'd ago';
+}
+
+function setDot(el, ok) {
+  var dot = el.querySelector('span:first-child');
+  var label = el.querySelector('span:last-child');
+  if (ok === true) {
+    dot.className = 'h-2 w-2 rounded-full bg-emerald-500';
+  } else if (ok === false) {
+    dot.className = 'h-2 w-2 rounded-full bg-red-500';
+  } else {
+    dot.className = 'h-2 w-2 rounded-full bg-gray-300 dark:bg-gray-600';
+  }
+  return label;
+}
+
+function refresh() {
+  fetch('/status').then(function(r){return r.json();}).then(function(s) {
+    document.getElementById('refreshLabel').textContent = 'Updated just now';
+
+    var connLabel = setDot(document.getElementById('connStatus'), s.logged_in);
+    connLabel.textContent = s.logged_in ? 'Logged in' : 'Not connected';
+    document.getElementById('serverURLLabel').textContent = s.server_url || '';
+    if (s.server_url) {
+      document.getElementById('serverDashLink').href = s.server_url.replace(/\/$/, '') + '/dashboard';
+    }
+
+    var syncOK = s.last_sync_at ? s.last_sync_ok : null;
+    var syncLabel = setDot(document.getElementById('lastSyncStatus'), syncOK);
+    syncLabel.textContent = s.last_sync_at ? timeAgo(s.last_sync_at) : 'Never';
+    var errEl = document.getElementById('lastSyncErr');
+    errEl.textContent = s.last_sync_err || '';
+
+    var watchLabel = setDot(document.getElementById('watcherStatus'), s.watcher_healthy);
+    watchLabel.textContent = s.watcher_healthy ? 'Healthy' : 'Recovering';
+
+    document.getElementById('discoveredCount').textContent = s.matched_games;
+
+    var pending = document.getElementById('pendingCard');
+    document.getElementById('pendingCount').textContent = s.pending_uploads;
+    pending.classList.toggle('hidden', s.pending_uploads === 0);
+
+    var conflict = document.getElementById('conflictCard');
+    document.getElementById('conflictCount').textContent = s.conflict_count;
+    conflict.classList.toggle('hidden', s.conflict_count === 0);
+
+    var ul = document.getElementById('gameList');
+    var titles = s.game_titles || [];
+    if (titles.length === 0) {
+      ul.innerHTML = '<li class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500">No games matched yet — discovery runs automatically after login.</li>';
+    } else {
+      ul.innerHTML = titles.slice(0, 20).map(function(t) {
+        return '<li class="flex items-center gap-2 px-4 py-2.5 text-sm">' +
+          '<svg class="h-4 w-4 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' +
+          '<span class="text-gray-800 dark:text-gray-200">' + t.replace(/</g,'&lt;') + '</span>' +
+          '</li>';
+      }).join('');
+      if (titles.length > 20) {
+        ul.innerHTML += '<li class="px-4 py-2.5 text-xs text-gray-400 dark:text-gray-500">… and ' + (titles.length - 20) + ' more</li>';
+      }
+    }
+  }).catch(function() {
+    document.getElementById('refreshLabel').textContent = 'Could not reach status endpoint';
+  });
+}
+
+function triggerSync() {
+  var btn = document.getElementById('syncNowBtn');
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+  fetch('/api/sync-now', {method:'POST'}).then(function() {
+    setTimeout(function() {
+      btn.disabled = false;
+      btn.textContent = 'Sync now';
+      refresh();
+    }, 2000);
+  }).catch(function() {
+    btn.disabled = false;
+    btn.textContent = 'Sync now';
+  });
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>`
+
 func htmlEsc(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	s = strings.ReplaceAll(s, "\"", "&quot;")

@@ -5,7 +5,7 @@ import "fmt"
 // Version, BuildDate, and Commit are set at build time via ldflags for releases.
 // Example: go build -ldflags "-X main.Version=1.0.3 -X main.BuildDate=... -X main.Commit=..."
 var (
-	Version   = "1.5.0"
+	Version   = "1.6.0"
 	BuildDate = ""
 	Commit    = ""
 )

@@ -74,6 +74,7 @@ type TrayController struct {
 	mAutostart    *systray.MenuItem
 	mViewLog      *systray.MenuItem
 	mDataFolder   *systray.MenuItem
+	mLocalStatus  *systray.MenuItem
 	mVersion      *systray.MenuItem
 	mCheckUpdate  *systray.MenuItem
 	mApplyUpdate  *systray.MenuItem
@@ -193,6 +194,7 @@ func (c *TrayController) buildMenu(cfg *config) {
 	c.mEditConfig = c.mAdvancedMenu.AddSubMenuItem("Edit config file", "Open config in editor")
 	c.mViewLog = c.mAdvancedMenu.AddSubMenuItem("View log", "Open client log file")
 	c.mDataFolder = c.mAdvancedMenu.AddSubMenuItem("Open data folder", "Open GSBS data folder")
+	c.mLocalStatus = c.mAdvancedMenu.AddSubMenuItem("Local status page", "Open local sync status in browser")
 	c.mAutostart = c.mAdvancedMenu.AddSubMenuItemCheckbox("Run at startup", "Start GSBS when the system starts", RunAtStartupEnabled())
 	c.wireUpdateMenu(c.mAdvancedMenu)
 
@@ -590,6 +592,15 @@ func (c *TrayController) startClickHandlers() {
 			}
 		}
 	}()
+	if c.mLocalStatus != nil {
+		go func() {
+			for range c.mLocalStatus.ClickedCh {
+				if url := GetSetupURL(); url != "" {
+					_ = openURL(url + "/dashboard")
+				}
+			}
+		}()
+	}
 	go func() {
 		for range c.mQuit.ClickedCh {
 			systray.Quit()
@@ -696,6 +707,17 @@ func (c *TrayController) handleLogin() {
 	if cfg == nil {
 		cfg = blankConfig()
 	}
+	// Prefer browser-based login (better UX, consistent with server WebUI).
+	// Fall back to native Walk dialog only if setup server isn't running.
+	if url := GetSetupURL(); url != "" {
+		_ = openURL(url)
+		go func() {
+			time.Sleep(3 * time.Second)
+			c.reloadConfig()
+		}()
+		return
+	}
+	// Fallback: native dialog (Windows only, when setup server couldn't bind a port)
 	if c.platform.HasNativeLogin && c.platform.NativeLogin != nil {
 		newCfg, err := c.platform.NativeLogin(cfg.ServerURL, cfg.ClientName)
 		if err == nil && newCfg != nil {
@@ -705,13 +727,6 @@ func (c *TrayController) handleLogin() {
 			restartSync(newCfg)
 		}
 		return
-	}
-	if url := GetSetupURL(); url != "" {
-		_ = openURL(url)
-		go func() {
-			time.Sleep(3 * time.Second)
-			c.reloadConfig()
-		}()
 	}
 }
 

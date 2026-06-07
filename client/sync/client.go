@@ -708,6 +708,8 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 			logSyncWarn("push_conflict_409", "game_id", gameID, "path_key", pathKey, "server_hash", conflictResp.CurrentHash, "local_hash", hash)
 			return fmt.Errorf("push: conflict for game=%s path=%s (server hash differs; resolve via tray or web UI)", gameID, pathKey)
 		}
+		bodySnip, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		logSyncWarn("push_http_error", "game_id", gameID, "path_key", pathKey, "status", resp.StatusCode, "body_snippet", strings.TrimSpace(string(bodySnip)))
 		return fmt.Errorf("push: status %d", resp.StatusCode)
 	}
 	respBody, _ := io.ReadAll(resp.Body)
@@ -800,6 +802,22 @@ func (c *Client) RestoreVersion(ctx context.Context, gameID, pathKey string, ver
 		return fmt.Errorf("restore: status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+// FetchServerHashes returns a map of "gameID\x00pathKey" -> wireContentHash for all saves on server.
+// Used by startup reconciliation to find saves missing on server.
+func (c *Client) FetchServerHashes(ctx context.Context) (map[string]string, error) {
+	summaries, err := c.pullSummaries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(summaries.Saves))
+	for _, s := range summaries.Saves {
+		if s.ContentHash != "" {
+			out[s.GameID+"\x00"+s.PathKey] = s.ContentHash
+		}
+	}
+	return out, nil
 }
 
 func readAPIError(body io.Reader) string {
