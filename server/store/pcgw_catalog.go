@@ -115,6 +115,31 @@ func (s *sqliteStore) ListPCGWCatalogFailedPartial(ctx context.Context, limit, o
 	return scanInt64Rows(rows)
 }
 
+// ListPCGWCatalogTitleBackfill returns catalog-backed rows where local title/page_name is blank.
+// These rows should be re-ingested so title fields are healed without a full resync.
+func (s *sqliteStore) ListPCGWCatalogTitleBackfill(ctx context.Context, limit, offset int) ([]types.PCGWCatalogEntry, error) {
+	if limit <= 0 {
+		limit = 500
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT c.page_id, c.title, c.first_seen_at, c.last_seen_at, c.last_seen_run_id, c.last_seen_rev_id,
+			c.dead_letter, c.dead_letter_reason, c.retry_count
+		FROM pcgw_catalog c
+		JOIN pcgw_games g ON g.page_id = c.page_id
+		WHERE c.dead_letter = 0
+		  AND TRIM(COALESCE(c.title, '')) != ''
+		  AND (
+			TRIM(COALESCE(g.title, '')) = ''
+			OR TRIM(COALESCE(g.page_name, '')) = ''
+		  )
+		ORDER BY c.page_id LIMIT ? OFFSET ?`, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanCatalogEntries(rows)
+}
+
 func scanInt64Rows(rows *sql.Rows) ([]int64, error) {
 	var out []int64
 	for rows.Next() {

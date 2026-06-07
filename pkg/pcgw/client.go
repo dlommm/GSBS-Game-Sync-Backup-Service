@@ -254,20 +254,21 @@ func (c *Client) ListAllPages(apcontinue string, aplimit int) ([]PageInfo, strin
 	return pages, out.Continue.APContinue, nil
 }
 
-// ParsePageWikitext returns the raw wikitext of a page.
-func (c *Client) ParsePageWikitext(pageID string) (string, error) {
+// ParsePageWikitext returns the raw wikitext and page title.
+func (c *Client) ParsePageWikitext(pageID string) (wikitext string, title string, err error) {
 	u := c.baseURL() + "/w/api.php?action=parse&format=json&pageid=" + url.QueryEscape(pageID) + "&prop=wikitext"
 	resp, err := c.doGet(u)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", fmt.Errorf("parse wikitext: HTTP %d: %s", resp.StatusCode, string(body))
+		return "", "", fmt.Errorf("parse wikitext: HTTP %d: %s", resp.StatusCode, string(body))
 	}
 	var out struct {
 		Parse struct {
+			Title    string `json:"title"`
 			Wikitext struct {
 				Content string `json:"*"`
 			} `json:"wikitext"`
@@ -278,16 +279,16 @@ func (c *Client) ParsePageWikitext(pageID string) (string, error) {
 		} `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if out.Error != nil {
 		info := out.Error.Info
 		if info == "" {
 			info = out.Error.Code
 		}
-		return "", fmt.Errorf("mediawiki API error: %s", info)
+		return "", "", fmt.Errorf("mediawiki API error: %s", info)
 	}
-	return out.Parse.Wikitext.Content, nil
+	return out.Parse.Wikitext.Content, out.Parse.Title, nil
 }
 
 // SaveLocationTemplate represents a single save/config path template per system.

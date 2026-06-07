@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // IngestPage fetches and parses a PCGW game page with section-level resilience.
@@ -25,11 +26,14 @@ func IngestPage(client *Client, pageID int64, pageInfo PageInfo) (*IngestResult,
 		},
 	}
 
-	wikitext, err := client.ParsePageWikitext(pageIDStr)
+	wikitext, pageTitle, err := client.ParsePageWikitext(pageIDStr)
 	if err != nil {
 		result.Errors = append(result.Errors, err.Error())
 		result.Bundle.ParseStatus = "failed"
 		return result, err
+	}
+	if strings.TrimSpace(result.Bundle.PageInfo.Title) == "" {
+		result.Bundle.PageInfo.Title = strings.TrimSpace(pageTitle)
 	}
 	result.Bundle.FullWikitext = wikitext
 	result.Bundle.AllTemplates = ExtractAllTemplates(wikitext)

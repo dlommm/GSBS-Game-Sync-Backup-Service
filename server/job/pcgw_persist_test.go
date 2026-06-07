@@ -120,3 +120,123 @@ func TestPersistIngestResult_SlotLabelAlignment(t *testing.T) {
 		t.Errorf("slot 0 and slot 1 produced identical RuleKey %q", win0Key)
 	}
 }
+
+func TestPersistIngestResult_PreservesExistingTitleWhenMissing(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	const pageID = int64(88888)
+	const gameID = "88888"
+	const existingTitle = "Already Known Title"
+
+	if err := st.UpsertPCGWGame(ctx, &types.PCGWGame{
+		PageID: pageID, PageName: existingTitle, Title: existingTitle, ParseStatus: "ok",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	saveLocs := []pcgw.SaveLocationTemplate{
+		{GameID: gameID, System: "Windows", Paths: []string{`%APPDATA%\GameY\Save`}, IsConfig: false},
+	}
+	result := &pcgw.IngestResult{
+		Bundle: pcgw.GameBundle{
+			PageID:      pageID,
+			ParseStatus: "ok",
+			PageInfo:    pcgw.PageInfo{PageID: pageID}, // title intentionally missing
+			Sections: map[string]pcgw.SectionResult{
+				"game_data": {
+					Key: "game_data",
+					Data: map[string]interface{}{
+						"templates": saveLocs,
+					},
+				},
+			},
+			SaveLocations: saveLocs,
+		},
+	}
+
+	if _, err := PersistIngestResult(ctx, st, "", result, PCGWFilters{}); err != nil {
+		t.Fatalf("PersistIngestResult: %v", err)
+	}
+
+	game, err := st.GetPCGWGame(ctx, pageID)
+	if err != nil {
+		t.Fatalf("GetPCGWGame: %v", err)
+	}
+	if game.Title != existingTitle {
+		t.Fatalf("expected preserved title %q, got %q", existingTitle, game.Title)
+	}
+
+	entries, err := st.ListGameSaveLocations(ctx)
+	if err != nil {
+		t.Fatalf("ListGameSaveLocations: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].GameTitle != existingTitle {
+		t.Fatalf("expected projected title %q, got %q", existingTitle, entries[0].GameTitle)
+	}
+}
+
+func TestPersistIngestResult_UsesSeededPageInfoTitle(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	const pageID = int64(99991)
+	const expectedTitle = "Catalog Seeded Title"
+
+	saveLocs := []pcgw.SaveLocationTemplate{
+		{GameID: "99991", System: "Windows", Paths: []string{`%APPDATA%\GameZ\Save`}, IsConfig: false},
+	}
+	result := &pcgw.IngestResult{
+		Bundle: pcgw.GameBundle{
+			PageID:      pageID,
+			ParseStatus: "ok",
+			PageInfo: pcgw.PageInfo{
+				PageID: pageID,
+				Title:  expectedTitle, // seeded from catalog title hint
+			},
+			Sections: map[string]pcgw.SectionResult{
+				"game_data": {
+					Key: "game_data",
+					Data: map[string]interface{}{
+						"templates": saveLocs,
+					},
+				},
+			},
+			SaveLocations: saveLocs,
+		},
+	}
+
+	if _, err := PersistIngestResult(ctx, st, "", result, PCGWFilters{}); err != nil {
+		t.Fatalf("PersistIngestResult: %v", err)
+	}
+
+	game, err := st.GetPCGWGame(ctx, pageID)
+	if err != nil {
+		t.Fatalf("GetPCGWGame: %v", err)
+	}
+	if game.Title != expectedTitle {
+		t.Fatalf("expected title %q, got %q", expectedTitle, game.Title)
+	}
+
+	entries, err := st.ListGameSaveLocations(ctx)
+	if err != nil {
+		t.Fatalf("ListGameSaveLocations: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].GameTitle != expectedTitle {
+		t.Fatalf("expected projected title %q, got %q", expectedTitle, entries[0].GameTitle)
+	}
+}
