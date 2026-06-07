@@ -33,6 +33,7 @@ ALL_ASSETS=(
 
 # Optional packaged artifacts (included in SHA256SUMS when present)
 OPTIONAL_ASSETS=(
+  "gsbs-server-setup-${VERSION_VALUE}-windows-amd64.exe"
   "gsbs-client-setup-${VERSION_VALUE}-windows-amd64.exe"
   "gsbs-client_${VERSION_VALUE}_amd64.deb"
   "gsbs-client-${VERSION_VALUE}-x86_64.AppImage"

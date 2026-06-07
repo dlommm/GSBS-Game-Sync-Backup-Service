@@ -12,7 +12,7 @@ When invoked:
 
 2. **CI**: `.github/workflows/ci.yml` for tests and matrix builds (no Docker). `.github/workflows/release.yml` on tag push → GitHub Release + Docker Hub.
 
-3. **Packaging**: Inno Setup (`script/packaging/windows/`), nfpm `.deb` and AppImage (`script/packaging/linux/`).
+3. **Packaging**: Inno Setup (`script/packaging/windows/` — client + server installers), nfpm `.deb` and AppImage (`script/packaging/linux/`).
 
 4. **Docker**: `Dockerfile`, `docker-compose.yml`, `docker-compose.dev.yml`, `docs/examples/` reverse proxy samples. Document env in `docs/DOCKER.md`.
 

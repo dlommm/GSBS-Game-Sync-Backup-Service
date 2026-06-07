@@ -20,6 +20,7 @@
 | `GSBS_READ_ONLY` | `false` | Set `true` to disable push and delete (pull and read still work) |
 | `GSBS_SAVE_VERSION_RETENTION` | `8` | Save versions kept per slot (recommended 5–10) |
 | `GSBS_LOG_LEVEL` | `info` | Structured log level: `debug`, `info`, `warn`, `error` |
+| `GSBS_SERVICE_LOG_PATH` | `C:\ProgramData\GSBS\logs\server.log` (Windows service mode) | Optional file path for server logs when running as a Windows service (`--service`) |
 | `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token lifetime (default 90 days) |
 | `GSBS_TRUST_PROXY` | (unset) | Trust `X-Forwarded-For` / `X-Real-IP` from reverse proxy |
 | `GSBS_METRICS_TOKEN` | (unset) | Bearer token required to access `/metrics` |
@@ -196,6 +197,43 @@ The admin interface is available at `/admin` (session required + must match `GSB
 | Export manifest bundle | `GET /admin/pcgw/export/manifest.json.gz` |
 | Import bundle | Admin → PCGW → **Import** |
 | Push manifest to clients | Admin → **Push manifest** (sends SSE event) |
+
+---
+
+## Windows installer wizard
+
+Windows admins can install the server with `gsbs-server-setup-X.Y.Z-windows-amd64.exe` from Releases.
+
+### Native Windows service commands
+
+The server binary supports native Service Control Manager (SCM) mode.
+
+```powershell
+gsbs-server-windows-amd64.exe --install-service
+gsbs-server-windows-amd64.exe --start-service
+gsbs-server-windows-amd64.exe --stop-service
+gsbs-server-windows-amd64.exe --uninstall-service
+```
+
+Notes:
+
+- Service name: `GSBSServer` (display name `GSBS Server`).
+- SCM host mode uses `--service` automatically when the service starts.
+- Console behavior is unchanged: run the binary with no service flags.
+- In service mode, logs go to `GSBS_SERVICE_LOG_PATH` or `C:\ProgramData\GSBS\logs\server.log`.
+
+What the wizard does:
+
+- Installs binaries in `C:\Program Files\GSBS` (admin-required install).
+- Writes environment config to `C:\ProgramData\GSBS\server.env` with comments and defaults.
+- Lets you generate `GSBS_SESSION_SECRET` in-wizard (or enter your own).
+- Installs and starts the `GSBS Server` Windows Service by default.
+- Adds Start Menu shortcuts for service start/stop/restart/status, open admin, edit config, and open config/log folders.
+
+Security notes:
+
+- Treat `GSBS_SESSION_SECRET` and `GSBS_METRICS_TOKEN` as secrets; never commit them to git.
+- Keep `ProgramData\GSBS` restricted to administrators/service users on shared systems.
 
 ---
 
