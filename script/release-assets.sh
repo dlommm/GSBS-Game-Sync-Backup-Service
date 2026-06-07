@@ -88,11 +88,20 @@ for f in "${CLIENT_ASSETS[@]}"; do
   esac
 done
 
+# In per-platform build jobs only one binary is present; the final release job sets
+# REQUIRE_COMPLETE_MANIFEST=1 after downloading all artifacts, so it enforces both.
+if [ "${REQUIRE_COMPLETE_MANIFEST:-0}" = "1" ]; then
+  if [ -z "$win_sha" ] || [ -z "$lin_sha" ]; then
+    echo "ERROR: one or more client platform assets are missing; latest-client.json would be incomplete." >&2
+    echo "  windows sha: ${win_sha:-(empty)}" >&2
+    echo "  linux sha:   ${lin_sha:-(empty)}" >&2
+    exit 1
+  fi
+fi
+
 if [ -z "$win_sha" ] || [ -z "$lin_sha" ]; then
-  echo "ERROR: one or more client platform assets are missing; latest-client.json would be incomplete." >&2
-  echo "  windows sha: ${win_sha:-(empty)}" >&2
-  echo "  linux sha:   ${lin_sha:-(empty)}" >&2
-  exit 1
+  echo "Skipping latest-client.json (partial build: only one platform present)"
+  exit 0
 fi
 
 cat > latest-client.json <<EOF
