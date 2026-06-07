@@ -198,6 +198,7 @@ type Store interface {
 	GetPCGWCatalogStats(ctx context.Context) (types.PCGWCatalogStats, error)
 	ListPCGWCatalogMissing(ctx context.Context, limit, offset int) ([]int64, error)
 	ListPCGWCatalogFailedPartial(ctx context.Context, limit, offset int) ([]int64, error)
+	ListPCGWCatalogTitleBackfill(ctx context.Context, limit, offset int) ([]types.PCGWCatalogEntry, error)
 	ListPCGWCatalogDeadLetter(ctx context.Context, limit int) ([]types.PCGWCatalogEntry, error)
 	IncrementCatalogRetry(ctx context.Context, pageID int64, reason string) error
 	ClearCatalogDeadLetter(ctx context.Context, pageID int64) error

@@ -178,6 +178,40 @@ func TestListPCGWCatalogMissing(t *testing.T) {
 	}
 }
 
+func TestListPCGWCatalogTitleBackfill(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	_ = st.UpsertPCGWCatalogBatch(ctx, []types.PCGWCatalogEntry{
+		{PageID: 1, Title: "Catalog One", FirstSeenAt: "2025-01-01T00:00:00Z", LastSeenAt: "2025-01-01T00:00:00Z"},
+		{PageID: 2, Title: "Catalog Two", FirstSeenAt: "2025-01-01T00:00:00Z", LastSeenAt: "2025-01-01T00:00:00Z"},
+		{PageID: 3, Title: "Catalog Three", FirstSeenAt: "2025-01-01T00:00:00Z", LastSeenAt: "2025-01-01T00:00:00Z"},
+		{PageID: 4, Title: "", FirstSeenAt: "2025-01-01T00:00:00Z", LastSeenAt: "2025-01-01T00:00:00Z"},
+	})
+	_ = st.UpsertPCGWGame(ctx, &types.PCGWGame{PageID: 1, PageName: "Catalog One", Title: "", ParseStatus: "ok"})
+	_ = st.UpsertPCGWGame(ctx, &types.PCGWGame{PageID: 2, PageName: "Catalog Two", Title: "Catalog Two", ParseStatus: "ok"})
+	_ = st.UpsertPCGWGame(ctx, &types.PCGWGame{PageID: 3, PageName: "", Title: "Catalog Three", ParseStatus: "ok"})
+	_ = st.UpsertPCGWGame(ctx, &types.PCGWGame{PageID: 4, PageName: "", Title: "", ParseStatus: "ok"})
+
+	rows, err := st.ListPCGWCatalogTitleBackfill(ctx, 100, 0)
+	if err != nil {
+		t.Fatalf("list title backfill: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	if rows[0].PageID != 1 || rows[0].Title != "Catalog One" {
+		t.Fatalf("unexpected first row: page_id=%d title=%q", rows[0].PageID, rows[0].Title)
+	}
+	if rows[1].PageID != 3 || rows[1].Title != "Catalog Three" {
+		t.Fatalf("unexpected second row: page_id=%d title=%q", rows[1].PageID, rows[1].Title)
+	}
+}
+
 func TestWipePCGWMirrorOnly(t *testing.T) {
 	st, err := NewSQLite(":memory:")
 	if err != nil {

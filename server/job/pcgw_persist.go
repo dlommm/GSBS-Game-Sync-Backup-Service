@@ -156,8 +156,12 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 			if ids, err := st.ListPCGWCatalogFailedPartial(ctx, 1, 0); err == nil {
 				failedCount = len(ids)
 			}
-			if failedCount == 0 {
-				log.Printf("pcgw sync: catalog hash unchanged, no pending failures — skipping Phase 2")
+			titleBackfillCount := 0
+			if rows, err := st.ListPCGWCatalogTitleBackfill(ctx, 1, 0); err == nil {
+				titleBackfillCount = len(rows)
+			}
+			if failedCount == 0 && titleBackfillCount == 0 {
+				log.Printf("pcgw sync: catalog hash unchanged, no pending failures/title backfills — skipping Phase 2")
 				finishRun(JobSuccess, "")
 				return bumpManifestAndReturn(ctx, st, 0)
 			}
@@ -166,6 +170,15 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 
 	// ─── Phase 2: Build targeted queue ───────────────────────────────────────
 	var queue []int64
+	titleHints := map[int64]string{}
+	inQueue := map[int64]bool{}
+	enqueue := func(id int64) {
+		if inQueue[id] {
+			return
+		}
+		queue = append(queue, id)
+		inQueue[id] = true
+	}
 
 	if !opts.RetryFailedOnly {
 		// Priority 1: missing IDs
@@ -173,42 +186,45 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		if err != nil {
 			log.Printf("pcgw sync: list missing: %v", err)
 		} else {
-			queue = append(queue, missing...)
-		}
-	}
-
-	// Priority 2: failed/partial IDs
-	failedPartial, err := st.ListPCGWCatalogFailedPartial(ctx, 0, 0)
-	if err != nil {
-		log.Printf("pcgw sync: list failed/partial: %v", err)
-	} else {
-		// Deduplicate against already-queued IDs.
-		inQueue := make(map[int64]bool, len(queue))
-		for _, id := range queue {
-			inQueue[id] = true
-		}
-		for _, id := range failedPartial {
-			if !inQueue[id] {
-				queue = append(queue, id)
-				inQueue[id] = true
+			for _, id := range missing {
+				enqueue(id)
 			}
 		}
 	}
 
-	// Priority 3: changed rev IDs (only on full or incremental when not retry-only)
+	if !opts.RetryFailedOnly {
+		// Priority 2: rows with blank local title/page_name but non-empty catalog title.
+		titleBackfill, err := st.ListPCGWCatalogTitleBackfill(ctx, 0, 0)
+		if err != nil {
+			log.Printf("pcgw sync: list title-backfill: %v", err)
+		} else {
+			for _, row := range titleBackfill {
+				enqueue(row.PageID)
+				if strings.TrimSpace(row.Title) != "" {
+					titleHints[row.PageID] = strings.TrimSpace(row.Title)
+				}
+			}
+		}
+	}
+
+	// Priority 3: failed/partial IDs
+	failedPartial, err := st.ListPCGWCatalogFailedPartial(ctx, 0, 0)
+	if err != nil {
+		log.Printf("pcgw sync: list failed/partial: %v", err)
+	} else {
+		for _, id := range failedPartial {
+			enqueue(id)
+		}
+	}
+
+	// Priority 4: changed rev IDs (only on full or incremental when not retry-only)
 	if !opts.RetryFailedOnly {
 		changedIDs, err := buildChangedQueue(ctx, st, client, filters)
 		if err != nil {
 			log.Printf("pcgw sync: build changed queue: %v", err)
 		} else {
-			inQueue := make(map[int64]bool, len(queue))
-			for _, id := range queue {
-				inQueue[id] = true
-			}
 			for _, id := range changedIDs {
-				if !inQueue[id] {
-					queue = append(queue, id)
-				}
+				enqueue(id)
 			}
 		}
 	}
@@ -266,8 +282,11 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 			})
 		}
 
-		// Determine title from catalog (best-effort).
 		pageInfo := pcgw.PageInfo{PageID: pageID}
+		// Seed title from catalog so blank-title rows heal even if parse payload omits title.
+		if hint := strings.TrimSpace(titleHints[pageID]); hint != "" {
+			pageInfo.Title = hint
+		}
 
 		start := time.Now()
 		n, err := syncOnePage(ctx, st, client, runID, pageID, pageInfo, &stats, filters)
@@ -437,6 +456,17 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 	}
 	b := result.Bundle
 	gameID := strconv.FormatInt(b.PageID, 10)
+	gameTitle := strings.TrimSpace(b.PageInfo.Title)
+	if gameTitle == "" {
+		// Preserve a previously known title so partial refreshes never blank it out.
+		if existing, err := st.GetPCGWGame(ctx, b.PageID); err == nil && existing != nil {
+			gameTitle = strings.TrimSpace(existing.Title)
+			if gameTitle == "" {
+				gameTitle = strings.TrimSpace(existing.PageName)
+			}
+		}
+	}
+	pageName := gameTitle
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	platforms := []string{}
@@ -445,8 +475,8 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 	// Upsert game row
 	g := &types.PCGWGame{
 		PageID:           b.PageID,
-		PageName:         b.PageInfo.Title,
-		Title:            b.PageInfo.Title,
+		PageName:         pageName,
+		Title:            gameTitle,
 		SteamAppIDs:      b.PageInfo.SteamAppIDs,
 		GOGID:            b.PageInfo.GOGID,
 		EpicID:           b.PageInfo.EpicID,
@@ -546,7 +576,7 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 					}
 					rule.SlotLabel = slotLabel
 					entries = append(entries, types.GameSaveLocation{
-						GameID: gameID, PCGWPageID: b.PageID, GameTitle: b.PageInfo.Title,
+						GameID: gameID, PCGWPageID: b.PageID, GameTitle: gameTitle,
 						Platform: platform, PathTemplate: rule.Directory, IsConfig: t.IsConfig,
 						SaveRules:   []types.SaveRule{rule},
 						Source:      "pcgw",

@@ -17,17 +17,20 @@ func TestGetWith5xxRetry_SucceedsAfterTransient(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"parse":{"wikitext":{"*":"hello"}}}`))
+		_, _ = w.Write([]byte(`{"parse":{"title":"Game Title","wikitext":{"*":"hello"}}}`))
 	}))
 	defer srv.Close()
 
 	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL, testBackoff: time.Millisecond}
-	wikitext, err := c.ParsePageWikitext("5")
+	wikitext, title, err := c.ParsePageWikitext("5")
 	if err != nil {
 		t.Fatalf("expected success after retries: %v", err)
 	}
 	if wikitext != "hello" {
 		t.Fatalf("unexpected wikitext: %q", wikitext)
+	}
+	if title != "Game Title" {
+		t.Fatalf("unexpected title: %q", title)
 	}
 	if attempts != 3 {
 		t.Fatalf("expected 3 attempts (2 failures + 1 success), got %d", attempts)
@@ -64,7 +67,7 @@ func TestParsePageWikitext_MediaWikiError(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL}
-	_, err := c.ParsePageWikitext("99999")
+	_, _, err := c.ParsePageWikitext("99999")
 	if err == nil {
 		t.Fatal("expected error for MediaWiki error response")
 	}
@@ -248,7 +251,7 @@ func TestIngestPageMock(t *testing.T) {
 		prop := r.URL.Query().Get("prop")
 		switch {
 		case action == "parse":
-			_, _ = w.Write([]byte(`{"parse":{"wikitext":{"*":"{{Infobox game|title=Test}}\n== Game data ==\n{{Game data/saves|Windows|{{p|appdata}}\\save}}"}}}`))
+			_, _ = w.Write([]byte(`{"parse":{"title":"Test Game","wikitext":{"*":"{{Infobox game|title=Test}}\n== Game data ==\n{{Game data/saves|Windows|{{p|appdata}}\\save}}"}}}`))
 		case action == "query" && prop == "revisions":
 			_, _ = w.Write([]byte(`{"query":{"pages":{"5":{"revisions":[{"revid":99,"timestamp":"2026-01-01T00:00:00Z"}]}}}}`))
 		default:
@@ -259,7 +262,7 @@ func TestIngestPageMock(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL}
-	result, err := IngestPage(c, 5, PageInfo{PageID: 5, Title: "Test"})
+	result, err := IngestPage(c, 5, PageInfo{PageID: 5})
 	if err != nil {
 		t.Fatalf("IngestPage: %v", err)
 	}
@@ -271,5 +274,8 @@ func TestIngestPageMock(t *testing.T) {
 	}
 	if result.Bundle.RevisionID != 99 {
 		t.Fatalf("rev id: %d errors=%v", result.Bundle.RevisionID, result.Errors)
+	}
+	if result.Bundle.PageInfo.Title != "Test Game" {
+		t.Fatalf("expected title from parse response, got %q", result.Bundle.PageInfo.Title)
 	}
 }
