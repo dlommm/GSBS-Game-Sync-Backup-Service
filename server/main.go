@@ -5,9 +5,11 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -58,6 +60,58 @@ func requestID(r *http.Request) string {
 		return hex.EncodeToString(b)
 	}
 	return strconv.FormatInt(time.Now().UnixNano(), 36)
+}
+
+// recoverMiddleware catches panics in downstream handlers, logs them with the
+// stack trace and request-id, and returns a structured 500 response so the
+// server process keeps running.  API paths get JSON; all others get plain text.
+func recoverMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if v := recover(); v != nil {
+				stack := debug.Stack()
+				rid := requestID(r)
+				logx.Logger().Error().
+					Str("request_id", rid).
+					Str("method", r.Method).
+					Str("path", r.URL.Path).
+					Str("panic", fmt.Sprintf("%v", v)).
+					Str("stack", string(stack)).
+					Msg("panic recovered")
+				if strings.HasPrefix(r.URL.Path, "/api/") {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusInternalServerError)
+					_, _ = w.Write([]byte(`{"error":"internal error"}`))
+				} else {
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				}
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// securityHeaders sets HTTP security headers on every response.
+// HSTS is only emitted when the connection is HTTPS (direct TLS or X-Forwarded-Proto: https).
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "SAMEORIGIN")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		// Google Fonts (googleapis.com + gstatic.com) are loaded in templates; allow them explicitly.
+		h.Set("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self' 'unsafe-inline'; "+
+				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
+				"font-src 'self' https://fonts.gstatic.com; "+
+				"img-src 'self' data:; "+
+				"connect-src 'self'")
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			h.Set("Strict-Transport-Security", "max-age=31536000")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // logRequests wraps a handler to log every request, return 503 when draining, and optionally record metrics.
@@ -214,7 +268,7 @@ func main() {
 		mux.Handle("/metrics", metricsHandler)
 		logx.Logger().Info().Msg("metrics: enabled at GET /metrics (Bearer token required)")
 	}
-	handler := logRequests(mux, metricsCollector)
+	handler := logRequests(securityHeaders(recoverMiddleware(mux)), metricsCollector)
 
 	if err := pcgwCronSched.Start(ctx); err != nil {
 		logx.Logger().Error().Err(err).Msg("cron: failed to schedule PCGW sync")

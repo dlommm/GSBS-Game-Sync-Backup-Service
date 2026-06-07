@@ -257,8 +257,12 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		if err := client.PullAndApplyWithResolver(ctx, resolvePath, pullOpts, onRetryIn); err != nil {
 			log.Printf("%s: %v", label, err)
 			pullErr = err
+			if errors.Is(err, sync.ErrUnauthorized) {
+				log.Printf("%s: auth failure detected — outbox retries paused until re-login", label)
+			}
 		} else {
 			log.Printf("%s: complete", label)
+			sync.ClearOutboxAuthFailed()
 		}
 		UpdateFromSyncEnd(pullErr, SyncEndStats{})
 		setLastSync(time.Now(), pullErr)

@@ -22,13 +22,16 @@ type Runner struct {
 	hub         *sse.Hub
 	invalidator ManifestCacheInvalidator
 
-	mu            sync.Mutex
-	wg            sync.WaitGroup
-	running       map[string]bool               // job name -> is running
-	cancelFuncs   map[string]context.CancelFunc // job name -> cancel
-	jobRunIDs     map[string]string             // job name -> job_runs id
-	pcgwSyncRunID string
-	progressPages int // pages processed by current pcgw_sync run (when running)
+	mu              sync.Mutex
+	wg              sync.WaitGroup
+	running         map[string]bool               // job name -> is running
+	cancelFuncs     map[string]context.CancelFunc // job name -> cancel
+	jobRunIDs       map[string]string             // job name -> job_runs id
+	pcgwSyncRunID   string
+	progressPages   int    // pages processed by current pcgw_sync run (when running)
+	progressPhase   string // current phase: "catalog" or "ingest"
+	progressQueue   int    // queue size for current run
+	progressCursor  int    // queue cursor for current run
 }
 
 // NewRunner creates a Runner. hub may be nil if SSE is not needed.
@@ -59,6 +62,28 @@ func (r *Runner) ProgressPages(jobName string) int {
 		return 0
 	}
 	return r.progressPages
+}
+
+// ProgressPhase returns the current sync phase ("catalog" or "ingest") for the running pcgw_sync.
+func (r *Runner) ProgressPhase() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.progressPhase
+}
+
+// RunPCGWSyncCatalogOnly runs a catalog-scan-only sync (Phase 1, no ingest).
+func (r *Runner) RunPCGWSyncCatalogOnly(ctx context.Context) (bool, error) {
+	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{SkipIngestPhase: true})
+}
+
+// RunPCGWSyncRetryFailed runs a sync that only processes failed/partial pages.
+func (r *Runner) RunPCGWSyncRetryFailed(ctx context.Context) (bool, error) {
+	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{RetryFailedOnly: true})
+}
+
+// RunPCGWSyncRebuildManifest bumps the manifest without fetching any pages.
+func (r *Runner) RunPCGWSyncRebuildManifest(ctx context.Context) (bool, error) {
+	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{RebuildManifestOnly: true})
 }
 
 // TryRunPCGWSync starts an incremental PCGW sync if none is running.
@@ -147,6 +172,9 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 		delete(r.jobRunIDs, jobName)
 		r.pcgwSyncRunID = ""
 		r.progressPages = 0
+		r.progressPhase = ""
+		r.progressQueue = 0
+		r.progressCursor = 0
 		r.mu.Unlock()
 	}()
 
@@ -174,11 +202,16 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 	if opts.Full {
 		mode = "full"
 	}
-	if !opts.ForceFull && !opts.Full {
+	if !opts.ForceFull && !opts.Full && !opts.RetryFailedOnly && !opts.SkipIngestPhase && !opts.RebuildManifestOnly {
 		if resumable, err := r.store.GetResumablePCGWSyncRun(jobCtx, mode); err != nil {
 			log.Printf("job runner: get resumable pcgw sync: %v", err)
 		} else if resumable != nil {
-			notes := fmt.Sprintf("resumed from %s at offset %d", resumable.ID, resumable.CheckpointOffset)
+			notes := fmt.Sprintf("resumed from %s", resumable.ID)
+			if resumable.CheckpointPhase == "ingest" {
+				notes = fmt.Sprintf("resumed from %s at ingest cursor %d", resumable.ID, resumable.CheckpointQueueCursor)
+			} else if resumable.CheckpointOffset > 0 {
+				notes = fmt.Sprintf("resumed from %s at offset %d", resumable.ID, resumable.CheckpointOffset)
+			}
 			syncRunID, err := r.store.StartPCGWSyncRunWithResume(jobCtx, mode, resumable.ID, notes)
 			if err != nil {
 				log.Printf("job runner: start resume pcgw sync run: %v", err)
@@ -188,10 +221,16 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 				syncOpts.ResumedFromRunID = resumable.ID
 				syncOpts.Notes = notes
 				syncOpts.Offset = resumable.CheckpointOffset
+				// Two-phase resume: if checkpoint_phase is "ingest", skip catalog scan.
+				if resumable.CheckpointPhase == "ingest" {
+					syncOpts.ResumeCatalogScan = true
+					syncOpts.ResumeQueueCursor = resumable.CheckpointQueueCursor
+				}
 				r.mu.Lock()
 				r.pcgwSyncRunID = syncRunID
 				r.mu.Unlock()
-				log.Printf("job runner: resuming pcgw sync from run %s at offset %d", resumable.ID, resumable.CheckpointOffset)
+				log.Printf("job runner: resuming pcgw sync from run %s (phase=%q cursor=%d)",
+					resumable.ID, resumable.CheckpointPhase, resumable.CheckpointQueueCursor)
 			}
 		}
 	}
@@ -210,6 +249,12 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 	var lastReport time.Time
 	var avgPerPage time.Duration
 	reportEx := func(p PCGWSyncProgress) {
+		r.mu.Lock()
+		r.progressPages = p.PagesProcessed
+		r.progressPhase = p.Phase
+		r.progressQueue = p.QueueSize
+		r.progressCursor = p.QueueCursor
+		r.mu.Unlock()
 		if r.hub != nil {
 			now := time.Now()
 			if lastReport.IsZero() {
@@ -232,8 +277,8 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 			}
 			p.ETASeconds = eta
 			r.hub.Broadcast(sse.Event{Type: "job-progress", Data: fmt.Sprintf(
-				`{"job":"pcgw_sync","pages":%d,"total":%d,"phase":%q,"games_skipped":%d,"eta_seconds":%d}`,
-				p.PagesProcessed, p.TotalEstimate, p.Phase, p.GamesSkipped, p.ETASeconds)})
+				`{"job":"pcgw_sync","pages":%d,"total":%d,"phase":%q,"games_skipped":%d,"eta_seconds":%d,"queue_size":%d,"queue_cursor":%d}`,
+				p.PagesProcessed, p.TotalEstimate, p.Phase, p.GamesSkipped, p.ETASeconds, p.QueueSize, p.QueueCursor)})
 		}
 	}
 	count, syncErr := PCGWSyncEx(jobCtx, r.store, pcgwClient, progressFn, reportEx, syncOpts)

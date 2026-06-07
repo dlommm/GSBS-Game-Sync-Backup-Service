@@ -32,6 +32,15 @@ type UpdateInfo struct {
 	SHA256      string
 }
 
+// UpdateCheckResult carries the outcome of CheckForUpdate.
+// Status values: "available", "up_to_date", "disabled", "metered_skip",
+// "network_error", "api_error", "manifest_mismatch", "unsupported_arch".
+type UpdateCheckResult struct {
+	Info    *UpdateInfo // non-nil only when Status == "available"
+	Status  string
+	Message string // human-readable detail for logs/UI
+}
+
 // ClientManifest is the latest-client.json release asset.
 type ClientManifest struct {
 	Version    string                         `json:"version"`
@@ -44,6 +53,10 @@ type ClientManifestAsset struct {
 	Name   string `json:"name"`
 	SHA256 string `json:"sha256"`
 }
+
+// goosForUpdate returns the OS string used for update-eligibility checks.
+// Tests may override this to simulate a supported platform on CI.
+var goosForUpdate = func() string { return runtime.GOOS }
 
 func updatePlatformKey() string {
 	return runtime.GOOS + "-" + runtime.GOARCH
@@ -72,57 +85,65 @@ func isNewerVersion(current, latest string) bool {
 	return semver.Compare(lat, cur) > 0
 }
 
-// CheckForUpdate compares embedded Version against the latest GitHub release.
-// Returns nil when up to date or the check fails silently.
-func CheckForUpdate(repo string) *UpdateInfo {
+// CheckForUpdate compares the embedded Version against the latest GitHub release.
+// manual=true bypasses the metered-connection skip but still honours update_check_enabled=false.
+// The returned Status is always set; Info is non-nil only when Status=="available".
+func CheckForUpdate(repo string, manual bool) UpdateCheckResult {
 	if repo == "" {
 		repo = defaultUpdateRepo
 	}
+
+	if goos := goosForUpdate(); goos != "windows" && goos != "linux" {
+		return UpdateCheckResult{
+			Status:  "unsupported_arch",
+			Message: fmt.Sprintf("auto-update not supported on %s/%s", runtime.GOOS, runtime.GOARCH),
+		}
+	}
+
 	current := normalizeVersion(Version)
 	if current == "" {
-		return nil
+		return UpdateCheckResult{
+			Status:  "unsupported_arch",
+			Message: "dev or unknown build version; update check skipped",
+		}
 	}
-	if shouldSkipUpdateCheck() {
-		return nil
+
+	cfg, _ := loadConfig()
+	if cfg != nil && cfg.UpdateCheckEnabled != nil && !*cfg.UpdateCheckEnabled {
+		return UpdateCheckResult{Status: "disabled", Message: "update checks are disabled (update_check_enabled=false)"}
+	}
+	if !manual && cfg != nil && cfg.SkipSyncWhenMetered && IsMeteredConnection() {
+		return UpdateCheckResult{Status: "metered_skip", Message: "update check skipped on metered connection"}
 	}
 
 	rel, err := fetchLatestRelease(repo)
 	if err != nil {
 		log.Printf("update: release fetch: %v", err)
-		return nil
+		status := "network_error"
+		if strings.Contains(err.Error(), "github API status") {
+			status = "api_error"
+		}
+		return UpdateCheckResult{Status: status, Message: err.Error()}
 	}
 	if rel.TagName == "" {
-		return nil
+		return UpdateCheckResult{Status: "api_error", Message: "empty release tag in GitHub API response"}
 	}
 	if !isNewerVersion(Version, rel.TagName) {
-		return nil
+		return UpdateCheckResult{
+			Status:  "up_to_date",
+			Message: fmt.Sprintf("current %s is not older than latest %s", Version, rel.TagName),
+		}
 	}
 
-	if info := updateFromManifest(rel); info != nil {
-		return info
+	res := updateFromManifest(rel)
+	if res.Status != "" {
+		return res
 	}
 	return updateFromAssetNames(rel)
 }
 
-func shouldSkipUpdateCheck() bool {
-	if runtime.GOOS != "windows" && runtime.GOOS != "linux" {
-		return true
-	}
-	cfg, err := loadConfig()
-	if err != nil || cfg == nil {
-		return false
-	}
-	if cfg.UpdateCheckEnabled != nil && !*cfg.UpdateCheckEnabled {
-		return true
-	}
-	if cfg.SkipSyncWhenMetered && IsMeteredConnection() {
-		return true
-	}
-	return false
-}
-
 type ghRelease struct {
-	TagName string
+	TagName string `json:"tag_name"`
 	Assets  []struct {
 		Name               string `json:"name"`
 		BrowserDownloadURL string `json:"browser_download_url"`
@@ -153,7 +174,11 @@ func fetchLatestRelease(repo string) (*ghRelease, error) {
 	return &rel, nil
 }
 
-func updateFromManifest(rel *ghRelease) *UpdateInfo {
+// updateFromManifest tries the latest-client.json manifest approach.
+// Returns a result with Status=="" when the manifest is not present or our
+// platform is not listed, signalling that the caller should fall through to
+// updateFromAssetNames. Any other non-empty Status is final.
+func updateFromManifest(rel *ghRelease) UpdateCheckResult {
 	var manifestURL string
 	for _, a := range rel.Assets {
 		if a.Name == "latest-client.json" {
@@ -162,32 +187,44 @@ func updateFromManifest(rel *ghRelease) *UpdateInfo {
 		}
 	}
 	if manifestURL == "" {
-		return nil
+		log.Printf("update: latest-client.json not found in release assets")
+		return UpdateCheckResult{} // fall through to asset-name heuristic
 	}
+
 	client := &http.Client{Timeout: 20 * time.Second}
 	req, _ := http.NewRequest(http.MethodGet, manifestURL, nil)
 	req.Header.Set("User-Agent", updateUserAgent)
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("update: manifest download: %v", err)
-		return nil
+		return UpdateCheckResult{Status: "network_error", Message: "manifest download: " + err.Error()}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil
+		msg := fmt.Sprintf("manifest download status %d", resp.StatusCode)
+		log.Printf("update: %s", msg)
+		return UpdateCheckResult{Status: "api_error", Message: msg}
 	}
+
 	var manifest ClientManifest
 	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
 		log.Printf("update: manifest parse: %v", err)
-		return nil
+		return UpdateCheckResult{Status: "api_error", Message: "manifest parse: " + err.Error()}
 	}
 	if !isNewerVersion(Version, manifest.Version) {
-		return nil
+		return UpdateCheckResult{
+			Status:  "up_to_date",
+			Message: fmt.Sprintf("manifest version %s is not newer than current %s", manifest.Version, Version),
+		}
 	}
-	asset, ok := manifest.Assets[updatePlatformKey()]
+
+	platformKey := updatePlatformKey()
+	asset, ok := manifest.Assets[platformKey]
 	if !ok || asset.Name == "" {
-		return nil
+		log.Printf("update: platform key %s not found in manifest", platformKey)
+		return UpdateCheckResult{} // fall through; asset-name heuristic may still work
 	}
+
 	dlURL := ""
 	for _, a := range rel.Assets {
 		if a.Name == asset.Name {
@@ -196,19 +233,24 @@ func updateFromManifest(rel *ghRelease) *UpdateInfo {
 		}
 	}
 	if dlURL == "" {
-		return nil
+		log.Printf("update: asset %s not found in release", asset.Name)
+		return UpdateCheckResult{} // fall through
 	}
-	return &UpdateInfo{
-		Tag:         rel.TagName,
-		Version:     manifest.Version,
-		AssetName:   asset.Name,
-		DownloadURL: dlURL,
-		SHA256:      strings.ToLower(asset.SHA256),
+
+	return UpdateCheckResult{
+		Status: "available",
+		Info: &UpdateInfo{
+			Tag:         rel.TagName,
+			Version:     manifest.Version,
+			AssetName:   asset.Name,
+			DownloadURL: dlURL,
+			SHA256:      strings.ToLower(asset.SHA256),
+		},
 	}
 }
 
 func expectedClientAssetName() string {
-	switch runtime.GOOS {
+	switch goosForUpdate() {
 	case "windows":
 		return "gsbs-client-windows-amd64.exe"
 	case "linux":
@@ -218,22 +260,32 @@ func expectedClientAssetName() string {
 	}
 }
 
-func updateFromAssetNames(rel *ghRelease) *UpdateInfo {
+func updateFromAssetNames(rel *ghRelease) UpdateCheckResult {
 	want := expectedClientAssetName()
 	if want == "" {
-		return nil
+		return UpdateCheckResult{
+			Status:  "unsupported_arch",
+			Message: fmt.Sprintf("no expected asset name for %s/%s", runtime.GOOS, runtime.GOARCH),
+		}
 	}
 	for _, a := range rel.Assets {
 		if a.Name == want {
-			return &UpdateInfo{
-				Tag:         rel.TagName,
-				Version:     strings.TrimPrefix(rel.TagName, "v"),
-				AssetName:   a.Name,
-				DownloadURL: a.BrowserDownloadURL,
+			return UpdateCheckResult{
+				Status: "available",
+				Info: &UpdateInfo{
+					Tag:         rel.TagName,
+					Version:     strings.TrimPrefix(rel.TagName, "v"),
+					AssetName:   a.Name,
+					DownloadURL: a.BrowserDownloadURL,
+				},
 			}
 		}
 	}
-	return nil
+	log.Printf("update: asset %s not found in release %s", want, rel.TagName)
+	return UpdateCheckResult{
+		Status:  "manifest_mismatch",
+		Message: fmt.Sprintf("asset %s not found in release %s", want, rel.TagName),
+	}
 }
 
 // DownloadUpdate saves the release asset under ClientDataDir()/updates/.

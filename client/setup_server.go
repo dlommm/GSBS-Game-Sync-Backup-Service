@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 )
 
 const setupPortStart = 41234
@@ -114,6 +115,7 @@ func handleSetupLogin(w http.ResponseWriter, r *http.Request) {
 
 type setupStatusResponse struct {
 	LoggedIn       bool     `json:"logged_in"`
+	AuthFailed     bool     `json:"auth_failed,omitempty"`
 	LastScanAt     string   `json:"last_scan_at,omitempty"`
 	MatchedGames   int      `json:"matched_games"`
 	GameTitles     []string `json:"game_titles,omitempty"`
@@ -125,6 +127,11 @@ type setupStatusResponse struct {
 	PendingUploads int      `json:"pending_uploads"`
 	ConflictCount  int      `json:"conflict_count"`
 	WatchedPaths   int      `json:"watched_paths"`
+	// Updater fields
+	UpdateLastCheckedAt string `json:"update_last_checked_at,omitempty"`
+	UpdateLastCheckedAgo string `json:"update_last_checked_ago,omitempty"`
+	UpdateStatus        string `json:"update_status,omitempty"` // "up_to_date", "available", "checking", ""
+	UpdateAvailableTag  string `json:"update_available_tag,omitempty"`
 }
 
 func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
@@ -148,6 +155,7 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 
 	resp := setupStatusResponse{
 		LoggedIn:       loggedIn,
+		AuthFailed:     snap.AuthFailed,
 		LastScanAt:     cache.LastScanAt,
 		MatchedGames:   len(cache.MatchedGameIDs),
 		GameTitles:     titles,
@@ -166,6 +174,36 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	if cfg != nil {
 		resp.ServerURL = cfg.ServerURL
 	}
+
+	// Populate update check state from the tray update loop vars.
+	updateMu.Lock()
+	lastChecked := lastUpdateCheck
+	pending := pendingUpdate
+	inProgress := updateInProgress
+	updateMu.Unlock()
+	if inProgress {
+		resp.UpdateStatus = "checking"
+	} else if !lastChecked.IsZero() {
+		if pending != nil {
+			resp.UpdateStatus = "available"
+			resp.UpdateAvailableTag = pending.Tag
+		} else {
+			resp.UpdateStatus = "up_to_date"
+		}
+		resp.UpdateLastCheckedAt = lastChecked.UTC().Format("2006-01-02T15:04:05Z")
+		ago := time.Since(lastChecked)
+		switch {
+		case ago < time.Minute:
+			resp.UpdateLastCheckedAgo = "just now"
+		case ago < time.Hour:
+			resp.UpdateLastCheckedAgo = fmt.Sprintf("%.0fm ago", ago.Minutes())
+		case ago < 24*time.Hour:
+			resp.UpdateLastCheckedAgo = fmt.Sprintf("%.0fh ago", ago.Hours())
+		default:
+			resp.UpdateLastCheckedAgo = fmt.Sprintf("%.0fd ago", ago.Hours()/24)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }
@@ -602,6 +640,7 @@ const dashboardPageHTML = `<!DOCTYPE html>
         <span class="text-sm font-semibold text-gray-900 dark:text-white">—</span>
       </div>
       <p id="serverURLLabel" class="mt-1 truncate text-xs text-gray-400 dark:text-gray-500"></p>
+      <p id="authFailedLabel" class="mt-1 hidden text-xs font-medium text-red-600 dark:text-red-400">⚠ Re-login required</p>
     </div>
     <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
       <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Last sync</p>
@@ -623,6 +662,27 @@ const dashboardPageHTML = `<!DOCTYPE html>
       <p id="discoveredCount" class="mt-1 text-2xl font-bold text-gray-900 dark:text-white">—</p>
       <p class="mt-0.5 text-xs text-gray-400 dark:text-gray-500">games matched</p>
     </div>
+  </div>
+
+  <div id="updateCard" class="mb-4 hidden rounded-xl bg-amber-50 p-4 shadow-sm ring-1 ring-amber-200 dark:bg-amber-900/20 dark:ring-amber-800">
+    <div class="flex items-center justify-between gap-2">
+      <div>
+        <p class="text-xs font-medium text-amber-700 dark:text-amber-400">Update available</p>
+        <p id="updateTag" class="mt-0.5 text-sm font-semibold text-amber-800 dark:text-amber-300">—</p>
+      </div>
+      <svg class="h-5 w-5 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+      </svg>
+    </div>
+    <p class="mt-1 text-xs text-amber-600 dark:text-amber-500">Open the tray menu → Advanced → Install update</p>
+  </div>
+
+  <div id="updateCheckedRow" class="mb-3 hidden text-xs text-gray-400 dark:text-gray-500">
+    <span>Update check: </span><span id="updateCheckedAgo">—</span>
+    <span id="updateUpToDateBadge" class="ml-1 inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+      <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+      up to date
+    </span>
   </div>
 
   <div class="mb-4 grid grid-cols-2 gap-3">
@@ -684,9 +744,12 @@ function refresh() {
   fetch('/status').then(function(r){return r.json();}).then(function(s) {
     document.getElementById('refreshLabel').textContent = 'Updated just now';
 
-    var connLabel = setDot(document.getElementById('connStatus'), s.logged_in);
-    connLabel.textContent = s.logged_in ? 'Logged in' : 'Not connected';
+    var connOK = s.logged_in && !s.auth_failed;
+    var connLabel = setDot(document.getElementById('connStatus'), s.logged_in ? (s.auth_failed ? false : true) : false);
+    connLabel.textContent = s.auth_failed ? 'Re-login required' : (s.logged_in ? 'Logged in' : 'Not connected');
     document.getElementById('serverURLLabel').textContent = s.server_url || '';
+    var authFailed = document.getElementById('authFailedLabel');
+    if (authFailed) authFailed.classList.toggle('hidden', !s.auth_failed);
     if (s.server_url) {
       document.getElementById('serverDashLink').href = s.server_url.replace(/\/$/, '') + '/dashboard';
     }
@@ -709,6 +772,28 @@ function refresh() {
     var conflict = document.getElementById('conflictCard');
     document.getElementById('conflictCount').textContent = s.conflict_count;
     conflict.classList.toggle('hidden', s.conflict_count === 0);
+
+    // Updater status
+    var updateCard = document.getElementById('updateCard');
+    var updateCheckedRow = document.getElementById('updateCheckedRow');
+    var updateUpToDateBadge = document.getElementById('updateUpToDateBadge');
+    if (s.update_status === 'available' && s.update_available_tag) {
+      document.getElementById('updateTag').textContent = s.update_available_tag;
+      updateCard.classList.remove('hidden');
+    } else {
+      updateCard.classList.add('hidden');
+    }
+    if (s.update_last_checked_ago) {
+      document.getElementById('updateCheckedAgo').textContent = s.update_last_checked_ago;
+      updateCheckedRow.classList.remove('hidden');
+      if (updateUpToDateBadge) updateUpToDateBadge.classList.toggle('hidden', s.update_status !== 'up_to_date');
+    } else if (s.update_status === 'checking') {
+      document.getElementById('updateCheckedAgo').textContent = 'checking…';
+      updateCheckedRow.classList.remove('hidden');
+      if (updateUpToDateBadge) updateUpToDateBadge.classList.add('hidden');
+    } else {
+      updateCheckedRow.classList.add('hidden');
+    }
 
     var ul = document.getElementById('gameList');
     var titles = s.game_titles || [];

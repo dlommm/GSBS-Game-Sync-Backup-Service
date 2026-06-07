@@ -88,6 +88,13 @@ for f in "${CLIENT_ASSETS[@]}"; do
   esac
 done
 
+if [ -z "$win_sha" ] || [ -z "$lin_sha" ]; then
+  echo "ERROR: one or more client platform assets are missing; latest-client.json would be incomplete." >&2
+  echo "  windows sha: ${win_sha:-(empty)}" >&2
+  echo "  linux sha:   ${lin_sha:-(empty)}" >&2
+  exit 1
+fi
+
 cat > latest-client.json <<EOF
 {
   "version": "${VERSION_VALUE}",

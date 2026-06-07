@@ -2,6 +2,35 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.0] - 2026-06-07
+
+### Fixed
+
+- Server: `GET /api/saves?summaries=1` 500 errors — enriched error logs (user_id, limit, offset, request_id, error_class), 503 returned for db_locked errors, quota checks now fail-closed (storage byte errors return 503 instead of silently bypassing quota).
+- Client: updater silently broken due to missing `json:"tag_name"` struct tag on `ghRelease` — version comparison never ran in production.
+- Client: manual "Check for updates" showed "latest" on all failures including network errors, API errors, and metered skips.
+- Windows: fsnotify overflow events silently dropped watched file changes — now triggers a directory rescan to catch missed events.
+- Windows: locked files after push retries were silently dropped — now enqueued to the persistent outbox.
+
+### Added
+
+- Server: panic recovery middleware with structured log and request-id correlation.
+- Server: HTTP security headers baseline (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, CSP, HSTS) via `securityHeaders` middleware.
+- Server: dashboard partial error states with inline HTMX retry notice on `StoreError`.
+- Server: disabled-user session cutoff — `requireSession` checks `IsUserDisabled` and revokes the session immediately.
+- Server: `RevokeAllClientTokens` — password change and 2FA disable now revoke all active client tokens.
+- Client: typed `UpdateCheckResult` with explicit statuses: `available`, `up_to_date`, `disabled`, `metered_skip`, `network_error`, `api_error`, `manifest_mismatch`, `unsupported_arch`.
+- Client: in-progress tray state during update checks; distinct messages per check outcome (no more silent "latest" on failure).
+- Client: `ErrUnauthorized` sentinel — outbox stops hammering on 401, surfaces re-login message in local dashboard and tray tooltip.
+- Client: local dashboard `/status` exposes updater last-check status and `auth_failed` state.
+- CI: Windows test job (`windows-latest`), `govulncheck` step, `latest-client.json` completeness guard in `release-assets.sh`.
+
+### Removed
+
+- Server: `PCGWSyncLegacy`, `PCGWSyncFull` unused wrapper functions; `GetPCGWGameByPageName`, `UpdatePCGWGameSyncState` unused store methods.
+- Server: orphan template partials (`stat_card.html`, `quota_bar.html`, `chart_svg.html`); stale `/admin/pcgw/sync/resume` form action.
+- Client: unused dead functions `minimizedMode()`, `parseDurationFlex()`, `RecordConflictSimple()`.
+
 ## [1.6.0] - 2026-06-07
 
 ### Added
@@ -226,9 +255,9 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 See [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases) for earlier history.
 
-[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.6.0...v2.0.0
 [1.6.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.5.0...v1.6.0
-[2.0.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.3...v2.0.0
 [1.2.3]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.2...v1.2.3
 [1.5.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.1...v1.5.0
 [1.2.1]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.0...v1.2.1

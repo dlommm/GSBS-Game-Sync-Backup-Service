@@ -65,8 +65,16 @@ func (h *WebHandler) getSessionUser(r *http.Request) (userID, sessionID string) 
 }
 
 func (h *WebHandler) requireSession(w http.ResponseWriter, r *http.Request) (userID, username string, ok bool) {
-	userID, _ = h.getSessionUser(r)
+	var sessionID string
+	userID, sessionID = h.getSessionUser(r)
 	if userID == "" {
+		Redirect(w, r, "/login")
+		return "", "", false
+	}
+	// Cut off disabled users: revoke their session and redirect to login.
+	if disabled, err := h.store.IsUserDisabled(r.Context(), userID); err == nil && disabled {
+		_ = h.store.DeleteSession(r.Context(), sessionID)
+		ClearSession(w)
 		Redirect(w, r, "/login")
 		return "", "", false
 	}

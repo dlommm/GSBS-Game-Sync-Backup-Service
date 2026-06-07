@@ -2,6 +2,7 @@ package webui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +21,9 @@ import (
 type adminPCGWData struct {
 	PageData
 	Stats            PCGWStatsView
+	CatalogStats     types.PCGWCatalogStats
+	LatestSyncRun    *types.PCGWSyncRun
+	ResumableSyncRun *types.PCGWSyncRun
 	Games            []types.PCGWGame
 	Query            string
 	FilterStatus     string
@@ -36,6 +40,7 @@ type adminPCGWData struct {
 	JobProgress      int
 	JobProgressTotal int
 	JobGamesSkipped  int
+	JobPhase         string
 }
 
 type PCGWStatsView struct {
@@ -127,11 +132,18 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	games, q, status, platform, page, perPage, total, totalPages, start, end, prevPage, nextPage := h.loadPCGWPage(r.Context(), r)
-	jobs := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret))
+	ctx := r.Context()
+	games, q, status, platform, page, perPage, total, totalPages, start, end, prevPage, nextPage := h.loadPCGWPage(ctx, r)
+	jobs := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret))
+	catalogStats, _ := h.store.GetPCGWCatalogStats(ctx)
+	latestRun, _ := h.store.GetLatestPCGWSyncRun(ctx)
+	resumableRun, _ := h.store.GetResumablePCGWSyncRun(ctx, "incremental")
 	h.render(w, "admin_pcgw.html", adminPCGWData{
 		PageData:         h.adminPageData(w, r, userID, username, "pcgw", "admin_pcgw"),
-		Stats:            h.loadPCGWStats(r.Context()),
+		Stats:            h.loadPCGWStats(ctx),
+		CatalogStats:     catalogStats,
+		LatestSyncRun:    latestRun,
+		ResumableSyncRun: resumableRun,
 		Games:            games,
 		Query:            q,
 		FilterStatus:     status,
@@ -148,6 +160,7 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 		JobProgress:      jobs.JobProgressPages,
 		JobProgressTotal: jobs.JobProgressTotal,
 		JobGamesSkipped:  jobs.JobGamesSkipped,
+		JobPhase:         jobs.JobPhase,
 	})
 }
 
@@ -362,6 +375,129 @@ func (h *WebHandler) handleAdminPCGWImport(w http.ResponseWriter, r *http.Reques
 	Redirect(w, r, fmt.Sprintf("/admin/pcgw?imported=1&locations=%d&games=%d", result.GameSaveLocations, result.PCGWGames))
 }
 
+func (h *WebHandler) handleAdminPCGWWipePreflight(w http.ResponseWriter, r *http.Request) {
+	if _, _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	counts, err := h.store.GetPCGWWipePreflightCounts(r.Context())
+	if err != nil {
+		http.Error(w, "preflight failed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(counts)
+}
+
+func (h *WebHandler) handleAdminPCGWWipe(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if h.store.HasRunningPCGWSync(r.Context()) {
+		Redirect(w, r, "/admin/pcgw?error=sync_running_cannot_wipe")
+		return
+	}
+	mode := strings.TrimSpace(r.FormValue("mode"))
+	if mode != "mirror_only" && mode != "mirror_and_manifest" {
+		http.Error(w, "Invalid wipe mode.", http.StatusBadRequest)
+		return
+	}
+
+	// Log wipe as a job_run entry for audit.
+	jobRunID, _ := h.store.LogJobStart(r.Context(), "pcgw_wipe")
+	var wipeErr error
+	if mode == "mirror_only" {
+		wipeErr = h.store.WipePCGWMirrorOnly(r.Context())
+	} else {
+		wipeErr = h.store.WipePCGWMirrorAndManifest(r.Context())
+	}
+	errMsg := ""
+	status := "success"
+	if wipeErr != nil {
+		errMsg = wipeErr.Error()
+		status = "failed"
+	}
+	_ = h.store.LogJobFinish(r.Context(), jobRunID, status, errMsg, 0)
+
+	if wipeErr != nil {
+		Redirect(w, r, "/admin/pcgw?error=wipe_failed")
+		return
+	}
+
+	if h.apiHandler != nil {
+		h.apiHandler.InvalidateManifestCache()
+	}
+	if h.hub != nil {
+		h.hub.Broadcast(sse.Event{Type: "manifest-updated", Data: "{}"})
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "pcgw_wipe", mode, "")
+	Redirect(w, r, "/admin/pcgw?wiped=1")
+}
+
+func (h *WebHandler) handleAdminPCGWSyncCatalogOnly(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if h.jobRunner != nil {
+		started, err := h.jobRunner.RunPCGWSyncCatalogOnly(context.Background())
+		if err != nil || !started {
+			Redirect(w, r, "/admin/pcgw?error=job_already_running")
+			return
+		}
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "pcgw_catalog_only", "")
+	Redirect(w, r, "/admin/pcgw?job_started=1")
+}
+
+func (h *WebHandler) handleAdminPCGWSyncRetryFailed(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if h.jobRunner != nil {
+		started, err := h.jobRunner.RunPCGWSyncRetryFailed(context.Background())
+		if err != nil || !started {
+			Redirect(w, r, "/admin/pcgw?error=job_already_running")
+			return
+		}
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "pcgw_retry_failed", "")
+	Redirect(w, r, "/admin/pcgw?job_started=1")
+}
+
+func (h *WebHandler) handleAdminPCGWRebuildManifest(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if h.jobRunner != nil {
+		started, err := h.jobRunner.RunPCGWSyncRebuildManifest(context.Background())
+		if err != nil || !started {
+			Redirect(w, r, "/admin/pcgw?error=job_already_running")
+			return
+		}
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "pcgw_rebuild_manifest", "")
+	Redirect(w, r, "/admin/pcgw?job_started=1")
+}
+
 func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool {
 	path := r.URL.Path
 	if path == "/admin/pcgw" && r.Method == http.MethodGet {
@@ -378,6 +514,26 @@ func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool
 	}
 	if path == "/admin/pcgw/sync" && r.Method == http.MethodPost {
 		h.handleAdminPCGWSync(w, r, r.FormValue("full") == "1")
+		return true
+	}
+	if path == "/admin/pcgw/sync/catalog-only" && r.Method == http.MethodPost {
+		h.handleAdminPCGWSyncCatalogOnly(w, r)
+		return true
+	}
+	if path == "/admin/pcgw/sync/retry-failed" && r.Method == http.MethodPost {
+		h.handleAdminPCGWSyncRetryFailed(w, r)
+		return true
+	}
+	if path == "/admin/pcgw/rebuild-manifest" && r.Method == http.MethodPost {
+		h.handleAdminPCGWRebuildManifest(w, r)
+		return true
+	}
+	if path == "/admin/pcgw/wipe-preflight" && r.Method == http.MethodGet {
+		h.handleAdminPCGWWipePreflight(w, r)
+		return true
+	}
+	if path == "/admin/pcgw/wipe" && r.Method == http.MethodPost {
+		h.handleAdminPCGWWipe(w, r)
 		return true
 	}
 	if path == "/admin/pcgw/purge-wikitext" && r.Method == http.MethodPost {

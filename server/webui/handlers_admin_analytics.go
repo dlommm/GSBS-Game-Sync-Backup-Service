@@ -30,6 +30,8 @@ type adminAnalyticsData struct {
 
 	// PCGW tab
 	PCGWStats             PCGWStatsView
+	CatalogStats          types.PCGWCatalogStats
+	LatestSyncRun         *types.PCGWSyncRun
 	ManifestMeta          *types.PCGWManifestMeta
 	ManifestSaveLocations int
 	ParseFailureCount     int
@@ -182,6 +184,8 @@ func (h *WebHandler) serveAdminAnalytics(w http.ResponseWriter, r *http.Request)
 		data.ManifestSaveLocations, _ = h.store.CountGameSaveLocations(ctx)
 		data.ParseFailureCount, _ = h.store.CountPCGWParseFailures(ctx)
 		data.ParseFailures, _ = h.store.ListRecentPCGWParseFailures(ctx, 15)
+		data.CatalogStats, _ = h.store.GetPCGWCatalogStats(ctx)
+		data.LatestSyncRun, _ = h.store.GetLatestPCGWSyncRun(ctx)
 	}
 
 	if tab == "sync" {

@@ -63,11 +63,6 @@ func RecordConflict(rec ConflictRecord) {
 	}
 }
 
-// RecordConflictSimple records a conflict with minimal fields (backward compat).
-func RecordConflictSimple(gameID, pathKey, filePath string) {
-	RecordConflict(ConflictRecord{GameID: gameID, PathKey: pathKey, FilePath: filePath})
-}
-
 // ListConflicts returns pending conflict records.
 func ListConflicts() []ConflictRecord {
 	conflictMu.Lock()

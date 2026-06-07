@@ -114,6 +114,9 @@ func (h *WebHandler) handleSettings(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if err := h.store.RevokeAllClientTokens(r.Context(), userID); err != nil {
+		logx.Logger().Warn().Err(err).Str("username", username).Msg("webui password change: revoke client tokens failed")
+	}
 	logx.Logger().Info().Str("username", username).Msg("webui password changed")
 	Redirect(w, r, "/dashboard/settings?updated=1")
 }
@@ -272,6 +275,9 @@ func (h *WebHandler) handleDisable2FA(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.SetTOTPEnabled(r.Context(), userID, false); err != nil {
 		Redirect(w, r, "/dashboard/settings?error=2fa_disable_failed")
 		return
+	}
+	if err := h.store.RevokeAllClientTokens(r.Context(), userID); err != nil {
+		logx.Logger().Warn().Err(err).Str("username", username).Msg("webui 2fa disable: revoke client tokens failed")
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "disable_2fa", "", "")
 	logx.Logger().Info().Str("username", username).Msg("webui 2FA disabled")

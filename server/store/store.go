@@ -69,6 +69,9 @@ type Store interface {
 	ClientUserID(ctx context.Context, clientID string) (string, error)
 	// RefreshClientToken rotates token for the authenticated client; old token stops working.
 	RefreshClientToken(ctx context.Context, currentToken string) (newToken string, err error)
+	// RevokeAllClientTokens regenerates tokens for every client owned by the user,
+	// invalidating all existing tokens (used after password or 2FA changes).
+	RevokeAllClientTokens(ctx context.Context, userID string) error
 	// UpdateClientLastSeen updates the last_seen timestamp for a client (called on push/pull).
 	UpdateClientLastSeen(ctx context.Context, clientID string) error
 
@@ -147,10 +150,8 @@ type Store interface {
 	// PCGW games (full mirror)
 	UpsertPCGWGame(ctx context.Context, g *types.PCGWGame) error
 	GetPCGWGame(ctx context.Context, pageID int64) (*types.PCGWGame, error)
-	GetPCGWGameByPageName(ctx context.Context, pageName string) (*types.PCGWGame, error)
 	ListPCGWGames(ctx context.Context, filter PCGWGameListFilter) ([]types.PCGWGame, int, error)
 	SearchPCGWGamesFTS(ctx context.Context, query string, limit, offset int) ([]types.PCGWGame, int, error)
-	UpdatePCGWGameSyncState(ctx context.Context, pageID int64, revID int64, revTS, status, parseErr string, durationMs int) error
 
 	UpsertPCGWGameData(ctx context.Context, row *types.PCGWGameData) error
 	DeletePCGWGameDataExcept(ctx context.Context, pageID int64, keepPlatformKeys []string) error
@@ -191,6 +192,22 @@ type Store interface {
 	GetResumablePCGWSyncRun(ctx context.Context, mode string) (*types.PCGWSyncRun, error)
 	ReconcileStalePCGWSyncRuns(ctx context.Context) error
 	HasRunningPCGWSync(ctx context.Context) bool
+
+	// PCGW catalog (two-phase sync)
+	UpsertPCGWCatalogBatch(ctx context.Context, entries []types.PCGWCatalogEntry) error
+	GetPCGWCatalogStats(ctx context.Context) (types.PCGWCatalogStats, error)
+	ListPCGWCatalogMissing(ctx context.Context, limit, offset int) ([]int64, error)
+	ListPCGWCatalogFailedPartial(ctx context.Context, limit, offset int) ([]int64, error)
+	ListPCGWCatalogDeadLetter(ctx context.Context, limit int) ([]types.PCGWCatalogEntry, error)
+	IncrementCatalogRetry(ctx context.Context, pageID int64, reason string) error
+	ClearCatalogDeadLetter(ctx context.Context, pageID int64) error
+	ComputeCatalogHash(ctx context.Context) (string, error)
+	UpdatePCGWSyncRunPhase1Stats(ctx context.Context, runID string, stats types.Phase1Stats) error
+	UpdatePCGWSyncRunPhase2Progress(ctx context.Context, runID string, processed, cursor int) error
+	// Wipe operations
+	WipePCGWMirrorOnly(ctx context.Context) error
+	WipePCGWMirrorAndManifest(ctx context.Context) error
+	GetPCGWWipePreflightCounts(ctx context.Context) (types.WipePreflightCounts, error)
 
 	GetPCGWManifestMeta(ctx context.Context) (*types.PCGWManifestMeta, error)
 	BumpManifestVersion(ctx context.Context, newETag string) (version int, err error)

@@ -86,3 +86,31 @@ Set `GSBS_LOG_LEVEL=debug` on the server or client (environment variable) for st
 1. Reproduce with verbose logging enabled.
 2. Check [GitHub Issues](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/issues).
 3. For security concerns see [SECURITY.md](../SECURITY.md).
+
+## 2.0 behavior changes
+
+### "Check for updates" does nothing / always shows latest
+
+In 2.0 the updater was fixed: a missing JSON struct tag that silently broke version comparisons in production has been corrected. Manual **Check for updates…** now shows the explicit check outcome instead of silently showing "latest". If the check still appears to do nothing:
+
+- Look for `update:` prefixed lines in `gsbs.log` (e.g. `update: check result status=network_error`).
+- Possible statuses: `available`, `up_to_date`, `disabled`, `metered_skip`, `network_error`, `api_error`, `manifest_mismatch`, `unsupported_arch`.
+- On Windows, `metered_skip` means the connection is metered and `skip_sync_when_metered` is true — switch to an unmetered connection or disable the setting.
+
+### Saves not uploading on Windows after burst writes
+
+In 2.0, two Windows-specific issues are fixed:
+
+- **fsnotify overflow**: if the OS event queue overflows (many rapid file changes), the client now triggers a full directory rescan to catch any events that were dropped. Previously those changes were silently missed.
+- **Locked files**: if a file is still held exclusively by the game during a push retry, the push is now enqueued to the persistent outbox instead of being silently dropped. It will retry automatically once the file is released.
+
+If saves are still not uploading, check `outbox/` in the client data directory and look for `watcher_overflow_rescan` or `push_locked_file_enqueued` log ops in `gsbs.log`.
+
+### Client keeps retrying after server error / 401 hammering
+
+In 2.0, when the server returns HTTP 401 (token revoked or expired), the outbox stops all retries immediately via the `ErrUnauthorized` sentinel. The client will not keep hammering the server. The `auth_failed` state is visible in:
+
+- **Local dashboard** (`http://127.0.0.1:41234/status` or tray **Advanced → Local status page**).
+- **Tray tooltip** — shows an auth-failure indicator next to the sync state.
+
+Re-login via tray **Login…** or `gsbs-client login` to resume. If you see repeated 401 errors on the server despite re-logging in, verify that your client token has not been revoked (WebUI **Settings → API tokens**). Note: in 2.0, password changes and 2FA disable automatically revoke all active client tokens — you will need to create a new token and log in again.

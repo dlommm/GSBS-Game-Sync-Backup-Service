@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/retry"
@@ -17,6 +18,22 @@ import (
 const outboxMaxAge = 7 * 24 * time.Hour
 
 var outboxMu sync.Mutex
+
+// outboxAuthFailed is set when a push attempt returns ErrUnauthorized.
+// While set, ProcessOutbox skips all retry attempts to avoid hammering a 401.
+// Cleared by ClearOutboxAuthFailed after a successful auth (pull or push).
+var outboxAuthFailed atomic.Bool
+
+// ClearOutboxAuthFailed clears the auth-failed pause, allowing outbox retries to resume.
+// Call after a successful pull or when the user re-authenticates.
+func ClearOutboxAuthFailed() {
+	outboxAuthFailed.Store(false)
+}
+
+// IsOutboxAuthFailed reports whether the outbox is paused due to an auth failure.
+func IsOutboxAuthFailed() bool {
+	return outboxAuthFailed.Load()
+}
 
 // OutboxEntry is a failed push persisted for later retry.
 type OutboxEntry struct {
@@ -144,6 +161,11 @@ func loadOutboxContent(entry *OutboxEntry, client *Client) ([]byte, error) {
 
 // ProcessOutbox retries pending outbox entries due for retry. Returns count sent.
 func ProcessOutbox(ctx context.Context, client *Client) int {
+	if outboxAuthFailed.Load() {
+		logSyncDebug("outbox_auth_paused", "reason", "auth failed; waiting for successful auth before retrying")
+		return 0
+	}
+
 	// Phase 1: snapshot candidates under lock so EnqueueOutbox is not blocked
 	// during network I/O.
 	outboxMu.Lock()
@@ -210,6 +232,15 @@ func ProcessOutbox(ctx context.Context, client *Client) int {
 
 		relPath := entry.RelativePath
 		if err := client.pushOnce(ctx, entry.GameID, entry.PathKey, entry.FilePath, relPath, content); err != nil {
+			if errors.Is(err, ErrUnauthorized) {
+				outboxAuthFailed.Store(true)
+				logSyncWarn("outbox_auth_failed", "id", entry.ID, "game_id", entry.GameID, "path_key", entry.PathKey,
+					"msg", "401 Unauthorized — pausing outbox retry until re-login")
+				if OnAuthError != nil {
+					OnAuthError("Sync paused: token invalid or expired — please log in again from the tray")
+				}
+				return sent
+			}
 			if !retry.IsRetryableError(err) {
 				logSyncWarn("outbox_non_retryable", "id", entry.ID, "game_id", entry.GameID, "path_key", entry.PathKey, "error", err)
 				outboxMu.Lock()

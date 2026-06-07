@@ -109,12 +109,3 @@ func consoleMode() bool {
 	}
 	return false
 }
-
-func minimizedMode() bool {
-	for _, a := range os.Args[1:] {
-		if a == "--minimized" {
-			return true
-		}
-	}
-	return false
-}

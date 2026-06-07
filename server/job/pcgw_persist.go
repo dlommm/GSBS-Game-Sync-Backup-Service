@@ -26,6 +26,18 @@ type PCGWSyncOptions struct {
 	ResumedFromRunID string
 	Notes            string
 	SkipStartRun     bool // use SyncRunID instead of StartPCGWSyncRun
+	// MaxPagesPerRun caps Phase 2 ingest budget per run (0 = use env/default).
+	MaxPagesPerRun int
+	// ResumeCatalogScan skips Phase 1 and goes straight to Phase 2 (resume from checkpoint).
+	ResumeCatalogScan bool
+	// ResumeQueueCursor is the Phase 2 queue position to resume from.
+	ResumeQueueCursor int
+	// SkipCatalogScan is true when running catalog-only (no Phase 2).
+	SkipIngestPhase bool
+	// RetryFailedOnly limits Phase 2 queue to failed/partial IDs only.
+	RetryFailedOnly bool
+	// RebuildManifestOnly skips all ingest and just bumps the manifest.
+	RebuildManifestOnly bool
 }
 
 // PCGWSyncProgress reports sync progress for SSE.
@@ -34,6 +46,8 @@ type PCGWSyncProgress struct {
 	TotalEstimate  int
 	Phase          string
 	GamesSkipped   int
+	QueueSize      int
+	QueueCursor    int
 	ETASeconds     int // set by runner when broadcasting
 }
 
@@ -49,8 +63,8 @@ func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client, reportPr
 }
 
 // PCGWSyncEx is PCGWSync with optional extended progress reporting.
+// It implements the two-phase pipeline: Phase 1 = catalog scan, Phase 2 = targeted ingest.
 func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, reportProgress ReportProgress, reportEx ReportProgressEx, opts PCGWSyncOptions) (int, error) {
-	const chunkSize = 100
 	mode := "incremental"
 	if opts.Full {
 		mode = "full"
@@ -74,7 +88,6 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 
 	stats := store.PCGWSyncRunStats{}
 	totalUpserted := 0
-	offset := opts.Offset
 	parseMsTotal := 0
 	parseCount := 0
 	filters := LoadPCGWFilters(ctx, st)
@@ -83,16 +96,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		_ = st.FinishPCGWSyncRun(context.Background(), runID, status, errMsg, stats)
 	}
 
-	report := func(pages, total int, phase string) {
-		if reportProgress != nil {
-			reportProgress(pages)
-		}
-		if reportEx != nil {
-			reportEx(PCGWSyncProgress{PagesProcessed: pages, TotalEstimate: total, Phase: phase, GamesSkipped: stats.GamesSkipped})
-		}
-		_ = st.UpdatePCGWSyncRunCheckpoint(ctx, runID, offset, stats)
-	}
-
+	// ─── Single-page mode (unchanged) ────────────────────────────────────────
 	if opts.SinglePage > 0 {
 		n, err := syncOnePage(ctx, st, client, runID, opts.SinglePage, pcgw.PageInfo{PageID: opts.SinglePage}, &stats, filters)
 		if err != nil {
@@ -104,81 +108,194 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		return bumpManifestAndReturn(ctx, st, n)
 	}
 
-	for {
+	// ─── Manifest rebuild only ────────────────────────────────────────────────
+	if opts.RebuildManifestOnly {
+		finishRun(JobSuccess, "")
+		return bumpManifestAndReturn(ctx, st, 0)
+	}
+
+	budget := opts.MaxPagesPerRun
+	if budget <= 0 {
+		budget = MaxPagesPerRun()
+	}
+
+	// ─── Phase 1: Catalog scan ────────────────────────────────────────────────
+	var phase1 types.Phase1Stats
+	if !opts.ResumeCatalogScan {
+		var err error
+		phase1, err = RunCatalogScan(ctx, st, client, runID, reportEx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				_ = st.UpdatePCGWSyncRunCheckpoint(ctx, runID, 0, stats)
+				finishRun(ctxStatus(ctx), ctx.Err().Error())
+				return totalUpserted, ctx.Err()
+			}
+			finishRun(JobFailed, err.Error())
+			return totalUpserted, err
+		}
+		stats.GamesTotal = phase1.RemoteTotalIDs
+	} else {
+		// Resuming into Phase 2: load Phase 1 stats from prior run.
+		if latest, err := st.GetLatestPCGWSyncRun(ctx); err == nil && latest != nil {
+			phase1.RemoteTotalIDs = latest.RemoteTotalIDs
+			phase1.CatalogHash = latest.CatalogHash
+			phase1.MissingLocalIDs = latest.MissingLocalIDs
+		}
+	}
+
+	if opts.SkipIngestPhase {
+		finishRun(JobSuccess, "")
+		return 0, nil
+	}
+
+	// ─── Catalog hash no-op optimization ─────────────────────────────────────
+	if !opts.Full && !opts.RetryFailedOnly && phase1.CatalogHash != "" {
+		if prev, err := getPreviousCatalogHash(ctx, st); err == nil && prev == phase1.CatalogHash {
+			// No new IDs and no known failures — skip Phase 2.
+			failedCount := 0
+			if ids, err := st.ListPCGWCatalogFailedPartial(ctx, 1, 0); err == nil {
+				failedCount = len(ids)
+			}
+			if failedCount == 0 {
+				log.Printf("pcgw sync: catalog hash unchanged, no pending failures — skipping Phase 2")
+				finishRun(JobSuccess, "")
+				return bumpManifestAndReturn(ctx, st, 0)
+			}
+		}
+	}
+
+	// ─── Phase 2: Build targeted queue ───────────────────────────────────────
+	var queue []int64
+
+	if !opts.RetryFailedOnly {
+		// Priority 1: missing IDs
+		missing, err := st.ListPCGWCatalogMissing(ctx, 0, 0)
+		if err != nil {
+			log.Printf("pcgw sync: list missing: %v", err)
+		} else {
+			queue = append(queue, missing...)
+		}
+	}
+
+	// Priority 2: failed/partial IDs
+	failedPartial, err := st.ListPCGWCatalogFailedPartial(ctx, 0, 0)
+	if err != nil {
+		log.Printf("pcgw sync: list failed/partial: %v", err)
+	} else {
+		// Deduplicate against already-queued IDs.
+		inQueue := make(map[int64]bool, len(queue))
+		for _, id := range queue {
+			inQueue[id] = true
+		}
+		for _, id := range failedPartial {
+			if !inQueue[id] {
+				queue = append(queue, id)
+				inQueue[id] = true
+			}
+		}
+	}
+
+	// Priority 3: changed rev IDs (only on full or incremental when not retry-only)
+	if !opts.RetryFailedOnly {
+		changedIDs, err := buildChangedQueue(ctx, st, client, filters)
+		if err != nil {
+			log.Printf("pcgw sync: build changed queue: %v", err)
+		} else {
+			inQueue := make(map[int64]bool, len(queue))
+			for _, id := range queue {
+				inQueue[id] = true
+			}
+			for _, id := range changedIDs {
+				if !inQueue[id] {
+					queue = append(queue, id)
+				}
+			}
+		}
+	}
+
+	queueSize := len(queue)
+	_ = st.UpdatePCGWSyncRunPhase2Progress(ctx, runID, 0, 0)
+
+	// Persist queue size into targeted_queue_size column.
+	if runID != "" {
+		_ = st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, types.Phase1Stats{
+			RemoteTotalIDs:  phase1.RemoteTotalIDs,
+			MissingLocalIDs: len(queue),
+			ExtraLocalIDs:   phase1.ExtraLocalIDs,
+			CatalogHash:     phase1.CatalogHash,
+			CompletedAt:     phase1.CompletedAt,
+		})
+	}
+
+	log.Printf("pcgw sync phase2: queue=%d budget=%d (resume_cursor=%d)", queueSize, budget, opts.ResumeQueueCursor)
+
+	// ─── Phase 2: Process queue with budget ───────────────────────────────────
+	startCursor := opts.ResumeQueueCursor
+	processed := 0
+
+	for i := startCursor; i < len(queue); i++ {
 		select {
 		case <-ctx.Done():
-			status := JobFailed
-			errMsg := ctx.Err().Error()
-			if errors.Is(ctx.Err(), context.Canceled) {
-				status = JobCanceled
-			}
-			finishRun(status, errMsg)
+			_ = st.UpdatePCGWSyncRunPhase2Progress(ctx, runID, processed, i)
+			finishRun(ctxStatus(ctx), ctx.Err().Error())
 			return totalUpserted, ctx.Err()
 		default:
 		}
 
-		pages, err := client.ListGamePages(chunkSize, offset)
+		if budget > 0 && processed >= budget {
+			// Budget exhausted — save checkpoint for resume.
+			_ = st.UpdatePCGWSyncRunPhase2Progress(ctx, runID, processed, i)
+			finishRun(JobInterrupted, "budget exhausted")
+			log.Printf("pcgw sync: budget %d exhausted at cursor %d/%d", budget, i, queueSize)
+			return bumpManifestAndReturn(ctx, st, totalUpserted)
+		}
+
+		pageID := queue[i]
+
+		if reportProgress != nil {
+			reportProgress(processed)
+		}
+		if reportEx != nil {
+			reportEx(PCGWSyncProgress{
+				PagesProcessed: processed,
+				TotalEstimate:  queueSize,
+				Phase:          "ingest",
+				GamesSkipped:   stats.GamesSkipped,
+				QueueSize:      queueSize,
+				QueueCursor:    i,
+			})
+		}
+
+		// Determine title from catalog (best-effort).
+		pageInfo := pcgw.PageInfo{PageID: pageID}
+
+		start := time.Now()
+		n, err := syncOnePage(ctx, st, client, runID, pageID, pageInfo, &stats, filters)
+		parseMsTotal += int(time.Since(start).Milliseconds())
+		parseCount++
+		processed++
+
 		if err != nil {
-			finishRun(JobFailed, err.Error())
-			return totalUpserted, err
+			log.Printf("pcgw sync: page %d: %v", pageID, err)
+			stats.GamesFailed++
+			_ = st.IncrementCatalogRetry(ctx, pageID, err.Error())
+			continue
 		}
-		if len(pages) == 0 {
-			break
+		// Clear dead-letter on success.
+		_ = st.ClearCatalogDeadLetter(ctx, pageID)
+		totalUpserted += n
+
+		// Checkpoint every 100 pages.
+		if processed%100 == 0 {
+			_ = st.UpdatePCGWSyncRunPhase2Progress(ctx, runID, processed, i+1)
 		}
-		stats.GamesTotal = offset + len(pages)
-		report(offset+len(pages), stats.GamesTotal, "listing")
-
-		for _, p := range pages {
-			select {
-			case <-ctx.Done():
-				status := JobFailed
-				errMsg := ctx.Err().Error()
-				if errors.Is(ctx.Err(), context.Canceled) {
-					status = JobCanceled
-				}
-				finishRun(status, errMsg)
-				return totalUpserted, ctx.Err()
-			default:
-			}
-
-			if !opts.Full {
-				if skip, err := shouldSkipPage(ctx, st, client, p.PageID); err == nil && skip {
-					stats.GamesSkipped++
-					continue
-				}
-			}
-
-			if filters.ShouldSkipTitle(p.Title) {
-				stats.GamesSkipped++
-				continue
-			}
-
-			start := time.Now()
-			n, err := syncOnePage(ctx, st, client, runID, p.PageID, p, &stats, filters)
-			parseMsTotal += int(time.Since(start).Milliseconds())
-			parseCount++
-			if err != nil {
-				log.Printf("pcgw sync: page %d %q: %v", p.PageID, p.Title, err)
-				stats.GamesFailed++
-				continue
-			}
-			totalUpserted += n
-			switch {
-			case n >= 0:
-				// status set in persist
-			}
-		}
-
-		report(offset+len(pages), stats.GamesTotal, "syncing")
-		if len(pages) < chunkSize {
-			break
-		}
-		offset += len(pages)
 	}
 
 	if parseCount > 0 {
 		stats.AvgParseMs = parseMsTotal / parseCount
 	}
+	_ = st.UpdatePCGWSyncRunPhase2Progress(ctx, runID, processed, len(queue))
+
 	status := JobSuccess
 	if stats.GamesFailed > 0 {
 		status = "partial"
@@ -187,6 +304,73 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	log.Printf("pcgw sync: done, upserted %d location entries (ok=%d partial=%d failed=%d skipped=%d)",
 		totalUpserted, stats.GamesOK, stats.GamesPartial, stats.GamesFailed, stats.GamesSkipped)
 	return bumpManifestAndReturn(ctx, st, totalUpserted)
+}
+
+// ctxStatus returns the job status string based on context error.
+func ctxStatus(ctx context.Context) string {
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return JobCanceled
+	}
+	return JobInterrupted
+}
+
+// getPreviousCatalogHash retrieves the catalog_hash from the last completed sync run.
+func getPreviousCatalogHash(ctx context.Context, st store.Store) (string, error) {
+	runs, err := st.ListPCGWSyncRuns(ctx, 5)
+	if err != nil {
+		return "", err
+	}
+	for _, r := range runs {
+		if r.Status == JobSuccess || r.Status == "partial" {
+			if r.CatalogHash != "" {
+				return r.CatalogHash, nil
+			}
+		}
+	}
+	return "", nil
+}
+
+// buildChangedQueue returns page IDs from the catalog that have changed rev IDs
+// or are not yet in pcgw_games (the "rev-check changed" set, priority 3).
+// This is the set where shouldSkipPage returns false — i.e. pages we do NOT skip.
+func buildChangedQueue(ctx context.Context, st store.Store, client *pcgw.Client, filters PCGWFilters) ([]int64, error) {
+	// We retrieve pages from the catalog that exist in pcgw_games but may have changed.
+	// Use an offset-based scan; for very large catalogs this is the slow path.
+	var changed []int64
+	offset := 0
+	const chunkSize = 200
+	for {
+		select {
+		case <-ctx.Done():
+			return changed, ctx.Err()
+		default:
+		}
+		rows, _, err := st.ListPCGWGames(ctx, store.PCGWGameListFilter{
+			ParseStatus: "ok",
+			Limit:       chunkSize,
+			Offset:      offset,
+		})
+		if err != nil {
+			return changed, err
+		}
+		if len(rows) == 0 {
+			break
+		}
+		for _, g := range rows {
+			if filters.ShouldSkipTitle(g.Title) {
+				continue
+			}
+			skip, err := shouldSkipPage(ctx, st, client, g.PageID)
+			if err != nil || !skip {
+				changed = append(changed, g.PageID)
+			}
+		}
+		if len(rows) < chunkSize {
+			break
+		}
+		offset += len(rows)
+	}
+	return changed, nil
 }
 
 func bumpManifestAndReturn(ctx context.Context, st store.Store, n int) (int, error) {

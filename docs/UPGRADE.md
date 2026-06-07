@@ -20,10 +20,10 @@ docker compose up -d
 Pin a version instead of `:latest` in production:
 
 ```yaml
-image: dendlomm/gsbs-server:1.0.17
+image: dendlomm/gsbs-server:2.0.0
 ```
 
-After upgrading to **v1.0.17+**, the PCGW mirror schema expands. The server migrates SQLite on startup; allow extra time on first boot. Trigger an initial PCGW sync from **Admin → PCGW** if the manifest is empty.
+After upgrading to **v2.0.0**, the server runs schema migrations on startup; back up your DB first (see [DOCKER.md](DOCKER.md#data-backup)). Clients with tokens created before 2.0 continue to work unless a password change or 2FA disable occurred (those now revoke all tokens — re-login required).
 
 ### Binary
 
@@ -58,7 +58,12 @@ Installers are for first install; ongoing updates use the raw binary via auto-up
 
 | Version | Change |
 |---------|--------|
-| **1.0.17** | Manifest v2 (`GET /api/manifest/v2`); clients prefer v2. Full PCGW mirror and admin UI. Upgrade server before clients for best discovery. |
+| **2.0.0** | Security headers, panic recovery, fail-closed quota, disabled-user session cutoff. `RevokeAllClientTokens` on password change / 2FA disable — re-login required after credential changes. Updater JSON tag fix (version checks were silently broken). Windows fsnotify overflow rescan + locked-file outbox enqueue. `ErrUnauthorized` sentinel stops outbox on 401 — re-login to resume. |
+| **1.6.0** | Startup reconciliation upload; local status dashboard; tray browser login. |
+| **1.5.0** | Cross-OS save sync (`path_key` OS-neutral); Proton/compatdata resolution; versioned DB migrations; optimistic-concurrency push (409 on conflict). |
+| **1.2.3** | Auto-detect Steam user ID; per-game install path overrides; admin analytics HTMX PCGW search. |
+| **1.1.0** | Manifest v2 (ETag/304, `deleted_game_ids`); discovery v2 index; `POST /api/clients/revoke`; session GC. |
+| **1.0.17** | Full PCGW mirror (`GET /api/manifest/v2`); admin PCGW UI; `cmd/pcgw-sync`, `cmd/pcgw-fetch`. Upgrade server before clients for best discovery. |
 | **1.0.16** | WebUI template fixes for Docker/production embeds. |
 | **1.0.15** | WebUI embed fix for Docker (all top-level templates). |
 | **1.0.14** | Client auto-update, Linux packages, Windows installer. |

@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 16
+const schemaVersion = 17
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -114,6 +114,7 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{14, s.stepSaveFilesystem},
 		{15, s.stepAdminSettings},
 		{16, s.stepMergeOSSlots},
+		{17, s.stepPCGWCatalog},
 	}
 }
 
@@ -1062,5 +1063,46 @@ func (s *sqliteStore) stepMergeOSSlots(tx *sql.Tx) error {
 
 	log.Printf("GSBS migrate step 16: merged %d slot(s), preserved %d version(s), updated %d path_key(s)",
 		totalMerged, totalVersions, totalUpdated)
+	return nil
+}
+
+// stepPCGWCatalog is migration step 17.
+// Creates the pcgw_catalog table and extends pcgw_sync_runs with two-phase fields.
+func (s *sqliteStore) stepPCGWCatalog(tx *sql.Tx) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS pcgw_catalog (
+			page_id INTEGER PRIMARY KEY,
+			title TEXT NOT NULL DEFAULT '',
+			first_seen_at TEXT NOT NULL,
+			last_seen_at TEXT NOT NULL,
+			last_seen_run_id TEXT NOT NULL DEFAULT '',
+			last_seen_rev_id INTEGER NOT NULL DEFAULT 0,
+			dead_letter INTEGER NOT NULL DEFAULT 0,
+			dead_letter_reason TEXT NOT NULL DEFAULT '',
+			retry_count INTEGER NOT NULL DEFAULT 0
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_pcgw_catalog_dead_letter ON pcgw_catalog(dead_letter)`,
+		`CREATE INDEX IF NOT EXISTS idx_pcgw_catalog_last_seen ON pcgw_catalog(last_seen_at)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := tx.Exec(stmt); err != nil {
+			return fmt.Errorf("step pcgw_catalog create: %w", err)
+		}
+	}
+	for _, col := range []string{
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN remote_total_ids INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN missing_local_ids INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN extra_local_ids INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN targeted_queue_size INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN targeted_processed INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN phase1_completed_at TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN catalog_hash TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN checkpoint_phase TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN checkpoint_queue_cursor INTEGER NOT NULL DEFAULT 0`,
+	} {
+		if _, err := tx.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate") {
+			return fmt.Errorf("step pcgw_catalog alter: %w", err)
+		}
+	}
 	return nil
 }

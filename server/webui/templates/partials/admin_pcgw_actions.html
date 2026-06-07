@@ -1,0 +1,230 @@
+{{define "partials/admin_pcgw_actions.html"}}
+<div class="pcgw-actions-section">
+
+  {{/* ── Status bar ── */}}
+  <div class="panel panel-compact" style="margin-bottom:1rem;">
+    <div class="panel-header"><h3>PCGW Status</h3></div>
+    <div class="config-grid">
+      <div class="config-item">
+        <span class="config-key">Last run</span>
+        <span class="config-val">
+          {{if .LatestSyncRun}}
+            {{template "partials/job_status_badge.html" .LatestSyncRun.Status}}
+            <span class="cell-muted" style="margin-left:.5rem;">{{formatTime .LatestSyncRun.StartedAt}}</span>
+          {{else}}—{{end}}
+        </span>
+      </div>
+      <div class="config-item">
+        <span class="config-key">Remote / Local / Missing</span>
+        <span class="config-val">{{.CatalogStats.RemoteTotal}} / {{.CatalogStats.LocalTotal}} / {{.CatalogStats.MissingLocal}}</span>
+      </div>
+      <div class="config-item">
+        <span class="config-key">Dead-letter</span>
+        <span class="config-val">
+          {{if gt .CatalogStats.DeadLetter 0}}
+            <a href="/admin/pcgw?status=failed">{{.CatalogStats.DeadLetter}}</a>
+          {{else}}0{{end}}
+        </span>
+      </div>
+      {{if .LatestSyncRun}}
+      {{if gt .LatestSyncRun.TargetedQueueSize 0}}
+      <div class="config-item">
+        <span class="config-key">Last queue size</span>
+        <span class="config-val">{{.LatestSyncRun.TargetedQueueSize}}</span>
+      </div>
+      {{end}}
+      {{end}}
+      {{if .JobRunning}}
+      <div class="config-item" style="grid-column:1/-1;">
+        <span class="config-key">Active sync</span>
+        <span class="config-val">
+          <span class="badge-running">Running…</span>
+          <span class="cell-muted" style="margin-left:.5rem;">Phase: <strong>{{if .JobPhase}}{{.JobPhase}}{{else}}listing{{end}}</strong></span>
+          {{if gt .JobProgressTotal 0}}
+          <div class="quota-bar-track" style="margin-top:.5rem;max-width:300px;">
+            <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgress .JobProgressTotal)}}%;"></div>
+          </div>
+          <span class="cell-muted">{{.JobProgress}} / {{.JobProgressTotal}}</span>
+          {{end}}
+        </span>
+      </div>
+      {{end}}
+    </div>
+  </div>
+
+  {{/* ── Sync group ── */}}
+  <div class="panel panel-compact" style="margin-bottom:1rem;">
+    <div class="panel-header"><h3>Sync</h3></div>
+    <div class="panel-actions actions-stack" style="padding:0 1.25rem 1rem;">
+
+      {{if .JobRunning}}
+      <span class="badge-running">Sync in progress…</span>
+      <form method="post" action="/admin/jobs/pcgw/cancel" class="inline-form">
+        <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+        <button type="submit" class="btn-ghost-sm">Cancel</button>
+      </form>
+      {{else}}
+
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+        <form method="post" action="/admin/pcgw/sync" class="inline-form">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <button type="submit" class="btn-primary-sm">Run Incremental Sync</button>
+        </form>
+        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+          title="Scope: all pcgw_* tables + catalog | Duration: minutes to hours | Reversible: no (data added) | Use: routine daily/weekly sync">?</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
+        <form method="post" action="/admin/pcgw/sync" class="inline-form"
+          onsubmit="return confirm('Force a full PCGW resync? This bypasses resume and may take many hours.');">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <input type="hidden" name="full" value="1">
+          <button type="submit" class="btn-ghost-sm">Run Full Sync</button>
+        </form>
+        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+          title="Scope: all pcgw_* tables | Duration: many hours (~54k pages) | Reversible: no | Use: after wipe or full refresh needed">?</span>
+      </div>
+
+      {{end}}{{/* end not running */}}
+    </div>
+  </div>
+
+  {{/* ── Maintenance group ── */}}
+  <div class="panel panel-compact" style="margin-bottom:1rem;">
+    <div class="panel-header"><h3>Maintenance</h3></div>
+    <div class="panel-actions actions-stack" style="padding:0 1.25rem 1rem;">
+
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+        <form method="post" action="/admin/pcgw/sync/retry-failed" class="inline-form">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Retry Failed Items</button>
+        </form>
+        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+          title="Scope: failed/partial entries in pcgw_games | Duration: short | Reversible: no | Use: after fixing a parse issue">?</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
+        <form method="post" action="/admin/pcgw/rebuild-manifest" class="inline-form">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Rebuild PCGW Manifest Projection</button>
+        </form>
+        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+          title="Scope: game_save_locations (pcgw source rows) | Duration: fast | Reversible: no | Use: after schema/path changes">?</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
+        <form method="post" action="/admin/pcgw/sync/catalog-only" class="inline-form">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Refresh Catalog Only</button>
+        </form>
+        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+          title="Scope: pcgw_catalog only | Duration: fast (~1-2 min) | Reversible: no (non-destructive) | Use: check current backlog size before a sync">?</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
+        <form method="post" action="/admin/pcgw/purge-wikitext" class="inline-form">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <button type="submit" class="btn-ghost-sm">Purge Stored Wikitext</button>
+        </form>
+        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+          title="Scope: full_wikitext_zstd column in pcgw_metadata | Duration: fast | Reversible: no (re-fetch needed) | Use: free disk space">?</span>
+      </div>
+
+    </div>
+  </div>
+
+  {{/* ── Destructive group ── */}}
+  <div class="panel panel-compact panel-danger" style="margin-bottom:1rem;border-color:var(--color-danger,#dc3545);">
+    <div class="panel-header" style="border-bottom-color:var(--color-danger,#dc3545);"><h3 style="color:var(--color-danger,#dc3545);">Destructive Actions</h3></div>
+    <div class="panel-actions actions-stack" style="padding:0 1.25rem 1rem;">
+
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+        <button type="button" class="btn-danger-sm"
+          {{if .JobRunning}}disabled{{end}}
+          onclick="showWipeModal('mirror_only')">Wipe PCGW Mirror Only</button>
+        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+          title="Scope: pcgw_games + pcgw_* section tables + pcgw_metadata | Reversible: no (must re-sync) | Use: reset mirror before a clean re-import">?</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
+        <button type="button" class="btn-danger-sm"
+          {{if .JobRunning}}disabled{{end}}
+          onclick="showWipeModal('mirror_and_manifest')">Wipe PCGW + Manifest Data</button>
+        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+          title="Scope: all pcgw_* + game_save_locations (pcgw source) | Reversible: no | Use: full clean slate before re-importing from scratch">?</span>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+{{/* ── Wipe confirmation modal ── */}}
+<div class="modal fade" id="wipeModal" tabindex="-1" aria-labelledby="wipeModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="wipeModalLabel">Confirm PCGW Wipe</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="wipePreflight" class="config-grid" style="margin-bottom:1rem;">
+          <div class="config-item"><span class="config-key">Loading…</span><span class="config-val"></span></div>
+        </div>
+        <p class="text-danger" style="font-weight:600;">This action is <strong>irreversible</strong>. Type <code>WIPE PCGW</code> to confirm:</p>
+        <input type="text" id="wipeConfirmInput" class="search-input" placeholder="WIPE PCGW" style="width:100%;margin-top:.5rem;">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form id="wipeForm" method="post" action="/admin/pcgw/wipe" class="inline-form">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <input type="hidden" id="wipeModeInput" name="mode" value="">
+          <button type="submit" id="wipeSubmitBtn" class="btn btn-danger" disabled>Wipe</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showWipeModal(mode) {
+  document.getElementById('wipeModeInput').value = mode;
+  document.getElementById('wipeConfirmInput').value = '';
+  document.getElementById('wipeSubmitBtn').disabled = true;
+
+  // Load preflight counts.
+  fetch('/admin/pcgw/wipe-preflight')
+    .then(r => r.json())
+    .then(d => {
+      const el = document.getElementById('wipePreflight');
+      let html = '';
+      html += `<div class="config-item"><span class="config-key">PCGW games</span><span class="config-val">${d.pcgw_games}</span></div>`;
+      html += `<div class="config-item"><span class="config-key">PCGW game data rows</span><span class="config-val">${d.pcgw_game_data}</span></div>`;
+      html += `<div class="config-item"><span class="config-key">Section rows</span><span class="config-val">${d.pcgw_sections}</span></div>`;
+      html += `<div class="config-item"><span class="config-key">Metadata rows</span><span class="config-val">${d.pcgw_metadata}</span></div>`;
+      if (mode === 'mirror_and_manifest') {
+        html += `<div class="config-item"><span class="config-key">Save locations (pcgw)</span><span class="config-val text-danger">${d.game_save_locations}</span></div>`;
+      }
+      el.innerHTML = html;
+    })
+    .catch(() => {
+      document.getElementById('wipePreflight').innerHTML = '<p class="cell-muted">Could not load preflight counts.</p>';
+    });
+
+  // Show modal.
+  const modal = new bootstrap.Modal(document.getElementById('wipeModal'));
+  modal.show();
+
+  // Enable confirm button only when input matches.
+  const input = document.getElementById('wipeConfirmInput');
+  const btn = document.getElementById('wipeSubmitBtn');
+  input.oninput = () => { btn.disabled = input.value !== 'WIPE PCGW'; };
+}
+
+// Initialize Bootstrap tooltips for PCGW action elements.
+document.addEventListener('DOMContentLoaded', () => {
+  const els = document.querySelectorAll('.pcgw-actions-section [data-bs-toggle="tooltip"]');
+  els.forEach(el => { try { new bootstrap.Tooltip(el); } catch(e) {} });
+});
+</script>
+{{end}}

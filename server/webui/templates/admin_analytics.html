@@ -137,13 +137,29 @@
 {{if eq .Tab "pcgw"}}
 <div class="analytics-panel active">
   <section class="analytics-cards stats-row stats-row-6" aria-label="PCGW catalog summary">
-    <div class="stat-card analytics-card"><div class="stat-value">{{.PCGWStats.TotalGames}}</div><div class="stat-label">Catalog games</div></div>
-    <div class="stat-card analytics-card"><div class="stat-value">{{.PCGWStats.OK}}</div><div class="stat-label">Parse OK</div></div>
-    <div class="stat-card analytics-card"><div class="stat-value">{{.PCGWStats.Partial}}</div><div class="stat-label">Partial</div></div>
-    <div class="stat-card analytics-card"><div class="stat-value">{{.PCGWStats.Failed}}</div><div class="stat-label">Failed</div></div>
-    <div class="stat-card analytics-card"><div class="stat-value">{{.PCGWStats.Pending}}</div><div class="stat-label">Pending</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">{{.CatalogStats.RemoteTotal}}</div><div class="stat-label">Remote total IDs</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">{{.CatalogStats.LocalTotal}}</div><div class="stat-label">Local total IDs</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">{{.CatalogStats.MissingLocal}}</div><div class="stat-label">Missing IDs</div></div>
+    <div class="stat-card analytics-card"><div class="stat-value">{{.CatalogStats.DeadLetter}}</div><div class="stat-label">Dead-letter</div></div>
+    {{if .LatestSyncRun}}<div class="stat-card analytics-card"><div class="stat-value">{{.LatestSyncRun.TargetedQueueSize}}</div><div class="stat-label">Last queue size</div></div>{{else}}<div class="stat-card analytics-card"><div class="stat-value">—</div><div class="stat-label">Last queue size</div></div>{{end}}
     <div class="stat-card analytics-card"><div class="stat-value">v{{.PCGWStats.ManifestVersion}}</div><div class="stat-label">Manifest version</div></div>
   </section>
+
+  {{if .LatestSyncRun}}
+  <section class="panel panel-compact">
+    <div class="panel-header"><h2>Latest sync run details</h2></div>
+    <div class="config-grid">
+      <div class="config-item"><span class="config-key">Status</span><span class="config-val">{{.LatestSyncRun.Status}}</span></div>
+      <div class="config-item"><span class="config-key">Started</span><span class="config-val">{{formatTime .LatestSyncRun.StartedAt}}</span></div>
+      {{if .LatestSyncRun.Phase1CompletedAt}}<div class="config-item"><span class="config-key">Phase 1 completed</span><span class="config-val">{{formatTime .LatestSyncRun.Phase1CompletedAt}}</span></div>{{end}}
+      {{if .LatestSyncRun.FinishedAt}}<div class="config-item"><span class="config-key">Finished</span><span class="config-val">{{formatTime .LatestSyncRun.FinishedAt}}</span></div>{{end}}
+      <div class="config-item"><span class="config-key">Remote IDs</span><span class="config-val">{{.LatestSyncRun.RemoteTotalIDs}}</span></div>
+      <div class="config-item"><span class="config-key">Missing IDs (phase 1)</span><span class="config-val">{{.LatestSyncRun.MissingLocalIDs}}</span></div>
+      <div class="config-item"><span class="config-key">Queue size</span><span class="config-val">{{.LatestSyncRun.TargetedQueueSize}}</span></div>
+      <div class="config-item"><span class="config-key">Pages processed</span><span class="config-val">{{.LatestSyncRun.TargetedProcessed}}</span></div>
+    </div>
+  </section>
+  {{end}}
 
   {{if gt .PCGWStats.TotalGames 0}}
   <section class="panel panel-compact">
