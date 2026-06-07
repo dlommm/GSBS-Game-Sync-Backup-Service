@@ -97,6 +97,26 @@ Build only (no release upload):
 ./script/release-assets.sh v1.0.14 dist
 ```
 
+## Wiki sync
+
+The GitHub Wiki is automatically synced from `docs/wiki/` in the repository.
+
+| Trigger | What runs |
+|---|---|
+| Push to `main` (docs files changed) | `sync-wiki.yml` runs `script/sync-wiki.sh`, publishes updated pages |
+| Push of `vX.Y.Z` tag | Same workflow runs from the tagged commit — wiki reflects the release snapshot |
+| `workflow_dispatch` | Manual re-sync or dry-run: `gh workflow run sync-wiki.yml` or `gh workflow run sync-wiki.yml -f dry_run=true` |
+
+**Source of truth:** `docs/wiki/*.md`. Do not edit wiki pages directly on the GitHub Wiki web UI — changes will be overwritten on the next sync.
+
+**Quality gate:** `script/check-wiki.sh` runs before every sync. It checks required pages, level-1 headings, Related pages sections, and duplicate upgrade procedures. Sync does not run if the check fails.
+
+**Rollback a bad wiki publish:**
+1. Fix the source in `docs/wiki/`.
+2. Push to `main` — the workflow re-runs automatically.
+3. Or: `gh workflow run sync-wiki.yml` to trigger immediately.
+4. As a last resort, use the GitHub Wiki web UI to revert to a previous page revision.
+
 ## Version policy
 
 - Tags: `vMAJOR.MINOR.PATCH` (semver).
