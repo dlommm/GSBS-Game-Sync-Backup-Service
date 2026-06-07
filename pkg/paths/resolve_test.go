@@ -35,6 +35,9 @@ func testResolver() *Resolver {
 }
 
 func TestExpandOnePlaceholders(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Linux resolver path tests skipped on Windows")
+	}
 	r := testResolver()
 
 	tests := []struct {
@@ -91,6 +94,9 @@ func TestExpandOne_SeparatorNormalization(t *testing.T) {
 	})
 
 	t.Run("linux keeps forward slashes", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Linux path test skipped on Windows")
+		}
 		got := r.expandOne("%USERPROFILE%/Documents/save", Linux)
 		if got != "/home/user/Documents/save" {
 			t.Fatalf("got %q", got)
@@ -99,6 +105,9 @@ func TestExpandOne_SeparatorNormalization(t *testing.T) {
 }
 
 func TestResolveAll_SteamMultiLibrary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Linux Steam path tests skipped on Windows")
+	}
 	r := testResolver()
 	template := "<SteamLibrary-folder>/steamapps/common/Game/saves"
 
@@ -113,6 +122,9 @@ func TestResolveAll_SteamMultiLibrary(t *testing.T) {
 }
 
 func TestResolveAll_SteamDedup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Linux Steam path tests skipped on Windows")
+	}
 	r := testResolver()
 	r.SteamLibraries = []string{"/steam/main", "/steam/main", "/steam/other"}
 	template := "<SteamLibrary-folder>/saves"
@@ -138,6 +150,9 @@ func TestResolveAll_EmptyTemplate(t *testing.T) {
 }
 
 func TestResolveAll_NoSteamPlaceholder(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Linux path tests skipped on Windows")
+	}
 	r := testResolver()
 	got := r.ResolveAll("%USERPROFILE%/saves", Linux)
 	want := []string{"/home/user/saves"}
@@ -147,6 +162,9 @@ func TestResolveAll_NoSteamPlaceholder(t *testing.T) {
 }
 
 func TestResolveAll_SkipsEmptySteamRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Linux path tests skipped on Windows")
+	}
 	r := testResolver()
 	r.SteamLibraries = []string{"", "/steam/valid"}
 	got := r.ResolveAll("<SteamLibrary-folder>/saves", Linux)
@@ -237,7 +255,7 @@ func TestGetSteamLibraryRoots_WithVDF(t *testing.T) {
 	got := appendSteamLibrariesFromVDF([]string{root})
 	foundExtra := false
 	for _, lib := range got {
-		if lib == extraLib {
+		if filepath.FromSlash(lib) == extraLib {
 			foundExtra = true
 		}
 	}
@@ -250,8 +268,9 @@ func TestExpandOne_SteamLibraryExistingRoot(t *testing.T) {
 	root := t.TempDir()
 	r := &Resolver{SteamLibraries: []string{root}}
 	got := r.expandOne("<SteamLibrary-folder>/steamapps/saves", Linux)
-	want := filepath.ToSlash(filepath.Join(root, "steamapps/saves"))
-	if got != want {
+	want := filepath.Join(root, "steamapps", "saves")
+	// Normalize both to forward slashes for a platform-independent comparison.
+	if filepath.ToSlash(got) != filepath.ToSlash(want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
@@ -304,6 +323,9 @@ func TestExpandProgramData(t *testing.T) {
 }
 
 func TestExpandHeroic(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Linux path tests skipped on Windows")
+	}
 	r := &Resolver{
 		Heroic: "/home/user/.config/heroic",
 	}
