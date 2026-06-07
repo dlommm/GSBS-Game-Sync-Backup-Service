@@ -8,7 +8,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -23,6 +25,20 @@ var (
 	setupURL   string
 )
 
+type localNavLink struct {
+	Key   string
+	Label string
+	Href  string
+}
+
+var localNavLinks = []localNavLink{
+	{Key: "dashboard", Label: "Status", Href: "/dashboard"},
+	{Key: "games", Label: "Games", Href: "/games"},
+	{Key: "quick-actions", Label: "Actions", Href: "/quick-actions"},
+	{Key: "help", Label: "Help", Href: "/help"},
+	{Key: "setup", Label: "Setup", Href: "/"},
+}
+
 // StartSetupServer starts a local HTTP server for the setup/login page. Call from tray onReady.
 // Listens on 127.0.0.1 only. Returns the base URL (e.g. http://127.0.0.1:41234) or "" if no port bound.
 func StartSetupServer() string {
@@ -32,6 +48,10 @@ func StartSetupServer() string {
 	mux.HandleFunc("/open-log", handleOpenLog)
 	mux.HandleFunc("/status", handleSetupStatus)
 	mux.HandleFunc("/dashboard", handleDashboardPage)
+	mux.HandleFunc("/quick-actions", handleQuickActionsPage)
+	mux.HandleFunc("/help", handleHelpPage)
+	mux.HandleFunc("/about", handleAboutPage)
+	mux.HandleFunc("/client-logo", handleClientLogo)
 	mux.HandleFunc("/api/sync-now", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "POST only", http.StatusMethodNotAllowed)
@@ -73,6 +93,75 @@ func GetSetupURL() string {
 	setupURLMu.Lock()
 	defer setupURLMu.Unlock()
 	return setupURL
+}
+
+func localBrandHTML(title, subtitle string) string {
+	return fmt.Sprintf(`
+<div class="mb-6 flex items-center gap-3">
+  <img src="/client-logo" alt="GSBS logo" class="h-11 w-11 rounded-xl object-cover ring-1 ring-emerald-200 shadow-sm dark:ring-emerald-800" />
+  <div>
+    <h1 class="text-xl font-bold text-gray-900 dark:text-white">%s</h1>
+    <p class="text-xs text-gray-500 dark:text-gray-400">%s</p>
+  </div>
+</div>`, htmlEsc(title), htmlEsc(subtitle))
+}
+
+func localNavHTML(active string) string {
+	items := make([]string, 0, len(localNavLinks))
+	for _, link := range localNavLinks {
+		className := "whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white sm:px-3 sm:py-2 sm:text-sm"
+		if link.Key == active {
+			className = "whitespace-nowrap rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white shadow-sm sm:px-3 sm:py-2 sm:text-sm"
+		}
+		items = append(items, fmt.Sprintf(`<a href="%s" class="%s">%s</a>`, htmlEsc(link.Href), className, htmlEsc(link.Label)))
+	}
+	return fmt.Sprintf(`
+<header class="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-gray-700 dark:bg-gray-800/95">
+  <div class="mx-auto max-w-5xl px-3 py-2.5 sm:px-4 sm:py-3">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="flex min-w-0 items-center gap-2">
+        <img src="/client-logo" alt="GSBS logo" class="h-7 w-7 shrink-0 rounded-md object-cover ring-1 ring-emerald-200 dark:ring-emerald-800 sm:h-8 sm:w-8" />
+        <span class="truncate text-sm font-semibold text-gray-900 dark:text-white">GSBS Local Client</span>
+      </div>
+      <a href="/about" class="whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white sm:text-sm">
+        About
+      </a>
+    </div>
+    <nav class="mt-2 flex flex-wrap items-center gap-1.5 sm:gap-2">%s</nav>
+  </div>
+</header>`, strings.Join(items, ""))
+}
+
+func resolveClientLogoPath() string {
+	candidates := []string{
+		filepath.Join("assets", "client-logo.png"),
+		filepath.Join("assets", "client-logo.jpg"),
+		filepath.Join("assets", "logo.png"),
+	}
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "assets", "client-logo.png"),
+			filepath.Join(exeDir, "assets", "client-logo.jpg"),
+			filepath.Join(exeDir, "assets", "logo.png"),
+		)
+	}
+	for _, p := range candidates {
+		st, err := os.Stat(p)
+		if err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+func handleClientLogo(w http.ResponseWriter, r *http.Request) {
+	if p := resolveClientLogoPath(); p != "" {
+		http.ServeFile(w, r, p)
+		return
+	}
+	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+	w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#059669"/><path d="M15 24v10h2.2m29 4A21 21 0 0 0 17.2 34M17.2 34H29m20 18V42h-2.2m0 0A21 21 0 0 1 17 37.5M46.8 42H35" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`))
 }
 
 func handleSetupPage(w http.ResponseWriter, r *http.Request) {
@@ -128,10 +217,10 @@ type setupStatusResponse struct {
 	ConflictCount  int      `json:"conflict_count"`
 	WatchedPaths   int      `json:"watched_paths"`
 	// Updater fields
-	UpdateLastCheckedAt string `json:"update_last_checked_at,omitempty"`
+	UpdateLastCheckedAt  string `json:"update_last_checked_at,omitempty"`
 	UpdateLastCheckedAgo string `json:"update_last_checked_ago,omitempty"`
-	UpdateStatus        string `json:"update_status,omitempty"` // "up_to_date", "available", "checking", ""
-	UpdateAvailableTag  string `json:"update_available_tag,omitempty"`
+	UpdateStatus         string `json:"update_status,omitempty"` // "up_to_date", "available", "checking", ""
+	UpdateAvailableTag   string `json:"update_available_tag,omitempty"`
 }
 
 func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
@@ -225,7 +314,28 @@ func handleOpenLog(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<html><head><title>Log</title></head><body><p>Opening log file.</p><p>Path: %s</p><p><a href="/">Back to setup</a></p></body></html>`, htmlEsc(logPath))
+	page := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GSBS — Open log</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={darkMode:'media'}</script>
+</head>
+<body class="min-h-full bg-gray-50 dark:bg-gray-900">
+%s
+<main class="mx-auto max-w-3xl px-4 py-8">
+  %s
+  <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+    <p class="text-sm text-gray-700 dark:text-gray-300">Opening your local client log in the default app.</p>
+    <p class="mt-2 break-all text-xs text-gray-500 dark:text-gray-400">%s</p>
+    <p class="mt-4 text-xs text-gray-500 dark:text-gray-400">If nothing opens, copy this path and open it manually.</p>
+  </div>
+</main>
+</body>
+</html>`, localNavHTML("help"), localBrandHTML("Open client log", "Troubleshoot sync and watcher issues"), htmlEsc(logPath))
+	w.Write([]byte(page))
 }
 
 func writeSetupHTML(w http.ResponseWriter, serverURL, clientName, errMsg string, success, done bool) {
@@ -301,18 +411,7 @@ func writeSetupHTML(w http.ResponseWriter, serverURL, clientName, errMsg string,
 <div class="flex min-h-full items-center justify-center p-4">
   <div class="w-full max-w-md">
 
-    <div class="mb-6 flex items-center gap-3">
-      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 shadow">
-        <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-        </svg>
-      </div>
-      <div>
-        <h1 class="text-xl font-bold text-gray-900 dark:text-white">GSBS Setup</h1>
-        <p class="text-xs text-gray-500 dark:text-gray-400">Game Sync &amp; Backup Service</p>
-      </div>
-    </div>
+    %s
 
     <div class="mb-6 flex items-center gap-2 text-xs font-medium">
       <span class="rounded-full bg-emerald-600 px-2.5 py-0.5 text-white">1 — Connect</span>
@@ -376,6 +475,8 @@ func writeSetupHTML(w http.ResponseWriter, serverURL, clientName, errMsg string,
       <a href="/dashboard" class="hover:underline">Local status</a>
       &nbsp;·&nbsp;
       <a href="/games" class="hover:underline">Add a game</a>
+      &nbsp;·&nbsp;
+      <a href="/help" class="hover:underline">Help</a>
     </p>
   </div>
 </div>
@@ -393,7 +494,7 @@ function validateForm(form) {
 }
 </script>
 </body>
-</html>`, statusHTML, htmlEsc(serverURL), htmlEsc(clientName))
+</html>`, localBrandHTML("GSBS Setup", "Game Sync & Backup Service"), statusHTML, htmlEsc(serverURL), htmlEsc(clientName))
 	w.Write([]byte(page))
 }
 
@@ -470,16 +571,10 @@ func writeAddGameHTML(w http.ResponseWriter, errMsg, okMsg string) {
   <script>tailwind.config={darkMode:'media'}</script>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900">
+%s
 <div class="mx-auto max-w-xl px-4 py-8">
 
-  <div class="mb-6 flex items-center gap-3">
-    <a href="/" class="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-      Back
-    </a>
-    <span class="text-gray-300 dark:text-gray-600">|</span>
-    <h1 class="text-lg font-bold text-gray-900 dark:text-white">Add a game to sync</h1>
-  </div>
+  %s
 
   %s
 
@@ -586,13 +681,137 @@ function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').repla
 runSearch();
 </script>
 </body>
-</html>`, bannerHTML)
+</html>`, localNavHTML("games"), localBrandHTML("Add a game to sync", "Manually add save folders when auto-discovery misses one"), bannerHTML)
 	w.Write([]byte(page))
 }
 
 func handleDashboardPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write([]byte(dashboardPageHTML))
+	page := fmt.Sprintf(dashboardPageHTML, localNavHTML("dashboard"), localBrandHTML("GSBS local status", "Live sync health for this machine"))
+	w.Write([]byte(page))
+}
+
+func handleQuickActionsPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	page := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GSBS — Quick actions</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={darkMode:'media'}</script>
+</head>
+<body class="min-h-full bg-gray-50 dark:bg-gray-900">
+%s
+<main class="mx-auto max-w-4xl px-4 py-8">
+  %s
+  <div class="grid gap-3 sm:grid-cols-2">
+    <button type="button" onclick="triggerSync(this)" class="rounded-xl bg-emerald-600 px-4 py-3 text-left text-sm font-semibold text-white shadow-sm hover:bg-emerald-700">Run sync now</button>
+    <a href="/dashboard" class="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700">Open local dashboard</a>
+    <a href="/games" class="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700">Add a game folder</a>
+    <a href="/open-log" class="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700">Open log file</a>
+    <a href="/help" class="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700">Troubleshooting help</a>
+    <a href="/" class="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:ring-gray-700">Return to setup</a>
+  </div>
+</main>
+<script>
+function triggerSync(btn) {
+  btn.disabled = true;
+  btn.textContent = 'Syncing...';
+  fetch('/api/sync-now', {method:'POST'}).then(function() {
+    btn.textContent = 'Sync requested';
+    setTimeout(function() {
+      btn.disabled = false;
+      btn.textContent = 'Run sync now';
+    }, 1600);
+  }).catch(function() {
+    btn.disabled = false;
+    btn.textContent = 'Try sync again';
+  });
+}
+</script>
+</body>
+</html>`, localNavHTML("quick-actions"), localBrandHTML("Quick actions", "Fast shortcuts for common local client tasks"))
+	w.Write([]byte(page))
+}
+
+func handleHelpPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	page := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GSBS — Help</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={darkMode:'media'}</script>
+</head>
+<body class="min-h-full bg-gray-50 dark:bg-gray-900">
+%s
+<main class="mx-auto max-w-4xl px-4 py-8">
+  %s
+  <div class="space-y-3">
+    <section class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+      <h2 class="text-sm font-semibold text-gray-900 dark:text-white">What each status means</h2>
+      <ul class="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-300">
+        <li><strong>Connection:</strong> login and token state for this client.</li>
+        <li><strong>Watcher:</strong> file watch pipeline health on your local save folders.</li>
+        <li><strong>Pending uploads:</strong> queued files still waiting to push.</li>
+        <li><strong>Conflicts:</strong> manual choice needed from the tray menu.</li>
+      </ul>
+    </section>
+    <section class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+      <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Quick troubleshooting</h2>
+      <ol class="mt-2 list-decimal space-y-1 pl-5 text-sm text-gray-600 dark:text-gray-300">
+        <li>Open <a class="font-medium text-emerald-700 underline dark:text-emerald-400" href="/dashboard">Dashboard</a> and check for auth or watcher warnings.</li>
+        <li>Use <a class="font-medium text-emerald-700 underline dark:text-emerald-400" href="/open-log">Open log</a> to inspect recent sync errors.</li>
+        <li>If a game is missing, add the save folder from <a class="font-medium text-emerald-700 underline dark:text-emerald-400" href="/games">Add game</a>.</li>
+        <li>Run a manual sync from <a class="font-medium text-emerald-700 underline dark:text-emerald-400" href="/quick-actions">Quick actions</a>.</li>
+      </ol>
+    </section>
+  </div>
+</main>
+</body>
+</html>`, localNavHTML("help"), localBrandHTML("Client help", "Understand status cards and recover quickly when sync fails"))
+	w.Write([]byte(page))
+}
+
+func handleAboutPage(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	page := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GSBS — About this client</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config={darkMode:'media'}</script>
+</head>
+<body class="min-h-full bg-gray-50 dark:bg-gray-900">
+%s
+<main class="mx-auto max-w-3xl px-4 py-8">
+  %s
+  <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+    <dl class="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+      <div>
+        <dt class="text-gray-500 dark:text-gray-400">Client version</dt>
+        <dd class="mt-1 font-semibold text-gray-900 dark:text-white">%s</dd>
+      </div>
+      <div>
+        <dt class="text-gray-500 dark:text-gray-400">Runtime</dt>
+        <dd class="mt-1 font-semibold text-gray-900 dark:text-white">%s</dd>
+      </div>
+      <div class="sm:col-span-2">
+        <dt class="text-gray-500 dark:text-gray-400">What this client does</dt>
+        <dd class="mt-1 text-gray-700 dark:text-gray-300">Watches local save folders, uploads changes, and pulls fresh saves from your GSBS server.</dd>
+      </div>
+    </dl>
+  </div>
+</main>
+</body>
+</html>`, localNavHTML("about"), localBrandHTML("About this client", "Build and runtime details for your local GSBS app"), htmlEsc(Version), htmlEsc(runtime.GOOS+"/"+runtime.GOARCH))
+	w.Write([]byte(page))
 }
 
 const dashboardPageHTML = `<!DOCTYPE html>
@@ -605,28 +824,20 @@ const dashboardPageHTML = `<!DOCTYPE html>
   <script>tailwind.config={darkMode:'media'}</script>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 min-h-full">
+%s
 <div class="mx-auto max-w-2xl px-4 py-8">
-
-  <div class="mb-6 flex items-center justify-between">
-    <div class="flex items-center gap-3">
-      <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 shadow">
-        <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-        </svg>
-      </div>
-      <div>
-        <h1 class="text-lg font-bold text-gray-900 dark:text-white">GSBS — Local Status</h1>
-        <p id="refreshLabel" class="text-xs text-gray-400 dark:text-gray-500">Loading…</p>
-      </div>
-    </div>
-    <div class="flex gap-2">
+  <div class="mb-6">
+    %s
+    <p id="refreshLabel" class="text-xs text-gray-400 dark:text-gray-500">Loading…</p>
+  </div>
+  <div class="mb-6 flex flex-wrap items-center gap-2">
+    <div class="flex flex-wrap gap-2">
       <button id="syncNowBtn" onclick="triggerSync()"
-        class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50">
+        class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50">
         Sync now
       </button>
       <a id="serverDashLink" href="#" target="_blank" rel="noopener"
-        class="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:hover:bg-gray-750">
+        class="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:hover:bg-gray-750">
         Server dashboard →
       </a>
     </div>
@@ -707,9 +918,9 @@ const dashboardPageHTML = `<!DOCTYPE html>
   </div>
 
   <p class="mt-4 text-center text-xs text-gray-400 dark:text-gray-500">
-    <a href="/" class="hover:underline">Setup</a>
+    <a href="/quick-actions" class="hover:underline">Quick actions</a>
     &nbsp;·&nbsp;
-    <a href="/games" class="hover:underline">Add a game</a>
+    <a href="/help" class="hover:underline">Help</a>
     &nbsp;·&nbsp;
     <a href="/open-log" class="hover:underline">Open log</a>
   </p>
