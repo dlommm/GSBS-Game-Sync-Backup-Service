@@ -148,18 +148,16 @@ jobs:
         run: ./script/build.sh "$VERSION" dist windows-amd64
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
-      - name: Build installer
-        shell: pwsh
+      - name: Build client installer
+        shell: bash
         env:
           VERSION: ${{ needs.version.outputs.tag }}
-        run: |
-          $ver = $env:VERSION -replace '^v',''
-          $work = Join-Path $PWD "dist/inno-work"
-          Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path $work | Out-Null
-          Copy-Item "dist/gsbs-client-windows-amd64.exe" (Join-Path $work "gsbs-client-windows-amd64.exe")
-          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
-          & $iscc "/DMyAppVersion=$ver" "/DSourceDir=$work" "/O$PWD\dist" "$PWD\script\packaging\windows\gsbs-client.iss"
+        run: bash script/packaging/windows/build-installer.sh dist "$VERSION"
+      - name: Build server installer
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.tag }}
+        run: bash script/packaging/windows/build-server-installer.sh dist "$VERSION"
       - name: Generate release manifests
         shell: bash
         env:
@@ -173,6 +171,7 @@ jobs:
             dist/gsbs-server-windows-amd64.exe
             dist/gsbs-client-windows-amd64.exe
             dist/gsbs-client-setup-*.exe
+            dist/gsbs-server-setup-*.exe
             dist/SHA256SUMS
             dist/latest-client.json
 
@@ -237,6 +236,7 @@ jobs:
             dist/gsbs-server-linux-amd64
             dist/gsbs-client-linux-amd64
             dist/gsbs-client-setup-*.exe
+            dist/gsbs-server-setup-*.exe
             dist/gsbs-client_*.deb
             dist/gsbs-client-${{ needs.version.outputs.value }}-x86_64.AppImage
             dist/SHA256SUMS

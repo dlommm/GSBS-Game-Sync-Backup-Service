@@ -2,6 +2,21 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.2] - 2026-06-07
+
+### Added
+
+- Windows server: native Service Control Manager support in `gsbs-server` (`--service`, `--install-service`, `--uninstall-service`, `--start-service`, `--stop-service`) with shared startup/shutdown lifecycle for console and service modes.
+- Windows server: `--env-file` support and default ProgramData env loading, so service installs can reliably boot with installer-generated configuration.
+- Windows server: service-mode file logging via `GSBS_SERVICE_LOG_PATH` (default `C:\ProgramData\GSBS\logs\server.log`).
+- Release: Windows server installer artifact `gsbs-server-setup-X.Y.Z-windows-amd64.exe` added to release workflow and checksums.
+
+### Changed
+
+- Windows installer: server deployment is now service-first (recommended) instead of scheduled task startup.
+- Windows installer: generated config now includes ProgramData-based service log path defaults and service management shortcuts.
+- Documentation: installation/server configuration/release docs now cover Windows service deployment and log locations.
+
 ## [2.0.1] - 2026-06-07
 
 ### Added

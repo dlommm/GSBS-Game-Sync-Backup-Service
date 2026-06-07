@@ -16,7 +16,7 @@ description: Builds and releases GSBS server and client: version ldflags, script
 - **Release (CI)**: `.github/workflows/release.yml` on tag `v*` — GitHub Release + Docker Hub; `ci.yml` has no Docker job; see `docs/RELEASE.md`.
 - **CI runners**: `.github/workflows/runner-resolve.yml` — Linux jobs use `self-hosted` when online, else `ubuntu-latest`; override with repo var `GSBS_USE_SELF_HOSTED=false`.
 - **Packaging**:
-  - Windows: `script/packaging/windows/gsbs-client.iss`, `build-installer.sh` (Inno Setup)
+  - Windows: `script/packaging/windows/gsbs-client.iss`, `script/packaging/windows/gsbs-server.iss`, `build-installer.sh`, `build-server-installer.sh` (Inno Setup)
   - Linux: `script/packaging/linux/nfpm.yaml`, `build-deb.sh`, `build-appimage.sh`
 - **Docker**: `Dockerfile`, `script/docker-entrypoint.sh` (non-root + volume chown), `docker-compose.yml`, `docker-compose.dev.yml`, `docs/DOCKER.md`, `docs/COMPOSE.md`, `docs/examples/`
 - **Rule**: `.cursor/rules/push-releases.mdc` — tag push triggers CI; local script is fallback.
@@ -39,6 +39,6 @@ Windows client adds `-H windowsgui`.
 
 - [ ] CHANGELOG entry for version.
 - [ ] Tag `vX.Y.Z` pushed to origin (or `./script/release.sh` locally).
-- [ ] CI release workflow green; GitHub Release has binaries + installer + deb + AppImage + manifests.
+- [ ] CI release workflow green; GitHub Release has binaries + client/server installers + deb + AppImage + manifests.
 - [ ] Docker Hub image updated (release workflow on tag push, or local `release.sh`).
 - [ ] Smoke: client **Check for updates** finds release.

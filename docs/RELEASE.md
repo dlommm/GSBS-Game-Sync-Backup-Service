@@ -22,6 +22,7 @@ Every release is a **two-step** publish: code on `main`, then a **semver git tag
    - `gsbs-server-windows-amd64.exe`, `gsbs-client-windows-amd64.exe`
    - `gsbs-server-linux-amd64`, `gsbs-client-linux-amd64`
    - `gsbs-client-setup-X.Y.Z-windows-amd64.exe` (Inno Setup)
+   - `gsbs-server-setup-X.Y.Z-windows-amd64.exe` (Inno Setup)
    - `gsbs-client_X.Y.Z_amd64.deb`
    - `gsbs-client-X.Y.Z-x86_64.AppImage`
    - `SHA256SUMS`, `latest-client.json`

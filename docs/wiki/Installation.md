@@ -60,6 +60,16 @@ export GSBS_DB="/path/to/gsbs.db"
 ./gsbs-server-linux-amd64
 ```
 
+### Option D: Windows server installer wizard
+
+1. Download `gsbs-server-setup-X.Y.Z-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest).
+2. Run the installer as Administrator.
+3. In the wizard, set at least `GSBS_ADDR`, `GSBS_DB`, and `GSBS_SESSION_SECRET` (or click **Generate secure secret**).
+4. By default, leave **Install and run GSBS Server as a Windows Service (recommended)** enabled.
+5. Finish install and optionally open GSBS Admin in your browser.
+
+The installer writes runtime config to `C:\ProgramData\GSBS\server.env`, installs binaries to `C:\Program Files\GSBS`, and stores launcher logs under `C:\ProgramData\GSBS\logs`. Uninstall removes installed binaries and the `GSBS Server` Windows Service, but keeps `ProgramData` config/database by default.
+
 ### Platform support
 
 | Component | linux/amd64 | linux/arm64 | windows/amd64 |
