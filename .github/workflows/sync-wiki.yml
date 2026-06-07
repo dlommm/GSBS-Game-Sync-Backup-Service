@@ -1,0 +1,79 @@
+name: Sync Wiki
+
+# Publishes docs/wiki/ to the GitHub wiki repository.
+#
+# Triggers:
+#   - Push to main when docs-related files change
+#   - Push of vX.Y.Z version tags (release snapshot)
+#   - Manual dispatch (workflow_dispatch) for backfill or re-sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/wiki/**"
+      - "docs/*.md"
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "CHANGELOG.md"
+      - "script/sync-wiki.sh"
+      - ".github/workflows/sync-wiki.yml"
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — transform pages but do not push to wiki"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+# Prevent concurrent wiki pushes racing each other.
+concurrency:
+  group: sync-wiki
+  cancel-in-progress: false
+
+jobs:
+  sync-wiki:
+    name: Sync docs to wiki
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch the exact ref that triggered the workflow.
+          # For tags, this checks out the tagged commit so wiki pages reflect
+          # the release snapshot rather than the current HEAD.
+          ref: ${{ github.ref }}
+
+      - name: Run docs quality checks
+        run: |
+          bash script/check-wiki.sh
+
+      - name: Sync wiki (dry run)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_REF: ${{ github.ref }}
+        run: |
+          bash script/sync-wiki.sh --dry-run --out-dir /tmp/wiki-dry-run
+          echo "=== Dry-run output ==="
+          ls -la /tmp/wiki-dry-run/
+          echo "=== First 40 lines of Home.md ==="
+          head -40 /tmp/wiki-dry-run/Home.md
+
+      - name: Sync wiki (publish)
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.dry_run == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_REF: ${{ github.ref }}
+        run: |
+          bash script/sync-wiki.sh

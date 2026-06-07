@@ -76,6 +76,43 @@ When you change behavior in one of these areas, update the matching skill and su
 - **Store**: Add new methods to `server/store/store.go` and implement in `server/store/sqlite.go`; use `context.Context` on all store calls.
 - **Docs**: Update [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for data model or flow changes; [docs/EXAMPLE_CONFIG.md](docs/EXAMPLE_CONFIG.md) for client config options.
 
+## Documentation and wiki
+
+The **[GSBS GitHub Wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki)** is the primary user-facing documentation hub.
+
+**Source of truth:** `docs/wiki/` in this repository. The wiki is a published view — automatically synced from source on every push to `main` (when docs files change) and on every release tag.
+
+**Do not edit wiki pages directly on GitHub** — changes will be overwritten on the next automatic sync.
+
+### Authoring wiki pages
+
+1. Edit or create files in `docs/wiki/` following the [wiki style guide](docs/wiki/README.md):
+   - Every page needs a `# Title`, lead paragraph, `---` before the first section, and `## Related pages` at the bottom.
+   - Use full GitHub raw URLs for images.
+   - Use wiki page slugs for internal links (e.g. `[Upgrading](Upgrading)`).
+   - All upgrade procedures must live in `docs/wiki/Upgrading.md`; other pages link there.
+2. Run quality checks locally:
+   ```bash
+   bash script/check-wiki.sh
+   ```
+3. Push to `main`. The `sync-wiki.yml` workflow runs checks and publishes automatically.
+
+### Manual sync
+
+```bash
+gh workflow run sync-wiki.yml
+```
+
+Dry-run (transform pages, do not push):
+
+```bash
+gh workflow run sync-wiki.yml -f dry_run=true
+```
+
+### Rollback a bad publish
+
+Fix the source in `docs/wiki/` and push to `main`. Or trigger `gh workflow run sync-wiki.yml`. As a last resort, use the GitHub Wiki web UI to revert a page to a previous revision.
+
 ## API reference
 
 A short API reference for the server is in [docs/API.md](docs/API.md). Use it for integrating third-party clients or debugging requests.

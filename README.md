@@ -66,19 +66,27 @@ Register on the server WebUI, create an API token, and log in from the client. G
 
 ## Documentation
 
-| Guide | Description |
-|-------|-------------|
-| [docs/INSTALL.md](docs/INSTALL.md) | Install server and client on each platform |
-| [docs/COMPOSE.md](docs/COMPOSE.md) | Docker Compose + TLS (Caddy) |
-| [docs/DOCKER.md](docs/DOCKER.md) | Docker image, env vars, production tips |
-| [docs/CLIENT.md](docs/CLIENT.md) | Client behavior, tray, paths, auto-update |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Data model, sync flow, PCGW, security |
-| [docs/API.md](docs/API.md) | REST API reference |
+**The canonical user documentation is the [GSBS GitHub Wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki).** The wiki is automatically synced from `docs/wiki/` in this repository on every push to `main` and on each release tag.
+
+| Wiki page | What it covers |
+|---|---|
+| [Installation](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Installation) | Server and client install on all platforms |
+| [Client Setup & Usage](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Client-Setup-and-Usage) | Tray, auto-discovery, sync behavior, E2E encryption, logs |
+| [Server Configuration](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Server-Configuration) | All environment variables, Docker, TLS, admin |
+| [How It Works](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/How-It-Works) | Architecture, data model, path keys, PCGW, cross-OS sync |
+| [Troubleshooting](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Troubleshooting) | Common problems and fixes |
+| [Upgrading](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Upgrading) | All upgrade procedures, version notes, rollback |
+| [API Reference](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/API-Reference) | Full REST API reference |
+| [FAQ](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/FAQ) | Frequently asked questions |
+| [Contributing](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Contributing) | Build from source, tests, conventions |
+
+**In-repo reference docs** (source of truth for the wiki, kept in `docs/`):
+
+| File | Description |
+|---|---|
+| [docs/COMPOSE.md](docs/COMPOSE.md) | Docker Compose + TLS (Caddy) detail |
 | [docs/EXAMPLE_CONFIG.md](docs/EXAMPLE_CONFIG.md) | Client config JSON examples |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common problems and fixes |
-| [docs/UPGRADE.md](docs/UPGRADE.md) | Upgrade server and client |
 | [docs/RELEASE.md](docs/RELEASE.md) | Maintainer release workflow |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Build from source, tests, conventions |
 | [SECURITY.md](SECURITY.md) | Security policy |
 
 ## Build from source
@@ -100,10 +108,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for lint, coverage, and conventions.
 
 | Symptom | Where to look |
 |---------|---------------|
-| WebUI blank or login fails | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — server section |
-| Client 401 / not syncing | Re-login from tray; check `gsbs.log` — [docs/CLIENT.md](docs/CLIENT.md) |
-| No tray icon (Linux) | AppIndicator packages — [docs/CLIENT.md](docs/CLIENT.md) |
-| Upgrading server or client | [docs/UPGRADE.md](docs/UPGRADE.md) |
+| WebUI blank or login fails | [Troubleshooting wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Troubleshooting#server-problems) |
+| Client 401 / not syncing | Re-login from tray; check `gsbs.log` — [Troubleshooting wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Troubleshooting#client-problems) |
+| No tray icon (Linux) | AppIndicator packages — [Client Setup & Usage wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Client-Setup-and-Usage#linux-requirements) |
+| Upgrading server or client | [Upgrading wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Upgrading) |
 
 ## Architecture
 
