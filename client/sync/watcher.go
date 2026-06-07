@@ -1,9 +1,9 @@
 // Package sync provides the file watcher and sync client.
 //
 // On Windows, the watcher uses fsnotify (ReadDirectoryChangesW). Under very heavy
-// write load, the system buffer can overflow and some events may be dropped; the
-// next periodic pull will still sync state. Reduce watch scope or write frequency
-// if you need every change under load.
+// write load, the system buffer can overflow and some events may be dropped.
+// When an Overflow event is received, the watcher triggers a targeted rescan of
+// all watched directories to compensate (comparing ModTime against pending timers).
 package sync
 
 import (
@@ -79,6 +79,7 @@ type Watcher struct {
 	pathMap         map[string]pathEntry
 	timers          map[string]*time.Timer
 	pending         map[string]pendingPush
+	emptyRetries    map[string]bool     // filePath -> true when re-checking a previously-empty file
 	installRoots    map[string][]string // manifest game_id -> install folders for <game-install-folder>
 	consecErr       int
 	IsPaused        func() bool
@@ -101,13 +102,14 @@ func NewWatcher(resolver *paths.Resolver, currentOS paths.OS, client *Client) (*
 		return nil, err
 	}
 	return &Watcher{
-		resolver:  resolver,
-		currentOS: currentOS,
-		client:    client,
-		fw:        fw,
-		pathMap:   make(map[string]pathEntry),
-		timers:    make(map[string]*time.Timer),
-		pending:   make(map[string]pendingPush),
+		resolver:     resolver,
+		currentOS:    currentOS,
+		client:       client,
+		fw:           fw,
+		pathMap:      make(map[string]pathEntry),
+		timers:       make(map[string]*time.Timer),
+		pending:      make(map[string]pendingPush),
+		emptyRetries: make(map[string]bool),
 	}, nil
 }
 
@@ -228,6 +230,7 @@ func (w *Watcher) cancelTimersUnderDirs(removedDirs map[string]bool) {
 			t.Stop()
 			delete(w.timers, filePath)
 			delete(w.pending, filePath)
+			delete(w.emptyRetries, filePath)
 		}
 	}
 }
@@ -272,6 +275,7 @@ func (w *Watcher) FlushPending(ctx context.Context) {
 	pending := w.pending
 	w.timers = make(map[string]*time.Timer)
 	w.pending = make(map[string]pendingPush)
+	w.emptyRetries = make(map[string]bool)
 	w.mu.Unlock()
 
 	for filePath, t := range timers {
@@ -328,6 +332,11 @@ func (w *Watcher) Run(ctx context.Context) error {
 				return errWatcherClosed
 			}
 			if err != nil {
+				if errors.Is(err, fsnotify.ErrEventOverflow) {
+					logSyncWarn("watcher_overflow", "msg", "event overflow, triggering rescan")
+					go w.rescan(ctx)
+					continue
+				}
 				w.consecErr++
 				logSyncWarn("watcher_error", "error", err, "consecutive", w.consecErr)
 				if w.consecErr >= maxConsecutiveErrors {
@@ -455,6 +464,70 @@ func (w *Watcher) maybeAttachRecursiveSubdir(dir string) {
 	w.attachDir(dir, childEntry)
 }
 
+// rescan walks all currently watched directories and queues any files that are
+// not already in the debounce queue. Called after a fsnotify.Overflow event to
+// compensate for dropped events.
+func (w *Watcher) rescan(ctx context.Context) {
+	w.mu.Lock()
+	pathMapCopy := make(map[string]pathEntry, len(w.pathMap))
+	for k, v := range w.pathMap {
+		pathMapCopy[k] = v
+	}
+	w.mu.Unlock()
+
+	queued := 0
+	for watchDir, entry := range pathMapCopy {
+		_ = filepath.WalkDir(watchDir, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return nil
+			}
+			if d.IsDir() {
+				if !entry.recursive && path != watchDir {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			relPath, err := filepath.Rel(watchDir, path)
+			if err != nil {
+				return nil
+			}
+			relPath = filepath.ToSlash(relPath)
+
+			for i := range entry.rules {
+				rule := &entry.rules[i]
+				if !matchInclude(relPath, rule.IncludePatterns, rule.SyncAll) {
+					continue
+				}
+				pathKey := pushPathKey(rule.RuleKey, relPath, rule.IncludePatterns, rule.SyncAll)
+				capturedPath := path
+				capturedRelPath := relPath
+				gID := rule.GameID
+				pk := pathKey
+				rk := rule.RuleKey
+
+				w.mu.Lock()
+				if _, alreadyQueued := w.timers[capturedPath]; !alreadyQueued {
+					w.pending[capturedPath] = pendingPush{
+						gameID:   gID,
+						pathKey:  pk,
+						ruleKey:  rk,
+						relPath:  capturedRelPath,
+						filePath: capturedPath,
+					}
+					w.timers[capturedPath] = time.AfterFunc(debounceDelay, func() {
+						w.pushDebounced(ctx, gID, pk, rk, capturedRelPath, capturedPath)
+					})
+					queued++
+				}
+				w.mu.Unlock()
+				break // only first matching rule per file
+			}
+			return nil
+		})
+	}
+	logSyncInfo("watcher_rescan_complete", "queued", queued)
+}
+
 func matchInclude(relativePath string, patterns []string, syncAll bool) bool {
 	return saverule.MatchInclude(relativePath, patterns, syncAll)
 }
@@ -470,7 +543,11 @@ func pushPathKey(ruleKey, relPath string, patterns []string, syncAll bool) strin
 }
 
 func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, relPath, filePath string) {
+	requeued := false
 	defer func() {
+		if requeued {
+			return
+		}
 		w.mu.Lock()
 		delete(w.timers, filePath)
 		delete(w.pending, filePath)
@@ -500,6 +577,17 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 				time.Sleep(300 * time.Millisecond)
 				continue
 			}
+			// File still locked after all retries: enqueue to outbox for later retry.
+			if isFileLockError(readErr) {
+				logSyncWarn("push_locked_enqueue", "game_id", gameID, "file", filePath,
+					"msg", "file still locked after retries, queuing to outbox")
+				if qErr := EnqueueOutbox(gameID, pathKey, filePath, relPath, nil, ""); qErr != nil {
+					logSyncError("outbox_enqueue_failed", "game_id", gameID, "path_key", pathKey, "error", qErr)
+				} else if OnOutboxEnqueued != nil {
+					OnOutboxEnqueued(gameID, pathKey)
+				}
+				return
+			}
 			logSyncWarn("watcher_read", "game_id", gameID, "file", filePath, "stage", "read", "error", readErr)
 			return
 		}
@@ -509,11 +597,43 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 				time.Sleep(300 * time.Millisecond)
 				continue
 			}
+			// File still stat-locked after all retries: enqueue to outbox.
+			if isFileLockError(statErr) {
+				logSyncWarn("push_locked_enqueue", "game_id", gameID, "file", filePath,
+					"msg", "file still locked after retries, queuing to outbox")
+				if qErr := EnqueueOutbox(gameID, pathKey, filePath, relPath, nil, ""); qErr != nil {
+					logSyncError("outbox_enqueue_failed", "game_id", gameID, "path_key", pathKey, "error", qErr)
+				} else if OnOutboxEnqueued != nil {
+					OnOutboxEnqueued(gameID, pathKey)
+				}
+				return
+			}
 			logSyncWarn("watcher_stat", "game_id", gameID, "file", filePath, "stage", "stat", "error", statErr)
 			return
 		}
+		// stat succeeded but size == 0: could be a transient truncate/replace write.
 		if info.Size() == 0 {
-			logSyncDebug("watcher_skip_empty", "game_id", gameID, "file", filePath)
+			w.mu.Lock()
+			wasRetry := w.emptyRetries[filePath]
+			if wasRetry {
+				// Already waited one debounce interval; file is still empty — skip it.
+				delete(w.emptyRetries, filePath)
+				w.mu.Unlock()
+				logSyncInfo("push_empty_skip", "game_id", gameID, "file", filePath,
+					"msg", "file empty after debounce, skipping")
+				return
+			}
+			// Schedule one more debounce re-check.
+			w.emptyRetries[filePath] = true
+			p := pendingPush{gameID: gameID, pathKey: pathKey, ruleKey: ruleKey, relPath: relPath, filePath: filePath}
+			w.pending[filePath] = p
+			w.timers[filePath] = time.AfterFunc(debounceDelay, func() {
+				w.pushDebounced(ctx, gameID, pathKey, ruleKey, relPath, filePath)
+			})
+			requeued = true
+			w.mu.Unlock()
+			logSyncDebug("push_empty_requeue", "game_id", gameID, "file", filePath,
+				"msg", "file empty, scheduled re-check after debounce")
 			return
 		}
 	}
@@ -591,6 +711,7 @@ func (w *Watcher) Close() error {
 	}
 	w.timers = make(map[string]*time.Timer)
 	w.pending = make(map[string]pendingPush)
+	w.emptyRetries = make(map[string]bool)
 	w.mu.Unlock()
 	if w.fw != nil {
 		return w.fw.Close()

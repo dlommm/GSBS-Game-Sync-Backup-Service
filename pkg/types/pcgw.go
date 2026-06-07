@@ -119,6 +119,58 @@ type PCGWSyncRun struct {
 	ErrorMessage     string `json:"error_message,omitempty"`
 	ResumedFromRunID string `json:"resumed_from_run_id,omitempty"`
 	Notes            string `json:"notes,omitempty"`
+
+	// Phase 1 (catalog scan) fields
+	RemoteTotalIDs       int    `json:"remote_total_ids"`
+	MissingLocalIDs      int    `json:"missing_local_ids"`
+	ExtraLocalIDs        int    `json:"extra_local_ids"`
+	TargetedQueueSize    int    `json:"targeted_queue_size"`
+	TargetedProcessed    int    `json:"targeted_processed"`
+	Phase1CompletedAt    string `json:"phase1_completed_at,omitempty"`
+	CatalogHash          string `json:"catalog_hash,omitempty"`
+	CheckpointPhase      string `json:"checkpoint_phase,omitempty"`      // "catalog" or "ingest"
+	CheckpointQueueCursor int   `json:"checkpoint_queue_cursor"`
+}
+
+// PCGWCatalogEntry is one row in pcgw_catalog (the full remote game-ID inventory).
+type PCGWCatalogEntry struct {
+	PageID          int64  `json:"page_id"`
+	Title           string `json:"title"`
+	FirstSeenAt     string `json:"first_seen_at"`
+	LastSeenAt      string `json:"last_seen_at"`
+	LastSeenRunID   string `json:"last_seen_run_id"`
+	LastSeenRevID   int64  `json:"last_seen_rev_id"`
+	DeadLetter      bool   `json:"dead_letter"`
+	DeadLetterReason string `json:"dead_letter_reason,omitempty"`
+	RetryCount      int    `json:"retry_count"`
+}
+
+// PCGWCatalogStats summarises counts derived from pcgw_catalog vs pcgw_games.
+type PCGWCatalogStats struct {
+	RemoteTotal  int `json:"remote_total"`  // rows in pcgw_catalog
+	LocalTotal   int `json:"local_total"`   // rows in pcgw_games
+	MissingLocal int `json:"missing_local"` // in catalog but not in pcgw_games
+	ExtraLocal   int `json:"extra_local"`   // in pcgw_games but not in catalog
+	DeadLetter   int `json:"dead_letter"`   // dead_letter=1 rows
+}
+
+// Phase1Stats holds the output of a catalog scan phase.
+type Phase1Stats struct {
+	RemoteTotalIDs  int
+	MissingLocalIDs int
+	ExtraLocalIDs   int
+	CatalogHash     string
+	CompletedAt     string
+}
+
+// WipePreflightCounts summarises what a wipe would affect before executing it.
+type WipePreflightCounts struct {
+	PCGWGames        int `json:"pcgw_games"`
+	PCGWGameData     int `json:"pcgw_game_data"`
+	PCGWSections     int `json:"pcgw_sections"`
+	PCGWMetadata     int `json:"pcgw_metadata"`
+	PCGWCatalog      int `json:"pcgw_catalog"`
+	GameSaveLocations int `json:"game_save_locations"` // pcgw-sourced rows (mirror_and_manifest only)
 }
 
 // PCGWManifestMeta is singleton manifest generation state.

@@ -43,6 +43,7 @@ type dashboardStats struct {
 	SaveCount   int
 	GameCount   int
 	TotalBytes  int64
+	StoreError  bool // true when any store call failed; template renders an error notice
 }
 
 type saveVersionsData struct {

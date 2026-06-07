@@ -13,16 +13,6 @@ func PCGWSyncPage(ctx context.Context, st store.Store, client *pcgw.Client, page
 	return PCGWSync(ctx, st, client, nil, PCGWSyncOptions{SinglePage: pageID})
 }
 
-// Legacy wrapper for runner compatibility.
-func PCGWSyncLegacy(ctx context.Context, st store.Store, client *pcgw.Client, reportProgress ReportProgress) (int, error) {
-	return PCGWSync(ctx, st, client, reportProgress, PCGWSyncOptions{})
-}
-
-// PCGWSyncFull runs a full resync (no incremental skip).
-func PCGWSyncFull(ctx context.Context, st store.Store, client *pcgw.Client, reportProgress ReportProgress, reportEx ReportProgressEx) (int, error) {
-	return PCGWSyncEx(ctx, st, client, reportProgress, reportEx, PCGWSyncOptions{Full: true})
-}
-
 // OnSyncComplete should be called after successful sync to invalidate API manifest cache.
 type ManifestCacheInvalidator interface {
 	InvalidateManifestCache()

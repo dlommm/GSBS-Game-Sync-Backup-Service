@@ -84,6 +84,7 @@ type TraySnapshot struct {
 	Metered        bool
 	Paused         bool
 	WatcherHealthy bool
+	AuthFailed     bool // true when the outbox/push is paused due to a 401 auth failure
 	ManifestAge    time.Duration
 	Games          []GameRow
 	Discovered     []GameRow
@@ -494,6 +495,7 @@ func GetTraySnapshot() TraySnapshot {
 		Metered:        globalTrayState.metered,
 		Paused:         globalTrayState.paused,
 		WatcherHealthy: WatcherHealthy.Load(),
+		AuthFailed:     clientsync.IsOutboxAuthFailed(),
 		ManifestAge:    ManifestETagAge(),
 		Games:          games,
 		Discovered:     discovered,

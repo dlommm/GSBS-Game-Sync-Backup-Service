@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,6 +44,10 @@ del "%%~f0"
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start updater: %w", err)
 	}
+	// NOTE: The .bat runs detached; we cannot observe whether the `move` or
+	// restart succeeded from here. Failures (e.g. file locked) are silent on
+	// the Go side. The user will see the old binary on next launch if it failed.
+	log.Printf("update: Windows apply script launched; current process will exit for restart")
 	return nil
 }
 

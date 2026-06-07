@@ -158,11 +158,6 @@ func (s *sqliteStore) GetPCGWGame(ctx context.Context, pageID int64) (*types.PCG
 	return scanPCGWGame(row)
 }
 
-func (s *sqliteStore) GetPCGWGameByPageName(ctx context.Context, pageName string) (*types.PCGWGame, error) {
-	row := s.db.QueryRowContext(ctx, pcgwGameSelect+` WHERE page_name = ?`, pageName)
-	return scanPCGWGame(row)
-}
-
 func (s *sqliteStore) ListPCGWGames(ctx context.Context, filter PCGWGameListFilter) ([]types.PCGWGame, int, error) {
 	if filter.Limit <= 0 {
 		filter.Limit = 50
@@ -270,15 +265,6 @@ func scanPCGWGameRows(rows *sql.Rows, totalOpt ...int) ([]types.PCGWGame, int, e
 		total = totalOpt[0]
 	}
 	return out, total, rows.Err()
-}
-
-func (s *sqliteStore) UpdatePCGWGameSyncState(ctx context.Context, pageID int64, revID int64, revTS, status, parseErr string, durationMs int) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.ExecContext(ctx, `
-		UPDATE pcgw_games SET last_rev_id=?, last_rev_timestamp=?, last_fetched_at=?,
-			parse_status=?, parse_error=?, parse_duration_ms=?, updated_at=?
-		WHERE page_id=?`, revID, revTS, now, status, nullIfEmpty(parseErr), durationMs, now, pageID)
-	return err
 }
 
 func (s *sqliteStore) UpsertPCGWGameData(ctx context.Context, row *types.PCGWGameData) error {
@@ -661,7 +647,9 @@ func (s *sqliteStore) GetLatestPCGWSyncRun(ctx context.Context) (*types.PCGWSync
 	return s.scanPCGWSyncRun(ctx, `
 		SELECT id, mode, status, started_at, finished_at, checkpoint_offset,
 			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message,
-			resumed_from_run_id, notes
+			resumed_from_run_id, notes,
+			remote_total_ids, missing_local_ids, extra_local_ids, targeted_queue_size, targeted_processed,
+			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor
 		FROM pcgw_sync_runs ORDER BY started_at DESC LIMIT 1`)
 }
 
@@ -672,7 +660,9 @@ func (s *sqliteStore) ListPCGWSyncRuns(ctx context.Context, limit int) ([]types.
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, mode, status, started_at, finished_at, checkpoint_offset,
 			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message,
-			resumed_from_run_id, notes
+			resumed_from_run_id, notes,
+			remote_total_ids, missing_local_ids, extra_local_ids, targeted_queue_size, targeted_processed,
+			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor
 		FROM pcgw_sync_runs ORDER BY started_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -680,18 +670,11 @@ func (s *sqliteStore) ListPCGWSyncRuns(ctx context.Context, limit int) ([]types.
 	defer rows.Close()
 	var out []types.PCGWSyncRun
 	for rows.Next() {
-		var r types.PCGWSyncRun
-		var finished, errMsg, resumedFrom, notes sql.NullString
-		if err := rows.Scan(&r.ID, &r.Mode, &r.Status, &r.StartedAt, &finished, &r.CheckpointOffset,
-			&r.GamesTotal, &r.GamesOK, &r.GamesPartial, &r.GamesFailed, &r.GamesSkipped, &r.AvgParseMs, &errMsg,
-			&resumedFrom, &notes); err != nil {
+		r, err := scanPCGWSyncRunRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		r.FinishedAt = finished.String
-		r.ErrorMessage = errMsg.String
-		r.ResumedFromRunID = resumedFrom.String
-		r.Notes = notes.String
-		out = append(out, r)
+		out = append(out, *r)
 	}
 	return out, rows.Err()
 }
@@ -706,22 +689,35 @@ func (s *sqliteStore) GetResumablePCGWSyncRun(ctx context.Context, mode string) 
 	return s.scanPCGWSyncRun(ctx, `
 		SELECT id, mode, status, started_at, finished_at, checkpoint_offset,
 			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message,
-			resumed_from_run_id, notes
+			resumed_from_run_id, notes,
+			remote_total_ids, missing_local_ids, extra_local_ids, targeted_queue_size, targeted_processed,
+			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor
 		FROM pcgw_sync_runs
-		WHERE mode = ? AND status IN ('interrupted', 'failed', 'canceled') AND checkpoint_offset > 0
+		WHERE mode = ? AND status IN ('interrupted', 'failed', 'canceled')
+		  AND (checkpoint_offset > 0 OR checkpoint_phase != '')
 		ORDER BY started_at DESC LIMIT 1`, mode)
 }
 
 func (s *sqliteStore) scanPCGWSyncRun(ctx context.Context, query string, args ...interface{}) (*types.PCGWSyncRun, error) {
-	var r types.PCGWSyncRun
-	var finished, errMsg, resumedFrom, notes sql.NullString
-	err := s.db.QueryRowContext(ctx, query, args...).
-		Scan(&r.ID, &r.Mode, &r.Status, &r.StartedAt, &finished, &r.CheckpointOffset,
-			&r.GamesTotal, &r.GamesOK, &r.GamesPartial, &r.GamesFailed, &r.GamesSkipped, &r.AvgParseMs, &errMsg,
-			&resumedFrom, &notes)
+	row := s.db.QueryRowContext(ctx, query, args...)
+	r, err := scanPCGWSyncRunRow(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	return r, err
+}
+
+// scanPCGWSyncRunRow scans a PCGWSyncRun from either a *sql.Row or *sql.Rows.
+func scanPCGWSyncRunRow(row interface{ Scan(...interface{}) error }) (*types.PCGWSyncRun, error) {
+	var r types.PCGWSyncRun
+	var finished, errMsg, resumedFrom, notes, phase1At, catalogHash, ckPhase sql.NullString
+	err := row.Scan(
+		&r.ID, &r.Mode, &r.Status, &r.StartedAt, &finished, &r.CheckpointOffset,
+		&r.GamesTotal, &r.GamesOK, &r.GamesPartial, &r.GamesFailed, &r.GamesSkipped, &r.AvgParseMs, &errMsg,
+		&resumedFrom, &notes,
+		&r.RemoteTotalIDs, &r.MissingLocalIDs, &r.ExtraLocalIDs, &r.TargetedQueueSize, &r.TargetedProcessed,
+		&phase1At, &catalogHash, &ckPhase, &r.CheckpointQueueCursor,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -729,6 +725,9 @@ func (s *sqliteStore) scanPCGWSyncRun(ctx context.Context, query string, args ..
 	r.ErrorMessage = errMsg.String
 	r.ResumedFromRunID = resumedFrom.String
 	r.Notes = notes.String
+	r.Phase1CompletedAt = phase1At.String
+	r.CatalogHash = catalogHash.String
+	r.CheckpointPhase = ckPhase.String
 	return &r, nil
 }
 

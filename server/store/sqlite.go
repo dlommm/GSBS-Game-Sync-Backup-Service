@@ -452,6 +452,34 @@ func (s *sqliteStore) RegenerateClientToken(ctx context.Context, clientID string
 	return err
 }
 
+// RevokeAllClientTokens rotates the API token for every client owned by userID,
+// forcing those clients to re-authenticate (e.g. after a password or 2FA change).
+func (s *sqliteStore) RevokeAllClientTokens(ctx context.Context, userID string) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM clients WHERE user_id = ?`, userID)
+	if err != nil {
+		return err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if scanErr := rows.Scan(&id); scanErr != nil {
+			rows.Close()
+			return scanErr
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := s.RegenerateClientToken(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *sqliteStore) ClientUserID(ctx context.Context, clientID string) (string, error) {
 	var userID string
 	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM clients WHERE id = ?`, clientID).Scan(&userID)

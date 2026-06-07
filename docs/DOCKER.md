@@ -66,14 +66,14 @@ There is no separate “manifest file” on disk: the manifest is stored in the 
 2. **Build and tag** the image with your Docker Hub username and repository name:
    ```bash
    docker build -t YOUR_DOCKERHUB_USERNAME/gsbs-server:latest .
-   docker tag YOUR_DOCKERHUB_USERNAME/gsbs-server:latest YOUR_DOCKERHUB_USERNAME/gsbs-server:v1.0.2   # optional version tag
+   docker tag YOUR_DOCKERHUB_USERNAME/gsbs-server:latest YOUR_DOCKERHUB_USERNAME/gsbs-server:2.0.0   # optional version tag
    ```
    Replace `YOUR_DOCKERHUB_USERNAME` with your actual Docker Hub username.
 
 3. **Push** the image:
    ```bash
    docker push YOUR_DOCKERHUB_USERNAME/gsbs-server:latest
-   docker push YOUR_DOCKERHUB_USERNAME/gsbs-server:v1.0.2   # if you tagged a version
+   docker push YOUR_DOCKERHUB_USERNAME/gsbs-server:2.0.0   # if you tagged a version
    ```
 
 **Releases:** Push a git tag `vX.Y.Z` to trigger [.github/workflows/release.yml](../.github/workflows/release.yml) (binaries, installer, `.deb`, AppImage, GitHub Release, Docker Hub). CI on `main` does not build Docker. Local fallback: `./script/release.sh [VERSION]`. See [docs/RELEASE.md](RELEASE.md).
@@ -115,6 +115,7 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_PCGW_RATE_LIMIT` | `2s` | Delay between PCGW HTTP requests. |
 | `GSBS_PCGW_USER_AGENT` | `GSBS/<version> (+https://github.com/…)` | User-Agent sent to PCGamingWiki. |
 | `GSBS_PCGW_STORE_FULL_WIKITEXT` | `true` | When `false`, skip storing zstd full-page wikitext (section text still stored). |
+| `GSBS_PCGW_MAX_PAGES_PER_RUN` | `5000` | Maximum number of pages to ingest in Phase 2 per sync run. Interrupted runs resume from checkpoint on next run. |
 
 Example with all options:
 
@@ -254,7 +255,7 @@ After the migration, clients perform a one-time re-sync check on their next run 
 Avoid using `:latest` in production compose files — it makes upgrade timing unpredictable. Instead, pin to a specific version tag and bump it deliberately:
 
 ```yaml
-image: dendlomm/gsbs-server:1.0.14
+image: dendlomm/gsbs-server:2.0.0
 ```
 
 This lets you control when migrations run and makes rollbacks straightforward (restore backup → roll back image tag).

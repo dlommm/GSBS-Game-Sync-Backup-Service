@@ -48,6 +48,7 @@ type jobsViewData struct {
 	JobProgressPages     int
 	JobProgressTotal     int
 	JobGamesSkipped      int
+	JobPhase             string
 	LastSuccessfulSyncAt string
 	CSRFToken            string
 }
@@ -75,6 +76,9 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string) jobsView
 		if jobRunning && jobProgress == 0 && syncRun.CheckpointOffset > 0 {
 			data.JobProgressPages = syncRun.CheckpointOffset
 		}
+	}
+	if h.jobRunner != nil && h.jobRunner.IsRunning("pcgw_sync") {
+		data.JobPhase = h.jobRunner.ProgressPhase()
 	}
 	return data
 }

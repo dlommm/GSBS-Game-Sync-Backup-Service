@@ -13,23 +13,11 @@
   {{template "partials/admin_pcgw_job_status.html" .}}
 </div>
 
-<section class="panel">
-  <div class="panel-header-actions">
-    <h2>Games</h2>
-    <div class="panel-actions actions-stack">
-      <form method="post" action="/admin/pcgw/sync" class="inline-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <button type="submit" class="btn-primary-sm">Incremental sync</button>
-      </form>
-      <form method="post" action="/admin/pcgw/sync" class="inline-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <input type="hidden" name="full" value="1">
-        <button type="submit" class="btn-ghost-sm">Full resync</button>
-      </form>
-      <form method="post" action="/admin/pcgw/purge-wikitext" class="inline-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <button type="submit" class="btn-ghost-sm">Purge old wikitext</button>
-      </form>
+{{/* PCGW action buttons — consolidated section */}}
+<section class="panel" id="pcgw-actions">
+  <div class="panel-header panel-header-actions">
+    <h2>PCGW Actions</h2>
+    <div class="panel-actions">
       <a href="/admin/pcgw/export/manifest.json.gz" class="btn-ghost-sm">Export bundle</a>
       <form method="post" action="/admin/pcgw/import" enctype="multipart/form-data" class="inline-form">
         <input type="hidden" name="csrf" value="{{.CSRFToken}}">
@@ -39,15 +27,16 @@
           <input type="file" name="file" accept=".json,.gz,application/gzip,application/json" style="display:none;" onchange="this.form.submit()">
         </label>
       </form>
-      <form method="post" action="/admin/pcgw/import" enctype="multipart/form-data" class="inline-form" onsubmit="return confirm('Replace all PCGW data and manifest entries with the import file?');">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <input type="hidden" name="mode" value="full_replace">
-        <label class="btn-ghost-sm" style="cursor:pointer;">
-          Import (replace all)
-          <input type="file" name="file" accept=".json,.gz,application/gzip,application/json" style="display:none;" onchange="if(confirm('Replace all PCGW data and manifest entries?')) this.form.submit();">
-        </label>
-      </form>
     </div>
+  </div>
+  <div style="padding:0 1.25rem 1rem;">
+    {{template "partials/admin_pcgw_actions.html" .}}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header-actions">
+    <h2>Games</h2>
   </div>
 
   <form id="pcgw-filters" method="get" action="/admin/pcgw" class="filter-toolbar">

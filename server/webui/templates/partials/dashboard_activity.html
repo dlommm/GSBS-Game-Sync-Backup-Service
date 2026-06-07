@@ -1,5 +1,9 @@
 {{define "partials/dashboard_activity.html"}}
-{{if .Entries}}
+{{if .StoreError}}
+<p class="panel-empty" role="alert" style="color:var(--color-warn,#c0392b);">Activity could not be loaded.
+  <a href="" hx-get="/dashboard/partial/activity" hx-target="closest #activity-feed" hx-swap="innerHTML">Retry</a>
+</p>
+{{else if .Entries}}
 <ul class="timeline">
   {{range .Entries}}
   {{template "partials/timeline_item.html" .}}

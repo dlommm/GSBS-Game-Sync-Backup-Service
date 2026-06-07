@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -56,20 +55,6 @@ func (d Duration) String() string {
 		s = strings.TrimSuffix(s, "0s")
 	}
 	return s
-}
-
-// parseDurationFlex parses a human-friendly duration string like "5m", "30s", "1h",
-// or a plain integer (treated as seconds for user convenience).
-func parseDurationFlex(s string) (time.Duration, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, fmt.Errorf("empty duration")
-	}
-	// If it's a bare integer, treat as seconds
-	if n, err := strconv.ParseInt(s, 10, 64); err == nil {
-		return time.Duration(n) * time.Second, nil
-	}
-	return time.ParseDuration(s)
 }
 
 type config struct {

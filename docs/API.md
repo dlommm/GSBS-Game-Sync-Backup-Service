@@ -57,11 +57,22 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 | Event type | Scope | Data | Meaning |
 |---|---|---|---|
 | `manifest-updated` | broadcast | `{}` | PCGW manifest was updated; clients should re-fetch `/api/manifest`. |
-| `job-progress` | broadcast | `{"job":"pcgw_sync","pages":<N>}` | PCGW sync job progress; page count processed so far. |
+| `job-progress` | broadcast | `{"job":"pcgw_sync","pages":<N>,"total":<N>,"phase":"catalog"\|"ingest","queue_size":<N>,"queue_cursor":<N>,"eta_seconds":<N>}` | PCGW sync job progress. `phase` is `catalog` during Phase 1 and `ingest` during Phase 2. |
 | `job-finished` | broadcast | `{"job":"pcgw_sync","status":"ok"\|"error"}` | PCGW sync job completed (success or error). |
 | `audit-updated` | broadcast | `{}` | Admin audit log updated (e.g. admin action). |
 | `server-shutting-down` | broadcast | `{}` | Server is about to shut down; clients should stop polling and reconnect later. |
 | `save-updated` | per-user | `{"game_id":"...","path_key":"..."}` | A save was pushed successfully for the authenticated user. |
+
+## Admin PCGW endpoints (WebUI admin, session auth required)
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/admin/pcgw/sync` | Run incremental PCGW sync. `full=1` body param forces full resync. |
+| `POST` | `/admin/pcgw/sync/catalog-only` | Phase 1 only — refresh `pcgw_catalog` without fetching page detail. |
+| `POST` | `/admin/pcgw/sync/retry-failed` | Phase 2 only — re-process failed/partial pages. |
+| `POST` | `/admin/pcgw/rebuild-manifest` | Bump manifest version without fetching any pages. |
+| `GET`  | `/admin/pcgw/wipe-preflight` | Returns JSON `WipePreflightCounts` for the confirmation modal. |
+| `POST` | `/admin/pcgw/wipe` | Execute wipe. Body: `mode=mirror_only\|mirror_and_manifest`. Requires `WIPE PCGW` typed confirmation from WebUI. Rejected if a sync is running. |
 
 ## Metrics (optional)
 

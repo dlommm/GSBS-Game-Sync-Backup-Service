@@ -86,5 +86,6 @@ func applyStagedBinary(stagedPath string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("restart client: %w", err)
 	}
+	log.Printf("update: Linux apply complete; new binary at %s, restarted with pid %d", exe, cmd.Process.Pid)
 	return nil
 }

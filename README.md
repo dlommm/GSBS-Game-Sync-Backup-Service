@@ -55,6 +55,15 @@ Register on the server WebUI, create an API token, and log in from the client. G
 - **WebUI + admin** — dashboard, save versions, activity, admin overview.
 - **Client auto-update** — checks GitHub Releases; install from the tray menu.
 
+### What's new in 2.0
+
+- **Stability hardening**: panic recovery middleware, security headers (CSP, HSTS, X-Frame-Options), disabled-user session cutoff, and fail-closed quota enforcement on the server.
+- **Token revocation on credential change**: password change and 2FA disable now revoke all active client tokens.
+- **Updater fix**: missing JSON tag that silently broke the updater in production is fixed; manual update checks now show explicit status (available, up-to-date, network error, metered skip, etc.).
+- **Windows sync reliability**: fsnotify overflow now triggers a directory rescan; locked files are enqueued to the persistent outbox instead of silently dropped.
+- **Auth-failure containment**: `ErrUnauthorized` sentinel stops the outbox from hammering a 401; re-login prompt surfaced in local dashboard and tray tooltip.
+- **CI**: Windows test job, `govulncheck`, and release-assets completeness guard added.
+
 ## Documentation
 
 | Guide | Description |
@@ -124,6 +133,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for lint, coverage, and conventions.
 ## Server configuration
 
 PCGW sync schedule: set `GSBS_PCGW_CRON` in Docker/compose (default `0 3 * * 0`, weekly Sunday 03:00; use `""` to disable). When the env var is **not** set, admins can configure cron in the WebUI under **Admin → Settings**.
+
+Two-phase PCGW sync: Phase 1 enumerates all PCGW game IDs into `pcgw_catalog`; Phase 2 fetches only missing, failed/partial, and changed pages. Set `GSBS_PCGW_MAX_PAGES_PER_RUN` to cap the Phase 2 ingest budget per run (default 5000). Interrupted runs save a checkpoint and resume automatically on the next sync.
 
 Save storage: set `GSBS_SAVE_ROOT` (e.g. `/app/data/gamesaves` on the same Docker volume as `GSBS_DB`) to store save files on disk instead of SQLite BLOBs. Clients must send `X-Relative-Path` on push when filesystem storage is enabled. See [docs/DOCKER.md](docs/DOCKER.md) for all environment variables.
 

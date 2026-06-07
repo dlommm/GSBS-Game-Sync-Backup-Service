@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -23,6 +24,10 @@ import (
 	"github.com/gsbs/gsbs/pkg/retry"
 	"golang.org/x/time/rate"
 )
+
+// ErrUnauthorized is returned when the server responds with 401. Callers should
+// surface a re-login prompt and stop hammering the endpoint with retries.
+var ErrUnauthorized = errors.New("unauthorized")
 
 const maxConcurrentPushes = 4
 
@@ -185,6 +190,9 @@ func (c *Client) pullSummaries(ctx context.Context) (*SummaryResponse, error) {
 		}
 		defer closeIO(resp.Body)
 		if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode == http.StatusUnauthorized {
+				return fmt.Errorf("summaries: %w", ErrUnauthorized)
+			}
 			return fmt.Errorf("summaries: status %d", resp.StatusCode)
 		}
 		var decoded SummaryResponse
@@ -215,6 +223,9 @@ func (c *Client) pullSingle(ctx context.Context, gameID, pathKey string) (*PullR
 		}
 		defer closeIO(resp.Body)
 		if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode == http.StatusUnauthorized {
+				return fmt.Errorf("pull single: %w", ErrUnauthorized)
+			}
 			return fmt.Errorf("pull single: status %d", resp.StatusCode)
 		}
 		body := io.Reader(resp.Body)
@@ -252,7 +263,7 @@ func (c *Client) pullOnce(ctx context.Context) (*PullResponse, error) {
 	defer closeIO(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized {
-			return nil, fmt.Errorf("401 Unauthorized — token may be invalid or expired; try logging in again from the tray")
+			return nil, fmt.Errorf("pull: %w", ErrUnauthorized)
 		}
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
@@ -662,15 +673,15 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 	defer closeIO(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized {
-			msg := "push: 401 Unauthorized — token may be invalid or expired; try logging in again from the tray"
 			if !c.getAuthRetried() && c.tryReloadToken() {
 				return c.pushOnce(ctx, gameID, pathKey, filePath, relativePath, content)
 			}
+			msg := "push: 401 Unauthorized — token may be invalid or expired; try logging in again from the tray"
 			if OnAuthError != nil {
 				OnAuthError(msg)
 			}
 			logSyncError("push_auth_failed", "game_id", gameID, "path_key", pathKey, "relative_path", relativePath, "error", msg)
-			return fmt.Errorf("%s", msg)
+			return fmt.Errorf("push: %w", ErrUnauthorized)
 		}
 		if resp.StatusCode == http.StatusRequestEntityTooLarge {
 			msg := readAPIError(resp.Body)

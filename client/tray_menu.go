@@ -487,6 +487,9 @@ func formatAgo(t time.Time) string {
 func formatTrayTooltip(snap TraySnapshot) string {
 	base := formatStatusHeader(snap)
 	var parts []string
+	if snap.AuthFailed {
+		parts = append(parts, "re-login required")
+	}
 	if !snap.WatcherHealthy {
 		parts = append(parts, "watcher: recovering")
 	}
@@ -496,6 +499,12 @@ func formatTrayTooltip(snap TraySnapshot) string {
 	if d := snap.NextRetryIn; d > 0 {
 		sec := int(d.Round(time.Second).Seconds())
 		parts = append(parts, fmt.Sprintf("retry in %ds", sec))
+	}
+	if n := len(snap.Games); n > 0 && snap.Status == TrayStatusIdle {
+		parts = append(parts, fmt.Sprintf("%d game(s) tracked", n))
+	}
+	if snap.PendingUploads > 0 {
+		parts = append(parts, fmt.Sprintf("%d upload(s) pending", snap.PendingUploads))
 	}
 	if len(parts) == 0 {
 		return base

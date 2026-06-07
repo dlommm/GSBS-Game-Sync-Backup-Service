@@ -73,6 +73,8 @@ The client checks [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---
 - **Check for updates…** runs a manual check
 - **Version: x.y.z** shows the installed build
 
+Update checks return a typed result with one of the following statuses: `available`, `up_to_date`, `disabled`, `metered_skip`, `network_error`, `api_error`, `manifest_mismatch`, or `unsupported_arch`. Manual checks via **Check for updates…** always show the explicit outcome — there is no silent "you're up to date" on network or API failures; the tray displays the actual reason and the check is also logged under the `update:` prefix in `gsbs.log`. The tray shows an in-progress state while the check is running.
+
 Updates download the platform binary (`gsbs-client-windows-amd64.exe` or `gsbs-client-linux-amd64`), verify SHA256 from `latest-client.json`, replace the running binary, and restart with `--minimized`. Installers (`.exe` setup, `.deb`, AppImage) are for first install; in-app updates use the raw binary.
 
 Config options:
@@ -165,6 +167,15 @@ Config `watch_paths` are merged first; manifest-derived paths with the same `(ga
 ## Offline outbox
 
 If a push fails after retries, the file is queued in `outbox/` with exponential backoff (2m–30m cap). Entries older than 7 days are dropped. Auth/quota errors are not retried.
+
+### Auth-failure containment (`ErrUnauthorized`)
+
+When the server returns HTTP 401 (token revoked, expired, or invalid), the outbox stops all retry attempts immediately — it will not keep hammering the server. The client sets an internal `auth_failed` flag that is surfaced in:
+
+- **Local dashboard** (`http://127.0.0.1:41234/status`) — shows `auth_failed: true` and the last check time.
+- **Tray tooltip** — indicates authentication failure next to the sync state.
+
+To resume syncing, re-login via tray **Login…** or run `gsbs-client login`. A new valid token clears the flag and the outbox resumes.
 
 ## Optional E2E encryption
 

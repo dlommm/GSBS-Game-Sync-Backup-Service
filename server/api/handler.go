@@ -464,8 +464,20 @@ func (h *Handler) handleSaveSummaries(w http.ResponseWriter, r *http.Request, us
 		}
 	}
 	if err != nil {
-		logx.Logger().Error().Err(err).Msg("api save summaries failed")
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "list failed"})
+		errClass := classifyDBError(err)
+		logx.Logger().Error().
+			Str("user_id", userID).
+			Int("limit", limit).
+			Int("offset", offset).
+			Str("request_id", strings.TrimSpace(r.Header.Get("X-Request-ID"))).
+			Str("error_class", errClass).
+			Err(err).
+			Msg("api save summaries failed")
+		code := http.StatusInternalServerError
+		if errClass == "db_locked" {
+			code = http.StatusServiceUnavailable
+		}
+		writeJSON(w, code, map[string]string{"error": "list failed"})
 		return
 	}
 	items := make([]map[string]interface{}, len(summaries))
@@ -753,15 +765,33 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 	delta := int64(len(content)) - existingSize
 	// Global storage quota check (0 = unlimited)
 	if h.maxStorageBytes > 0 {
-		total, _ := h.store.TotalStorageBytes(r.Context())
+		total, err := h.store.TotalStorageBytes(r.Context())
+		if err != nil {
+			logx.Logger().Error().
+				Str("user_id", userID).
+				Str("operation", "total_storage_check").
+				Err(err).
+				Msg("api push storage check failed")
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "storage check failed"})
+			return
+		}
 		if total+delta > h.maxStorageBytes {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "global storage limit exceeded"})
 			return
 		}
 	}
 	// Per-user storage quota check (0 = unlimited)
-	if quota, err := h.store.UserQuotaBytes(r.Context(), userID); err == nil && quota > 0 {
-		current, _ := h.store.UserStorageBytes(r.Context(), userID)
+	if quota, qErr := h.store.UserQuotaBytes(r.Context(), userID); qErr == nil && quota > 0 {
+		current, err := h.store.UserStorageBytes(r.Context(), userID)
+		if err != nil {
+			logx.Logger().Error().
+				Str("user_id", userID).
+				Str("operation", "user_storage_check").
+				Err(err).
+				Msg("api push storage check failed")
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "storage check failed"})
+			return
+		}
 		if current+delta > quota {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "storage quota exceeded"})
 			return
@@ -1078,4 +1108,24 @@ func writeJSON(w http.ResponseWriter, code int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// classifyDBError inspects the error message and returns a short classification
+// string used for structured logging and status-code selection.
+// Recognised classes: "db_locked", "context_canceled", "schema_error", "unknown".
+func classifyDBError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "database is locked") || strings.Contains(msg, "SQLITE_BUSY") {
+		return "db_locked"
+	}
+	if strings.Contains(msg, "context canceled") || strings.Contains(msg, "context deadline exceeded") {
+		return "context_canceled"
+	}
+	if strings.Contains(msg, "no such column") || strings.Contains(msg, "no such table") || strings.Contains(msg, "schema") {
+		return "schema_error"
+	}
+	return "unknown"
 }

@@ -76,16 +76,36 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *WebHandler) loadDashboardStats(ctx context.Context, userID string) dashboardStats {
-	clients, _ := h.store.ListClientsByUserID(ctx, userID)
-	saves, _ := h.store.ListSaveSummaries(ctx, userID)
-	totalBytes, _ := h.store.UserStorageBytes(ctx, userID)
-	gameCount, _ := h.store.DistinctGameCount(ctx, userID)
-	return dashboardStats{
-		ClientCount: len(clients),
-		SaveCount:   len(saves),
-		GameCount:   gameCount,
-		TotalBytes:  totalBytes,
+	var stats dashboardStats
+	clients, err := h.store.ListClientsByUserID(ctx, userID)
+	if err != nil {
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard stats: list clients failed")
+		stats.StoreError = true
+	} else {
+		stats.ClientCount = len(clients)
 	}
+	saves, err := h.store.ListSaveSummaries(ctx, userID)
+	if err != nil {
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard stats: list saves failed")
+		stats.StoreError = true
+	} else {
+		stats.SaveCount = len(saves)
+	}
+	totalBytes, err := h.store.UserStorageBytes(ctx, userID)
+	if err != nil {
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard stats: user storage bytes failed")
+		stats.StoreError = true
+	} else {
+		stats.TotalBytes = totalBytes
+	}
+	gameCount, err := h.store.DistinctGameCount(ctx, userID)
+	if err != nil {
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard stats: distinct game count failed")
+		stats.StoreError = true
+	} else {
+		stats.GameCount = gameCount
+	}
+	return stats
 }
 
 func (h *WebHandler) serveDashboardStatsPartial(w http.ResponseWriter, r *http.Request) {
@@ -149,9 +169,13 @@ func (h *WebHandler) serveDashboardActivityPartial(w http.ResponseWriter, r *htt
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	entries, _ := h.store.ListAuditLogByUser(r.Context(), userID, 20)
+	entries, err := h.store.ListAuditLogByUser(r.Context(), userID, 20)
+	if err != nil {
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard activity: list audit log failed")
+	}
 	h.renderPartial(w, "partials/dashboard_activity.html", map[string]interface{}{
-		"Entries": entries,
+		"Entries":    entries,
+		"StoreError": err != nil,
 	})
 }
 

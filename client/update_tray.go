@@ -73,6 +73,9 @@ func (c *TrayController) runUpdateCheck(manual bool) {
 	updateMu.Lock()
 	if updateInProgress {
 		updateMu.Unlock()
+		if manual {
+			_ = beeep.Notify("GSBS", "Update check already in progress.", "")
+		}
 		return
 	}
 	if !manual && !lastUpdateCheck.IsZero() && time.Since(lastUpdateCheck) < updateCheckPeriod {
@@ -82,11 +85,20 @@ func (c *TrayController) runUpdateCheck(manual bool) {
 	updateInProgress = true
 	updateMu.Unlock()
 
+	if manual {
+		c.mCheckUpdate.SetTitle("Checking for updates…")
+		c.mCheckUpdate.Disable()
+	}
+
 	defer func() {
 		updateMu.Lock()
 		updateInProgress = false
 		lastUpdateCheck = time.Now()
 		updateMu.Unlock()
+		if manual {
+			c.mCheckUpdate.SetTitle("Check for updates...")
+			c.mCheckUpdate.Enable()
+		}
 	}()
 
 	cfg := c.cfg()
@@ -94,24 +106,56 @@ func (c *TrayController) runUpdateCheck(manual bool) {
 	if cfg != nil {
 		repo = strings.TrimSpace(cfg.UpdateRepo)
 	}
-	info := CheckForUpdate(repo)
+	result := CheckForUpdate(repo, manual)
+
 	updateMu.Lock()
-	pendingUpdate = info
+	pendingUpdate = result.Info
 	updateMu.Unlock()
 
-	if info == nil {
+	switch result.Status {
+	case "available":
+		log.Printf("update: available %s", result.Info.Tag)
+		c.setUpdateMenuVisible(result.Info)
+		if manual {
+			_ = beeep.Notify("GSBS", fmt.Sprintf("Update available: %s", result.Info.Tag), "")
+		} else {
+			_ = beeep.Notify("GSBS", fmt.Sprintf("Update available: %s — open tray to install", result.Info.Tag), "")
+		}
+	case "up_to_date":
+		c.setUpdateMenuVisible(nil)
 		if manual {
 			_ = beeep.Notify("GSBS", "You are running the latest version.", "")
 		}
+	case "disabled":
 		c.setUpdateMenuVisible(nil)
-		return
-	}
-	log.Printf("update: available %s", info.Tag)
-	c.setUpdateMenuVisible(info)
-	if manual {
-		_ = beeep.Notify("GSBS", fmt.Sprintf("Update available: %s", info.Tag), "")
-	} else {
-		_ = beeep.Notify("GSBS", fmt.Sprintf("Update available: %s — open tray to install", info.Tag), "")
+		if manual {
+			_ = beeep.Notify("GSBS", "Update checks are disabled.", "")
+		}
+	case "metered_skip":
+		c.setUpdateMenuVisible(nil)
+		if manual {
+			_ = beeep.Notify("GSBS", "Update check skipped on metered connection.", "")
+		}
+	case "network_error", "api_error":
+		c.setUpdateMenuVisible(nil)
+		if manual {
+			_ = beeep.Notify("GSBS", fmt.Sprintf("Update check failed: %s. See gsbs.log for details.", result.Message), "")
+		}
+	case "manifest_mismatch":
+		c.setUpdateMenuVisible(nil)
+		if manual {
+			_ = beeep.Notify("GSBS", "No update found for this platform. See gsbs.log.", "")
+		}
+	case "unsupported_arch":
+		c.setUpdateMenuVisible(nil)
+		if manual {
+			_ = beeep.Notify("GSBS", "Auto-update not supported on this architecture.", "")
+		}
+	default:
+		c.setUpdateMenuVisible(nil)
+		if manual {
+			_ = beeep.Notify("GSBS", "You are running the latest version.", "")
+		}
 	}
 }
 
