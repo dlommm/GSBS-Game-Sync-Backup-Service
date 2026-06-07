@@ -13,23 +13,15 @@
   {{template "partials/admin_pcgw_job_status.html" .}}
 </div>
 
-{{/* PCGW action buttons — consolidated section */}}
+{{/* PCGW controls and admin jobs */}}
 <section class="panel" id="pcgw-actions">
   <div class="panel-header panel-header-actions">
-    <h2>PCGW Actions</h2>
-    <div class="panel-actions">
-      <a href="/admin/pcgw/export/manifest.json.gz" class="btn-ghost-sm">Export bundle</a>
-      <form method="post" action="/admin/pcgw/import" enctype="multipart/form-data" class="inline-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <input type="hidden" name="mode" value="merge">
-        <label class="btn-ghost-sm" style="cursor:pointer;">
-          Import (merge)
-          <input type="file" name="file" accept=".json,.gz,application/gzip,application/json" style="display:none;" onchange="this.form.submit()">
-        </label>
-      </form>
-    </div>
+    <h2>PCGW</h2>
   </div>
-  <div style="padding:0 1.25rem 1rem;">
+  <p class="panel-subtitle">
+    Keep sync status and PCGW runtime actions together, with maintenance and import/export grouped under Active &amp; Jobs.
+  </p>
+  <div class="pcgw-actions-wrap">
     {{template "partials/admin_pcgw_actions.html" .}}
   </div>
 </section>

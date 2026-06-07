@@ -96,12 +96,15 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 	if h.hub != nil {
 		sseClients = h.hub.Count()
 	}
+	stats := h.loadAdminStats(ctx)
+	showGettingStarted := stats.UserCount <= 1 && stats.ClientCount == 0 && stats.SaveCount == 0
 	h.render(w, "admin_overview.html", adminOverviewData{
 		PageData:             h.adminPageData(w, r, userID, username, "overview", "admin_overview"),
-		Stats:                h.loadAdminStats(ctx),
+		Stats:                stats,
 		StatsSnapshots:       statsSnapshots,
 		SSEClients:           sseClients,
 		AllowRegister:        h.allowRegister,
+		ShowGettingStarted:   showGettingStarted,
 		MaxStorageBytes:      h.maxStorageBytes,
 		ReadOnly:             h.readOnly,
 		RecentJobs:           recentJobs,
