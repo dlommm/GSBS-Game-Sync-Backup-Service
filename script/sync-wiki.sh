@@ -204,6 +204,15 @@ git clone --quiet "${WIKI_REPO}" "${WIKI_CLONE_DIR}" || {
   git init "${WIKI_CLONE_DIR}"
   cd "${WIKI_CLONE_DIR}"
   git checkout -b master
+  git remote add origin "${WIKI_REPO}"
+
+  # If the remote is still unreachable (wiki disabled or token lacks access),
+  # avoid failing the whole workflow and emit a clear action message instead.
+  if ! git ls-remote --exit-code origin >/dev/null 2>&1; then
+    warn "Wiki remote is not reachable; skipping publish."
+    warn "Ensure GitHub wiki is enabled and workflow credentials can access ${GITHUB_REPOSITORY}.wiki.git."
+    exit 0
+  fi
   cd -
 }
 

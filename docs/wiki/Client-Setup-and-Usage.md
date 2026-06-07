@@ -81,6 +81,8 @@ On Windows, the tray **Login…** item opens this browser page by default. A nat
 
 The page auto-refreshes every 5 seconds. **Sync Now** on the page triggers an immediate sync.
 
+![Local status dashboard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-local-dashboard-status.png)
+
 ### Notifications
 
 The client sends OS toast notifications for:
@@ -129,6 +131,8 @@ If a game is not in the manifest or uses a non-standard save path:
 1. Tray → **Discovered games** → **Add a game manually…**
 2. Search the manifest by name and click **Use this**, or paste an absolute save folder path.
 3. GSBS writes a `watch_paths` entry to `config.json` and restarts sync.
+
+![Add a game manually page](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-add-game-page.png)
 
 ---
 

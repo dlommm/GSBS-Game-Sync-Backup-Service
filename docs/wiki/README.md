@@ -138,6 +138,9 @@ Available screenshots in `docs/images/screenshots/`:
 - `tray-menu.png`
 - `admin-overview.png`
 - `setup-wizard.png`
+- Full page set:
+  - Server WebUI: `example-webui-*.png`
+  - Client local pages: `example-client-*.png`
 
 Logo: `docs/images/gsbs-logo-sm.png`
 
