@@ -1,8 +1,6 @@
 {{define "partials/admin_pcgw_actions.html"}}
 <div class="pcgw-actions-section">
-
-  {{/* ── Status bar ── */}}
-  <div class="panel panel-compact" style="margin-bottom:1rem;">
+  <section class="panel panel-compact pcgw-primary-controls">
     <div class="panel-header"><h3>PCGW Status</h3></div>
     <div class="config-grid">
       <div class="config-item">
@@ -50,112 +48,130 @@
       </div>
       {{end}}
     </div>
-  </div>
+  </section>
 
-  {{/* ── Sync group ── */}}
-  <div class="panel panel-compact" style="margin-bottom:1rem;">
-    <div class="panel-header"><h3>Sync</h3></div>
-    <div class="panel-actions actions-stack" style="padding:0 1.25rem 1rem;">
+  <section class="panel panel-compact">
+    <div class="panel-header"><h3>Active &amp; Jobs</h3></div>
+    <p class="panel-subtitle">Run sync jobs, maintenance, imports/exports, and wipe actions from one place.</p>
 
-      {{if .JobRunning}}
-      <span class="badge-running">Sync in progress…</span>
-      <form method="post" action="/admin/jobs/pcgw/cancel" class="inline-form">
-        <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-        <button type="submit" class="btn-ghost-sm">Cancel</button>
-      </form>
-      {{else}}
+    <div class="pcgw-group">
+      <h4 class="pcgw-group-title">Sync Jobs</h4>
+      <div class="panel-actions actions-stack">
+        {{if .JobRunning}}
+        <div class="pcgw-action-row">
+          <span class="badge-running">Sync in progress…</span>
+          <form method="post" action="/admin/jobs/pcgw/cancel" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-ghost-sm">Cancel</button>
+          </form>
+        </div>
+        {{else}}
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/sync" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-primary-sm">Run Incremental Sync</button>
+          </form>
+          <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+            title="Scope: all pcgw_* tables + catalog | Duration: minutes to hours | Reversible: no (data added) | Use: routine daily/weekly sync">?</span>
+        </div>
 
-      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
-        <form method="post" action="/admin/pcgw/sync" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-primary-sm">Run Incremental Sync</button>
-        </form>
-        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
-          title="Scope: all pcgw_* tables + catalog | Duration: minutes to hours | Reversible: no (data added) | Use: routine daily/weekly sync">?</span>
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/sync" class="inline-form"
+            onsubmit="return confirm('Force a full PCGW resync? This bypasses resume and may take many hours.');">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <input type="hidden" name="full" value="1">
+            <button type="submit" class="btn-ghost-sm">Run Full Sync</button>
+          </form>
+          <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+            title="Scope: all pcgw_* tables | Duration: many hours (~54k pages) | Reversible: no | Use: after wipe or full refresh needed">?</span>
+        </div>
+        {{end}}
       </div>
-
-      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
-        <form method="post" action="/admin/pcgw/sync" class="inline-form"
-          onsubmit="return confirm('Force a full PCGW resync? This bypasses resume and may take many hours.');">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <input type="hidden" name="full" value="1">
-          <button type="submit" class="btn-ghost-sm">Run Full Sync</button>
-        </form>
-        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
-          title="Scope: all pcgw_* tables | Duration: many hours (~54k pages) | Reversible: no | Use: after wipe or full refresh needed">?</span>
-      </div>
-
-      {{end}}{{/* end not running */}}
     </div>
-  </div>
 
-  {{/* ── Maintenance group ── */}}
-  <div class="panel panel-compact" style="margin-bottom:1rem;">
-    <div class="panel-header"><h3>Maintenance</h3></div>
-    <div class="panel-actions actions-stack" style="padding:0 1.25rem 1rem;">
-
-      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
-        <form method="post" action="/admin/pcgw/sync/retry-failed" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Retry Failed Items</button>
-        </form>
-        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
-          title="Scope: failed/partial entries in pcgw_games | Duration: short | Reversible: no | Use: after fixing a parse issue">?</span>
+    <div class="pcgw-group">
+      <h4 class="pcgw-group-title">Import / Export</h4>
+      <div class="panel-actions actions-stack">
+        <div class="pcgw-action-row">
+          <a href="/admin/pcgw/export/manifest.json.gz" class="btn-ghost-sm">Export bundle</a>
+          <span class="cell-muted">Download all PCGW mirror + manifest rows.</span>
+        </div>
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/import" enctype="multipart/form-data" class="inline-form">
+            <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+            <input type="hidden" name="mode" value="merge">
+            <label class="btn-ghost-sm" style="cursor:pointer;">
+              Import (merge)
+              <input type="file" name="file" accept=".json,.gz,application/gzip,application/json" style="display:none;" onchange="this.form.submit()">
+            </label>
+          </form>
+          <span class="cell-muted">Merge bundle data into existing rows.</span>
+        </div>
       </div>
-
-      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
-        <form method="post" action="/admin/pcgw/rebuild-manifest" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Rebuild PCGW Manifest Projection</button>
-        </form>
-        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
-          title="Scope: game_save_locations (pcgw source rows) | Duration: fast | Reversible: no | Use: after schema/path changes">?</span>
-      </div>
-
-      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
-        <form method="post" action="/admin/pcgw/sync/catalog-only" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Refresh Catalog Only</button>
-        </form>
-        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
-          title="Scope: pcgw_catalog only | Duration: fast (~1-2 min) | Reversible: no (non-destructive) | Use: check current backlog size before a sync">?</span>
-      </div>
-
-      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
-        <form method="post" action="/admin/pcgw/purge-wikitext" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm">Purge Stored Wikitext</button>
-        </form>
-        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
-          title="Scope: full_wikitext_zstd column in pcgw_metadata | Duration: fast | Reversible: no (re-fetch needed) | Use: free disk space">?</span>
-      </div>
-
     </div>
-  </div>
 
-  {{/* ── Destructive group ── */}}
-  <div class="panel panel-compact panel-danger" style="margin-bottom:1rem;border-color:var(--color-danger,#dc3545);">
-    <div class="panel-header" style="border-bottom-color:var(--color-danger,#dc3545);"><h3 style="color:var(--color-danger,#dc3545);">Destructive Actions</h3></div>
-    <div class="panel-actions actions-stack" style="padding:0 1.25rem 1rem;">
+    <div class="pcgw-group">
+      <h4 class="pcgw-group-title">Maintenance</h4>
+      <div class="panel-actions actions-stack">
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/sync/retry-failed" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Retry Failed Items</button>
+          </form>
+          <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+            title="Scope: failed/partial entries in pcgw_games | Duration: short | Reversible: no | Use: after fixing a parse issue">?</span>
+        </div>
 
-      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
-        <button type="button" class="btn-danger-sm"
-          {{if .JobRunning}}disabled{{end}}
-          onclick="showWipeModal('mirror_only')">Wipe PCGW Mirror Only</button>
-        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
-          title="Scope: pcgw_games + pcgw_* section tables + pcgw_metadata | Reversible: no (must re-sync) | Use: reset mirror before a clean re-import">?</span>
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/rebuild-manifest" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Rebuild PCGW Manifest Projection</button>
+          </form>
+          <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+            title="Scope: game_save_locations (pcgw source rows) | Duration: fast | Reversible: no | Use: after schema/path changes">?</span>
+        </div>
+
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/sync/catalog-only" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Refresh Catalog Only</button>
+          </form>
+          <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+            title="Scope: pcgw_catalog only | Duration: fast (~1-2 min) | Reversible: no (non-destructive) | Use: check current backlog size before a sync">?</span>
+        </div>
+
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/purge-wikitext" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-ghost-sm">Purge Stored Wikitext</button>
+          </form>
+          <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+            title="Scope: full_wikitext_zstd column in pcgw_metadata | Duration: fast | Reversible: no (re-fetch needed) | Use: free disk space">?</span>
+        </div>
       </div>
-
-      <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
-        <button type="button" class="btn-danger-sm"
-          {{if .JobRunning}}disabled{{end}}
-          onclick="showWipeModal('mirror_and_manifest')">Wipe PCGW + Manifest Data</button>
-        <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
-          title="Scope: all pcgw_* + game_save_locations (pcgw source) | Reversible: no | Use: full clean slate before re-importing from scratch">?</span>
-      </div>
-
     </div>
-  </div>
+
+    <div class="pcgw-group pcgw-group-danger">
+      <h4 class="pcgw-group-title">Destructive Actions</h4>
+      <div class="panel-actions actions-stack">
+        <div class="pcgw-action-row">
+          <button type="button" class="btn-danger-sm"
+            {{if .JobRunning}}disabled{{end}}
+            onclick="showWipeModal('mirror_only')">Wipe PCGW Mirror Only</button>
+          <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+            title="Scope: pcgw_games + pcgw_* section tables + pcgw_metadata | Reversible: no (must re-sync) | Use: reset mirror before a clean re-import">?</span>
+        </div>
+
+        <div class="pcgw-action-row">
+          <button type="button" class="btn-danger-sm"
+            {{if .JobRunning}}disabled{{end}}
+            onclick="showWipeModal('mirror_and_manifest')">Wipe PCGW + Manifest Data</button>
+          <span class="badge" data-bs-toggle="tooltip" data-bs-placement="top"
+            title="Scope: all pcgw_* + game_save_locations (pcgw source) | Reversible: no | Use: full clean slate before re-importing from scratch">?</span>
+        </div>
+      </div>
+    </div>
+  </section>
 
 </div>
 

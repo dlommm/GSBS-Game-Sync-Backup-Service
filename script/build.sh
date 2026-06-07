@@ -59,9 +59,11 @@ want_platform() {
 }
 
 build_windows() {
-  export GOOS=windows GOARCH=amd64 CGO_ENABLED=0
+  export GOOS=windows GOARCH=amd64 CGO_ENABLED=1
+  # go-sqlite3 requires CGO for the server binary on Windows.
   go build -trimpath -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-server-windows-amd64.exe" ./server
   echo "Built gsbs-server-windows-amd64.exe"
+  export CGO_ENABLED=0
   go build -trimpath -ldflags "-H windowsgui ${LDFLAGS}" -o "${OUT_DIR}/gsbs-client-windows-amd64.exe" ./client
   echo "Built gsbs-client-windows-amd64.exe"
 }

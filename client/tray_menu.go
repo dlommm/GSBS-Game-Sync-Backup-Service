@@ -365,6 +365,12 @@ func (c *TrayController) applyIcon(snap TraySnapshot) {
 	switch snap.Status {
 	case TrayStatusSyncing:
 		systray.SetIcon(IconSyncing())
+	case TrayStatusIdle, TrayStatusPaused, TrayStatusOffline:
+		if !snap.WatcherHealthy {
+			systray.SetIcon(IconRecovering())
+			return
+		}
+		systray.SetIcon(IconIdle())
 	case TrayStatusError:
 		systray.SetIcon(IconError())
 	case TrayStatusSetup:

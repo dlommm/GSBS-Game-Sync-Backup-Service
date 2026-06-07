@@ -77,6 +77,7 @@ type adminOverviewData struct {
 	StatsSnapshots       []store.StatsSnapshotRow
 	SSEClients           int
 	AllowRegister        bool
+	ShowGettingStarted   bool
 	MaxStorageBytes      int64
 	ReadOnly             bool
 	RecentJobs           []store.JobRun

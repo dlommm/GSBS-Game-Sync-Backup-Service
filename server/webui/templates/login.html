@@ -25,6 +25,19 @@
       <input id="password" name="password" type="password" required autocomplete="current-password">
       <button type="submit">Sign in</button>
     </form>
+    <section class="auth-help">
+      <h2>Getting Started</h2>
+      {{if .AllowRegister}}
+      <p class="cell-muted">First run on a new server? Create the first account, then open Admin to configure PCGW sync.</p>
+      <ol>
+        <li><a href="/register">Register</a> an admin account.</li>
+        <li>Sign in and open <strong>Admin → Settings</strong> for initial cron/sync preferences.</li>
+        <li>Open <strong>Admin → PCGW</strong> and run an incremental sync.</li>
+      </ol>
+      {{else}}
+      <p class="cell-muted">Registration is disabled on this server. Ask an admin to create your account before first login.</p>
+      {{end}}
+    </section>
     {{if .AllowRegister}}<p class="auth-footer">Don't have an account? <a href="/register">Register</a></p>{{end}}
   </main>
 </body>

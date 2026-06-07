@@ -2,6 +2,18 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.1] - 2026-06-07
+
+### Added
+
+- Admin/WebUI: first-run onboarding guidance in login/register screens and a "Getting Started" panel on Admin Overview when the instance is empty.
+
+### Changed
+
+- Admin/WebUI: consolidated PCGW controls into clearer sections (status, jobs, import/export, maintenance, destructive actions) with improved layout and helper text.
+- Client tray: status icons now use tinted GSBS logo variants and add a distinct "recovering watcher" icon when watcher health is degraded.
+- Build: Windows server release binary now builds with `CGO_ENABLED=1` to support sqlite in release artifacts, while client remains `CGO_ENABLED=0`.
+
 ## [2.0.0] - 2026-06-07
 
 ### Fixed
