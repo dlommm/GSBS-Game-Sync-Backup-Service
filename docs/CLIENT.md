@@ -37,6 +37,7 @@ When started without `--console`, the client runs in the system tray.
 - **Issues** — conflict count, pending offline uploads, last error (with link to log).
 - **Account & Setup** (submenu) — server URL, sync interval, login, **Detect launcher paths**, **Refresh manifest**.
 - **Advanced** (submenu) — edit config, view log, open data folder, run at startup, version, check/install updates.
+  - **Local status page** — opens a local browser page (`http://127.0.0.1:41234/dashboard`) with live sync status, watched games, pending uploads, and conflicts.
 
 Ready + enabled discovered games sync automatically; there is no separate "add to sync" step for games the manifest covers and whose save folder exists. For games the manifest doesn't cover (or with a non-standard folder), use **Add a game manually…**.
 
@@ -46,7 +47,7 @@ Toasts (via the OS notification system) for sync complete/failed, new saves uplo
 
 ### First-run setup wizard
 
-If not logged in, the tray opens a local browser setup page (`http://127.0.0.1:41234`). After login, the page polls `/status` for discovery progress and lists matched games.
+If not logged in, the tray opens a local browser setup page (`http://127.0.0.1:41234`). On Windows, tray **Login...** now opens this browser page by default; the native Walk dialog is available as a fallback via a direct sub-item. After login, the page polls `/status` for discovery progress and lists matched games.
 
 ### Autostart
 
@@ -172,6 +173,7 @@ Enable **End-to-end encryption** in WebUI **Settings**. Set `encryption_passphra
 ## Sync behavior
 
 - **Upload**: File watcher debounces changes (2s) and pushes with SHA256 hash metadata. Duplicate content (same hash as the last successful push for that slot) is skipped locally; the server may also respond with `{"status":"unchanged"}`. A supervisor restarts the watcher if fsnotify fails.
+- **Startup reconciliation**: On startup (after the initial pull), the client scans all local save files under watched directories and uploads any that are not yet on the server. This ensures saves reach the server on first install or when the server has no record — not just when files change. Files already matching the server hash are skipped.
 - **Download**: Uses summary + hash comparison to fetch only changed saves; listens for SSE `save-updated` events from other machines. Transient network errors use exponential backoff (`pkg/retry`).
 - **Conflicts**: Default policy is `last_write_wins` (`conflict_policy`). When both local and server changed, conflicts are recorded in `conflicts.json` with hashes and timestamps. Resolve from the tray (keep all local / use all server) or the WebUI dashboard. Legacy `skip_overwrite_when_local_newer: true` maps to `keep_local`.
 - **Versions**: Server keeps last N versions per save (`GSBS_SAVE_VERSION_RETENTION`). Restore from WebUI **Versions** link or tray **Open dashboard**.
@@ -187,7 +189,7 @@ Enable **End-to-end encryption** in WebUI **Settings**. Set `encryption_passphra
   - Manifest: fetch from server, cache save, refresh (SSE or manual)
   - Sync: initial pull, periodic pull, “sync now”, watch paths count, zero-watch diagnostics
   - Manifest refresh: watch path diff (+added -removed) after SSE, discovery, or manual refresh
-  - Watcher: directory add errors, push after file change, push errors
+  - Watcher: directory add errors, push after file change, push errors; `watcher_event_received`, `watcher_event_unmapped`, `watcher_push_paused`, `watcher_file_lock_retry`, `reconcile_upload`, `reconcile_skip_unchanged`, `push_cache_load_error`, `push_http_error`
   - Pull: decode/mkdir/write errors, successful writes per game/path
   - Tray: sync started, config reloaded, menu actions, per-game status updates
   - SSE: connection/disconnect, received events

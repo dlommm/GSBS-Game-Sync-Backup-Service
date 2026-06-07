@@ -2,10 +2,12 @@ package sync
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -256,4 +258,60 @@ func TestWatcherPushRelativePathHeader(t *testing.T) {
 	time.Sleep(150 * time.Millisecond)
 
 	assert.Equal(t, "save.dat", relHeader.Load())
+}
+
+func TestIsFileLockError(t *testing.T) {
+	cases := []struct {
+		name    string
+		errMsg  string
+		expects bool
+	}{
+		{"nil error", "", false},
+		{"sharing violation", "The process cannot access the file because it is being used by another process: sharing violation", true},
+		{"process cannot access", "open C:\\foo: The process cannot access the file", true},
+		{"being used by another", "file is being used by another process", true},
+		{"unrelated error", "no such file or directory", false},
+		{"permission denied", "permission denied", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var err error
+			if tc.errMsg != "" {
+				err = fmt.Errorf("%s", tc.errMsg)
+			}
+			assert.Equal(t, tc.expects, isFileLockError(err))
+		})
+	}
+}
+
+func TestFindWatchDir_CaseInsensitive(t *testing.T) {
+	dir := t.TempDir()
+	resolver := paths.NewResolver()
+	client, err := NewClient("http://127.0.0.1:1", "test-token", resolver, paths.CurrentOS(), 0, false, false)
+	require.NoError(t, err)
+
+	w, err := NewWatcher(resolver, paths.CurrentOS(), client)
+	require.NoError(t, err)
+	defer w.Close()
+
+	// Register the directory with its canonical casing.
+	canonical := dir
+	entry := pathEntry{rules: []watchRuleInfo{{GameID: "g1", RuleKey: "rk1", SyncAll: true}}}
+	w.mu.Lock()
+	w.pathMap[canonical] = entry
+	w.mu.Unlock()
+
+	// Look up using the same path — exact match.
+	foundDir, _, ok := w.findWatchDir(filepath.Join(canonical, "save.dat"))
+	require.True(t, ok, "expected exact match to succeed")
+	assert.Equal(t, canonical, foundDir)
+
+	// Look up using uppercase version — should find via case-insensitive fallback.
+	upper := strings.ToUpper(canonical)
+	if upper == canonical {
+		t.Skip("filesystem path has no uppercase letters to test case-insensitive lookup")
+	}
+	foundDir2, _, ok2 := w.findWatchDir(filepath.Join(upper, "save.dat"))
+	require.True(t, ok2, "expected case-insensitive match to succeed")
+	assert.Equal(t, canonical, foundDir2, "should return the canonical registered path")
 }

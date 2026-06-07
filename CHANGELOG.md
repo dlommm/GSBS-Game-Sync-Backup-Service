@@ -2,6 +2,28 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.6.0] - 2026-06-07
+
+### Added
+
+- **Startup reconciliation upload**: Client scans local save files at startup and uploads any that are missing on the server, independent of file-change events. Ensures saves are seeded even on first run or after server resets. Logs `reconcile_upload` / `reconcile_skip_unchanged` per file.
+- **Local status dashboard**: New local web page at `http://127.0.0.1:41234/dashboard` (also available via tray **Advanced → Local status page**) shows live sync status, watched games, pending uploads, conflicts, and last sync result. Auto-refreshes every 5 seconds.
+- **Tray "Local status page"** item in **Advanced** submenu opens the local dashboard in the system browser.
+- **Sync Now** button on local dashboard triggers an immediate sync.
+
+### Changed
+
+- **Tray "Login..." now opens the browser-based setup page by default** on Windows. The Walk native dialog is retained as a fallback only when the local setup server fails to bind a port. This provides a modern, consistent login experience matching the server WebUI.
+- **Windows watcher path matching** is now case-insensitive — avoids missed uploads when fsnotify returns a differently-cased path than the registered watch directory.
+- **Watcher file-lock retry**: debounce push retries stat/read up to 3 times (300ms apart) when a Windows sharing-violation or file-lock error is detected, reducing missed uploads caused by games holding exclusive write locks during save.
+- **Modernized setup/login HTML**: Setup and add-game pages now use Tailwind CSS (loaded via CDN), dark-mode support, and a clean card layout matching the server WebUI style.
+
+### Fixed
+
+- **Push diagnostics**: `watcher_event_unmapped` log op identifies fsnotify events that arrive for a path not registered in the watcher (useful for diagnosing watch root mismatches on Windows).
+- Push hash cache I/O errors are now surfaced as `push_cache_load_error` / `push_cache_write_error` structured log ops instead of being silently swallowed.
+- Non-specific push HTTP errors now log the first 512 bytes of the response body as `push_http_error` for easier server-side triage.
+
 ## [1.5.0] - 2026-06-06
 
 ### Added
@@ -204,7 +226,8 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 See [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases) for earlier history.
 
-[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.5.0...v1.6.0
 [2.0.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.3...v2.0.0
 [1.2.3]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.2...v1.2.3
 [1.5.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.1...v1.5.0

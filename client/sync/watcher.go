@@ -344,10 +344,22 @@ func (w *Watcher) findWatchDir(filePath string) (watchDir string, entry pathEntr
 	dir := filepath.Dir(filePath)
 	for {
 		w.mu.Lock()
-		entry, found := w.pathMap[dir]
+		e, found := w.pathMap[dir]
+		if !found {
+			// Case-insensitive fallback for Windows (fsnotify may return different casing)
+			ldir := strings.ToLower(dir)
+			for k, v := range w.pathMap {
+				if strings.ToLower(k) == ldir {
+					e = v
+					dir = k // use the registered canonical path
+					found = true
+					break
+				}
+			}
+		}
 		w.mu.Unlock()
 		if found {
-			return dir, entry, true
+			return dir, e, true
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -381,8 +393,10 @@ func (w *Watcher) handleEvent(ctx context.Context, ev fsnotify.Event) {
 		return
 	}
 
+	logSyncDebug("watcher_event_received", "file", ev.Name, "op", ev.Op.String())
 	watchDir, entry, found := w.findWatchDir(ev.Name)
 	if !found {
+		logSyncWarn("watcher_event_unmapped", "file", ev.Name, "op", ev.Op.String())
 		return
 	}
 
@@ -401,7 +415,7 @@ func (w *Watcher) handleEvent(ctx context.Context, ev fsnotify.Event) {
 		}
 	}
 	if matched == nil {
-		logSyncDebug("watcher_ignore_pattern", "file", ev.Name, "relative_path", relPath)
+		logSyncDebug("watcher_ignore_pattern", "file", ev.Name, "relative_path", relPath, "rules_count", len(entry.rules))
 		return
 	}
 
@@ -463,25 +477,47 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 		w.mu.Unlock()
 	}()
 	if w.IsPaused != nil && w.IsPaused() {
-		logSyncDebug("watcher_push_paused", "game_id", gameID, "file", filePath)
+		logSyncInfo("watcher_push_paused", "game_id", gameID, "file", filePath)
 		return
 	}
 	if w.excludeMatch(filePath, relPath) {
 		logSyncDebug("watcher_exclude", "game_id", gameID, "file", filePath, "relative_path", relPath)
 		return
 	}
-	info, err := os.Stat(filePath)
-	if err != nil {
-		logSyncWarn("watcher_stat", "game_id", gameID, "file", filePath, "error", err)
-		return
+	var info os.FileInfo
+	var content []byte
+	for attempt := 0; attempt < 3; attempt++ {
+		var statErr error
+		info, statErr = os.Stat(filePath)
+		if statErr == nil && info.Size() > 0 {
+			var readErr error
+			content, readErr = os.ReadFile(filePath)
+			if readErr == nil {
+				break
+			}
+			if attempt < 2 && isFileLockError(readErr) {
+				logSyncDebug("watcher_file_lock_retry", "game_id", gameID, "file", filePath, "attempt", attempt+1)
+				time.Sleep(300 * time.Millisecond)
+				continue
+			}
+			logSyncWarn("watcher_read", "game_id", gameID, "file", filePath, "stage", "read", "error", readErr)
+			return
+		}
+		if statErr != nil {
+			if attempt < 2 && isFileLockError(statErr) {
+				logSyncDebug("watcher_file_lock_retry", "game_id", gameID, "file", filePath, "attempt", attempt+1)
+				time.Sleep(300 * time.Millisecond)
+				continue
+			}
+			logSyncWarn("watcher_stat", "game_id", gameID, "file", filePath, "stage", "stat", "error", statErr)
+			return
+		}
+		if info.Size() == 0 {
+			logSyncDebug("watcher_skip_empty", "game_id", gameID, "file", filePath)
+			return
+		}
 	}
-	if info.Size() == 0 {
-		logSyncDebug("watcher_skip_empty", "game_id", gameID, "file", filePath)
-		return
-	}
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		logSyncWarn("watcher_read", "game_id", gameID, "file", filePath, "error", err)
+	if info == nil || content == nil {
 		return
 	}
 	hash, err := w.client.ContentWireHash(content)
@@ -560,4 +596,15 @@ func (w *Watcher) Close() error {
 		return w.fw.Close()
 	}
 	return nil
+}
+
+// isFileLockError reports whether an OS error indicates a Windows file-sharing/lock error.
+func isFileLockError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "sharing violation") ||
+		strings.Contains(s, "process cannot access") ||
+		strings.Contains(s, "being used by another process")
 }

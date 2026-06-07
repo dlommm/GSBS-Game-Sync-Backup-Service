@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/url"
+	"os"
 	"strings"
 	gosync "sync"
 	"sync/atomic"
@@ -293,6 +294,32 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		WatcherHealthy.Store(ok)
 	})
 
+	// Startup reconciliation: upload local saves that are missing on the server.
+	// Runs in a goroutine with a short delay so the watcher is running first,
+	// avoiding echo-suppression gaps when reconcile fires pushes.
+	if !SyncPaused.Load() && !(cfg.SkipSyncWhenMetered && IsMeteredConnection()) {
+		go func() {
+			time.Sleep(2 * time.Second)
+			reconcileCtx, reconcileCancel := context.WithTimeout(ctx, 5*time.Minute)
+			defer reconcileCancel()
+			serverHashes, sumErr := client.FetchServerHashes(reconcileCtx)
+			if sumErr != nil {
+				log.Printf("reconcile: failed to fetch server hashes: %v", sumErr)
+				serverHashes = nil
+			}
+			installRootsMu.RLock()
+			reconRoots := installRoots
+			installRootsMu.RUnlock()
+			reconWPs := buildReconciledWatchPaths(getSyncWatchPaths(), resolver, currentOS, reconRoots)
+			n := sync.ReconcileLocalToServer(reconcileCtx, reconWPs, client, serverHashes)
+			if n > 0 {
+				log.Printf("reconcile: uploaded %d local save(s) missing on server", n)
+			} else {
+				log.Printf("reconcile: no missing uploads found")
+			}
+		}()
+	}
+
 	// Process any pending outbox entries from previous sessions.
 	if n := sync.ProcessOutbox(ctx, client); n > 0 {
 		log.Printf("outbox: sent %d pending upload(s) on startup", n)
@@ -546,6 +573,34 @@ func mapToSyncWatchPaths(wps []watchPath) []sync.WatchPath {
 				Directory: t,
 				SyncAll:   true,
 			})
+		}
+	}
+	return out
+}
+
+// buildReconciledWatchPaths resolves WatchPath.Directory templates to absolute paths
+// so ReconcileLocalToServer can walk them directly.
+func buildReconciledWatchPaths(wps []sync.WatchPath, resolver *paths.Resolver, currentOS paths.OS, installRoots map[string][]string) []sync.WatchPath {
+	var out []sync.WatchPath
+	for _, wp := range wps {
+		if wp.Directory == "" {
+			continue
+		}
+		var roots []string
+		if installRoots != nil {
+			roots = installRoots[wp.GameID]
+		}
+		for _, abs := range resolver.ResolveAllForGame(wp.Directory, currentOS, roots) {
+			if abs == "" {
+				continue
+			}
+			info, err := os.Stat(abs)
+			if err != nil || !info.IsDir() {
+				continue
+			}
+			resolved := wp
+			resolved.Directory = abs
+			out = append(out, resolved)
 		}
 	}
 	return out

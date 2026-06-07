@@ -56,6 +56,9 @@ func loadPushHashCache() map[string]string {
 	hashCacheLoaded = true
 	data, err := os.ReadFile(pushHashCachePath())
 	if err != nil {
+		if !os.IsNotExist(err) {
+			logSyncWarn("push_cache_load_error", "path", pushHashCachePath(), "error", err)
+		}
 		hashCachePersist = make(map[string]string)
 		return hashCachePersist
 	}
@@ -146,6 +149,7 @@ func writePushHashCacheFile(m map[string]string) {
 	}
 	tmp := pushHashCachePath() + ".tmp"
 	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		logSyncWarn("push_cache_write_error", "path", pushHashCachePath(), "error", err)
 		return
 	}
 	_ = os.Rename(tmp, pushHashCachePath())
