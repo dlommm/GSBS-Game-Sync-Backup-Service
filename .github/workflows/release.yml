@@ -223,6 +223,7 @@ jobs:
       - name: Merge SHA256SUMS and latest-client.json
         env:
           VERSION: ${{ needs.version.outputs.tag }}
+          REQUIRE_COMPLETE_MANIFEST: "1"
         run: bash script/release-assets.sh "$VERSION" dist
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
