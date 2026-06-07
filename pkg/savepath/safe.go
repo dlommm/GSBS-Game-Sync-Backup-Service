@@ -21,6 +21,10 @@ func ValidateRelativePath(rel string) error {
 	if filepath.IsAbs(rel) {
 		return fmt.Errorf("%w: absolute path", ErrInvalidRelativePath)
 	}
+	// Reject Unix absolute paths on any OS (filepath.IsAbs misses these on Windows).
+	if len(rel) > 0 && rel[0] == '/' {
+		return fmt.Errorf("%w: absolute path", ErrInvalidRelativePath)
+	}
 	// Reject Windows drive paths (e.g. C:\foo) on any OS.
 	if len(rel) >= 2 && rel[1] == ':' && ((rel[0] >= 'A' && rel[0] <= 'Z') || (rel[0] >= 'a' && rel[0] <= 'z')) {
 		return fmt.Errorf("%w: absolute path", ErrInvalidRelativePath)

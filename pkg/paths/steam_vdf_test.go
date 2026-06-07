@@ -105,7 +105,7 @@ func TestAppendSteamLibrariesFromVDF(t *testing.T) {
 	if got[0] != root {
 		t.Fatalf("first root %q, want %q", got[0], root)
 	}
-	if got[1] != extraLib {
+	if filepath.FromSlash(got[1]) != extraLib {
 		t.Fatalf("second root %q, want %q", got[1], extraLib)
 	}
 }
