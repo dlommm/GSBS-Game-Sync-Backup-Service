@@ -86,9 +86,13 @@ type adminOverviewData struct {
 	JobProgressTotal      int
 	JobGamesSkipped       int
 	JobPhase              string
+	JobAutoCatchUp        bool
 	LastSuccessfulSyncAt  string
 	MaxPagesPerRun        int
 	MaxPagesPerRunFromEnv bool
+	MaxPagesPerRunSource  string
+	CapReached            bool
+	CapStatusText         string
 	ShowPCGWControls      bool
 }
 
@@ -126,12 +130,36 @@ type adminActivityData struct {
 	JobProgressTotal      int
 	JobGamesSkipped       int
 	JobPhase              string
+	JobAutoCatchUp        bool
 	LastSuccessfulSyncAt  string
 	CatalogStats          types.PCGWCatalogStats
 	LatestSyncRun         *types.PCGWSyncRun
 	MaxPagesPerRun        int
 	MaxPagesPerRunFromEnv bool
+	MaxPagesPerRunSource  string
+	CapReached            bool
+	CapStatusText         string
 	ShowPCGWControls      bool
+}
+
+type adminLogEntry struct {
+	Timestamp string
+	Level     string
+	Message   string
+	Raw       string
+}
+
+type adminLogsData struct {
+	PageData
+	Entries          []adminLogEntry
+	LogSourcePath    string
+	LogSourceInfo    string
+	LogSourcePresent bool
+	Level            string
+	Query            string
+	Limit            int
+	AutoRefresh      bool
+	RefreshSeconds   int
 }
 
 func newTemplateFuncs(t *template.Template) template.FuncMap {

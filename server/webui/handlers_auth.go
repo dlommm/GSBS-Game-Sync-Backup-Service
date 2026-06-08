@@ -269,6 +269,8 @@ func adminQuerySuccess(r *http.Request) string {
 			return "PCGW sync started. This pass includes missing local backlog first; if none are pending it may complete without changes."
 		case "retry_failed":
 			return "Retry failed started. This action only processes failed/partial rows and is a no-op when none are queued."
+		case "auto_catchup":
+			return "Auto catch-up started. GSBS will keep running Phase 2 parse/store cycles until backlog reaches zero or a guard/error stops it."
 		}
 		return "PCGW sync job started in background."
 	}

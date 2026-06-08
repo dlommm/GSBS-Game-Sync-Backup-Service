@@ -2,7 +2,6 @@ package webui
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -41,6 +40,10 @@ type adminPCGWData struct {
 	JobProgressTotal int
 	JobGamesSkipped  int
 	JobPhase         string
+	JobAutoCatchUp   bool
+	MaxPagesPerRun   int
+	CapStatusText    string
+	CapReached       bool
 }
 
 type PCGWStatsView struct {
@@ -161,6 +164,10 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 		JobProgressTotal: jobs.JobProgressTotal,
 		JobGamesSkipped:  jobs.JobGamesSkipped,
 		JobPhase:         jobs.JobPhase,
+		JobAutoCatchUp:   jobs.JobAutoCatchUp,
+		MaxPagesPerRun:   jobs.MaxPagesPerRun,
+		CapStatusText:    jobs.CapStatusText,
+		CapReached:       jobs.CapReached,
 	})
 }
 
@@ -182,6 +189,7 @@ func (h *WebHandler) serveAdminPCGWJobStatusPartial(w http.ResponseWriter, r *ht
 		"JobProgress":      data.JobProgressPages,
 		"JobProgressTotal": data.JobProgressTotal,
 		"JobGamesSkipped":  data.JobGamesSkipped,
+		"JobAutoCatchUp":   data.JobAutoCatchUp,
 		"CSRFToken":        data.CSRFToken,
 	})
 }
@@ -375,19 +383,6 @@ func (h *WebHandler) handleAdminPCGWImport(w http.ResponseWriter, r *http.Reques
 	Redirect(w, r, fmt.Sprintf("/admin/activity?imported=1&locations=%d&games=%d", result.GameSaveLocations, result.PCGWGames))
 }
 
-func (h *WebHandler) handleAdminPCGWWipePreflight(w http.ResponseWriter, r *http.Request) {
-	if _, _, ok := h.requireAdmin(w, r); !ok {
-		return
-	}
-	counts, err := h.store.GetPCGWWipePreflightCounts(r.Context())
-	if err != nil {
-		http.Error(w, "preflight failed", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(counts)
-}
-
 func (h *WebHandler) handleAdminPCGWWipe(w http.ResponseWriter, r *http.Request) {
 	if !ValidateCSRF(r, h.secret) {
 		http.Error(w, "Invalid security token.", http.StatusBadRequest)
@@ -514,6 +509,34 @@ func (h *WebHandler) handleAdminPCGWSyncMissingLocal(w http.ResponseWriter, r *h
 	Redirect(w, r, "/admin/activity?job_started=1&job_action=missing_local")
 }
 
+func (h *WebHandler) handleAdminPCGWSyncAutoCatchUp(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if h.jobRunner != nil {
+		started, err := h.jobRunner.RunPCGWSyncAutoCatchUp(context.Background())
+		if err != nil {
+			if errors.Is(err, job.ErrJobAlreadyRunning) {
+				Redirect(w, r, "/admin/activity?error=job_already_running")
+				return
+			}
+			Redirect(w, r, "/admin/activity?error=job_start_failed")
+			return
+		}
+		if !started {
+			Redirect(w, r, "/admin/activity?error=job_already_running")
+			return
+		}
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "pcgw_sync_auto_catchup", "")
+	Redirect(w, r, "/admin/activity?job_started=1&job_action=auto_catchup")
+}
+
 func (h *WebHandler) handleAdminPCGWRebuildManifest(w http.ResponseWriter, r *http.Request) {
 	if !ValidateCSRF(r, h.secret) {
 		http.Error(w, "Invalid security token.", http.StatusBadRequest)
@@ -564,12 +587,12 @@ func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool
 		h.handleAdminPCGWSyncMissingLocal(w, r)
 		return true
 	}
-	if path == "/admin/pcgw/rebuild-manifest" && r.Method == http.MethodPost {
-		h.handleAdminPCGWRebuildManifest(w, r)
+	if path == "/admin/pcgw/sync/auto-catch-up" && r.Method == http.MethodPost {
+		h.handleAdminPCGWSyncAutoCatchUp(w, r)
 		return true
 	}
-	if path == "/admin/pcgw/wipe-preflight" && r.Method == http.MethodGet {
-		h.handleAdminPCGWWipePreflight(w, r)
+	if path == "/admin/pcgw/rebuild-manifest" && r.Method == http.MethodPost {
+		h.handleAdminPCGWRebuildManifest(w, r)
 		return true
 	}
 	if path == "/admin/pcgw/wipe" && r.Method == http.MethodPost {

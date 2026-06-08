@@ -2,6 +2,24 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.4] - 2026-06-08
+
+### Added
+
+- Admin/WebUI: new `/admin/logs` page with level filtering, text search, line limit control, and optional auto-refresh polling.
+- Admin/WebUI: new `Auto Catch-Up Missing Backlog` action that repeatedly runs budgeted Phase 2 ingest cycles until backlog clears (with cancel support).
+- Server/job: explicit `MaxPagesPerRunWithSource()` parsing to report effective Phase 2 cap source/value in admin UI.
+
+### Changed
+
+- Admin/WebUI: PCGW sync action labels now explicitly describe Phase 1 vs Phase 2 behavior (IDs refresh vs parse/store backlog) to reduce operator confusion.
+- Admin/WebUI: jobs/status messaging now clearly distinguishes catalog scan completion from budgeted ingest progress and cap-reached resume behavior.
+
+### Fixed
+
+- Server/job: resume ingest no longer reuses stale queue cursor indexes against rebuilt queues, preventing skipped or stalled backlog progress after interrupted runs.
+- Admin/WebUI: destructive PCGW wipe flow now uses clean confirmation prompts (removed typed `WIPE PCGW` modal and stale loading state).
+
 ## [2.0.3] - 2026-06-08
 
 ### Added

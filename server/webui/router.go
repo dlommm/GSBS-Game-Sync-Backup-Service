@@ -161,6 +161,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveAdminManifest(w, r)
 	case path == "/admin/activity" && r.Method == http.MethodGet:
 		h.serveAdminActivity(w, r)
+	case path == "/admin/logs" && r.Method == http.MethodGet:
+		h.serveAdminLogs(w, r)
 	case path == "/admin/settings" && r.Method == http.MethodGet:
 		h.serveAdminSettings(w, r)
 	case path == "/admin/settings/save" && r.Method == http.MethodPost:
@@ -173,6 +175,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveAdminManifestPartial(w, r)
 	case path == "/admin/partial/jobs" && r.Method == http.MethodGet:
 		h.serveAdminJobsPartial(w, r)
+	case path == "/admin/partial/logs" && r.Method == http.MethodGet:
+		h.serveAdminLogsPartial(w, r)
 	case path == "/admin/revoke" && r.Method == http.MethodPost:
 		h.handleRevokeClient(w, r)
 	case path == "/admin/push-manifest" && r.Method == http.MethodPost:
