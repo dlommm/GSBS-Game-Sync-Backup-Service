@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/gsbs/gsbs/server/logx"
 )
 
 const (
@@ -106,17 +108,58 @@ func parseAdminLogQuery(r *http.Request) (level, query string, limit int, autoRe
 }
 
 func resolveAdminLogSource() (path, info string, present bool) {
-	if custom := strings.TrimSpace(os.Getenv("GSBS_SERVICE_LOG_PATH")); custom != "" {
-		return filepath.Clean(custom), "Using GSBS_SERVICE_LOG_PATH.", true
+	return resolveAdminLogSourceFor(runtime.GOOS, os.Getenv, os.Stat)
+}
+
+type adminLogSourceCandidate struct {
+	path   string
+	source string
+}
+
+func resolveAdminLogSourceFor(goos string, getenv func(string) string, statFn func(string) (os.FileInfo, error)) (path, info string, present bool) {
+	candidates := adminLogSourceCandidates(goos, getenv)
+	attempted := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		attempted = append(attempted, candidate.path)
+		if fi, err := statFn(candidate.path); err == nil && !fi.IsDir() {
+			return candidate.path, fmt.Sprintf("Using %s.", candidate.source), true
+		}
 	}
-	if runtime.GOOS == "windows" {
-		base := os.Getenv("ProgramData")
-		if strings.TrimSpace(base) == "" {
+	if len(candidates) == 0 {
+		return "", fmt.Sprintf("No log file source configured. Set %s (preferred) or %s to write server logs to a file; this runtime is likely stdout-only.", logx.ServiceLogPathEnv, logx.LegacyLogFileEnv), false
+	}
+	primary := candidates[0].path
+	return primary, fmt.Sprintf("No log file found yet. Attempted: %s. Set %s (preferred) or %s to a writable file path and restart if needed.", strings.Join(attempted, ", "), logx.ServiceLogPathEnv, logx.LegacyLogFileEnv), false
+}
+
+func adminLogSourceCandidates(goos string, getenv func(string) string) []adminLogSourceCandidate {
+	candidates := make([]adminLogSourceCandidate, 0, 3)
+	seen := make(map[string]struct{}, 3)
+	add := func(path, source string) {
+		clean := filepath.Clean(strings.TrimSpace(path))
+		if clean == "" || clean == "." {
+			return
+		}
+		if _, ok := seen[clean]; ok {
+			return
+		}
+		seen[clean] = struct{}{}
+		candidates = append(candidates, adminLogSourceCandidate{path: clean, source: source})
+	}
+	if custom := strings.TrimSpace(getenv(logx.ServiceLogPathEnv)); custom != "" {
+		add(custom, logx.ServiceLogPathEnv)
+	}
+	if legacy := strings.TrimSpace(getenv(logx.LegacyLogFileEnv)); legacy != "" {
+		add(legacy, logx.LegacyLogFileEnv)
+	}
+	if goos == "windows" {
+		base := strings.TrimSpace(getenv("ProgramData"))
+		if base == "" {
 			base = `C:\ProgramData`
 		}
-		return filepath.Join(base, "GSBS", "logs", "server.log"), "Using default Windows service log path.", true
+		add(filepath.Join(base, "GSBS", "logs", "server.log"), "default Windows service log path")
 	}
-	return "", "Log file source unavailable in this runtime. This server is likely logging to stdout only.", false
+	return candidates
 }
 
 func loadAdminLogEntries(path, level, query string, limit int) ([]adminLogEntry, error) {

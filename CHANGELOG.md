@@ -2,6 +2,13 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.5] - 2026-06-08
+
+### Fixed
+
+- Admin/WebUI logs: `/admin/logs` now resolves file sources in a robust order (`GSBS_SERVICE_LOG_PATH`, then legacy `GSBS_LOG_FILE`, then Windows default path) and shows clearer guidance when no readable log file exists yet.
+- Server logging init: console mode now honors `GSBS_SERVICE_LOG_PATH` / `GSBS_LOG_FILE` for file-backed logging when configured, with safe fallback to stdout if file initialization fails.
+
 ## [2.0.4] - 2026-06-08
 
 ### Added
