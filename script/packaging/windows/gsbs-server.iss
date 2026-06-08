@@ -382,8 +382,6 @@ procedure InitializeWizard();
 var
   Top: Integer;
 begin
-  Randomize;
-
   CorePage := CreateCustomPage(
     wpSelectTasks,
     'Server basics',
