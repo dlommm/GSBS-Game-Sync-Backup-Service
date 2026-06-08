@@ -1,0 +1,100 @@
+{{template "layout" .}}
+{{define "admin_logs_title"}}Admin Logs — GSBS{{end}}
+{{define "admin_logs_content"}}
+<section class="panel panel-compact">
+  <div class="panel-header"><h2>Server Logs</h2></div>
+  <p class="panel-subtitle">
+    {{if .LogSourcePresent}}
+      Showing logs from <code>{{.LogSourcePath}}</code>. {{.LogSourceInfo}}
+    {{else}}
+      {{.LogSourceInfo}}
+    {{end}}
+  </p>
+</section>
+
+<section class="panel">
+  <div class="panel-header-actions">
+    <h2>Filters</h2>
+    <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
+  </div>
+  <form id="logs-filters" class="filter-toolbar" method="get" action="/admin/logs">
+    <select name="level" class="filter-select">
+      <option value="all" {{if eq .Level "all"}}selected{{end}}>All levels</option>
+      <option value="debug" {{if eq .Level "debug"}}selected{{end}}>debug</option>
+      <option value="info" {{if eq .Level "info"}}selected{{end}}>info</option>
+      <option value="warn" {{if eq .Level "warn"}}selected{{end}}>warn</option>
+      <option value="error" {{if eq .Level "error"}}selected{{end}}>error</option>
+    </select>
+    <input type="search" class="search-input filter-search" name="q" value="{{.Query}}" placeholder="Search logs…">
+    <select name="limit" class="filter-select">
+      <option value="100" {{if eq .Limit 100}}selected{{end}}>100 lines</option>
+      <option value="200" {{if eq .Limit 200}}selected{{end}}>200 lines</option>
+      <option value="500" {{if eq .Limit 500}}selected{{end}}>500 lines</option>
+      <option value="1000" {{if eq .Limit 1000}}selected{{end}}>1000 lines</option>
+    </select>
+    <label class="checkbox-label">
+      <input type="checkbox" name="auto" value="1" {{if .AutoRefresh}}checked{{end}}>
+      Auto-refresh
+    </label>
+    <select name="refresh" class="filter-select">
+      <option value="2" {{if eq .RefreshSeconds 2}}selected{{end}}>2s</option>
+      <option value="5" {{if eq .RefreshSeconds 5}}selected{{end}}>5s</option>
+      <option value="10" {{if eq .RefreshSeconds 10}}selected{{end}}>10s</option>
+      <option value="30" {{if eq .RefreshSeconds 30}}selected{{end}}>30s</option>
+    </select>
+    <button type="submit" class="btn-primary-sm">Apply</button>
+  </form>
+  <div id="admin-logs-table">
+    {{template "partials/admin_logs_table.html" .}}
+  </div>
+</section>
+{{end}}
+{{define "admin_logs_scripts"}}
+<script>
+(function () {
+  const form = document.getElementById('logs-filters');
+  const table = document.getElementById('admin-logs-table');
+  const refreshBtn = document.getElementById('logs-refresh-btn');
+  if (!form || !table) {
+    return;
+  }
+
+  function buildQuery() {
+    const params = new URLSearchParams(new FormData(form));
+    return '/admin/partial/logs?' + params.toString();
+  }
+
+  function refreshLogs() {
+    if (!window.htmx) {
+      return;
+    }
+    htmx.ajax('GET', buildQuery(), { target: '#admin-logs-table', swap: 'innerHTML' });
+  }
+
+  form.addEventListener('submit', function (evt) {
+    evt.preventDefault();
+    refreshLogs();
+  });
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', refreshLogs);
+  }
+
+  let timer = null;
+  function syncAutoRefresh() {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+    const enabled = form.querySelector('input[name="auto"]');
+    const seconds = form.querySelector('select[name="refresh"]');
+    const interval = seconds ? Math.max(2000, parseInt(seconds.value || '5', 10) * 1000) : 5000;
+    if (enabled && enabled.checked) {
+      timer = setInterval(refreshLogs, interval);
+    }
+  }
+
+  form.addEventListener('change', syncAutoRefresh);
+  syncAutoRefresh();
+})();
+</script>
+{{end}}

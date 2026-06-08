@@ -23,6 +23,7 @@ var handlerTemplates = []string{
 	"admin_users.html",
 	"admin_manifest.html",
 	"admin_activity.html",
+	"admin_logs.html",
 	"admin_pcgw.html",
 	"admin_pcgw_detail.html",
 	"admin_settings.html",
@@ -33,6 +34,7 @@ var handlerTemplates = []string{
 	"partials/dashboard_activity.html",
 	"partials/admin_manifest_table.html",
 	"partials/admin_jobs.html",
+	"partials/admin_logs_table.html",
 	"partials/admin_pcgw_table.html",
 	"partials/admin_pcgw_job_status.html",
 	"partials/admin_analytics_pcgw_table.html",
@@ -61,6 +63,7 @@ var pageBlockTemplates = []string{
 	"admin_analytics_title", "admin_analytics_content", "admin_analytics_scripts",
 	"admin_manifest_title", "admin_manifest_content", "admin_manifest_scripts",
 	"admin_activity_title", "admin_activity_content", "admin_activity_scripts",
+	"admin_logs_title", "admin_logs_content", "admin_logs_scripts",
 	"admin_pcgw_title", "admin_pcgw_content", "admin_pcgw_scripts",
 	"admin_pcgw_detail_title", "admin_pcgw_detail_content", "admin_pcgw_detail_scripts",
 }
@@ -144,6 +147,7 @@ func TestLayoutReferencesResolve(t *testing.T) {
 		{"admin_overview.html", templateTestData("admin_overview.html")},
 		{"admin_manifest.html", templateTestData("admin_manifest.html")},
 		{"admin_activity.html", templateTestData("admin_activity.html")},
+		{"admin_logs.html", templateTestData("admin_logs.html")},
 		{"admin_pcgw.html", templateTestData("admin_pcgw.html")},
 	}
 	for _, tc := range cases {
@@ -281,6 +285,7 @@ func templateTestData(name string) interface{} {
 			JobProgressTotal:     0,
 			JobGamesSkipped:      0,
 			LastSuccessfulSyncAt: now,
+			CapStatusText:        "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
 		}
 	case "admin_users.html":
 		return adminUsersData{
@@ -341,6 +346,25 @@ func templateTestData(name string) interface{} {
 			JobProgressTotal:     0,
 			JobGamesSkipped:      0,
 			LastSuccessfulSyncAt: now,
+			MaxPagesPerRun:       500,
+			MaxPagesPerRunSource: "GSBS_PCGW_MAX_PAGES_PER_RUN",
+			CapStatusText:        "Phase 2 parse/store cap: 500 pages per run (GSBS_PCGW_MAX_PAGES_PER_RUN). Phase 1 catalog scan always fetches all IDs.",
+		}
+	case "admin_logs.html":
+		return adminLogsData{
+			PageData: PageData{
+				PageName: "admin_logs", Username: "admin", IsAdmin: true, CSRFToken: "csrf-test", AdminNav: "logs",
+			},
+			Entries: []adminLogEntry{
+				{Timestamp: now, Level: "info", Message: "request", Raw: `{"level":"info","message":"request"}`},
+			},
+			LogSourcePath:    "/tmp/server.log",
+			LogSourceInfo:    "Using GSBS_SERVICE_LOG_PATH.",
+			LogSourcePresent: true,
+			Level:            "all",
+			Query:            "",
+			Limit:            200,
+			RefreshSeconds:   5,
 		}
 	case "admin_pcgw.html":
 		return adminPCGWData{
@@ -353,6 +377,7 @@ func templateTestData(name string) interface{} {
 			},
 			Page: 1, PerPage: 20, Total: 1, TotalPages: 1, Start: 1, End: 1, PrevPage: 0, NextPage: 2,
 			JobRunning: true, JobProgress: 42, JobProgressTotal: 100, JobGamesSkipped: 1,
+			CapStatusText: "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
 		}
 	case "admin_pcgw_detail.html":
 		return adminPCGWDetailData{
@@ -481,7 +506,15 @@ func templateTestData(name string) interface{} {
 			},
 			"JobRunning":       false,
 			"JobProgressPages": 0,
+			"CapStatusText":    "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
 			"CSRFToken":        "csrf-test",
+		}
+	case "partials/admin_logs_table.html":
+		return map[string]interface{}{
+			"Entries": []adminLogEntry{
+				{Timestamp: now, Level: "info", Message: "request", Raw: `{"level":"info","message":"request"}`},
+			},
+			"LogSourcePresent": true,
 		}
 	case "partials/admin_pcgw_table.html":
 		return map[string]interface{}{

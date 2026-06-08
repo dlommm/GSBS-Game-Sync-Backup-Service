@@ -177,6 +177,7 @@ The admin interface is available at `/admin` (session required + must match `GSB
 | `/admin/users` | User list, client-count bars, revoke client tokens |
 | `/admin/manifest` | Server manifest search and pagination |
 | `/admin/activity` | Jobs, manifest fetches, audit log, stats snapshots |
+| `/admin/logs` | Server log viewer with level/text filters and auto-refresh (file source only) |
 | `/admin/settings` | PCGW cron, filters, first-start auto sync |
 | `/admin/analytics` | Storage, active clients, sync volume, PCGW coverage |
 | `/admin/pcgw` | PCGW catalog search, sync controls, per-game detail, export/import |
@@ -197,6 +198,12 @@ The admin interface is available at `/admin` (session required + must match `GSB
 | Export manifest bundle | `GET /admin/pcgw/export/manifest.json.gz` |
 | Import bundle | Admin → PCGW → **Import** |
 | Push manifest to clients | Admin → **Push manifest** (sends SSE event) |
+
+Notes:
+
+- The admin logs page reads from a file source. In Windows service mode it uses `GSBS_SERVICE_LOG_PATH` (or `C:\ProgramData\GSBS\logs\server.log` default).
+- In non-service/console mode logs may go to stdout only; `/admin/logs` will show an unavailable-source notice in that case.
+- PCGW destructive actions now use a simple popup confirmation instead of typed confirmation.
 
 ---
 

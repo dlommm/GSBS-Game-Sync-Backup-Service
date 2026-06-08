@@ -16,22 +16,46 @@ import (
 // ErrJobAlreadyRunning is returned when a sync is requested while one is in progress.
 var ErrJobAlreadyRunning = errors.New("job already running")
 
+const (
+	autoCatchUpMaxCycles       = 25
+	autoCatchUpNoProgressLimit = 2
+)
+
+type phase2BacklogSnapshot struct {
+	Missing       int
+	TitleBackfill int
+	FailedPartial int
+	Total         int
+}
+
+func (b phase2BacklogSnapshot) summary() string {
+	return fmt.Sprintf("remaining backlog=%d (missing=%d, title_backfill=%d, failed_partial=%d)", b.Total, b.Missing, b.TitleBackfill, b.FailedPartial)
+}
+
+func autoCatchUpProgressError(streak, limit int, backlog phase2BacklogSnapshot) error {
+	if streak < limit {
+		return nil
+	}
+	return fmt.Errorf("auto catch-up stopped: no backlog progress after %d consecutive cycle(s); %s", streak, backlog.summary())
+}
+
 // Runner manages background job execution with tracking and deduplication.
 type Runner struct {
 	store       store.Store
 	hub         *sse.Hub
 	invalidator ManifestCacheInvalidator
 
-	mu              sync.Mutex
-	wg              sync.WaitGroup
-	running         map[string]bool               // job name -> is running
-	cancelFuncs     map[string]context.CancelFunc // job name -> cancel
-	jobRunIDs       map[string]string             // job name -> job_runs id
-	pcgwSyncRunID   string
-	progressPages   int    // pages processed by current pcgw_sync run (when running)
-	progressPhase   string // current phase: "catalog" or "ingest"
-	progressQueue   int    // queue size for current run
-	progressCursor  int    // queue cursor for current run
+	mu             sync.Mutex
+	wg             sync.WaitGroup
+	running        map[string]bool               // job name -> is running
+	cancelFuncs    map[string]context.CancelFunc // job name -> cancel
+	jobRunIDs      map[string]string             // job name -> job_runs id
+	pcgwSyncRunID  string
+	progressPages  int    // pages processed by current pcgw_sync run (when running)
+	progressPhase  string // current phase: "catalog" or "ingest"
+	progressQueue  int    // queue size for current run
+	progressCursor int    // queue cursor for current run
+	progressMode   string // current mode: "single-run" or "auto-catch-up"
 }
 
 // NewRunner creates a Runner. hub may be nil if SSE is not needed.
@@ -71,6 +95,13 @@ func (r *Runner) ProgressPhase() string {
 	return r.progressPhase
 }
 
+// ProgressMode returns the currently running PCGW sync mode ("single-run" or "auto-catch-up").
+func (r *Runner) ProgressMode() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.progressMode
+}
+
 // RunPCGWSyncCatalogOnly runs a catalog-scan-only sync (Phase 1, no ingest).
 func (r *Runner) RunPCGWSyncCatalogOnly(ctx context.Context) (bool, error) {
 	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{SkipIngestPhase: true})
@@ -99,6 +130,11 @@ func (r *Runner) RunPCGWSync(ctx context.Context) (bool, error) {
 // RunPCGWSyncFull starts a full PCGW resync in the background (no resume).
 func (r *Runner) RunPCGWSyncFull(ctx context.Context) (bool, error) {
 	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{Full: true, ForceFull: true})
+}
+
+// RunPCGWSyncAutoCatchUp runs repeated budgeted sync cycles until Phase 2 backlog reaches zero.
+func (r *Runner) RunPCGWSyncAutoCatchUp(ctx context.Context) (bool, error) {
+	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{AutoCatchUp: true})
 }
 
 // CancelAll cancels every in-flight job. Used during graceful shutdown.
@@ -175,6 +211,7 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 		r.progressPhase = ""
 		r.progressQueue = 0
 		r.progressCursor = 0
+		r.progressMode = ""
 		r.mu.Unlock()
 	}()
 
@@ -185,6 +222,11 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 
 	r.mu.Lock()
 	r.cancelFuncs[jobName] = cancel
+	if opts.AutoCatchUp {
+		r.progressMode = "auto-catch-up"
+	} else {
+		r.progressMode = "single-run"
+	}
 	r.mu.Unlock()
 	defer cancel()
 
@@ -254,6 +296,7 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 		r.progressPhase = p.Phase
 		r.progressQueue = p.QueueSize
 		r.progressCursor = p.QueueCursor
+		mode := r.progressMode
 		r.mu.Unlock()
 		if r.hub != nil {
 			now := time.Now()
@@ -277,11 +320,22 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 			}
 			p.ETASeconds = eta
 			r.hub.Broadcast(sse.Event{Type: "job-progress", Data: fmt.Sprintf(
-				`{"job":"pcgw_sync","pages":%d,"total":%d,"phase":%q,"games_skipped":%d,"eta_seconds":%d,"queue_size":%d,"queue_cursor":%d}`,
-				p.PagesProcessed, p.TotalEstimate, p.Phase, p.GamesSkipped, p.ETASeconds, p.QueueSize, p.QueueCursor)})
+				`{"job":"pcgw_sync","pages":%d,"total":%d,"phase":%q,"games_skipped":%d,"eta_seconds":%d,"queue_size":%d,"queue_cursor":%d,"mode":%q}`,
+				p.PagesProcessed, p.TotalEstimate, p.Phase, p.GamesSkipped, p.ETASeconds, p.QueueSize, p.QueueCursor, mode)})
 		}
 	}
-	count, syncErr := PCGWSyncEx(jobCtx, r.store, pcgwClient, progressFn, reportEx, syncOpts)
+	runCycle := func(cycleOpts PCGWSyncOptions) (int, error) {
+		return PCGWSyncEx(jobCtx, r.store, pcgwClient, progressFn, reportEx, cycleOpts)
+	}
+	var (
+		count   int
+		syncErr error
+	)
+	if opts.AutoCatchUp {
+		count, syncErr = r.runPCGWSyncAutoCatchUp(jobCtx, syncOpts, runCycle)
+	} else {
+		count, syncErr = runCycle(syncOpts)
+	}
 
 	status := JobSuccess
 	errMsg := ""
@@ -310,4 +364,84 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 			r.hub.Broadcast(sse.Event{Type: "manifest-updated", Data: "{}"})
 		}
 	}
+}
+
+func (r *Runner) runPCGWSyncAutoCatchUp(ctx context.Context, baseOpts PCGWSyncOptions, runCycle func(PCGWSyncOptions) (int, error)) (int, error) {
+	totalEntries := 0
+	backlog, err := r.currentPhase2Backlog(ctx)
+	if err != nil {
+		return totalEntries, fmt.Errorf("auto catch-up failed to check initial backlog: %w", err)
+	}
+	if backlog.Total == 0 {
+		return totalEntries, nil
+	}
+
+	noProgressStreak := 0
+	for cycle := 1; cycle <= autoCatchUpMaxCycles; cycle++ {
+		select {
+		case <-ctx.Done():
+			return totalEntries, ctx.Err()
+		default:
+		}
+
+		cycleEntries, cycleErr := runCycle(baseOpts)
+		totalEntries += cycleEntries
+		if cycleErr != nil {
+			return totalEntries, fmt.Errorf("auto catch-up cycle %d failed: %w", cycle, cycleErr)
+		}
+
+		nextBacklog, err := r.currentPhase2Backlog(ctx)
+		if err != nil {
+			return totalEntries, fmt.Errorf("auto catch-up cycle %d: backlog recheck failed: %w", cycle, err)
+		}
+		if nextBacklog.Total == 0 {
+			return totalEntries, nil
+		}
+		if nextBacklog.Total < backlog.Total {
+			noProgressStreak = 0
+		} else {
+			noProgressStreak++
+			if progressErr := autoCatchUpProgressError(noProgressStreak, autoCatchUpNoProgressLimit, nextBacklog); progressErr != nil {
+				return totalEntries, progressErr
+			}
+		}
+		backlog = nextBacklog
+	}
+	latestBacklog, err := r.currentPhase2Backlog(ctx)
+	if err != nil {
+		return totalEntries, fmt.Errorf("auto catch-up stopped after %d cycles (safety limit reached): backlog recheck failed: %w", autoCatchUpMaxCycles, err)
+	}
+	return totalEntries, fmt.Errorf("auto catch-up stopped after %d cycles (safety limit reached); %s", autoCatchUpMaxCycles, latestBacklog.summary())
+}
+
+func (r *Runner) currentPhase2Backlog(ctx context.Context) (phase2BacklogSnapshot, error) {
+	backlog := phase2BacklogSnapshot{}
+	missing, err := r.store.ListPCGWCatalogMissing(ctx, 0, 0)
+	if err != nil {
+		return backlog, err
+	}
+	failedPartial, err := r.store.ListPCGWCatalogFailedPartial(ctx, 0, 0)
+	if err != nil {
+		return backlog, err
+	}
+	titleBackfill, err := r.store.ListPCGWCatalogTitleBackfill(ctx, 0, 0)
+	if err != nil {
+		return backlog, err
+	}
+
+	backlog.Missing = len(missing)
+	backlog.FailedPartial = len(failedPartial)
+	backlog.TitleBackfill = len(titleBackfill)
+	unique := make(map[int64]struct{}, len(missing)+len(failedPartial)+len(titleBackfill))
+	for _, id := range missing {
+		unique[id] = struct{}{}
+	}
+	for _, id := range failedPartial {
+		unique[id] = struct{}{}
+	}
+	for _, row := range titleBackfill {
+		unique[row.PageID] = struct{}{}
+	}
+	backlog.Total = len(unique)
+	return backlog, nil
 }

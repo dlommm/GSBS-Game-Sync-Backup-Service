@@ -351,8 +351,7 @@ Session auth required (admin role). These are WebUI-facing endpoints used by the
 | `POST` | `/admin/pcgw/sync/catalog-only` | Phase 1 only — refresh `pcgw_catalog` |
 | `POST` | `/admin/pcgw/sync/retry-failed` | Phase 2 only — re-process failed/partial pages |
 | `POST` | `/admin/pcgw/rebuild-manifest` | Bump manifest version without fetching pages |
-| `GET` | `/admin/pcgw/wipe-preflight` | Returns JSON `WipePreflightCounts` for confirmation modal |
-| `POST` | `/admin/pcgw/wipe` | Execute wipe (`mode=mirror_only\|mirror_and_manifest`; requires typed confirmation) |
+| `POST` | `/admin/pcgw/wipe` | Execute wipe (`mode=mirror_only\|mirror_and_manifest`; confirmed in WebUI popup) |
 | `GET` | `/admin/pcgw/export/manifest.json.gz` | Download gzip manifest+mirror bundle |
 | `POST` | `/admin/pcgw/import` | Upload bundle (`merge` or `full_replace`) |
 

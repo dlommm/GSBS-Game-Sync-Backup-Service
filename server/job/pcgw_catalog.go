@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/pcgw"
@@ -18,14 +19,31 @@ const catalogChunkSize = 100
 // Override with GSBS_PCGW_MAX_PAGES_PER_RUN.
 const DefaultMaxPagesPerRun = 5000
 
+const (
+	MaxPagesPerRunSourceDefault    = "default"
+	MaxPagesPerRunSourceEnv        = "GSBS_PCGW_MAX_PAGES_PER_RUN"
+	MaxPagesPerRunSourceInvalidEnv = "default (invalid GSBS_PCGW_MAX_PAGES_PER_RUN)"
+)
+
 // MaxPagesPerRun reads the budget from GSBS_PCGW_MAX_PAGES_PER_RUN or falls back to the default.
 func MaxPagesPerRun() int {
-	if v := os.Getenv("GSBS_PCGW_MAX_PAGES_PER_RUN"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
+	n, _ := MaxPagesPerRunWithSource()
+	return n
+}
+
+// MaxPagesPerRunWithSource returns the ingest budget and the source string used by UI/status.
+func MaxPagesPerRunWithSource() (int, string) {
+	if raw, ok := os.LookupEnv(MaxPagesPerRunSourceEnv); ok {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return DefaultMaxPagesPerRun, MaxPagesPerRunSourceDefault
 		}
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			return n, MaxPagesPerRunSourceEnv
+		}
+		return DefaultMaxPagesPerRun, MaxPagesPerRunSourceInvalidEnv
 	}
-	return DefaultMaxPagesPerRun
+	return DefaultMaxPagesPerRun, MaxPagesPerRunSourceDefault
 }
 
 // RunCatalogScan performs Phase 1: enumerate all PCGW game IDs via ListGamePages,

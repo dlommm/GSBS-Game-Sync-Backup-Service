@@ -1,0 +1,22 @@
+{{define "partials/admin_logs_table.html"}}
+{{if not .LogSourcePresent}}
+<div class="panel-empty"><p>{{.LogSourceInfo}}</p></div>
+{{else if .Entries}}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>Time</th><th>Level</th><th>Message</th></tr></thead>
+    <tbody>
+      {{range .Entries}}
+      <tr>
+        <td class="cell-muted">{{if .Timestamp}}{{formatTime .Timestamp}}{{else}}—{{end}}</td>
+        <td><span class="code-inline">{{.Level}}</span></td>
+        <td class="cell-muted">{{.Message}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="panel-empty"><p>No matching log lines for the current filters.</p></div>
+{{end}}
+{{end}}

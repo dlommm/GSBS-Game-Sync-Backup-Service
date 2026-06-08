@@ -38,6 +38,8 @@ type PCGWSyncOptions struct {
 	RetryFailedOnly bool
 	// RebuildManifestOnly skips all ingest and just bumps the manifest.
 	RebuildManifestOnly bool
+	// AutoCatchUp repeatedly runs budgeted sync cycles until backlog is empty.
+	AutoCatchUp bool
 }
 
 // PCGWSyncProgress reports sync progress for SSE.
@@ -246,7 +248,10 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	log.Printf("pcgw sync phase2: queue=%d budget=%d (resume_cursor=%d)", queueSize, budget, opts.ResumeQueueCursor)
 
 	// ─── Phase 2: Process queue with budget ───────────────────────────────────
-	startCursor := opts.ResumeQueueCursor
+	startCursor := phase2StartCursor(opts.ResumeQueueCursor, queueSize, opts.ResumeCatalogScan)
+	if opts.ResumeCatalogScan && opts.ResumeQueueCursor > 0 && startCursor == 0 {
+		log.Printf("pcgw sync phase2: ignoring stale resume cursor %d because queue is rebuilt from current backlog", opts.ResumeQueueCursor)
+	}
 	processed := 0
 
 	for i := startCursor; i < len(queue); i++ {
@@ -323,6 +328,15 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	log.Printf("pcgw sync: done, upserted %d location entries (ok=%d partial=%d failed=%d skipped=%d)",
 		totalUpserted, stats.GamesOK, stats.GamesPartial, stats.GamesFailed, stats.GamesSkipped)
 	return bumpManifestAndReturn(ctx, st, totalUpserted)
+}
+
+func phase2StartCursor(resumeCursor, queueSize int, resumeCatalogScan bool) int {
+	if !resumeCatalogScan || resumeCursor <= 0 || queueSize <= 0 {
+		return 0
+	}
+	// Phase 2 queue is rebuilt from current DB state each run (missing/failed/changed).
+	// Reusing a stale absolute index can skip entries after queue membership shifts.
+	return 0
 }
 
 // ctxStatus returns the job status string based on context error.

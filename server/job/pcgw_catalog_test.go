@@ -107,3 +107,38 @@ func TestRunCatalogScan_HashStability(t *testing.T) {
 		t.Errorf("hash not stable: %q vs %q", stats1.CatalogHash, stats2.CatalogHash)
 	}
 }
+
+func TestMaxPagesPerRunWithSource(t *testing.T) {
+	t.Run("default source", func(t *testing.T) {
+		t.Setenv("GSBS_PCGW_MAX_PAGES_PER_RUN", "")
+		got, source := MaxPagesPerRunWithSource()
+		if got != DefaultMaxPagesPerRun {
+			t.Fatalf("budget=%d, want %d", got, DefaultMaxPagesPerRun)
+		}
+		if source != MaxPagesPerRunSourceDefault {
+			t.Fatalf("source=%q, want %q", source, MaxPagesPerRunSourceDefault)
+		}
+	})
+
+	t.Run("env source", func(t *testing.T) {
+		t.Setenv("GSBS_PCGW_MAX_PAGES_PER_RUN", "750")
+		got, source := MaxPagesPerRunWithSource()
+		if got != 750 {
+			t.Fatalf("budget=%d, want 750", got)
+		}
+		if source != MaxPagesPerRunSourceEnv {
+			t.Fatalf("source=%q, want %q", source, MaxPagesPerRunSourceEnv)
+		}
+	})
+
+	t.Run("invalid env falls back", func(t *testing.T) {
+		t.Setenv("GSBS_PCGW_MAX_PAGES_PER_RUN", "oops")
+		got, source := MaxPagesPerRunWithSource()
+		if got != DefaultMaxPagesPerRun {
+			t.Fatalf("budget=%d, want %d", got, DefaultMaxPagesPerRun)
+		}
+		if source != MaxPagesPerRunSourceInvalidEnv {
+			t.Fatalf("source=%q, want %q", source, MaxPagesPerRunSourceInvalidEnv)
+		}
+	})
+}

@@ -7,10 +7,10 @@
     {{else}}
     <p class="cell-muted jobs-meta">No successful sync recorded yet.</p>
     {{end}}
-    <p class="cell-muted jobs-meta">
-      Phase 2 ingest budget: <strong>{{.MaxPagesPerRun}}</strong> pages per run
-      {{if .MaxPagesPerRunFromEnv}}(<code>GSBS_PCGW_MAX_PAGES_PER_RUN</code>){{else}}(default){{end}}.
-    </p>
+    <p class="cell-muted jobs-meta">{{.CapStatusText}}</p>
+    {{if .CapReached}}
+    <p class="notice notice-warn" style="margin:0.5rem 0 0;">Run another Phase 2 parse/store action to continue the remaining queue.</p>
+    {{end}}
   </div>
   {{if .ShowPCGWControls}}{{else}}
   <div class="panel-actions actions-stack">
@@ -23,12 +23,12 @@
     {{else}}
     <form method="post" action="/admin/run-job" class="inline-form">
       <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-      <button type="submit" class="btn-primary-sm">Run PCGW Sync</button>
+      <button type="submit" class="btn-primary-sm">Phase 1+2: Refresh IDs and Parse/Store Backlog</button>
     </form>
     <form method="post" action="/admin/run-job" class="inline-form" onsubmit="return confirm('Force a full PCGW resync? This bypasses resume and may take a long time.');">
       <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
       <input type="hidden" name="full" value="1">
-      <button type="submit" class="btn-ghost-sm">Force Full Sync</button>
+      <button type="submit" class="btn-ghost-sm">Phase 1+2 Full Reparse (No Resume)</button>
     </form>
     {{end}}
   </div>
@@ -40,6 +40,9 @@
     <span>Progress</span>
     <span>{{.JobProgressPages}}{{if gt .JobProgressTotal 0}} / {{.JobProgressTotal}}{{end}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
   </div>
+  {{if .JobAutoCatchUp}}
+  <p class="cell-muted jobs-meta" style="margin:0 0 0.4rem;">Mode: <strong>Auto catch-up</strong> (repeating Phase 2 until backlog is cleared).</p>
+  {{end}}
   <div class="quota-bar-track">
     {{if gt .JobProgressTotal 0}}
     <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}%;"></div>

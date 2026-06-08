@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/gsbs/gsbs/pkg/types"
@@ -52,9 +51,13 @@ type jobsViewData struct {
 	JobProgressTotal      int
 	JobGamesSkipped       int
 	JobPhase              string
+	JobAutoCatchUp        bool
 	LastSuccessfulSyncAt  string
 	MaxPagesPerRun        int
 	MaxPagesPerRunFromEnv bool
+	MaxPagesPerRunSource  string
+	CapReached            bool
+	CapStatusText         string
 	ShowPCGWControls      bool
 	CSRFToken             string
 }
@@ -64,18 +67,20 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 	jobRunning, jobProgress := h.jobStatus()
 	catalogStats, _ := h.store.GetPCGWCatalogStats(ctx)
 	latestRun, _ := h.store.GetLatestPCGWSyncRun(ctx)
-	_, hasEnvBudget := os.LookupEnv("GSBS_PCGW_MAX_PAGES_PER_RUN")
+	maxPagesPerRun, maxPagesSource := job.MaxPagesPerRunWithSource()
 	data := jobsViewData{
 		RecentJobs:            recentJobs,
 		CatalogStats:          catalogStats,
 		LatestSyncRun:         latestRun,
 		JobRunning:            jobRunning,
 		JobProgressPages:      jobProgress,
-		MaxPagesPerRun:        job.MaxPagesPerRun(),
-		MaxPagesPerRunFromEnv: hasEnvBudget,
+		MaxPagesPerRun:        maxPagesPerRun,
+		MaxPagesPerRunFromEnv: maxPagesSource == job.MaxPagesPerRunSourceEnv,
+		MaxPagesPerRunSource:  maxPagesSource,
 		ShowPCGWControls:      showPCGWControls,
 		CSRFToken:             csrf,
 	}
+	data.CapStatusText = fmt.Sprintf("Phase 2 parse/store cap: %d pages per run (%s). Phase 1 catalog scan always fetches all IDs.", data.MaxPagesPerRun, data.MaxPagesPerRunSource)
 	if last, _ := h.store.GetLatestSuccessfulJobRun(ctx, "pcgw_sync"); last != nil {
 		data.LastSuccessfulSyncAt = last.FinishedAt
 		if data.LastSuccessfulSyncAt == "" {
@@ -90,9 +95,26 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 		if jobRunning && jobProgress == 0 && data.LatestSyncRun.CheckpointOffset > 0 {
 			data.JobProgressPages = data.LatestSyncRun.CheckpointOffset
 		}
+		errLower := strings.ToLower(strings.TrimSpace(data.LatestSyncRun.ErrorMessage))
+		data.CapReached = strings.Contains(errLower, "budget exhausted")
+		if !data.CapReached && data.MaxPagesPerRun > 0 && data.LatestSyncRun.Status == "interrupted" && data.LatestSyncRun.TargetedProcessed >= data.MaxPagesPerRun {
+			data.CapReached = true
+		}
+		if data.CapReached {
+			remaining := data.LatestSyncRun.TargetedQueueSize - data.LatestSyncRun.TargetedProcessed
+			if remaining < 0 {
+				remaining = 0
+			}
+			if remaining > 0 {
+				data.CapStatusText = fmt.Sprintf("Last Phase 2 run hit the cap (%d pages from %s). About %d queued pages remained for follow-up runs.", data.MaxPagesPerRun, data.MaxPagesPerRunSource, remaining)
+			} else {
+				data.CapStatusText = fmt.Sprintf("Last Phase 2 run hit the cap (%d pages from %s). Run parse/store again to continue from current backlog.", data.MaxPagesPerRun, data.MaxPagesPerRunSource)
+			}
+		}
 	}
 	if h.jobRunner != nil && h.jobRunner.IsRunning("pcgw_sync") {
 		data.JobPhase = h.jobRunner.ProgressPhase()
+		data.JobAutoCatchUp = h.jobRunner.ProgressMode() == "auto-catch-up"
 	}
 	return data
 }
@@ -127,9 +149,13 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 		JobProgressTotal:      jobsData.JobProgressTotal,
 		JobGamesSkipped:       jobsData.JobGamesSkipped,
 		JobPhase:              jobsData.JobPhase,
+		JobAutoCatchUp:        jobsData.JobAutoCatchUp,
 		LastSuccessfulSyncAt:  jobsData.LastSuccessfulSyncAt,
 		MaxPagesPerRun:        jobsData.MaxPagesPerRun,
 		MaxPagesPerRunFromEnv: jobsData.MaxPagesPerRunFromEnv,
+		MaxPagesPerRunSource:  jobsData.MaxPagesPerRunSource,
+		CapReached:            jobsData.CapReached,
+		CapStatusText:         jobsData.CapStatusText,
 		ShowPCGWControls:      jobsData.ShowPCGWControls,
 	})
 }
@@ -252,11 +278,15 @@ func (h *WebHandler) serveAdminActivity(w http.ResponseWriter, r *http.Request) 
 		JobProgressTotal:      jobsData.JobProgressTotal,
 		JobGamesSkipped:       jobsData.JobGamesSkipped,
 		JobPhase:              jobsData.JobPhase,
+		JobAutoCatchUp:        jobsData.JobAutoCatchUp,
 		LastSuccessfulSyncAt:  jobsData.LastSuccessfulSyncAt,
 		CatalogStats:          jobsData.CatalogStats,
 		LatestSyncRun:         jobsData.LatestSyncRun,
 		MaxPagesPerRun:        jobsData.MaxPagesPerRun,
 		MaxPagesPerRunFromEnv: jobsData.MaxPagesPerRunFromEnv,
+		MaxPagesPerRunSource:  jobsData.MaxPagesPerRunSource,
+		CapReached:            jobsData.CapReached,
+		CapStatusText:         jobsData.CapStatusText,
 		ShowPCGWControls:      jobsData.ShowPCGWControls,
 	})
 }
@@ -276,9 +306,13 @@ func (h *WebHandler) serveAdminJobsPartial(w http.ResponseWriter, r *http.Reques
 		"JobProgressTotal":      data.JobProgressTotal,
 		"JobGamesSkipped":       data.JobGamesSkipped,
 		"JobPhase":              data.JobPhase,
+		"JobAutoCatchUp":        data.JobAutoCatchUp,
 		"LastSuccessfulSyncAt":  data.LastSuccessfulSyncAt,
 		"MaxPagesPerRun":        data.MaxPagesPerRun,
 		"MaxPagesPerRunFromEnv": data.MaxPagesPerRunFromEnv,
+		"MaxPagesPerRunSource":  data.MaxPagesPerRunSource,
+		"CapReached":            data.CapReached,
+		"CapStatusText":         data.CapStatusText,
 		"ShowPCGWControls":      data.ShowPCGWControls,
 		"CSRFToken":             data.CSRFToken,
 	})

@@ -240,3 +240,44 @@ func TestPersistIngestResult_UsesSeededPageInfoTitle(t *testing.T) {
 		t.Fatalf("expected projected title %q, got %q", expectedTitle, entries[0].GameTitle)
 	}
 }
+
+func TestPhase2StartCursor_IgnoresStaleResumeCursor(t *testing.T) {
+	tests := []struct {
+		name              string
+		resumeCursor      int
+		queueSize         int
+		resumeCatalogScan bool
+		want              int
+	}{
+		{
+			name:              "fresh run",
+			resumeCursor:      0,
+			queueSize:         1200,
+			resumeCatalogScan: false,
+			want:              0,
+		},
+		{
+			name:              "resume run ignores old cursor",
+			resumeCursor:      500,
+			queueSize:         54000,
+			resumeCatalogScan: true,
+			want:              0,
+		},
+		{
+			name:              "resume run with empty queue",
+			resumeCursor:      500,
+			queueSize:         0,
+			resumeCatalogScan: true,
+			want:              0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := phase2StartCursor(tt.resumeCursor, tt.queueSize, tt.resumeCatalogScan)
+			if got != tt.want {
+				t.Fatalf("phase2StartCursor(%d, %d, %v) = %d, want %d",
+					tt.resumeCursor, tt.queueSize, tt.resumeCatalogScan, got, tt.want)
+			}
+		})
+	}
+}

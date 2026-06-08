@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/gsbs/gsbs/server/store"
@@ -113,4 +114,33 @@ func TestCancelPCGWSyncReturnsFalseWhenIdle(t *testing.T) {
 	if r.CancelPCGWSync(context.Background()) {
 		t.Fatal("expected cancel to fail when idle")
 	}
+}
+
+func TestAutoCatchUpProgressError(t *testing.T) {
+	backlog := phase2BacklogSnapshot{
+		Missing:       3,
+		TitleBackfill: 2,
+		FailedPartial: 1,
+		Total:         4,
+	}
+	if err := autoCatchUpProgressError(1, 2, backlog); err != nil {
+		t.Fatalf("expected nil before limit, got %v", err)
+	}
+	err := autoCatchUpProgressError(2, 2, backlog)
+	if err == nil {
+		t.Fatal("expected no-progress error at limit")
+	}
+	got := err.Error()
+	if got == "" || !containsAll(got, []string{"no backlog progress", "remaining backlog=4", "missing=3", "title_backfill=2", "failed_partial=1"}) {
+		t.Fatalf("unexpected error message: %q", got)
+	}
+}
+
+func containsAll(s string, subs []string) bool {
+	for _, sub := range subs {
+		if !strings.Contains(s, sub) {
+			return false
+		}
+	}
+	return true
 }

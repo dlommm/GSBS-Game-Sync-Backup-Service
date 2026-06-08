@@ -71,8 +71,7 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 | `POST` | `/admin/pcgw/sync/catalog-only` | Phase 1 only — refresh `pcgw_catalog` without fetching page detail. |
 | `POST` | `/admin/pcgw/sync/retry-failed` | Phase 2 only — re-process failed/partial pages. |
 | `POST` | `/admin/pcgw/rebuild-manifest` | Bump manifest version without fetching any pages. |
-| `GET`  | `/admin/pcgw/wipe-preflight` | Returns JSON `WipePreflightCounts` for the confirmation modal. |
-| `POST` | `/admin/pcgw/wipe` | Execute wipe. Body: `mode=mirror_only\|mirror_and_manifest`. Requires `WIPE PCGW` typed confirmation from WebUI. Rejected if a sync is running. |
+| `POST` | `/admin/pcgw/wipe` | Execute wipe. Body: `mode=mirror_only\|mirror_and_manifest`. Triggered from a WebUI confirm dialog. Rejected if a sync is running. |
 
 ## Metrics (optional)
 

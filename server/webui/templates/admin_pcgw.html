@@ -12,6 +12,10 @@
 <div id="job-status">
   {{template "partials/admin_pcgw_job_status.html" .}}
 </div>
+<p class="cell-muted jobs-meta" style="margin:-0.25rem 0 1rem 1.25rem;">{{.CapStatusText}}</p>
+{{if .CapReached}}
+<p class="notice notice-warn" style="margin:0 1.25rem 1rem;">Run another Phase 2 parse/store action to continue the remaining queue.</p>
+{{end}}
 
 <section class="panel">
   <div class="panel-header-actions">

@@ -51,14 +51,15 @@
 
   <section class="pcgw-control-card">
     <h3 class="pcgw-card-title">Sync Jobs</h3>
-    <p class="pcgw-card-subtitle">
-      Ingest budget: <strong>{{.MaxPagesPerRun}}</strong> pages per run
-      {{if .MaxPagesPerRunFromEnv}}(<code>GSBS_PCGW_MAX_PAGES_PER_RUN</code>){{else}}(default){{end}}.
-    </p>
+    <p class="pcgw-card-subtitle">{{.CapStatusText}}</p>
+    {{if .CapReached}}
+    <p class="pcgw-card-subtitle" style="color:var(--warning);margin-top:-0.35rem;">Run a Phase 2 parse/store action again to continue the remaining queue.</p>
+    {{end}}
     <div class="pcgw-actions-stack">
       {{if .JobRunning}}
       <div class="pcgw-action-row">
         <span class="badge-running">Sync in progress</span>
+        {{if .JobAutoCatchUp}}<span class="cell-muted"><strong>Auto catch-up mode</strong></span>{{end}}
         <form method="post" action="/admin/jobs/pcgw/cancel" class="inline-form">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
           <button type="submit" class="btn-ghost-sm">Cancel</button>
@@ -68,17 +69,17 @@
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/sync" class="inline-form">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-primary-sm">Run Incremental Sync</button>
+          <button type="submit" class="btn-primary-sm">Phase 1+2: Refresh IDs and Parse/Store Backlog</button>
         </form>
-        <span class="pcgw-action-help">Routine pass: missing local entries first, then failed/changed pages.</span>
+        <span class="pcgw-action-help">Runs Phase 1 catalog ID refresh, then Phase 2 parse/store for missing, failed/partial, and changed pages.</span>
       </div>
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/sync" class="inline-form" onsubmit="return confirm('Force a full PCGW resync? This bypasses resume and may take many hours.');">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
           <input type="hidden" name="full" value="1">
-          <button type="submit" class="btn-ghost-sm">Run Full Sync</button>
+          <button type="submit" class="btn-ghost-sm">Phase 1+2 Full Reparse (No Resume)</button>
         </form>
-        <span class="pcgw-action-help">Bypasses resume checkpoints and reprocesses everything.</span>
+        <span class="pcgw-action-help">Bypasses resume checkpoints and reparses all pages from scratch.</span>
       </div>
       {{end}}
     </div>
@@ -111,16 +112,23 @@
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/sync/missing-local" class="inline-form">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Sync Missing Local</button>
+          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Phase 2: Parse/Store Missing Pages Only</button>
         </form>
-        <span class="pcgw-action-help">Targets backlog where catalog IDs exist but no local mirror row yet. No-op if backlog is empty.</span>
+        <span class="pcgw-action-help">Skips catalog refresh and only parses/stores catalog IDs that are missing locally.</span>
+      </div>
+      <div class="pcgw-action-row">
+        <form method="post" action="/admin/pcgw/sync/auto-catch-up" class="inline-form">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Auto Catch-Up Missing Backlog</button>
+        </form>
+        <span class="pcgw-action-help">Automatically repeats budgeted Phase 2 parse/store cycles until missing/failed backlog reaches zero, or stops on error/no-progress.</span>
       </div>
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/sync/retry-failed" class="inline-form">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Retry Failed Items</button>
+          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Phase 2: Retry Failed/Partial Pages</button>
         </form>
-        <span class="pcgw-action-help">Retries only failed/partial parse rows. No-op if there are no failed or partial rows.</span>
+        <span class="pcgw-action-help">Skips catalog refresh and retries only failed/partial parse rows.</span>
       </div>
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/rebuild-manifest" class="inline-form">
@@ -132,9 +140,9 @@
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/sync/catalog-only" class="inline-form">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Refresh Catalog Only</button>
+          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Phase 1 Only: Refresh Catalog IDs</button>
         </form>
-        <span class="pcgw-action-help">Refresh remote catalog IDs without ingesting game pages.</span>
+        <span class="pcgw-action-help">Fetches the remote ID catalog only; does not parse/store page detail.</span>
       </div>
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/purge-wikitext" class="inline-form">
@@ -150,11 +158,19 @@
     <h3 class="pcgw-card-title">Destructive Actions</h3>
     <div class="pcgw-actions-stack">
       <div class="pcgw-action-row">
-        <button type="button" class="btn-danger-sm" {{if .JobRunning}}disabled{{end}} onclick="showWipeModal('mirror_only')">Wipe PCGW Mirror Only</button>
+        <form method="post" action="/admin/pcgw/wipe" class="inline-form" onsubmit="return confirm('Are you sure you want to wipe PCGW mirror data? This cannot be undone.');">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <input type="hidden" name="mode" value="mirror_only">
+          <button type="submit" class="btn-danger-sm" {{if .JobRunning}}disabled{{end}}>Wipe PCGW Mirror Only</button>
+        </form>
         <span class="pcgw-action-help">Deletes all `pcgw_*` mirror rows except catalog IDs.</span>
       </div>
       <div class="pcgw-action-row">
-        <button type="button" class="btn-danger-sm" {{if .JobRunning}}disabled{{end}} onclick="showWipeModal('mirror_and_manifest')">Wipe PCGW + Manifest Data</button>
+        <form method="post" action="/admin/pcgw/wipe" class="inline-form" onsubmit="return confirm('Are you sure you want to wipe PCGW mirror and manifest data? This cannot be undone.');">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <input type="hidden" name="mode" value="mirror_and_manifest">
+          <button type="submit" class="btn-danger-sm" {{if .JobRunning}}disabled{{end}}>Wipe PCGW + Manifest Data</button>
+        </form>
         <span class="pcgw-action-help">Deletes all `pcgw_*` rows and PCGW-sourced manifest entries.</span>
       </div>
     </div>

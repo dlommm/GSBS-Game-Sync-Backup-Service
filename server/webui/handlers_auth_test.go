@@ -22,6 +22,14 @@ func TestAdminQuerySuccessPCGWActionMessages(t *testing.T) {
 		}
 	})
 
+	t.Run("auto catch-up action", func(t *testing.T) {
+		r := httptest.NewRequest("GET", "/admin/activity?job_started=1&job_action=auto_catchup", nil)
+		got := adminQuerySuccess(r)
+		if got == "" {
+			t.Fatalf("expected success message for auto_catchup action")
+		}
+	})
+
 	t.Run("default action", func(t *testing.T) {
 		r := httptest.NewRequest("GET", "/admin/activity?job_started=1", nil)
 		got := adminQuerySuccess(r)
