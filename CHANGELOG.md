@@ -2,6 +2,12 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.6] - 2026-06-08
+
+### Fixed
+
+- CI/tests: normalized Windows path separator handling in log source tests so cross-platform test assertions are stable on `windows-latest`.
+
 ## [2.0.5] - 2026-06-08
 
 ### Fixed
