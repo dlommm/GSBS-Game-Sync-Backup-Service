@@ -20,7 +20,8 @@
 | `GSBS_READ_ONLY` | `false` | Set `true` to disable push and delete (pull and read still work) |
 | `GSBS_SAVE_VERSION_RETENTION` | `8` | Save versions kept per slot (recommended 5–10) |
 | `GSBS_LOG_LEVEL` | `info` | Structured log level: `debug`, `info`, `warn`, `error` |
-| `GSBS_SERVICE_LOG_PATH` | `C:\ProgramData\GSBS\logs\server.log` (Windows service mode) | Optional file path for server logs when running as a Windows service (`--service`) |
+| `GSBS_SERVICE_LOG_PATH` | `C:\ProgramData\GSBS\logs\server.log` (Windows service mode) | Preferred file path for server logs (used by service mode and by console mode when set) |
+| `GSBS_LOG_FILE` | (unset) | Legacy/compatibility file path for server logs when `GSBS_SERVICE_LOG_PATH` is not set |
 | `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token lifetime (default 90 days) |
 | `GSBS_TRUST_PROXY` | (unset) | Trust `X-Forwarded-For` / `X-Real-IP` from reverse proxy |
 | `GSBS_METRICS_TOKEN` | (unset) | Bearer token required to access `/metrics` |
@@ -201,8 +202,8 @@ The admin interface is available at `/admin` (session required + must match `GSB
 
 Notes:
 
-- The admin logs page reads from a file source. In Windows service mode it uses `GSBS_SERVICE_LOG_PATH` (or `C:\ProgramData\GSBS\logs\server.log` default).
-- In non-service/console mode logs may go to stdout only; `/admin/logs` will show an unavailable-source notice in that case.
+- `/admin/logs` checks log sources in this order: `GSBS_SERVICE_LOG_PATH`, `GSBS_LOG_FILE`, then Windows default `C:\ProgramData\GSBS\logs\server.log`.
+- If none of those files exist yet, `/admin/logs` shows guidance with attempted paths. Console mode still falls back to stdout when file logging is not configured or fails.
 - PCGW destructive actions now use a simple popup confirmation instead of typed confirmation.
 
 ---
@@ -227,7 +228,7 @@ Notes:
 - Service name: `GSBSServer` (display name `GSBS Server`).
 - SCM host mode uses `--service` automatically when the service starts.
 - Console behavior is unchanged: run the binary with no service flags.
-- In service mode, logs go to `GSBS_SERVICE_LOG_PATH` or `C:\ProgramData\GSBS\logs\server.log`.
+- In service mode, logs go to `GSBS_SERVICE_LOG_PATH` (or `C:\ProgramData\GSBS\logs\server.log` if unset).
 
 What the wizard does:
 

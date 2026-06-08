@@ -17,9 +17,28 @@ var (
 	logCloser io.Closer
 )
 
+const (
+	// ServiceLogPathEnv is the preferred log file path override.
+	ServiceLogPathEnv = "GSBS_SERVICE_LOG_PATH"
+	// LegacyLogFileEnv is the legacy file logging override retained for compatibility.
+	LegacyLogFileEnv = "GSBS_LOG_FILE"
+)
+
 // Init configures global structured logging from GSBS_LOG_LEVEL (debug, info, warn, error).
 func Init() {
 	initWithWriter(os.Stdout, nil)
+}
+
+// ConfiguredLogFilePath returns the configured log file path from environment
+// variables in precedence order.
+func ConfiguredLogFilePath() (path, sourceEnv string) {
+	if v := strings.TrimSpace(os.Getenv(ServiceLogPathEnv)); v != "" {
+		return filepath.Clean(v), ServiceLogPathEnv
+	}
+	if v := strings.TrimSpace(os.Getenv(LegacyLogFileEnv)); v != "" {
+		return filepath.Clean(v), LegacyLogFileEnv
+	}
+	return "", ""
 }
 
 // InitFile configures logging to append JSON logs to the given file path.

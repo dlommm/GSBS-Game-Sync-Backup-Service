@@ -244,7 +244,7 @@ func (a *serverApp) Shutdown(ctx context.Context) error {
 }
 
 func runConsoleMode() error {
-	logx.Init()
+	initConsoleLogging()
 	defer func() {
 		if err := logx.Close(); err != nil {
 			fmt.Fprintf(os.Stderr, "close logger: %v\n", err)
@@ -276,6 +276,26 @@ func runConsoleMode() error {
 		logx.Logger().Info().Msg("server stopped")
 		return nil
 	}
+}
+
+func initConsoleLogging() {
+	if path, sourceEnv := logx.ConfiguredLogFilePath(); path != "" {
+		if err := logx.InitFile(path); err != nil {
+			logx.Init()
+			logx.Logger().Warn().
+				Str("env", sourceEnv).
+				Str("path", path).
+				Err(err).
+				Msg("file logging init failed; using stdout")
+			return
+		}
+		logx.Logger().Info().
+			Str("env", sourceEnv).
+			Str("path", path).
+			Msg("file logging enabled")
+		return
+	}
+	logx.Init()
 }
 
 func runServerWithOptions(opts cliOptions) error {

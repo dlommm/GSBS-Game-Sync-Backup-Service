@@ -2,7 +2,11 @@ package webui
 
 import (
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseAdminLogQueryDefaultsAndBounds(t *testing.T) {
@@ -54,3 +58,74 @@ func TestParseAdminLogLineJSONAndRaw(t *testing.T) {
 		t.Fatalf("unexpected raw entry: %+v", raw)
 	}
 }
+
+func TestResolveAdminLogSourceForPrecedenceAndFallback(t *testing.T) {
+	getenv := func(key string) string {
+		switch key {
+		case "GSBS_SERVICE_LOG_PATH":
+			return "/tmp/service.log"
+		case "GSBS_LOG_FILE":
+			return "/tmp/legacy.log"
+		case "ProgramData":
+			return `C:\ProgramData`
+		default:
+			return ""
+		}
+	}
+	statFn := func(path string) (os.FileInfo, error) {
+		if filepath.Clean(path) == filepath.Clean("/tmp/legacy.log") {
+			return fakeFileInfo{name: "legacy.log"}, nil
+		}
+		return nil, os.ErrNotExist
+	}
+	path, info, present := resolveAdminLogSourceFor("windows", getenv, statFn)
+	if !present {
+		t.Fatalf("present=%v want true", present)
+	}
+	if filepath.Clean(path) != filepath.Clean("/tmp/legacy.log") {
+		t.Fatalf("path=%q want %q", path, "/tmp/legacy.log")
+	}
+	if !strings.Contains(info, "GSBS_LOG_FILE") {
+		t.Fatalf("info=%q want GSBS_LOG_FILE source", info)
+	}
+}
+
+func TestResolveAdminLogSourceForMissingIncludesAttemptedPaths(t *testing.T) {
+	getenv := func(key string) string {
+		switch key {
+		case "GSBS_SERVICE_LOG_PATH":
+			return "/tmp/service.log"
+		case "GSBS_LOG_FILE":
+			return "/tmp/legacy.log"
+		default:
+			return ""
+		}
+	}
+	statFn := func(path string) (os.FileInfo, error) {
+		return nil, os.ErrNotExist
+	}
+	path, info, present := resolveAdminLogSourceFor("linux", getenv, statFn)
+	if present {
+		t.Fatalf("present=%v want false", present)
+	}
+	if filepath.Clean(path) != filepath.Clean("/tmp/service.log") {
+		t.Fatalf("path=%q want first attempted path", path)
+	}
+	if !strings.Contains(info, "/tmp/service.log") || !strings.Contains(info, "/tmp/legacy.log") {
+		t.Fatalf("info=%q must include attempted paths", info)
+	}
+	if !strings.Contains(info, "GSBS_SERVICE_LOG_PATH") || !strings.Contains(info, "GSBS_LOG_FILE") {
+		t.Fatalf("info=%q must include env guidance", info)
+	}
+}
+
+type fakeFileInfo struct {
+	name string
+}
+
+func (f fakeFileInfo) Name() string       { return f.name }
+func (f fakeFileInfo) Size() int64        { return 0 }
+func (f fakeFileInfo) Mode() os.FileMode  { return 0o644 }
+func (f fakeFileInfo) ModTime() time.Time { return time.Time{} }
+func (f fakeFileInfo) IsDir() bool        { return false }
+func (f fakeFileInfo) Sys() interface{}   { return nil }
