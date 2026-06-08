@@ -53,6 +53,9 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Filename: "{app}\{#MyLauncherName}"; Parameters: "open-admin"; Description: "Open GSBS Admin in browser"; Flags: nowait postinstall skipifsilent unchecked
 
 [Code]
+const
+  SecretCharset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_';
+
 var
   CorePage: TWizardPage;
   RuntimePage: TWizardPage;
@@ -157,14 +160,12 @@ begin
 end;
 
 function GenerateSecret(LengthValue: Integer): String;
-const
-  Charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_';
 var
   I: Integer;
 begin
   Result := '';
   for I := 1 to LengthValue do
-    Result := Result + Charset[Random(Length(Charset)) + 1];
+    Result := Result + SecretCharset[Random(Length(SecretCharset)) + 1];
 end;
 
 procedure GenerateSecretClick(Sender: TObject);
