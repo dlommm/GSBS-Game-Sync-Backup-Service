@@ -178,6 +178,36 @@ func TestListPCGWCatalogMissing(t *testing.T) {
 	}
 }
 
+func TestListPCGWCatalogMissing_ZeroLimitReturnsAll(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	entries := make([]types.PCGWCatalogEntry, 0, 620)
+	for i := int64(1); i <= 620; i++ {
+		entries = append(entries, types.PCGWCatalogEntry{
+			PageID: i, Title: "G", FirstSeenAt: "2025-01-01T00:00:00Z", LastSeenAt: "2025-01-01T00:00:00Z",
+		})
+	}
+	if err := st.UpsertPCGWCatalogBatch(ctx, entries); err != nil {
+		t.Fatalf("upsert catalog: %v", err)
+	}
+
+	// Seed one local row so not all are missing.
+	_ = st.UpsertPCGWGame(ctx, &types.PCGWGame{PageID: 1, PageName: "p1", Title: "G1", ParseStatus: "ok"})
+
+	missing, err := st.ListPCGWCatalogMissing(ctx, 0, 0)
+	if err != nil {
+		t.Fatalf("list missing with zero limit: %v", err)
+	}
+	if len(missing) != 619 {
+		t.Fatalf("missing count with zero limit: got %d, want 619", len(missing))
+	}
+}
+
 func TestListPCGWCatalogTitleBackfill(t *testing.T) {
 	st, err := NewSQLite(":memory:")
 	if err != nil {

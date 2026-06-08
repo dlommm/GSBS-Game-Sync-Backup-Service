@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gsbs/gsbs/pkg/types"
@@ -43,24 +44,37 @@ func (h *WebHandler) jobStatus() (running bool, progressPages int) {
 }
 
 type jobsViewData struct {
-	RecentJobs           []store.JobRun
-	JobRunning           bool
-	JobProgressPages     int
-	JobProgressTotal     int
-	JobGamesSkipped      int
-	JobPhase             string
-	LastSuccessfulSyncAt string
-	CSRFToken            string
+	RecentJobs            []store.JobRun
+	CatalogStats          types.PCGWCatalogStats
+	LatestSyncRun         *types.PCGWSyncRun
+	JobRunning            bool
+	JobProgressPages      int
+	JobProgressTotal      int
+	JobGamesSkipped       int
+	JobPhase              string
+	LastSuccessfulSyncAt  string
+	MaxPagesPerRun        int
+	MaxPagesPerRunFromEnv bool
+	ShowPCGWControls      bool
+	CSRFToken             string
 }
 
-func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string) jobsViewData {
+func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGWControls bool) jobsViewData {
 	recentJobs, _ := h.store.ListJobRuns(ctx, "pcgw_sync", 10)
 	jobRunning, jobProgress := h.jobStatus()
+	catalogStats, _ := h.store.GetPCGWCatalogStats(ctx)
+	latestRun, _ := h.store.GetLatestPCGWSyncRun(ctx)
+	_, hasEnvBudget := os.LookupEnv("GSBS_PCGW_MAX_PAGES_PER_RUN")
 	data := jobsViewData{
-		RecentJobs:       recentJobs,
-		JobRunning:       jobRunning,
-		JobProgressPages: jobProgress,
-		CSRFToken:        csrf,
+		RecentJobs:            recentJobs,
+		CatalogStats:          catalogStats,
+		LatestSyncRun:         latestRun,
+		JobRunning:            jobRunning,
+		JobProgressPages:      jobProgress,
+		MaxPagesPerRun:        job.MaxPagesPerRun(),
+		MaxPagesPerRunFromEnv: hasEnvBudget,
+		ShowPCGWControls:      showPCGWControls,
+		CSRFToken:             csrf,
 	}
 	if last, _ := h.store.GetLatestSuccessfulJobRun(ctx, "pcgw_sync"); last != nil {
 		data.LastSuccessfulSyncAt = last.FinishedAt
@@ -68,13 +82,13 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string) jobsView
 			data.LastSuccessfulSyncAt = last.StartedAt
 		}
 	}
-	if syncRun, _ := h.store.GetLatestPCGWSyncRun(ctx); syncRun != nil {
-		if syncRun.GamesTotal > 0 {
-			data.JobProgressTotal = syncRun.GamesTotal
+	if data.LatestSyncRun != nil {
+		if data.LatestSyncRun.GamesTotal > 0 {
+			data.JobProgressTotal = data.LatestSyncRun.GamesTotal
 		}
-		data.JobGamesSkipped = syncRun.GamesSkipped
-		if jobRunning && jobProgress == 0 && syncRun.CheckpointOffset > 0 {
-			data.JobProgressPages = syncRun.CheckpointOffset
+		data.JobGamesSkipped = data.LatestSyncRun.GamesSkipped
+		if jobRunning && jobProgress == 0 && data.LatestSyncRun.CheckpointOffset > 0 {
+			data.JobProgressPages = data.LatestSyncRun.CheckpointOffset
 		}
 	}
 	if h.jobRunner != nil && h.jobRunner.IsRunning("pcgw_sync") {
@@ -91,7 +105,7 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	statsSnapshots, _ := h.store.ListStatsSnapshots(ctx, 30)
 	recentJobs, _ := h.store.ListJobRuns(ctx, "pcgw_sync", 10)
-	jobsData := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret))
+	jobsData := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret), false)
 	sseClients := 0
 	if h.hub != nil {
 		sseClients = h.hub.Count()
@@ -99,20 +113,24 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 	stats := h.loadAdminStats(ctx)
 	showGettingStarted := stats.UserCount <= 1 && stats.ClientCount == 0 && stats.SaveCount == 0
 	h.render(w, "admin_overview.html", adminOverviewData{
-		PageData:             h.adminPageData(w, r, userID, username, "overview", "admin_overview"),
-		Stats:                stats,
-		StatsSnapshots:       statsSnapshots,
-		SSEClients:           sseClients,
-		AllowRegister:        h.allowRegister,
-		ShowGettingStarted:   showGettingStarted,
-		MaxStorageBytes:      h.maxStorageBytes,
-		ReadOnly:             h.readOnly,
-		RecentJobs:           recentJobs,
-		JobRunning:           jobsData.JobRunning,
-		JobProgressPages:     jobsData.JobProgressPages,
-		JobProgressTotal:     jobsData.JobProgressTotal,
-		JobGamesSkipped:      jobsData.JobGamesSkipped,
-		LastSuccessfulSyncAt: jobsData.LastSuccessfulSyncAt,
+		PageData:              h.adminPageData(w, r, userID, username, "overview", "admin_overview"),
+		Stats:                 stats,
+		StatsSnapshots:        statsSnapshots,
+		SSEClients:            sseClients,
+		AllowRegister:         h.allowRegister,
+		ShowGettingStarted:    showGettingStarted,
+		MaxStorageBytes:       h.maxStorageBytes,
+		ReadOnly:              h.readOnly,
+		RecentJobs:            recentJobs,
+		JobRunning:            jobsData.JobRunning,
+		JobProgressPages:      jobsData.JobProgressPages,
+		JobProgressTotal:      jobsData.JobProgressTotal,
+		JobGamesSkipped:       jobsData.JobGamesSkipped,
+		JobPhase:              jobsData.JobPhase,
+		LastSuccessfulSyncAt:  jobsData.LastSuccessfulSyncAt,
+		MaxPagesPerRun:        jobsData.MaxPagesPerRun,
+		MaxPagesPerRunFromEnv: jobsData.MaxPagesPerRunFromEnv,
+		ShowPCGWControls:      jobsData.ShowPCGWControls,
 	})
 }
 
@@ -222,18 +240,24 @@ func (h *WebHandler) serveAdminActivity(w http.ResponseWriter, r *http.Request) 
 	auditLog, _ := h.store.ListAuditLog(ctx, 50, "")
 	statsSnapshots, _ := h.store.ListStatsSnapshots(ctx, 30)
 	recentJobs, _ := h.store.ListJobRuns(ctx, "pcgw_sync", 10)
-	jobsData := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret))
+	jobsData := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret), true)
 	h.render(w, "admin_activity.html", adminActivityData{
-		PageData:             h.adminPageData(w, r, userID, username, "activity", "admin_activity"),
-		Fetches:              fetches,
-		AuditLog:             auditLog,
-		StatsSnapshots:       statsSnapshots,
-		RecentJobs:           recentJobs,
-		JobRunning:           jobsData.JobRunning,
-		JobProgressPages:     jobsData.JobProgressPages,
-		JobProgressTotal:     jobsData.JobProgressTotal,
-		JobGamesSkipped:      jobsData.JobGamesSkipped,
-		LastSuccessfulSyncAt: jobsData.LastSuccessfulSyncAt,
+		PageData:              h.adminPageData(w, r, userID, username, "activity", "admin_activity"),
+		Fetches:               fetches,
+		AuditLog:              auditLog,
+		StatsSnapshots:        statsSnapshots,
+		RecentJobs:            recentJobs,
+		JobRunning:            jobsData.JobRunning,
+		JobProgressPages:      jobsData.JobProgressPages,
+		JobProgressTotal:      jobsData.JobProgressTotal,
+		JobGamesSkipped:       jobsData.JobGamesSkipped,
+		JobPhase:              jobsData.JobPhase,
+		LastSuccessfulSyncAt:  jobsData.LastSuccessfulSyncAt,
+		CatalogStats:          jobsData.CatalogStats,
+		LatestSyncRun:         jobsData.LatestSyncRun,
+		MaxPagesPerRun:        jobsData.MaxPagesPerRun,
+		MaxPagesPerRunFromEnv: jobsData.MaxPagesPerRunFromEnv,
+		ShowPCGWControls:      jobsData.ShowPCGWControls,
 	})
 }
 
@@ -241,15 +265,22 @@ func (h *WebHandler) serveAdminJobsPartial(w http.ResponseWriter, r *http.Reques
 	if _, _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
-	data := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret))
+	showPCGWControls := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("context")), "activity")
+	data := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret), showPCGWControls)
 	h.renderPartial(w, "partials/admin_jobs.html", map[string]interface{}{
-		"RecentJobs":           data.RecentJobs,
-		"JobRunning":           data.JobRunning,
-		"JobProgressPages":     data.JobProgressPages,
-		"JobProgressTotal":     data.JobProgressTotal,
-		"JobGamesSkipped":      data.JobGamesSkipped,
-		"LastSuccessfulSyncAt": data.LastSuccessfulSyncAt,
-		"CSRFToken":            data.CSRFToken,
+		"RecentJobs":            data.RecentJobs,
+		"CatalogStats":          data.CatalogStats,
+		"LatestSyncRun":         data.LatestSyncRun,
+		"JobRunning":            data.JobRunning,
+		"JobProgressPages":      data.JobProgressPages,
+		"JobProgressTotal":      data.JobProgressTotal,
+		"JobGamesSkipped":       data.JobGamesSkipped,
+		"JobPhase":              data.JobPhase,
+		"LastSuccessfulSyncAt":  data.LastSuccessfulSyncAt,
+		"MaxPagesPerRun":        data.MaxPagesPerRun,
+		"MaxPagesPerRunFromEnv": data.MaxPagesPerRunFromEnv,
+		"ShowPCGWControls":      data.ShowPCGWControls,
+		"CSRFToken":             data.CSRFToken,
 	})
 }
 

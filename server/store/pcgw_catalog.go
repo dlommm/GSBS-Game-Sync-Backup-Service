@@ -82,14 +82,23 @@ func (s *sqliteStore) GetPCGWCatalogStats(ctx context.Context) (types.PCGWCatalo
 
 // ListPCGWCatalogMissing returns page IDs that are in pcgw_catalog but not in pcgw_games (excluding dead-letter).
 func (s *sqliteStore) ListPCGWCatalogMissing(ctx context.Context, limit, offset int) ([]int64, error) {
-	if limit <= 0 {
-		limit = 500
-	}
-	rows, err := s.db.QueryContext(ctx, `
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	baseQuery := `
 		SELECT c.page_id FROM pcgw_catalog c
 		WHERE NOT EXISTS (SELECT 1 FROM pcgw_games g WHERE g.page_id = c.page_id)
 		  AND c.dead_letter = 0
-		ORDER BY c.page_id LIMIT ? OFFSET ?`, limit, offset)
+		ORDER BY c.page_id`
+	if limit > 0 {
+		rows, err = s.db.QueryContext(ctx, baseQuery+` LIMIT ? OFFSET ?`, limit, offset)
+	} else if offset > 0 {
+		// SQLite supports LIMIT -1 for "no upper bound with offset".
+		rows, err = s.db.QueryContext(ctx, baseQuery+` LIMIT -1 OFFSET ?`, offset)
+	} else {
+		rows, err = s.db.QueryContext(ctx, baseQuery)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -99,15 +108,23 @@ func (s *sqliteStore) ListPCGWCatalogMissing(ctx context.Context, limit, offset 
 
 // ListPCGWCatalogFailedPartial returns page IDs with failed or partial parse status.
 func (s *sqliteStore) ListPCGWCatalogFailedPartial(ctx context.Context, limit, offset int) ([]int64, error) {
-	if limit <= 0 {
-		limit = 500
-	}
-	rows, err := s.db.QueryContext(ctx, `
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	baseQuery := `
 		SELECT g.page_id FROM pcgw_games g
 		JOIN pcgw_catalog c ON c.page_id = g.page_id
 		WHERE g.parse_status IN ('failed', 'partial')
 		  AND c.dead_letter = 0
-		ORDER BY g.page_id LIMIT ? OFFSET ?`, limit, offset)
+		ORDER BY g.page_id`
+	if limit > 0 {
+		rows, err = s.db.QueryContext(ctx, baseQuery+` LIMIT ? OFFSET ?`, limit, offset)
+	} else if offset > 0 {
+		rows, err = s.db.QueryContext(ctx, baseQuery+` LIMIT -1 OFFSET ?`, offset)
+	} else {
+		rows, err = s.db.QueryContext(ctx, baseQuery)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -118,10 +135,11 @@ func (s *sqliteStore) ListPCGWCatalogFailedPartial(ctx context.Context, limit, o
 // ListPCGWCatalogTitleBackfill returns catalog-backed rows where local title/page_name is blank.
 // These rows should be re-ingested so title fields are healed without a full resync.
 func (s *sqliteStore) ListPCGWCatalogTitleBackfill(ctx context.Context, limit, offset int) ([]types.PCGWCatalogEntry, error) {
-	if limit <= 0 {
-		limit = 500
-	}
-	rows, err := s.db.QueryContext(ctx, `
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	baseQuery := `
 		SELECT c.page_id, c.title, c.first_seen_at, c.last_seen_at, c.last_seen_run_id, c.last_seen_rev_id,
 			c.dead_letter, c.dead_letter_reason, c.retry_count
 		FROM pcgw_catalog c
@@ -132,7 +150,14 @@ func (s *sqliteStore) ListPCGWCatalogTitleBackfill(ctx context.Context, limit, o
 			TRIM(COALESCE(g.title, '')) = ''
 			OR TRIM(COALESCE(g.page_name, '')) = ''
 		  )
-		ORDER BY c.page_id LIMIT ? OFFSET ?`, limit, offset)
+		ORDER BY c.page_id`
+	if limit > 0 {
+		rows, err = s.db.QueryContext(ctx, baseQuery+` LIMIT ? OFFSET ?`, limit, offset)
+	} else if offset > 0 {
+		rows, err = s.db.QueryContext(ctx, baseQuery+` LIMIT -1 OFFSET ?`, offset)
+	} else {
+		rows, err = s.db.QueryContext(ctx, baseQuery)
+	}
 	if err != nil {
 		return nil, err
 	}

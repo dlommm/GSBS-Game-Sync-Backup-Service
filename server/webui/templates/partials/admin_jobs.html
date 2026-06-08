@@ -3,11 +3,16 @@
   <div>
     <h2>Jobs</h2>
     {{if .LastSuccessfulSyncAt}}
-    <p class="cell-muted" style="margin:0.25rem 0 0;font-size:0.8125rem;">Last successful sync: <strong>{{formatTime .LastSuccessfulSyncAt}}</strong></p>
+    <p class="cell-muted jobs-meta">Last successful sync: <strong>{{formatTime .LastSuccessfulSyncAt}}</strong></p>
     {{else}}
-    <p class="cell-muted" style="margin:0.25rem 0 0;font-size:0.8125rem;">No successful sync recorded yet.</p>
+    <p class="cell-muted jobs-meta">No successful sync recorded yet.</p>
     {{end}}
+    <p class="cell-muted jobs-meta">
+      Phase 2 ingest budget: <strong>{{.MaxPagesPerRun}}</strong> pages per run
+      {{if .MaxPagesPerRunFromEnv}}(<code>GSBS_PCGW_MAX_PAGES_PER_RUN</code>){{else}}(default){{end}}.
+    </p>
   </div>
+  {{if .ShowPCGWControls}}{{else}}
   <div class="panel-actions actions-stack">
     {{if .JobRunning}}
     <span class="badge-running">Running…</span>
@@ -27,9 +32,10 @@
     </form>
     {{end}}
   </div>
+  {{end}}
 </div>
 {{if .JobRunning}}
-<div class="job-progress-wrap" style="padding:0 1.25rem 1rem;">
+<div class="job-progress-wrap jobs-progress-wrap">
   <div class="quota-bar-header">
     <span>Progress</span>
     <span>{{.JobProgressPages}}{{if gt .JobProgressTotal 0}} / {{.JobProgressTotal}}{{end}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
@@ -41,6 +47,11 @@
     <div class="quota-bar-fill" style="width:100%;opacity:0.35;animation:pulse 1.5s ease-in-out infinite;"></div>
     {{end}}
   </div>
+</div>
+{{end}}
+{{if .ShowPCGWControls}}
+<div class="pcgw-actions-wrap jobs-controls-wrap">
+  {{template "partials/admin_pcgw_actions.html" .}}
 </div>
 {{end}}
 {{if .RecentJobs}}
