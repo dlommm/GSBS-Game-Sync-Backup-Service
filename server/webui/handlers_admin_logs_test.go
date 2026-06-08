@@ -111,7 +111,8 @@ func TestResolveAdminLogSourceForMissingIncludesAttemptedPaths(t *testing.T) {
 	if filepath.Clean(path) != filepath.Clean("/tmp/service.log") {
 		t.Fatalf("path=%q want first attempted path", path)
 	}
-	if !strings.Contains(info, "/tmp/service.log") || !strings.Contains(info, "/tmp/legacy.log") {
+	infoNorm := strings.ReplaceAll(info, "\\", "/")
+	if !strings.Contains(infoNorm, "/tmp/service.log") || !strings.Contains(infoNorm, "/tmp/legacy.log") {
 		t.Fatalf("info=%q must include attempted paths", info)
 	}
 	if !strings.Contains(info, "GSBS_SERVICE_LOG_PATH") || !strings.Contains(info, "GSBS_LOG_FILE") {

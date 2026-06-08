@@ -1,12 +1,15 @@
 package logx
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestConfiguredLogFilePathPrecedence(t *testing.T) {
 	t.Setenv(ServiceLogPathEnv, "/tmp/service.log")
 	t.Setenv(LegacyLogFileEnv, "/tmp/legacy.log")
 	path, source := ConfiguredLogFilePath()
-	if path != "/tmp/service.log" {
+	if filepath.Clean(path) != filepath.Clean("/tmp/service.log") {
 		t.Fatalf("path=%q want /tmp/service.log", path)
 	}
 	if source != ServiceLogPathEnv {
@@ -18,7 +21,7 @@ func TestConfiguredLogFilePathLegacyFallback(t *testing.T) {
 	t.Setenv(ServiceLogPathEnv, "")
 	t.Setenv(LegacyLogFileEnv, "/tmp/legacy.log")
 	path, source := ConfiguredLogFilePath()
-	if path != "/tmp/legacy.log" {
+	if filepath.Clean(path) != filepath.Clean("/tmp/legacy.log") {
 		t.Fatalf("path=%q want /tmp/legacy.log", path)
 	}
 	if source != LegacyLogFileEnv {
