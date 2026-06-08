@@ -149,15 +149,30 @@ jobs:
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
       - name: Build client installer
-        shell: bash
+        shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.tag }}
-        run: bash script/packaging/windows/build-installer.sh dist "$VERSION"
+        run: |
+          $ver = $env:VERSION -replace '^v',''
+          $work = Join-Path $PWD "dist/inno-work"
+          Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $work | Out-Null
+          Copy-Item "dist/gsbs-client-windows-amd64.exe" (Join-Path $work "gsbs-client-windows-amd64.exe")
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          & $iscc "/DMyAppVersion=$ver" "/DSourceDir=$work" "/O$PWD\dist" "$PWD\script\packaging\windows\gsbs-client.iss"
       - name: Build server installer
-        shell: bash
+        shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.tag }}
-        run: bash script/packaging/windows/build-server-installer.sh dist "$VERSION"
+        run: |
+          $ver = $env:VERSION -replace '^v',''
+          $work = Join-Path $PWD "dist/inno-work-server"
+          Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $work | Out-Null
+          Copy-Item "dist/gsbs-server-windows-amd64.exe" (Join-Path $work "gsbs-server-windows-amd64.exe")
+          Copy-Item "script/packaging/windows/gsbs-server-launcher.cmd" (Join-Path $work "gsbs-server-launcher.cmd")
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          & $iscc "/DMyAppVersion=$ver" "/DSourceDir=$work" "/O$PWD\dist" "$PWD\script\packaging\windows\gsbs-server.iss"
       - name: Generate release manifests
         shell: bash
         env:
