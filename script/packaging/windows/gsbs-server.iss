@@ -44,8 +44,8 @@ Name: "{group}\Service - Start"; Filename: "{app}\{#MyLauncherName}"; Parameters
 Name: "{group}\Service - Stop"; Filename: "{app}\{#MyLauncherName}"; Parameters: "service-stop"
 Name: "{group}\Service - Restart"; Filename: "{app}\{#MyLauncherName}"; Parameters: "service-restart"
 Name: "{group}\Service - Status"; Filename: "{app}\{#MyLauncherName}"; Parameters: "service-status"
-Name: "{group}\Edit GSBS Server config"; Filename: "{sys}\notepad.exe"; Parameters: "\"{commonappdata}\GSBS\server.env\""
-Name: "{group}\Open GSBS config folder"; Filename: "{sys}\explorer.exe"; Parameters: "\"{commonappdata}\GSBS\""
+Name: "{group}\Edit GSBS Server config"; Filename: "{sys}\notepad.exe"; Parameters: """{commonappdata}\GSBS\server.env"""
+Name: "{group}\Open GSBS config folder"; Filename: "{sys}\explorer.exe"; Parameters: """{commonappdata}\GSBS"""
 Name: "{group}\Open GSBS logs folder"; Filename: "{app}\{#MyLauncherName}"; Parameters: "open-logs"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 
