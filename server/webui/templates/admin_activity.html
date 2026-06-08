@@ -2,11 +2,13 @@
 {{define "admin_activity_title"}}Admin Activity — GSBS{{end}}
 {{define "admin_activity_content"}}
 <section class="panel" id="admin-jobs-panel"
-         hx-get="/admin/partial/jobs"
+         hx-get="/admin/partial/jobs?context=activity"
          hx-trigger="load, job-finished from:body, job-progress from:body"
          hx-swap="innerHTML">
   {{template "partials/admin_jobs.html" .}}
 </section>
+
+{{template "partials/admin_pcgw_wipe_modal.html" .}}
 
 <section class="panel">
   <div class="panel-header"><h2>Recent Manifest Fetches</h2></div>
@@ -77,5 +79,5 @@
 <div hidden
      sse-swap="job-finished,job-progress"
      hx-trigger="job-finished,job-progress from:body"
-     hx-get="/admin/partial/jobs" hx-target="#admin-jobs-panel" hx-swap="innerHTML"></div>
+     hx-get="/admin/partial/jobs?context=activity" hx-target="#admin-jobs-panel" hx-swap="innerHTML"></div>
 {{end}}

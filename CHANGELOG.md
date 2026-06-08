@@ -2,6 +2,22 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.3] - 2026-06-08
+
+### Added
+
+- Admin/WebUI: new `Sync Missing Local` action on Activity & Jobs to explicitly process remote catalog entries that are missing locally.
+- Admin/WebUI: action-specific flash feedback for `Retry Failed Items` and `Sync Missing Local`, plus tests for the new messaging paths.
+
+### Changed
+
+- Admin/WebUI: moved PCGW sync/import/export/maintenance/destructive controls from the PCGW page to Activity & Jobs, with cleaner card-based formatting and a dedicated wipe confirmation modal.
+
+### Fixed
+
+- Server/store: `limit=0` in PCGW catalog list queries now means unbounded (instead of silently capping to 500), which prevented large missing backlogs from being enqueued for ingest.
+- Admin/WebUI: `Retry Failed Items` now reports accurate start failures (`job_already_running` vs generic start failure) instead of appearing as a no-op.
+
 ## [2.0.2] - 2026-06-07
 
 ### Added

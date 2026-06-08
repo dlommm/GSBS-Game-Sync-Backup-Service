@@ -134,7 +134,7 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	games, q, status, platform, page, perPage, total, totalPages, start, end, prevPage, nextPage := h.loadPCGWPage(ctx, r)
-	jobs := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret))
+	jobs := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret), false)
 	catalogStats, _ := h.store.GetPCGWCatalogStats(ctx)
 	latestRun, _ := h.store.GetLatestPCGWSyncRun(ctx)
 	resumableRun, _ := h.store.GetResumablePCGWSyncRun(ctx, "incremental")
@@ -176,7 +176,7 @@ func (h *WebHandler) serveAdminPCGWJobStatusPartial(w http.ResponseWriter, r *ht
 	if _, _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
-	data := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret))
+	data := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret), false)
 	h.renderPartial(w, "partials/admin_pcgw_job_status.html", map[string]interface{}{
 		"JobRunning":       data.JobRunning,
 		"JobProgress":      data.JobProgressPages,
@@ -261,14 +261,14 @@ func (h *WebHandler) handleAdminPCGWSync(w http.ResponseWriter, r *http.Request,
 		}
 		if err != nil {
 			if errors.Is(err, job.ErrJobAlreadyRunning) {
-				Redirect(w, r, "/admin/pcgw?error=job_already_running")
+				Redirect(w, r, "/admin/activity?error=job_already_running")
 				return
 			}
-			Redirect(w, r, "/admin/pcgw?error=job_start_failed")
+			Redirect(w, r, "/admin/activity?error=job_start_failed")
 			return
 		}
 		if !started {
-			Redirect(w, r, "/admin/pcgw?error=job_already_running")
+			Redirect(w, r, "/admin/activity?error=job_already_running")
 			return
 		}
 	}
@@ -277,7 +277,7 @@ func (h *WebHandler) handleAdminPCGWSync(w http.ResponseWriter, r *http.Request,
 		action = "pcgw_sync_full"
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", action, "")
-	Redirect(w, r, "/admin/pcgw?job_started=1")
+	Redirect(w, r, "/admin/activity?job_started=1")
 }
 
 func (h *WebHandler) handleAdminPCGWPurgeWikitext(w http.ResponseWriter, r *http.Request) {
@@ -291,7 +291,7 @@ func (h *WebHandler) handleAdminPCGWPurgeWikitext(w http.ResponseWriter, r *http
 	}
 	n, _ := h.store.PurgePCGWFullWikitext(r.Context())
 	h.appendAuditBroadcast(r.Context(), userID, username, "pcgw_purge_wikitext", "", fmt.Sprintf("rows=%d", n))
-	Redirect(w, r, fmt.Sprintf("/admin/pcgw?purged=%d", n))
+	Redirect(w, r, fmt.Sprintf("/admin/activity?purged=%d", n))
 }
 
 func (h *WebHandler) serveAdminPCGWExport(w http.ResponseWriter, r *http.Request, pageID int64) {
@@ -333,30 +333,30 @@ func (h *WebHandler) handleAdminPCGWImport(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if err := r.ParseMultipartForm(256 << 20); err != nil {
-		Redirect(w, r, "/admin/pcgw?error=import_parse_failed")
+		Redirect(w, r, "/admin/activity?error=import_parse_failed")
 		return
 	}
 	mode := strings.TrimSpace(r.FormValue("mode"))
 	if mode != "merge" && mode != "full_replace" {
-		Redirect(w, r, "/admin/pcgw?error=import_invalid_mode")
+		Redirect(w, r, "/admin/activity?error=import_invalid_mode")
 		return
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		Redirect(w, r, "/admin/pcgw?error=import_missing_file")
+		Redirect(w, r, "/admin/activity?error=import_missing_file")
 		return
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, 256<<20))
 	if err != nil {
-		Redirect(w, r, "/admin/pcgw?error=import_read_failed")
+		Redirect(w, r, "/admin/activity?error=import_read_failed")
 		return
 	}
 
 	result, err := h.store.ImportPCGWManifestBundle(r.Context(), data, mode)
 	if err != nil {
 		logx.Logger().Error().Err(err).Msg("pcgw import bundle failed")
-		Redirect(w, r, "/admin/pcgw?error=import_failed")
+		Redirect(w, r, "/admin/activity?error=import_failed")
 		return
 	}
 
@@ -372,7 +372,7 @@ func (h *WebHandler) handleAdminPCGWImport(w http.ResponseWriter, r *http.Reques
 		h.hub.Broadcast(sse.Event{Type: "manifest-updated", Data: "{}"})
 	}
 
-	Redirect(w, r, fmt.Sprintf("/admin/pcgw?imported=1&locations=%d&games=%d", result.GameSaveLocations, result.PCGWGames))
+	Redirect(w, r, fmt.Sprintf("/admin/activity?imported=1&locations=%d&games=%d", result.GameSaveLocations, result.PCGWGames))
 }
 
 func (h *WebHandler) handleAdminPCGWWipePreflight(w http.ResponseWriter, r *http.Request) {
@@ -398,7 +398,7 @@ func (h *WebHandler) handleAdminPCGWWipe(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if h.store.HasRunningPCGWSync(r.Context()) {
-		Redirect(w, r, "/admin/pcgw?error=sync_running_cannot_wipe")
+		Redirect(w, r, "/admin/activity?error=sync_running_cannot_wipe")
 		return
 	}
 	mode := strings.TrimSpace(r.FormValue("mode"))
@@ -424,7 +424,7 @@ func (h *WebHandler) handleAdminPCGWWipe(w http.ResponseWriter, r *http.Request)
 	_ = h.store.LogJobFinish(r.Context(), jobRunID, status, errMsg, 0)
 
 	if wipeErr != nil {
-		Redirect(w, r, "/admin/pcgw?error=wipe_failed")
+		Redirect(w, r, "/admin/activity?error=wipe_failed")
 		return
 	}
 
@@ -435,7 +435,7 @@ func (h *WebHandler) handleAdminPCGWWipe(w http.ResponseWriter, r *http.Request)
 		h.hub.Broadcast(sse.Event{Type: "manifest-updated", Data: "{}"})
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "pcgw_wipe", mode, "")
-	Redirect(w, r, "/admin/pcgw?wiped=1")
+	Redirect(w, r, "/admin/activity?wiped=1")
 }
 
 func (h *WebHandler) handleAdminPCGWSyncCatalogOnly(w http.ResponseWriter, r *http.Request) {
@@ -450,12 +450,12 @@ func (h *WebHandler) handleAdminPCGWSyncCatalogOnly(w http.ResponseWriter, r *ht
 	if h.jobRunner != nil {
 		started, err := h.jobRunner.RunPCGWSyncCatalogOnly(context.Background())
 		if err != nil || !started {
-			Redirect(w, r, "/admin/pcgw?error=job_already_running")
+			Redirect(w, r, "/admin/activity?error=job_already_running")
 			return
 		}
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "pcgw_catalog_only", "")
-	Redirect(w, r, "/admin/pcgw?job_started=1")
+	Redirect(w, r, "/admin/activity?job_started=1")
 }
 
 func (h *WebHandler) handleAdminPCGWSyncRetryFailed(w http.ResponseWriter, r *http.Request) {
@@ -469,13 +469,49 @@ func (h *WebHandler) handleAdminPCGWSyncRetryFailed(w http.ResponseWriter, r *ht
 	}
 	if h.jobRunner != nil {
 		started, err := h.jobRunner.RunPCGWSyncRetryFailed(context.Background())
-		if err != nil || !started {
-			Redirect(w, r, "/admin/pcgw?error=job_already_running")
+		if err != nil {
+			if errors.Is(err, job.ErrJobAlreadyRunning) {
+				Redirect(w, r, "/admin/activity?error=job_already_running")
+				return
+			}
+			Redirect(w, r, "/admin/activity?error=job_start_failed")
+			return
+		}
+		if !started {
+			Redirect(w, r, "/admin/activity?error=job_already_running")
 			return
 		}
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "pcgw_retry_failed", "")
-	Redirect(w, r, "/admin/pcgw?job_started=1")
+	Redirect(w, r, "/admin/activity?job_started=1&job_action=retry_failed")
+}
+
+func (h *WebHandler) handleAdminPCGWSyncMissingLocal(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if h.jobRunner != nil {
+		started, err := h.jobRunner.RunPCGWSync(context.Background())
+		if err != nil {
+			if errors.Is(err, job.ErrJobAlreadyRunning) {
+				Redirect(w, r, "/admin/activity?error=job_already_running")
+				return
+			}
+			Redirect(w, r, "/admin/activity?error=job_start_failed")
+			return
+		}
+		if !started {
+			Redirect(w, r, "/admin/activity?error=job_already_running")
+			return
+		}
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "pcgw_sync_missing_local", "")
+	Redirect(w, r, "/admin/activity?job_started=1&job_action=missing_local")
 }
 
 func (h *WebHandler) handleAdminPCGWRebuildManifest(w http.ResponseWriter, r *http.Request) {
@@ -490,12 +526,12 @@ func (h *WebHandler) handleAdminPCGWRebuildManifest(w http.ResponseWriter, r *ht
 	if h.jobRunner != nil {
 		started, err := h.jobRunner.RunPCGWSyncRebuildManifest(context.Background())
 		if err != nil || !started {
-			Redirect(w, r, "/admin/pcgw?error=job_already_running")
+			Redirect(w, r, "/admin/activity?error=job_already_running")
 			return
 		}
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "pcgw_rebuild_manifest", "")
-	Redirect(w, r, "/admin/pcgw?job_started=1")
+	Redirect(w, r, "/admin/activity?job_started=1")
 }
 
 func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool {
@@ -522,6 +558,10 @@ func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool
 	}
 	if path == "/admin/pcgw/sync/retry-failed" && r.Method == http.MethodPost {
 		h.handleAdminPCGWSyncRetryFailed(w, r)
+		return true
+	}
+	if path == "/admin/pcgw/sync/missing-local" && r.Method == http.MethodPost {
+		h.handleAdminPCGWSyncMissingLocal(w, r)
 		return true
 	}
 	if path == "/admin/pcgw/rebuild-manifest" && r.Method == http.MethodPost {

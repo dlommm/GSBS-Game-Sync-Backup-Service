@@ -73,19 +73,23 @@ type adminStats struct {
 
 type adminOverviewData struct {
 	PageData
-	Stats                adminStats
-	StatsSnapshots       []store.StatsSnapshotRow
-	SSEClients           int
-	AllowRegister        bool
-	ShowGettingStarted   bool
-	MaxStorageBytes      int64
-	ReadOnly             bool
-	RecentJobs           []store.JobRun
-	JobRunning           bool
-	JobProgressPages     int
-	JobProgressTotal     int
-	JobGamesSkipped      int
-	LastSuccessfulSyncAt string
+	Stats                 adminStats
+	StatsSnapshots        []store.StatsSnapshotRow
+	SSEClients            int
+	AllowRegister         bool
+	ShowGettingStarted    bool
+	MaxStorageBytes       int64
+	ReadOnly              bool
+	RecentJobs            []store.JobRun
+	JobRunning            bool
+	JobProgressPages      int
+	JobProgressTotal      int
+	JobGamesSkipped       int
+	JobPhase              string
+	LastSuccessfulSyncAt  string
+	MaxPagesPerRun        int
+	MaxPagesPerRunFromEnv bool
+	ShowPCGWControls      bool
 }
 
 type adminUsersData struct {
@@ -113,15 +117,21 @@ type adminManifestData struct {
 
 type adminActivityData struct {
 	PageData
-	Fetches              []store.ManifestFetchRow
-	AuditLog             []store.AuditRow
-	StatsSnapshots       []store.StatsSnapshotRow
-	RecentJobs           []store.JobRun
-	JobRunning           bool
-	JobProgressPages     int
-	JobProgressTotal     int
-	JobGamesSkipped      int
-	LastSuccessfulSyncAt string
+	Fetches               []store.ManifestFetchRow
+	AuditLog              []store.AuditRow
+	StatsSnapshots        []store.StatsSnapshotRow
+	RecentJobs            []store.JobRun
+	JobRunning            bool
+	JobProgressPages      int
+	JobProgressTotal      int
+	JobGamesSkipped       int
+	JobPhase              string
+	LastSuccessfulSyncAt  string
+	CatalogStats          types.PCGWCatalogStats
+	LatestSyncRun         *types.PCGWSyncRun
+	MaxPagesPerRun        int
+	MaxPagesPerRunFromEnv bool
+	ShowPCGWControls      bool
 }
 
 func newTemplateFuncs(t *template.Template) template.FuncMap {

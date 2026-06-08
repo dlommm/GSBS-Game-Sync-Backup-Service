@@ -264,6 +264,12 @@ func adminQuerySuccess(r *http.Request) string {
 		return "Manifest push event sent."
 	}
 	if q.Get("job_started") == "1" {
+		switch q.Get("job_action") {
+		case "missing_local":
+			return "PCGW sync started. This pass includes missing local backlog first; if none are pending it may complete without changes."
+		case "retry_failed":
+			return "Retry failed started. This action only processes failed/partial rows and is a no-op when none are queued."
+		}
 		return "PCGW sync job started in background."
 	}
 	if q.Get("job_canceled") == "1" {
@@ -290,6 +296,12 @@ func adminQuerySuccess(r *http.Request) string {
 	if q.Get("imported") == "1" {
 		return fmt.Sprintf("PCGW import complete (%s locations, %s games).",
 			q.Get("locations"), q.Get("games"))
+	}
+	if q.Get("wiped") == "1" {
+		return "PCGW wipe completed."
+	}
+	if n := q.Get("purged"); n != "" {
+		return fmt.Sprintf("Purged stored full wikitext for %s row(s).", n)
 	}
 	return ""
 }
@@ -336,6 +348,10 @@ func adminQueryError(r *http.Request) string {
 		return "Invalid import mode."
 	case "import_failed":
 		return "Import failed. See server log."
+	case "sync_running_cannot_wipe":
+		return "Cannot wipe while a PCGW sync is running."
+	case "wipe_failed":
+		return "PCGW wipe failed. See server log."
 	default:
 		return r.URL.Query().Get("error")
 	}

@@ -42,7 +42,7 @@
 </section>
 
 <section class="panel" id="admin-jobs-panel"
-         hx-get="/admin/partial/jobs"
+         hx-get="/admin/partial/jobs?context=overview"
          hx-trigger="load, job-finished from:body, job-progress from:body"
          hx-swap="innerHTML">
   {{template "partials/admin_jobs.html" .}}
@@ -64,5 +64,5 @@
 <div hidden
      sse-swap="job-finished,job-progress"
      hx-trigger="job-finished,job-progress from:body"
-     hx-get="/admin/partial/jobs" hx-target="#admin-jobs-panel" hx-swap="innerHTML"></div>
+     hx-get="/admin/partial/jobs?context=overview" hx-target="#admin-jobs-panel" hx-swap="innerHTML"></div>
 {{end}}

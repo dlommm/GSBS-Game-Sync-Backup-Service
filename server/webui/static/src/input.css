@@ -224,6 +224,8 @@
     margin: 0; padding: 0 1.25rem 0.9rem; color: var(--text-muted);
     font-size: 0.8125rem; line-height: 1.45;
   }
+  .jobs-meta { margin: 0.25rem 0 0; font-size: 0.8125rem; }
+  .jobs-progress-wrap { padding: 0 1.25rem 1rem; }
   .panel-body { padding: 0 1.25rem 1rem; }
   .panel-empty { padding: 2rem 1.25rem; text-align: center; }
   .panel-empty p { margin: 0.25rem 0; color: var(--text-muted); font-size: 0.9375rem; }
@@ -540,28 +542,68 @@
   .setup-checklist a { color: var(--accent); text-decoration: none; }
   .setup-checklist a:hover { text-decoration: underline; }
 
-  .pcgw-actions-wrap { padding: 0 1.25rem 1rem; }
-  .pcgw-actions-section { display: grid; gap: 1rem; }
-  .pcgw-primary-controls { border-color: rgba(99, 102, 241, 0.35); background: rgba(99, 102, 241, 0.06); }
-  .pcgw-group {
-    padding: 0.75rem 1.25rem 1rem;
-    border-top: 1px solid var(--border);
+  .pcgw-actions-wrap { padding: 0 1.25rem 1.25rem; }
+  .jobs-controls-wrap { padding-top: 0.25rem; }
+  .pcgw-controls-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: 0.9rem;
   }
-  .pcgw-group-title {
-    margin: 0 0 0.65rem;
-    font-size: 0.8125rem;
+  .pcgw-control-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-raised);
+    padding: 0.9rem;
+  }
+  .pcgw-primary-controls { border-color: rgba(99, 102, 241, 0.35); background: rgba(99, 102, 241, 0.07); }
+  .pcgw-card-title {
+    margin: 0 0 0.35rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .pcgw-card-subtitle {
+    margin: 0 0 0.7rem;
     color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-size: 0.8rem;
+    line-height: 1.4;
   }
-  .pcgw-group .actions-stack { justify-content: flex-start; }
+  .pcgw-card-subtitle code {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 0.1rem 0.35rem;
+    border-radius: var(--radius-xs);
+  }
+  .pcgw-control-card .config-grid { padding: 0; gap: 0.65rem 1rem; }
+  .pcgw-inline-muted { margin-left: 0.5rem; }
+  .pcgw-actions-stack { display: grid; gap: 0.55rem; }
   .pcgw-action-row {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
   }
-  .pcgw-group-danger { border-top-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.05); }
+  .pcgw-action-help { color: var(--text-muted); font-size: 0.78rem; }
+  .pcgw-upload-btn { cursor: pointer; }
+  .pcgw-upload-input { display: none; }
+  .pcgw-progress-row {
+    width: 100%;
+    display: grid;
+    gap: 0.45rem;
+    margin-top: 0.15rem;
+  }
+  .pcgw-progress-header {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .pcgw-group-danger { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.07); }
+  .pcgw-wipe-preflight { margin-bottom: 1rem; }
+  .pcgw-wipe-warning { margin: 0; font-weight: 600; color: var(--error); }
+  .pcgw-wipe-input { width: 100%; margin-top: 0.55rem; max-width: none; }
+  .pcgw-danger-text { color: var(--error); }
 }
 
 @media (max-width: 900px) {
