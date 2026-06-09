@@ -299,6 +299,18 @@
   .badge-warn { display: inline-block; padding: 0.1rem 0.5rem; font-size: 0.6875rem; font-weight: 600; border-radius: var(--radius-xs); background: var(--warning-muted); color: var(--warning); }
   .badge-running { display: inline-block; padding: 0.1rem 0.5rem; font-size: 0.6875rem; font-weight: 600; border-radius: var(--radius-xs); background: var(--info-muted); color: var(--info); }
   .badge-failed { display: inline-block; padding: 0.1rem 0.5rem; font-size: 0.6875rem; font-weight: 600; border-radius: var(--radius-xs); background: var(--error-muted); color: var(--error); }
+
+  .log-table .log-event { font-family: var(--mono); font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; }
+  .log-table .log-summary { font-size: 0.8125rem; word-break: break-word; }
+  .log-table .log-context { font-family: var(--mono); font-size: 0.6875rem; max-width: 16rem; word-break: break-all; line-height: 1.35; }
+  .log-table .log-level { text-transform: lowercase; }
+  .log-table .log-details summary { cursor: pointer; list-style: none; }
+  .log-table .log-details summary::-webkit-details-marker { display: none; }
+  .log-detail-pre {
+    margin: 0.5rem 0 0; padding: 0.625rem 0.75rem; max-height: 12rem; overflow: auto;
+    font-family: var(--mono); font-size: 0.6875rem; line-height: 1.4; color: var(--text-secondary);
+    background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius-xs); white-space: pre-wrap; word-break: break-all;
+  }
   .pill-yes { display: inline-block; padding: 0.1rem 0.4rem; font-size: 0.625rem; font-weight: 600; border-radius: var(--radius-xs); background: var(--accent-muted); color: var(--accent); }
   .pill-no { display: inline-block; padding: 0.1rem 0.4rem; font-size: 0.625rem; font-weight: 600; border-radius: var(--radius-xs); background: rgba(100, 100, 122, 0.12); color: var(--text-muted); }
 

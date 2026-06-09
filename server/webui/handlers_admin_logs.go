@@ -1,24 +1,15 @@
 package webui
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 
+	"github.com/gsbs/gsbs/pkg/logview"
 	"github.com/gsbs/gsbs/server/logx"
-)
-
-const (
-	defaultAdminLogLimit      = 200
-	defaultAdminRefreshSecond = 5
-	maxAdminLogLimit          = 1000
-	maxLogReadBytes           = 4 << 20
 )
 
 func (h *WebHandler) serveAdminLogs(w http.ResponseWriter, r *http.Request) {
@@ -26,9 +17,9 @@ func (h *WebHandler) serveAdminLogs(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	level, query, limit, autoRefresh, refreshSeconds := parseAdminLogQuery(r)
+	level, query, limit, autoRefresh, refreshSeconds := logview.ParseQuery(r)
 	sourcePath, sourceInfo, sourcePresent := resolveAdminLogSource()
-	entries := []adminLogEntry{}
+	entries := []logview.Entry{}
 	if sourcePresent {
 		loaded, err := loadAdminLogEntries(sourcePath, level, query, limit)
 		if err != nil {
@@ -50,9 +41,9 @@ func (h *WebHandler) serveAdminLogsPartial(w http.ResponseWriter, r *http.Reques
 	if _, _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
-	level, query, limit, _, _ := parseAdminLogQuery(r)
+	level, query, limit, _, _ := logview.ParseQuery(r)
 	sourcePath, sourceInfo, sourcePresent := resolveAdminLogSource()
-	entries := []adminLogEntry{}
+	entries := []logview.Entry{}
 	if sourcePresent {
 		loaded, err := loadAdminLogEntries(sourcePath, level, query, limit)
 		if err != nil {
@@ -66,45 +57,6 @@ func (h *WebHandler) serveAdminLogsPartial(w http.ResponseWriter, r *http.Reques
 		"LogSourcePath": sourcePath, "LogSourceInfo": sourceInfo, "LogSourcePresent": sourcePresent,
 		"Level": level, "Query": query, "Limit": limit,
 	})
-}
-
-func parseAdminLogQuery(r *http.Request) (level, query string, limit int, autoRefresh bool, refreshSeconds int) {
-	level = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("level")))
-	switch level {
-	case "", "all", "debug", "info", "warn", "error":
-		if level == "" {
-			level = "all"
-		}
-	default:
-		level = "all"
-	}
-	query = strings.TrimSpace(r.URL.Query().Get("q"))
-	limit = defaultAdminLogLimit
-	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil {
-			if n < 1 {
-				n = 1
-			}
-			if n > maxAdminLogLimit {
-				n = maxAdminLogLimit
-			}
-			limit = n
-		}
-	}
-	autoRefresh = r.URL.Query().Get("auto") == "1"
-	refreshSeconds = defaultAdminRefreshSecond
-	if raw := strings.TrimSpace(r.URL.Query().Get("refresh")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil {
-			if n < 2 {
-				n = 2
-			}
-			if n > 30 {
-				n = 30
-			}
-			refreshSeconds = n
-		}
-	}
-	return level, query, limit, autoRefresh, refreshSeconds
 }
 
 func resolveAdminLogSource() (path, info string, present bool) {
@@ -162,81 +114,6 @@ func adminLogSourceCandidates(goos string, getenv func(string) string) []adminLo
 	return candidates
 }
 
-func loadAdminLogEntries(path, level, query string, limit int) ([]adminLogEntry, error) {
-	lines, err := readRecentLines(path, maxLogReadBytes)
-	if err != nil {
-		return nil, err
-	}
-	q := strings.ToLower(strings.TrimSpace(query))
-	out := make([]adminLogEntry, 0, limit)
-	for i := len(lines) - 1; i >= 0 && len(out) < limit; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			continue
-		}
-		entry := parseAdminLogLine(line)
-		if level != "all" && entry.Level != level {
-			continue
-		}
-		if q != "" && !strings.Contains(strings.ToLower(entry.Raw), q) {
-			continue
-		}
-		out = append(out, entry)
-	}
-	return out, nil
-}
-
-func readRecentLines(path string, maxBytes int64) ([]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	st, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	size := st.Size()
-	start := int64(0)
-	if size > maxBytes {
-		start = size - maxBytes
-	}
-	if _, err := f.Seek(start, 0); err != nil {
-		return nil, err
-	}
-	buf, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-	return strings.Split(strings.ReplaceAll(string(buf), "\r\n", "\n"), "\n"), nil
-}
-
-func parseAdminLogLine(line string) adminLogEntry {
-	entry := adminLogEntry{
-		Level:   "raw",
-		Message: line,
-		Raw:     line,
-	}
-	var payload map[string]interface{}
-	if err := json.Unmarshal([]byte(line), &payload); err != nil {
-		return entry
-	}
-	if ts, ok := payload["time"].(string); ok {
-		entry.Timestamp = ts
-	}
-	if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
-		entry.Message = msg
-	}
-	if lvl, ok := payload["level"].(string); ok {
-		switch strings.ToLower(strings.TrimSpace(lvl)) {
-		case "warning":
-			entry.Level = "warn"
-		case "debug", "info", "warn", "error":
-			entry.Level = strings.ToLower(strings.TrimSpace(lvl))
-		default:
-			entry.Level = strings.ToLower(strings.TrimSpace(lvl))
-		}
-	}
-	return entry
+func loadAdminLogEntries(path, level, query string, limit int) ([]logview.Entry, error) {
+	return logview.LoadEntries(path, level, query, limit, logview.ParseZerologLine)
 }

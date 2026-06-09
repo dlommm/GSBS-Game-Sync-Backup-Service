@@ -9,13 +9,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/types"
+	"github.com/gsbs/gsbs/server/logx"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -59,7 +59,8 @@ func NewSQLite(path string) (Store, error) {
 	}
 	if os.Getenv("GSBS_MIGRATE_BLOBS_TO_FS") == "1" {
 		if err := s.migrateBlobsToFS(); err != nil {
-			log.Printf("GSBS: blob-to-filesystem migration failed: %v", err)
+			logx.Logger().Error().Str("component", "store").Err(err).
+				Msg("GSBS: blob-to-filesystem migration failed")
 		}
 	}
 	return s, nil
@@ -1431,7 +1432,9 @@ func (s *sqliteStore) ReconcileStaleJobRuns(ctx context.Context) error {
 			"interrupted", now, staleJobMessage, j.ID); err != nil {
 			return err
 		}
-		log.Printf("reconcile: job_runs id=%s job=%s started=%s -> interrupted", j.ID, j.JobName, j.StartedAt)
+		logx.Logger().Warn().Str("component", "store").Str("run_id", j.ID).
+			Str("job", j.JobName).Str("started", j.StartedAt).
+			Msg("reconcile: job_runs -> interrupted")
 	}
 	return nil
 }

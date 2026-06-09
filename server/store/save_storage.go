@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/gsbs/gsbs/pkg/savepath"
+	"github.com/gsbs/gsbs/server/logx"
 )
 
 const defaultSaveRoot = "/app/data/gamesaves"
@@ -97,7 +97,8 @@ func (s *sqliteStore) migrateBlobsToFS() error {
 		migrated++
 	}
 	if migrated > 0 {
-		log.Printf("GSBS: migrated %d save blob(s) to filesystem under %s", migrated, s.saveRoot)
+		logx.Logger().Info().Str("component", "store").Int("count", migrated).Str("save_root", s.saveRoot).
+			Msg("GSBS: migrated save blob(s) to filesystem")
 	}
 	return nil
 }

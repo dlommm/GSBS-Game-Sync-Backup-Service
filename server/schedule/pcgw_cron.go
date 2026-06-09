@@ -2,12 +2,12 @@ package schedule
 
 import (
 	"context"
-	"log"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/gsbs/gsbs/server/job"
+	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/store"
 	"github.com/robfig/cron/v3"
 )
@@ -64,20 +64,21 @@ func (p *PCGWCron) Reschedule(ctx context.Context) error {
 	}
 
 	if disabled {
-		log.Println("cron: PCGW sync disabled")
+		logx.Logger().Info().Str("component", "cron").Msg("cron: PCGW sync disabled")
 		return nil
 	}
 
 	id, err := p.cron.AddFunc(expr, func() {
 		if _, err := p.runner.RunPCGWSync(context.Background()); err != nil {
-			log.Printf("cron: pcgw sync: %v", err)
+			logx.Logger().Error().Str("component", "cron").Err(err).Msg("cron: pcgw sync")
 		}
 	})
 	if err != nil {
 		return err
 	}
 	p.entryID = id
-	log.Printf("cron: PCGW sync scheduled %s (source=%s)", expr, source)
+	logx.Logger().Info().Str("component", "cron").Str("expr", expr).Str("source", source).
+		Msg("cron: PCGW sync scheduled")
 	return nil
 }
 

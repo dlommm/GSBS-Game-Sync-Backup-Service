@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gsbs/gsbs/pkg/logview"
 	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/gsbs/gsbs/server/store"
 )
@@ -362,8 +363,16 @@ func templateTestData(name string) interface{} {
 			PageData: PageData{
 				PageName: "admin_logs", Username: "admin", IsAdmin: true, CSRFToken: "csrf-test", AdminNav: "logs",
 			},
-			Entries: []adminLogEntry{
-				{Timestamp: now, Level: "info", Message: "request", Raw: `{"level":"info","message":"request"}`},
+			Entries: []logview.Entry{
+				{
+					Timestamp: now, Level: "info", Event: "http.request",
+					Summary:   "GET /api/manifest → 200 in 12ms from 10.0.0.5",
+					Message:   "GET /api/manifest → 200 in 12ms from 10.0.0.5",
+					Context:   "request_id=abc123 user_id=user-1",
+					Method:    "GET", Path: "/api/manifest", Status: "200", Duration: "12ms",
+					RequestID: "abc123", IP: "10.0.0.5", UserID: "user-1",
+					Raw:       `{"level":"info","event":"http.request","message":"GET /api/manifest 200","method":"GET","path":"/api/manifest","status":200,"duration":12,"ip":"10.0.0.5","request_id":"abc123","user_id":"user-1"}`,
+				},
 			},
 			LogSourcePath:    "/tmp/server.log",
 			LogSourceInfo:    "Using GSBS_SERVICE_LOG_PATH.",
@@ -526,8 +535,16 @@ func templateTestData(name string) interface{} {
 		}
 	case "partials/admin_logs_table.html":
 		return map[string]interface{}{
-			"Entries": []adminLogEntry{
-				{Timestamp: now, Level: "info", Message: "request", Raw: `{"level":"info","message":"request"}`},
+			"Entries": []logview.Entry{
+				{
+					Timestamp: now, Level: "info", Event: "http.request",
+					Summary:   "GET /api/manifest → 200 in 12ms from 10.0.0.5",
+					Message:   "GET /api/manifest → 200 in 12ms from 10.0.0.5",
+					Context:   "request_id=abc123 user_id=user-1",
+					Method:    "GET", Path: "/api/manifest", Status: "200", Duration: "12ms",
+					RequestID: "abc123", IP: "10.0.0.5", UserID: "user-1",
+					Raw:       `{"level":"info","event":"http.request","message":"GET /api/manifest 200","method":"GET","path":"/api/manifest","status":200,"duration":12,"ip":"10.0.0.5","request_id":"abc123","user_id":"user-1"}`,
+				},
 			},
 			"LogSourcePresent": true,
 		}

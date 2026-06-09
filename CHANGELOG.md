@@ -2,6 +2,18 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.2] - 2026-06-09
+
+### Added
+
+- **Server/WebUI**: Admin logs page now parses structured zerolog JSON into Event, Summary, Context, and expandable raw Details columns; level badges, richer search (method, path, status, user_id, request_id), and improved HTTP request messages.
+- **Client/WebUI**: New `/logs` page on the local setup server with the same filter/search/auto-refresh table UX as server admin logs; linked from topbar, Help, and Quick actions.
+- **pkg/logview**: Shared log tail/filter/parse helpers for server zerolog JSON and client slog/plain text lines.
+
+### Changed
+
+- **Server**: Migrated SSE hub, PCGW jobs, store migrations/reconcile, and PCGW cron from stdlib `log` to `logx` so all operational logs appear in the unified service log file the WebUI reads.
+
 ## [2.1.1] - 2026-06-09
 
 ### Fixed
