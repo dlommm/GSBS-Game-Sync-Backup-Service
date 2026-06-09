@@ -177,6 +177,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveAdminJobsPartial(w, r)
 	case path == "/admin/partial/logs" && r.Method == http.MethodGet:
 		h.serveAdminLogsPartial(w, r)
+	case path == "/admin/logs/export.csv" && r.Method == http.MethodGet:
+		h.serveAdminLogsCSV(w, r)
 	case path == "/admin/revoke" && r.Method == http.MethodPost:
 		h.handleRevokeClient(w, r)
 	case path == "/admin/push-manifest" && r.Method == http.MethodPost:

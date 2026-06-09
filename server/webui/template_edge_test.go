@@ -21,11 +21,14 @@ func TestAdminJobsPartialAfterSync(t *testing.T) {
 			}},
 			"JobRunning": false, "JobProgressPages": 0, "JobProgressTotal": 10000,
 			"JobGamesSkipped": 42, "LastSuccessfulSyncAt": now, "CSRFToken": "csrf",
+			"IdleRunsNeeded": 11, "IdleTotalETASec": 3600, "IdlePerRunETASec": 330,
+			"CatalogStats": map[string]int{"RemoteTotal": 55000, "LocalTotal": 3945, "MissingLocal": 50816, "DeadLetter": 0},
 		},
 		{
 			"RecentJobs": []store.JobRun{{Status: "success", StartedAt: now, FinishedAt: now}},
 			"JobRunning": true, "JobProgressPages": 9000, "JobProgressTotal": 10000,
 			"JobGamesSkipped": 3, "CSRFToken": "csrf",
+			"JobPhaseLabel": "Phase 2: Parsing game data", "JobETAMin": 5,
 		},
 	}
 	for i, data := range cases {

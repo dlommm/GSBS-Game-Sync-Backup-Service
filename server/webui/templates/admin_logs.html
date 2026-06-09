@@ -16,7 +16,10 @@
 <section class="panel">
   <div class="panel-header-actions">
     <h2>Filters</h2>
-    <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
+    <div class="panel-actions">
+      <a id="logs-csv-btn" href="#" class="btn-ghost-sm" download="server-logs.csv">Export CSV</a>
+      <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
+    </div>
   </div>
   <form id="logs-filters" class="filter-toolbar" method="get" action="/admin/logs">
     <select name="component" class="filter-select" aria-label="Application">
@@ -87,9 +90,18 @@
     htmx.ajax('GET', buildQuery(), { target: '#admin-logs-table', swap: 'innerHTML' });
   }
 
+  const csvBtn = document.getElementById('logs-csv-btn');
+
+  function updateCsvLink() {
+    if (!csvBtn) return;
+    const params = new URLSearchParams(new FormData(form));
+    csvBtn.href = '/admin/logs/export.csv?' + params.toString();
+  }
+
   form.addEventListener('submit', function (evt) {
     evt.preventDefault();
     refreshLogs();
+    updateCsvLink();
   });
   if (refreshBtn) {
     refreshBtn.addEventListener('click', refreshLogs);
@@ -109,8 +121,16 @@
     }
   }
 
-  form.addEventListener('change', syncAutoRefresh);
+  form.addEventListener('change', function (evt) {
+    syncAutoRefresh();
+    updateCsvLink();
+    // Immediately refresh the table for any filter change except auto-refresh toggles
+    if (evt.target.name !== 'auto' && evt.target.name !== 'refresh') {
+      refreshLogs();
+    }
+  });
   syncAutoRefresh();
+  updateCsvLink();
 })();
 </script>
 {{end}}

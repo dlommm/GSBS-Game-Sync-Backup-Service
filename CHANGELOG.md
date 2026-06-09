@@ -2,6 +2,22 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.4] - 2026-06-09
+
+### Added
+
+- **Server/WebUI**: Jobs panel shows a **backlog progress bar and ETA** when idle — ingested %, remaining pages, estimated total time, runs needed, and time per run (based on historical rate from last 3 successful runs).
+- **Server/WebUI**: Admin logs **Export CSV** button — downloads current filtered log entries as a `.csv` file (time, app, level, event, summary, context, raw).
+- **Client/WebUI**: Same Export CSV button on the client `/logs` page.
+
+### Fixed
+
+- **Server/WebUI**: Changing any log filter (Application, Level, search text, limit, Show routine HTTP) now **immediately refreshes the table** — the JS `change` handler now calls `refreshLogs()` for all controls except the auto-refresh interval selector.
+- **Server/WebUI**: SSE log events no longer have a leading dot (e.g. `sse.client.subscribed` instead of `.client.subscribed`).
+- **Server/WebUI**: APP column in the log table no longer wraps ("ss e", "ht tp") — added `white-space: nowrap` and removed `word-break: break-all` override for component badges.
+- **Server/WebUI**: Context column truncates with ellipsis at 14rem and shows full text on hover (`title` attribute).
+- **Server/WebUI**: Log table hides Context column on screens ≤900px and Event column on screens ≤640px for better mobile readability; table remains horizontally scrollable.
+
 ## [2.1.3] - 2026-06-09
 
 ### Added

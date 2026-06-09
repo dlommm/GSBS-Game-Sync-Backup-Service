@@ -37,7 +37,7 @@
 {{if .JobRunning}}
 <div class="job-progress-wrap jobs-progress-wrap">
   <div class="quota-bar-header">
-    <span>Progress</span>
+    <span>{{if .JobPhaseLabel}}{{.JobPhaseLabel}}{{else}}Progress{{end}}</span>
     <span>{{.JobProgressPages}}{{if gt .JobProgressTotal 0}} / {{.JobProgressTotal}}{{end}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
   </div>
   {{if .JobAutoCatchUp}}
@@ -50,9 +50,36 @@
     <div class="quota-bar-fill" style="width:100%;opacity:0.35;animation:pulse 1.5s ease-in-out infinite;"></div>
     {{end}}
   </div>
-  {{if .JobElapsedSec}}
-  <span class="cell-muted" style="font-size:0.75rem;">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
-  {{end}}
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:0.25rem;flex-wrap:wrap;gap:0.25rem;">
+    {{if .JobElapsedSec}}
+    <span class="cell-muted" style="font-size:0.75rem;">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
+    {{else}}<span></span>{{end}}
+    {{if ge .JobETAMin 0}}
+    <span class="cell-muted" style="font-size:0.75rem;">{{if eq .JobETAMin 0}}Almost done{{else if lt .JobETAMin 2}}~1 min remaining{{else}}~{{.JobETAMin}} min remaining{{end}}</span>
+    {{end}}
+  </div>
+</div>
+{{else if .IdleRunsNeeded}}
+<div class="jobs-progress-wrap">
+  <div class="quota-bar-header">
+    <span>Backlog estimate</span>
+    <span>{{.CatalogStats.MissingLocal}} pages remaining</span>
+  </div>
+  <div class="quota-bar-track">
+    {{if .CatalogStats.RemoteTotal}}
+    <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .CatalogStats.LocalTotal .CatalogStats.RemoteTotal)}}%;opacity:0.6;"></div>
+    {{else}}
+    <div class="quota-bar-fill" style="width:0%;"></div>
+    {{end}}
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:0.25rem;flex-wrap:wrap;gap:0.25rem;">
+    <span class="cell-muted" style="font-size:0.75rem;">{{.CatalogStats.LocalTotal}} / {{.CatalogStats.RemoteTotal}} ingested ({{printf "%.0f" (percentInt .CatalogStats.LocalTotal .CatalogStats.RemoteTotal)}}%)</span>
+    {{if .IdleTotalETASec}}
+    <span class="cell-muted" style="font-size:0.75rem;">Est. total: {{formatETASec .IdleTotalETASec}} · {{.IdleRunsNeeded}} run(s) · ~{{formatETASec .IdlePerRunETASec}}/run</span>
+    {{else}}
+    <span class="cell-muted" style="font-size:0.75rem;">{{.IdleRunsNeeded}} run(s) needed · start a run to build speed estimate</span>
+    {{end}}
+  </div>
 </div>
 {{end}}
 {{if .ShowPCGWControls}}

@@ -300,12 +300,24 @@
   .badge-running { display: inline-block; padding: 0.1rem 0.5rem; font-size: 0.6875rem; font-weight: 600; border-radius: var(--radius-xs); background: var(--info-muted); color: var(--info); }
   .badge-failed { display: inline-block; padding: 0.1rem 0.5rem; font-size: 0.6875rem; font-weight: 600; border-radius: var(--radius-xs); background: var(--error-muted); color: var(--error); }
 
-  .log-table .log-event { font-family: var(--mono); font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; }
-  .log-table .log-summary { font-size: 0.8125rem; word-break: break-word; }
-  .log-table .log-context { font-family: var(--mono); font-size: 0.6875rem; max-width: 16rem; word-break: break-all; line-height: 1.35; }
-  .log-table .log-level { text-transform: lowercase; }
+  .log-table { table-layout: auto; }
+  .log-table .log-time { white-space: nowrap; width: 5.5rem; }
+  .log-table .log-component { white-space: nowrap; width: 5rem; }
+  .log-table .log-component .code-inline { white-space: nowrap; word-break: normal; display: inline-block; }
+  .log-table .log-event { font-family: var(--mono); font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
+  .log-table .log-summary { font-size: 0.8125rem; word-break: break-word; min-width: 10rem; }
+  .log-table .log-context { font-family: var(--mono); font-size: 0.6875rem; width: 14rem; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.35; cursor: help; vertical-align: middle; }
+  .log-table .log-level { text-transform: lowercase; white-space: nowrap; }
   .log-table .log-details summary { cursor: pointer; list-style: none; }
   .log-table .log-details summary::-webkit-details-marker { display: none; }
+  @media (max-width: 900px) {
+    .log-table .log-context { display: none; }
+    .log-table th:nth-child(6), .log-table td:nth-child(6) { display: none; }
+  }
+  @media (max-width: 640px) {
+    .log-table .log-event, .log-table th:nth-child(4), .log-table td:nth-child(4) { display: none; }
+    .log-table .log-time { width: 3.5rem; font-size: 0.6875rem; }
+  }
   .log-detail-pre {
     margin: 0.5rem 0 0; padding: 0.625rem 0.75rem; max-height: 12rem; overflow: auto;
     font-family: var(--mono); font-size: 0.6875rem; line-height: 1.4; color: var(--text-secondary);

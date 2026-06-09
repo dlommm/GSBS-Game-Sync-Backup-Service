@@ -120,7 +120,8 @@ func deriveEvent(entry Entry, payload map[string]interface{}) string {
 	case strings.HasPrefix(lower, "job:"):
 		return "job.lifecycle"
 	case strings.HasPrefix(lower, "sse:"):
-		return strings.ReplaceAll(strings.TrimPrefix(lower, "sse:"), " ", ".")
+		slug := strings.TrimSpace(strings.TrimPrefix(lower, "sse:"))
+		return "sse." + strings.ReplaceAll(slug, " ", ".")
 	case strings.HasPrefix(lower, "cron:"):
 		return "cron." + slugToken(msg)
 	}

@@ -89,6 +89,7 @@ type adminOverviewData struct {
 	JobPhase              string
 	JobAutoCatchUp        bool
 	LastSuccessfulSyncAt  string
+	CatalogStats          types.PCGWCatalogStats
 	MaxPagesPerRun        int
 	MaxPagesPerRunFromEnv bool
 	MaxPagesPerRunSource  string
@@ -101,6 +102,9 @@ type adminOverviewData struct {
 	JobETAMin             int
 	JobPhaseLabel         string
 	AvgHistPagesPerSec    float64
+	IdleRunsNeeded        int
+	IdleTotalETASec       int
+	IdlePerRunETASec      int
 }
 
 type adminUsersData struct {
@@ -153,6 +157,9 @@ type adminActivityData struct {
 	JobETAMin             int
 	JobPhaseLabel         string
 	AvgHistPagesPerSec    float64
+	IdleRunsNeeded        int
+	IdleTotalETASec       int
+	IdlePerRunETASec      int
 }
 
 type adminLogsData struct {
@@ -184,6 +191,7 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 		"div":             func(a, b int) int { if b == 0 { return 0 }; return a / b },
 		"mod":             func(a, b int) int { if b == 0 { return 0 }; return a % b },
 		"join":            strings.Join,
+		"formatETASec":    formatETASec,
 	}
 }
 
@@ -393,6 +401,25 @@ func formatDuration(start, end string) string {
 		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
 	}
 	return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
+}
+
+// formatETASec returns a human-readable estimate of seconds remaining.
+func formatETASec(sec int) string {
+	if sec <= 0 {
+		return "—"
+	}
+	if sec < 60 {
+		return fmt.Sprintf("~%ds", sec)
+	}
+	if sec < 3600 {
+		return fmt.Sprintf("~%dm", int(math.Ceil(float64(sec)/60)))
+	}
+	h := sec / 3600
+	m := (sec % 3600) / 60
+	if m == 0 {
+		return fmt.Sprintf("~%dh", h)
+	}
+	return fmt.Sprintf("~%dh %dm", h, m)
 }
 
 func clientBarWidth(count, max int) int {
