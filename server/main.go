@@ -125,13 +125,14 @@ func logRequests(next http.Handler, mc *metrics.Collector) http.Handler {
 			mc.RecordDuration(r.URL.Path, time.Since(start))
 		}
 		logx.Logger().Info().
+			Str("event", "http.request").
 			Str("request_id", rid).
 			Str("method", r.Method).
 			Str("path", r.URL.Path).
 			Int("status", rec.status).
 			Str("ip", netutil.ClientIP(r)).
 			Dur("duration", time.Since(start).Round(time.Millisecond)).
-			Msg("request")
+			Msg(fmt.Sprintf("%s %s %d", r.Method, r.URL.Path, rec.status))
 	})
 }
 

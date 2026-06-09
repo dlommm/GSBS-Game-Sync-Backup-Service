@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/pcgw"
+	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
 )
@@ -222,7 +222,8 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 		r.mu.Unlock()
 	}()
 
-	log.Printf("job: %s started (full=%v force_full=%v)", jobName, opts.Full, opts.ForceFull)
+	logx.Logger().Info().Str("component", "job").Str("job", jobName).
+		Bool("full", opts.Full).Bool("force_full", opts.ForceFull).Msg("job: started")
 	timeoutCtx, timeoutCancel := context.WithTimeout(parentCtx, 24*time.Hour)
 	defer timeoutCancel()
 	jobCtx, cancel := context.WithCancel(timeoutCtx)
@@ -239,7 +240,7 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 
 	runID, err := r.store.LogJobStart(jobCtx, jobName)
 	if err != nil {
-		log.Printf("job runner: log start: %v", err)
+		logx.Logger().Error().Str("component", "job").Str("job", jobName).Err(err).Msg("job runner: log start")
 	} else {
 		r.mu.Lock()
 		r.jobRunIDs[jobName] = runID
@@ -253,7 +254,7 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 	}
 	if !opts.ForceFull && !opts.Full && !opts.RetryFailedOnly && !opts.SkipIngestPhase && !opts.RebuildManifestOnly {
 		if resumable, err := r.store.GetResumablePCGWSyncRun(jobCtx, mode); err != nil {
-			log.Printf("job runner: get resumable pcgw sync: %v", err)
+			logx.Logger().Error().Str("component", "job").Err(err).Msg("job runner: get resumable pcgw sync")
 		} else if resumable != nil {
 			notes := fmt.Sprintf("resumed from %s", resumable.ID)
 			if resumable.CheckpointPhase == "ingest" {
@@ -263,7 +264,7 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 			}
 			syncRunID, err := r.store.StartPCGWSyncRunWithResume(jobCtx, mode, resumable.ID, notes)
 			if err != nil {
-				log.Printf("job runner: start resume pcgw sync run: %v", err)
+				logx.Logger().Error().Str("component", "job").Err(err).Msg("job runner: start resume pcgw sync run")
 			} else {
 				syncOpts.SyncRunID = syncRunID
 				syncOpts.SkipStartRun = true
@@ -278,8 +279,9 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 				r.mu.Lock()
 				r.pcgwSyncRunID = syncRunID
 				r.mu.Unlock()
-				log.Printf("job runner: resuming pcgw sync from run %s (phase=%q cursor=%d)",
-					resumable.ID, resumable.CheckpointPhase, resumable.CheckpointQueueCursor)
+				logx.Logger().Info().Str("component", "job").Str("run_id", resumable.ID).
+					Str("phase", resumable.CheckpointPhase).Int("cursor", resumable.CheckpointQueueCursor).
+					Msg("job runner: resuming pcgw sync from run")
 			}
 		}
 	}
@@ -352,15 +354,15 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 		} else {
 			status = JobFailed
 			errMsg = syncErr.Error()
-			log.Printf("job runner: pcgw_sync failed: %v", syncErr)
+			logx.Logger().Error().Str("component", "job").Err(syncErr).Msg("job runner: pcgw_sync failed")
 		}
 	} else {
-		log.Printf("job runner: pcgw_sync success (%d entries)", count)
+		logx.Logger().Info().Str("component", "job").Int("entries", count).Msg("job runner: pcgw_sync success")
 	}
 
 	if runID != "" {
 		if err := r.store.LogJobFinish(jobCtx, runID, status, errMsg, count); err != nil {
-			log.Printf("job runner: log finish: %v", err)
+			logx.Logger().Error().Str("component", "job").Str("job", jobName).Err(err).Msg("job runner: log finish")
 		}
 	}
 

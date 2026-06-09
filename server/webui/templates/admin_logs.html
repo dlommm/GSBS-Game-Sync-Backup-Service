@@ -26,7 +26,7 @@
       <option value="warn" {{if eq .Level "warn"}}selected{{end}}>warn</option>
       <option value="error" {{if eq .Level "error"}}selected{{end}}>error</option>
     </select>
-    <input type="search" class="search-input filter-search" name="q" value="{{.Query}}" placeholder="Search logs…">
+    <input type="search" class="search-input filter-search" name="q" value="{{.Query}}" placeholder="Search method, path, status, user_id, request_id…">
     <select name="limit" class="filter-select">
       <option value="100" {{if eq .Limit 100}}selected{{end}}>100 lines</option>
       <option value="200" {{if eq .Limit 200}}selected{{end}}>200 lines</option>

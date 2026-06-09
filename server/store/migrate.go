@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/gsbs/gsbs/pkg/savepath"
 	"github.com/gsbs/gsbs/pkg/types"
+	"github.com/gsbs/gsbs/server/logx"
 )
 
 // schemaVersion is the current database schema version.
@@ -52,8 +52,9 @@ func (s *sqliteStore) migrate() error {
 	if pending > 0 {
 		// Skip the warning banner and sleep for in-memory databases used in tests.
 		if !isInMemoryPath(s.dbPath) {
-			log.Printf("GSBS: DB migration required (schema %d → %d). Back up your database before proceeding. Continuing in 3 seconds...",
-				current, schemaVersion)
+			logx.Logger().Warn().Str("component", "migration").
+				Int("from_version", current).Int("to_version", schemaVersion).
+				Msg("GSBS: DB migration required. Back up your database before proceeding. Continuing in 3 seconds...")
 			time.Sleep(3 * time.Second)
 		}
 	}
@@ -82,7 +83,8 @@ func (s *sqliteStore) runMigrationStep(step migrationStep) error {
 	if err := step.fn(tx); err != nil {
 		_ = tx.Rollback()
 		if errors.Is(err, errMigDryRun) {
-			log.Printf("GSBS: migration step %d dry-run complete (not applied; remove GSBS_DRY_RUN_MIGRATION=1 to apply)", step.version)
+			logx.Logger().Info().Str("component", "migration").Int("step", step.version).
+				Msg("GSBS: migration step dry-run complete (not applied; remove GSBS_DRY_RUN_MIGRATION=1 to apply)")
 			return nil
 		}
 		return err
@@ -599,7 +601,8 @@ func (s *sqliteStore) stepPCGW(tx *sql.Tx) error {
 			}
 		}
 		if _, err := tx.Exec(`INSERT INTO pcgw_games_fts(pcgw_games_fts) VALUES('rebuild')`); err != nil {
-			log.Printf("GSBS: pcgw fts rebuild warning (non-fatal): %v", err)
+			logx.Logger().Warn().Str("component", "migration").Err(err).
+				Msg("GSBS: pcgw fts rebuild warning (non-fatal)")
 		}
 	}
 	return nil
@@ -835,7 +838,9 @@ func (s *sqliteStore) stepMergeOSSlots(tx *sql.Tx) error {
 			}
 			k := gameID + ":" + oldKey
 			if prev, ok := remap[k]; ok && prev != newKey {
-				log.Printf("GSBS migrate step 16: conflicting remap for game=%s old=%s: %s vs %s (keeping first)", gameID, oldKey, prev, newKey)
+				logx.Logger().Warn().Str("component", "migration").Str("game_id", gameID).
+					Str("old_key", oldKey).Str("prev", prev).Str("new_key", newKey).
+					Msg("GSBS migrate step 16: conflicting remap (keeping first)")
 				continue
 			}
 			remap[k] = newKey
@@ -847,7 +852,8 @@ func (s *sqliteStore) stepMergeOSSlots(tx *sql.Tx) error {
 	}
 
 	if len(remap) == 0 {
-		log.Println("GSBS migrate step 16: no PCGW slot labels found — step is a no-op")
+		logx.Logger().Info().Str("component", "migration").
+			Msg("GSBS migrate step 16: no PCGW slot labels found — step is a no-op")
 		return nil
 	}
 
@@ -885,7 +891,8 @@ func (s *sqliteStore) stepMergeOSSlots(tx *sql.Tx) error {
 	}
 
 	if len(allSaves) == 0 {
-		log.Println("GSBS migrate step 16: saves table is empty — step is a no-op")
+		logx.Logger().Info().Str("component", "migration").
+			Msg("GSBS migrate step 16: saves table is empty — step is a no-op")
 		return nil
 	}
 
@@ -936,7 +943,8 @@ func (s *sqliteStore) stepMergeOSSlots(tx *sql.Tx) error {
 				if abs, err := migRenameBlobFile(s.saveRoot, m.userID, m.gameID, m.storagePath, gk.targetKey); err == nil {
 					newStoragePath = abs
 				} else {
-					log.Printf("GSBS migrate step 16: rename blob (non-fatal): %v", err)
+					logx.Logger().Warn().Str("component", "migration").Err(err).
+						Msg("GSBS migrate step 16: rename blob (non-fatal)")
 				}
 			}
 			if _, err := tx.Exec(
@@ -1038,7 +1046,8 @@ func (s *sqliteStore) stepMergeOSSlots(tx *sql.Tx) error {
 				if abs, err := migRenameBlobFile(s.saveRoot, survivor.userID, survivor.gameID, survivor.storagePath, gk.targetKey); err == nil {
 					newStoragePath = abs
 				} else {
-					log.Printf("GSBS migrate step 16: rename survivor blob (non-fatal): %v", err)
+					logx.Logger().Warn().Str("component", "migration").Err(err).
+						Msg("GSBS migrate step 16: rename survivor blob (non-fatal)")
 				}
 			}
 			if _, err := tx.Exec(
@@ -1054,15 +1063,18 @@ func (s *sqliteStore) stepMergeOSSlots(tx *sql.Tx) error {
 
 	if dryRun {
 		for gameID, n := range perGameMerge {
-			log.Printf("GSBS migrate step 16 (dry-run): game=%s would merge %d slot(s)", gameID, n)
+			logx.Logger().Info().Str("component", "migration").Str("game_id", gameID).Int("slots", n).
+				Msg("GSBS migrate step 16 (dry-run): game would merge slot(s)")
 		}
-		log.Printf("GSBS migrate step 16 (dry-run): would merge %d slot(s), preserve %d version(s), update %d path_key(s)",
-			totalMerged, totalVersions, totalUpdated)
+		logx.Logger().Info().Str("component", "migration").
+			Int("merged", totalMerged).Int("versions", totalVersions).Int("updated", totalUpdated).
+			Msg("GSBS migrate step 16 (dry-run): summary")
 		return errMigDryRun
 	}
 
-	log.Printf("GSBS migrate step 16: merged %d slot(s), preserved %d version(s), updated %d path_key(s)",
-		totalMerged, totalVersions, totalUpdated)
+	logx.Logger().Info().Str("component", "migration").
+		Int("merged", totalMerged).Int("versions", totalVersions).Int("updated", totalUpdated).
+		Msg("GSBS migrate step 16: merged slot(s)")
 	return nil
 }
 

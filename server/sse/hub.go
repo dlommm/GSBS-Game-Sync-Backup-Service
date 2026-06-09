@@ -2,9 +2,10 @@ package sse
 
 import (
 	"fmt"
-	"log"
 	"sync"
 	"time"
+
+	"github.com/gsbs/gsbs/server/logx"
 )
 
 // Event is a server-sent event.
@@ -87,7 +88,8 @@ func (h *Hub) SubscribeCapped(userID string, maxPerUser int) (<-chan Event, func
 					break
 				}
 			}
-			log.Printf("sse: evicted oldest connection for user %s (cap %d)", userID, maxPerUser)
+			logx.Logger().Warn().Str("component", "sse").Str("user_id", userID).Int("cap", maxPerUser).
+				Msg("sse: evicted oldest connection for user (cap)")
 		}
 	}
 
@@ -99,13 +101,15 @@ func (h *Hub) SubscribeCapped(userID string, maxPerUser int) (<-chan Event, func
 	}
 	h.subscribers[sub] = struct{}{}
 	h.mu.Unlock()
-	log.Printf("sse: client %s subscribed (%d total)", userID, h.Count())
+	logx.Logger().Info().Str("component", "sse").Str("user_id", userID).Int("total", h.Count()).
+		Msg("sse: client subscribed")
 
 	unsub := func() {
 		h.mu.Lock()
 		delete(h.subscribers, sub)
 		h.mu.Unlock()
-		log.Printf("sse: client %s unsubscribed (%d total)", userID, h.Count())
+		logx.Logger().Info().Str("component", "sse").Str("user_id", userID).Int("total", h.Count()).
+			Msg("sse: client unsubscribed")
 	}
 	return sub.ch, unsub
 }
@@ -121,7 +125,8 @@ func (h *Hub) BroadcastToUser(userID string, evt Event) {
 		select {
 		case sub.ch <- evt:
 		default:
-			log.Printf("sse: dropping event for slow client %s", sub.clientID)
+			logx.Logger().Warn().Str("component", "sse").Str("client_id", sub.clientID).
+				Msg("sse: dropping event for slow client")
 		}
 	}
 }
@@ -145,7 +150,7 @@ func (h *Hub) Shutdown() {
 	}
 	h.subscribers = make(map[*subscriber]struct{})
 	h.mu.Unlock()
-	log.Printf("sse: hub shut down")
+	logx.Logger().Info().Str("component", "sse").Msg("sse: hub shut down")
 }
 
 // Broadcast sends an event to all connected subscribers.
@@ -157,7 +162,8 @@ func (h *Hub) Broadcast(evt Event) {
 		select {
 		case sub.ch <- evt:
 		default:
-			log.Printf("sse: dropping event for slow client %s", sub.clientID)
+			logx.Logger().Warn().Str("component", "sse").Str("client_id", sub.clientID).
+				Msg("sse: dropping event for slow client")
 		}
 	}
 }

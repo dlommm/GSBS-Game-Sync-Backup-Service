@@ -2,9 +2,9 @@ package job
 
 import (
 	"context"
-	"log"
 
 	"github.com/gsbs/gsbs/pkg/pcgw"
+	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/store"
 )
 
@@ -21,6 +21,6 @@ type ManifestCacheInvalidator interface {
 func LogSyncComplete(invalidator ManifestCacheInvalidator, count int) {
 	if invalidator != nil {
 		invalidator.InvalidateManifestCache()
-		log.Printf("pcgw sync: manifest cache invalidated")
+		logx.Logger().Info().Str("component", "pcgw").Msg("pcgw sync: manifest cache invalidated")
 	}
 }

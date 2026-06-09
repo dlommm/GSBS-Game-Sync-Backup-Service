@@ -2,7 +2,6 @@ package job
 
 import (
 	"context"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/gsbs/gsbs/pkg/pcgw"
 	"github.com/gsbs/gsbs/pkg/types"
+	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/store"
 )
 
@@ -81,7 +81,8 @@ func RunCatalogScan(ctx context.Context, st store.Store, client *pcgw.Client, ru
 			})
 		}
 		if err := st.UpsertPCGWCatalogBatch(ctx, entries); err != nil {
-			log.Printf("catalog scan: upsert batch offset=%d: %v", offset, err)
+			logx.Logger().Error().Str("component", "pcgw").Int("offset", offset).Err(err).
+				Msg("catalog scan: upsert batch")
 			return stats, err
 		}
 
@@ -102,7 +103,7 @@ func RunCatalogScan(ctx context.Context, st store.Store, client *pcgw.Client, ru
 	// Compute catalog hash and stats.
 	hash, err := st.ComputeCatalogHash(ctx)
 	if err != nil {
-		log.Printf("catalog scan: compute hash: %v", err)
+		logx.Logger().Error().Str("component", "pcgw").Err(err).Msg("catalog scan: compute hash")
 	}
 	stats.CatalogHash = hash
 	stats.CompletedAt = time.Now().UTC().Format(time.RFC3339)
@@ -110,7 +111,7 @@ func RunCatalogScan(ctx context.Context, st store.Store, client *pcgw.Client, ru
 	// Compute missing/extra counts.
 	catStats, err := st.GetPCGWCatalogStats(ctx)
 	if err != nil {
-		log.Printf("catalog scan: get stats: %v", err)
+		logx.Logger().Error().Str("component", "pcgw").Err(err).Msg("catalog scan: get stats")
 	} else {
 		stats.MissingLocalIDs = catStats.MissingLocal
 		stats.ExtraLocalIDs = catStats.ExtraLocal
@@ -118,12 +119,14 @@ func RunCatalogScan(ctx context.Context, st store.Store, client *pcgw.Client, ru
 
 	if runID != "" {
 		if err := st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, stats); err != nil {
-			log.Printf("catalog scan: update phase1 stats: %v", err)
+			logx.Logger().Error().Str("component", "pcgw").Err(err).Msg("catalog scan: update phase1 stats")
 		}
 	}
 
-	log.Printf("catalog scan: done remote=%d missing=%d extra=%d hash=%s",
-		stats.RemoteTotalIDs, stats.MissingLocalIDs, stats.ExtraLocalIDs, truncateHash(stats.CatalogHash))
+	logx.Logger().Info().Str("component", "pcgw").
+		Int("remote", stats.RemoteTotalIDs).Int("missing", stats.MissingLocalIDs).
+		Int("extra", stats.ExtraLocalIDs).Str("hash", truncateHash(stats.CatalogHash)).
+		Msg("catalog scan: done")
 	return stats, nil
 }
 

@@ -7,13 +7,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/pcgw"
 	"github.com/gsbs/gsbs/pkg/types"
+	"github.com/gsbs/gsbs/server/logx"
 )
 
 func pcgwJSON(v interface{}) string {
@@ -766,8 +766,9 @@ func (s *sqliteStore) ReconcileStalePCGWSyncRuns(ctx context.Context) error {
 			"interrupted", now, staleJobMessage, row.id); err != nil {
 			return err
 		}
-		log.Printf("reconcile: pcgw_sync_runs id=%s mode=%s started=%s checkpoint=%d -> interrupted",
-			row.id, row.mode, row.started, row.checkpoint)
+		logx.Logger().Warn().Str("component", "store").Str("run_id", row.id).
+			Str("mode", row.mode).Str("started", row.started).Int("checkpoint", row.checkpoint).
+			Msg("reconcile: pcgw_sync_runs -> interrupted")
 	}
 	return nil
 }

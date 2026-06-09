@@ -43,6 +43,8 @@ func StartSetupServer() string {
 	mux.HandleFunc("/dashboard", handleDashboardPage)
 	mux.HandleFunc("/quick-actions", handleQuickActionsPage)
 	mux.HandleFunc("/help", handleHelpPage)
+	mux.HandleFunc("/logs", handleLogsPage)
+	mux.HandleFunc("/partial/logs", handleLogsPartial)
 	mux.HandleFunc("/about", handleAboutPage)
 	mux.HandleFunc("/api/sync-now", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

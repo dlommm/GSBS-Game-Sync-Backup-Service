@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/gsbs/gsbs/pkg/pcgw"
 	"github.com/gsbs/gsbs/pkg/types"
+	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/store"
 )
 
@@ -168,11 +168,14 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 				missingCount = len(ids)
 			}
 			if missingCount == 0 && failedCount == 0 && titleBackfillCount == 0 {
-				log.Printf("pcgw sync: catalog hash unchanged, no missing/failed/title-backfill — skipping Phase 2")
+				logx.Logger().Info().Str("component", "pcgw").
+					Msg("pcgw sync: catalog hash unchanged, no missing/failed/title-backfill — skipping Phase 2")
 				finishRun(JobSuccess, "")
 				return bumpManifestAndReturn(ctx, st, 0)
 			}
-			log.Printf("pcgw sync: catalog hash unchanged but backlog non-empty (missing=%d failed=%d title_backfill=%d) — proceeding to Phase 2", missingCount, failedCount, titleBackfillCount)
+			logx.Logger().Info().Str("component", "pcgw").
+				Int("missing", missingCount).Int("failed", failedCount).Int("title_backfill", titleBackfillCount).
+				Msg("pcgw sync: catalog hash unchanged but backlog non-empty — proceeding to Phase 2")
 		}
 	}
 
@@ -198,7 +201,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		var err error
 		missing, err = st.ListPCGWCatalogMissing(ctx, 0, 0)
 		if err != nil {
-			log.Printf("pcgw sync: list missing: %v", err)
+			logx.Logger().Error().Str("component", "pcgw").Err(err).Msg("pcgw sync: list missing")
 			missing = nil
 		}
 		for _, id := range missing {
@@ -211,7 +214,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		var err error
 		titleBackfill, err = st.ListPCGWCatalogTitleBackfill(ctx, 0, 0)
 		if err != nil {
-			log.Printf("pcgw sync: list title-backfill: %v", err)
+			logx.Logger().Error().Str("component", "pcgw").Err(err).Msg("pcgw sync: list title-backfill")
 			titleBackfill = nil
 		}
 		for _, row := range titleBackfill {
@@ -227,7 +230,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		var err error
 		failedPartial, err = st.ListPCGWCatalogFailedPartial(ctx, 0, 0)
 		if err != nil {
-			log.Printf("pcgw sync: list failed/partial: %v", err)
+			logx.Logger().Error().Str("component", "pcgw").Err(err).Msg("pcgw sync: list failed/partial")
 			failedPartial = nil
 		}
 		for _, id := range failedPartial {
@@ -240,7 +243,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		var err error
 		changedIDs, err = buildChangedQueue(ctx, st, client, filters)
 		if err != nil {
-			log.Printf("pcgw sync: build changed queue: %v", err)
+			logx.Logger().Error().Str("component", "pcgw").Err(err).Msg("pcgw sync: build changed queue")
 			changedIDs = nil
 		}
 		for _, id := range changedIDs {
@@ -262,13 +265,17 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		})
 	}
 
-	log.Printf("pcgw sync phase2: queue=%d (missing=%d, title_backfill=%d, failed=%d, changed=%d) budget=%d (resume_cursor=%d)",
-		queueSize, len(missing), len(titleBackfill), len(failedPartial), len(changedIDs), budget, opts.ResumeQueueCursor)
+	logx.Logger().Info().Str("component", "pcgw").
+		Int("queue", queueSize).Int("missing", len(missing)).Int("title_backfill", len(titleBackfill)).
+		Int("failed", len(failedPartial)).Int("changed", len(changedIDs)).
+		Int("budget", budget).Int("resume_cursor", opts.ResumeQueueCursor).
+		Msg("pcgw sync phase2: queue built")
 
 	// ─── Phase 2: Process queue with budget ───────────────────────────────────
 	startCursor := phase2StartCursor(opts.ResumeQueueCursor, queueSize, opts.ResumeCatalogScan)
 	if opts.ResumeCatalogScan && opts.ResumeQueueCursor > 0 && startCursor == 0 {
-		log.Printf("pcgw sync phase2: ignoring stale resume cursor %d because queue is rebuilt from current backlog", opts.ResumeQueueCursor)
+		logx.Logger().Warn().Str("component", "pcgw").Int("resume_cursor", opts.ResumeQueueCursor).
+			Msg("pcgw sync phase2: ignoring stale resume cursor because queue is rebuilt from current backlog")
 	}
 	processed := 0
 
@@ -285,7 +292,9 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 			// Budget exhausted — save checkpoint for resume.
 			_ = st.UpdatePCGWSyncRunPhase2Progress(ctx, runID, processed, i)
 			finishRun(JobInterrupted, "budget exhausted")
-			log.Printf("pcgw sync: budget %d exhausted at cursor %d/%d", budget, i, queueSize)
+			logx.Logger().Info().Str("component", "pcgw").
+				Int("budget", budget).Int("cursor", i).Int("queue_size", queueSize).
+				Msg("pcgw sync: budget exhausted at cursor")
 			return bumpManifestAndReturn(ctx, st, totalUpserted)
 		}
 
@@ -318,7 +327,8 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		processed++
 
 		if err != nil {
-			log.Printf("pcgw sync: page %d: %v", pageID, err)
+			logx.Logger().Error().Str("component", "pcgw").Int64("page_id", pageID).Err(err).
+				Msg("pcgw sync: page")
 			stats.GamesFailed++
 			_ = st.IncrementCatalogRetry(ctx, pageID, err.Error())
 			continue
@@ -343,8 +353,10 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		status = "partial"
 	}
 	finishRun(status, "")
-	log.Printf("pcgw sync: done, upserted %d location entries (ok=%d partial=%d failed=%d skipped=%d)",
-		totalUpserted, stats.GamesOK, stats.GamesPartial, stats.GamesFailed, stats.GamesSkipped)
+	logx.Logger().Info().Str("component", "pcgw").
+		Int("upserted", totalUpserted).Int("ok", stats.GamesOK).
+		Int("partial", stats.GamesPartial).Int("failed", stats.GamesFailed).Int("skipped", stats.GamesSkipped).
+		Msg("pcgw sync: done")
 	return bumpManifestAndReturn(ctx, st, totalUpserted)
 }
 
@@ -433,7 +445,8 @@ func bumpManifestAndReturn(ctx context.Context, st store.Store, n int) (int, err
 	}
 	etag := store.ManifestETagFromGames(newVersion)
 	if v, err := st.BumpManifestVersion(ctx, etag); err == nil {
-		log.Printf("pcgw sync: manifest version bumped to %d", v)
+		logx.Logger().Info().Str("component", "pcgw").Int("version", v).
+			Msg("pcgw sync: manifest version bumped")
 	}
 	return n, nil
 }
@@ -571,12 +584,14 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 			SectionWikitext: sr.SectionWikitext, UpdatedAt: now,
 		}
 		if err := upsertSection(ctx, st, key, row); err != nil {
-			log.Printf("pcgw persist: section %s page %d: %v", key, b.PageID, err)
+			logx.Logger().Error().Str("component", "pcgw").Str("section", key).
+				Int64("page_id", b.PageID).Err(err).Msg("pcgw persist: section")
 		}
 		if key == "game_data" {
 			gameDataOK = true
 			if err := persistGameDataPlatforms(ctx, st, b.PageID, sr, now, &platforms); err != nil {
-				log.Printf("pcgw persist: game_data platforms page %d: %v", b.PageID, err)
+				logx.Logger().Error().Str("component", "pcgw").Int64("page_id", b.PageID).Err(err).
+					Msg("pcgw persist: game_data platforms")
 			}
 		}
 	}

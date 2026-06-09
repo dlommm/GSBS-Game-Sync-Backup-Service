@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gsbs/gsbs/pkg/logview"
 	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/store"
@@ -154,16 +155,9 @@ type adminActivityData struct {
 	AvgHistPagesPerSec    float64
 }
 
-type adminLogEntry struct {
-	Timestamp string
-	Level     string
-	Message   string
-	Raw       string
-}
-
 type adminLogsData struct {
 	PageData
-	Entries          []adminLogEntry
+	Entries          []logview.Entry
 	LogSourcePath    string
 	LogSourceInfo    string
 	LogSourcePresent bool
