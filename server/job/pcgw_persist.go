@@ -514,6 +514,14 @@ func shouldSkipPage(ctx context.Context, st store.Store, client *pcgw.Client, pa
 func syncOnePage(ctx context.Context, st store.Store, client *pcgw.Client, runID string, pageID int64, p pcgw.PageInfo, stats *store.PCGWSyncRunStats, filters PCGWFilters) (int, error) {
 	result, err := pcgw.IngestPage(ctx, client, pageID, p)
 	if err != nil {
+		// IngestPage returns a non-nil partial result even on fetch error (PageID and
+		// ParseStatus="failed" are set). Persist the stub so the page moves from
+		// "missing" to "failed" in pcgw_games and becomes visible to the retry queue
+		// (ListPCGWCatalogFailedPartial). Without this, every failed page stays
+		// "missing", accumulates retries, dead-letters, and becomes unretriable.
+		if result != nil {
+			_, _ = PersistIngestResult(ctx, st, runID, result, filters)
+		}
 		return 0, err
 	}
 	n, persistErr := PersistIngestResult(ctx, st, runID, result, filters)

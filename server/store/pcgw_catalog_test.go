@@ -310,6 +310,57 @@ func TestWipePCGWMirrorAndManifest(t *testing.T) {
 	}
 }
 
+func TestResetPCGWDeadLetter(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	_ = st.UpsertPCGWCatalogBatch(ctx, []types.PCGWCatalogEntry{
+		{PageID: 10, Title: "G10", FirstSeenAt: "2025-01-01T00:00:00Z", LastSeenAt: "2025-01-01T00:00:00Z"},
+		{PageID: 20, Title: "G20", FirstSeenAt: "2025-01-01T00:00:00Z", LastSeenAt: "2025-01-01T00:00:00Z"},
+		{PageID: 30, Title: "G30", FirstSeenAt: "2025-01-01T00:00:00Z", LastSeenAt: "2025-01-01T00:00:00Z"},
+	})
+
+	// Dead-letter page 10 and 20 (5 failures each).
+	for i := 0; i < deadLetterThreshold; i++ {
+		_ = st.IncrementCatalogRetry(ctx, 10, "net error")
+		_ = st.IncrementCatalogRetry(ctx, 20, "net error")
+	}
+
+	dl, _ := st.ListPCGWCatalogDeadLetter(ctx, 10)
+	if len(dl) != 2 {
+		t.Fatalf("expected 2 dead-lettered pages before reset, got %d", len(dl))
+	}
+
+	// After dead-lettering, pages 10 and 20 are absent from ListPCGWCatalogMissing.
+	missing, _ := st.ListPCGWCatalogMissing(ctx, 0, 0)
+	if len(missing) != 1 || missing[0] != 30 {
+		t.Fatalf("expected only page 30 in missing before reset, got %v", missing)
+	}
+
+	n, err := st.ResetPCGWDeadLetter(ctx)
+	if err != nil {
+		t.Fatalf("reset dead-letter: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("reset rows affected: got %d, want 2", n)
+	}
+
+	// After reset all three pages are missing again.
+	missing2, _ := st.ListPCGWCatalogMissing(ctx, 0, 0)
+	if len(missing2) != 3 {
+		t.Errorf("expected 3 missing pages after reset, got %d", len(missing2))
+	}
+
+	dl2, _ := st.ListPCGWCatalogDeadLetter(ctx, 10)
+	if len(dl2) != 0 {
+		t.Errorf("expected 0 dead-letter entries after reset, got %d", len(dl2))
+	}
+}
+
 func TestUpdatePCGWSyncRunPhase1Stats(t *testing.T) {
 	st, err := NewSQLite(":memory:")
 	if err != nil {

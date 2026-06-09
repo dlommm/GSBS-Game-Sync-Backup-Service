@@ -130,6 +130,15 @@
       <summary class="pcgw-card-title">Advanced Maintenance</summary>
       <p class="pcgw-card-subtitle">Targeted operations for specific recovery and maintenance scenarios. Use these when standard sync options are insufficient.</p>
       <div class="pcgw-actions-stack">
+        {{if and (not .JobRunning) (gt .CatalogStats.DeadLetter 0)}}
+        <div class="pcgw-action-row" style="padding:0.5rem 0.75rem;background:var(--warning-muted);border-radius:var(--radius-sm);margin-bottom:0.5rem;">
+          <form method="post" action="/admin/pcgw/reset-dead-letter" class="inline-form" onsubmit="return confirm('Reset all {{.CatalogStats.DeadLetter}} dead-lettered page(s) so they can be retried? Run Auto Catch-Up afterwards.');">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-primary-sm" aria-describedby="help-reset-dead-letter">Reset Dead Letter ({{.CatalogStats.DeadLetter}} blocked)</button>
+          </form>
+          <span id="help-reset-dead-letter" class="pcgw-action-help" style="color:var(--warning);">{{.CatalogStats.DeadLetter}} page(s) have exhausted retries and are blocked. Reset them so the next Auto Catch-Up can retry. This is required when Local count is stuck despite a full catalog.</span>
+        </div>
+        {{end}}
         <div class="pcgw-action-row">
           <form method="post" action="/admin/pcgw/sync/missing-local" class="inline-form">
             <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
@@ -143,6 +152,13 @@
             <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-retry-failed">Retry Failed Pages</button>
           </form>
           <span id="help-retry-failed" class="pcgw-action-help">Retries only pages that previously failed or parsed partially. Does not refresh the catalog.</span>
+        </div>
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/reset-dead-letter" class="inline-form" onsubmit="return confirm('Reset dead-lettered pages so they can be retried? Run Auto Catch-Up afterwards.');">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-ghost-sm" aria-describedby="help-reset-dead-letter-adv">Reset Dead Letter</button>
+          </form>
+          <span id="help-reset-dead-letter-adv" class="pcgw-action-help">Clears the dead-letter flag on all blocked pages so they re-enter the Phase 2 queue. Run Auto Catch-Up after to process them.</span>
         </div>
         <div class="pcgw-action-row">
           <form method="post" action="/admin/pcgw/rebuild-manifest" class="inline-form">
