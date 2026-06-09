@@ -138,10 +138,9 @@ func (r *Runner) RunPCGWSyncAutoCatchUp(ctx context.Context) (bool, error) {
 }
 
 // RunPCGWSyncRefreshNew starts a targeted incremental sync after a fresh catalog scan.
-// It is equivalent to a regular incremental sync but always performs Phase 1 (no resume skip).
-// After the no-op fix, a fresh catalog scan with non-empty missing backlog will always proceed to Phase 2.
+// ForceFull skips resume-from-checkpoint so Phase 1 always runs.
 func (r *Runner) RunPCGWSyncRefreshNew(ctx context.Context) (bool, error) {
-	return r.TryRunPCGWSync(ctx)
+	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{ForceFull: true})
 }
 
 // CancelAll cancels every in-flight job. Used during graceful shutdown.
@@ -172,11 +171,21 @@ func (r *Runner) WaitJobs(ctx context.Context) error {
 func (r *Runner) CancelPCGWSync(ctx context.Context) bool {
 	r.mu.Lock()
 	cancel, ok := r.cancelFuncs["pcgw_sync"]
+	pcgwRunID := r.pcgwSyncRunID
+	jobRunID := r.jobRunIDs["pcgw_sync"]
 	r.mu.Unlock()
 	if !ok || cancel == nil {
 		return false
 	}
 	cancel()
+	if pcgwRunID != "" {
+		_ = r.store.FinishPCGWSyncRun(ctx, pcgwRunID, JobCanceled, "context canceled", store.PCGWSyncRunStats{})
+	} else {
+		_ = r.store.CancelRunningPCGWSyncRuns(ctx, "context canceled")
+	}
+	if jobRunID != "" {
+		_ = r.store.LogJobFinish(ctx, jobRunID, JobCanceled, "context canceled", 0)
+	}
 	return true
 }
 
@@ -271,10 +280,17 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 				syncOpts.ResumedFromRunID = resumable.ID
 				syncOpts.Notes = notes
 				syncOpts.Offset = resumable.CheckpointOffset
-				// Two-phase resume: if checkpoint_phase is "ingest", skip catalog scan.
+				// Two-phase resume: if checkpoint_phase is "ingest", skip catalog scan when catalog is complete.
 				if resumable.CheckpointPhase == "ingest" {
-					syncOpts.ResumeCatalogScan = true
-					syncOpts.ResumeQueueCursor = resumable.CheckpointQueueCursor
+					catStats, catErr := r.store.GetPCGWCatalogStats(jobCtx)
+					if catErr == nil && resumable.RemoteTotalIDs > 0 && catStats.RemoteTotal >= resumable.RemoteTotalIDs {
+						syncOpts.ResumeCatalogScan = true
+						syncOpts.ResumeQueueCursor = resumable.CheckpointQueueCursor
+					} else {
+						logx.Logger().Warn().Str("component", "job").Str("run_id", resumable.ID).
+							Int("catalog_rows", catStats.RemoteTotal).Int("remote_total", resumable.RemoteTotalIDs).
+							Msg("job runner: catalog incomplete — forcing Phase 1 instead of ingest resume")
+					}
 				}
 				r.mu.Lock()
 				r.pcgwSyncRunID = syncRunID

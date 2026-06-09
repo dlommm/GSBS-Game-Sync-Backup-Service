@@ -653,6 +653,16 @@ func (s *sqliteStore) GetLatestPCGWSyncRun(ctx context.Context) (*types.PCGWSync
 		FROM pcgw_sync_runs ORDER BY started_at DESC LIMIT 1`)
 }
 
+func (s *sqliteStore) GetPCGWSyncRunByID(ctx context.Context, runID string) (*types.PCGWSyncRun, error) {
+	return s.scanPCGWSyncRun(ctx, `
+		SELECT id, mode, status, started_at, finished_at, checkpoint_offset,
+			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message,
+			resumed_from_run_id, notes,
+			remote_total_ids, missing_local_ids, extra_local_ids, targeted_queue_size, targeted_processed,
+			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor
+		FROM pcgw_sync_runs WHERE id = ?`, runID)
+}
+
 func (s *sqliteStore) ListPCGWSyncRuns(ctx context.Context, limit int) ([]types.PCGWSyncRun, error) {
 	if limit <= 0 {
 		limit = 50
@@ -693,7 +703,7 @@ func (s *sqliteStore) GetResumablePCGWSyncRun(ctx context.Context, mode string) 
 			remote_total_ids, missing_local_ids, extra_local_ids, targeted_queue_size, targeted_processed,
 			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor
 		FROM pcgw_sync_runs
-		WHERE mode = ? AND status IN ('interrupted', 'failed', 'canceled')
+		WHERE mode = ? AND status IN ('interrupted', 'failed')
 		  AND (checkpoint_offset > 0 OR checkpoint_phase != '')
 		ORDER BY started_at DESC LIMIT 1`, mode)
 }
@@ -779,6 +789,18 @@ func (s *sqliteStore) HasRunningPCGWSync(ctx context.Context) bool {
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM pcgw_sync_runs WHERE status = 'running'`).Scan(&n)
 	return err == nil && n > 0
+}
+
+// CancelRunningPCGWSyncRuns marks all in-flight pcgw_sync_runs as canceled (user cancel).
+func (s *sqliteStore) CancelRunningPCGWSyncRuns(ctx context.Context, errMsg string) error {
+	if strings.TrimSpace(errMsg) == "" {
+		errMsg = "context canceled"
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE pcgw_sync_runs SET status = ?, finished_at = ?, error_message = ?
+		WHERE status = 'running'`, "canceled", now, errMsg)
+	return err
 }
 
 func (s *sqliteStore) GetPCGWManifestMeta(ctx context.Context) (*types.PCGWManifestMeta, error) {

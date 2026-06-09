@@ -161,11 +161,7 @@ type adminLogsData struct {
 	LogSourcePath    string
 	LogSourceInfo    string
 	LogSourcePresent bool
-	Level            string
-	Query            string
-	Limit            int
-	AutoRefresh      bool
-	RefreshSeconds   int
+	Query            logview.Query
 }
 
 func newTemplateFuncs(t *template.Template) template.FuncMap {

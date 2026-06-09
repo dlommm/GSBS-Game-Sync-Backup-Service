@@ -47,6 +47,10 @@ func parseSlogTextLine(line string) Entry {
 	entry.GameID = kv["game_id"]
 	entry.PathKey = kv["path_key"]
 	entry.Error = kv["error"]
+	entry.Component = strings.ToLower(kv["component"])
+	if entry.Component == "" {
+		entry.Component = deriveClientComponent(entry, kv)
+	}
 
 	entry.Summary = buildClientSlogSummary(entry, kv)
 	entry.Context = buildClientSlogContext(entry, kv)
@@ -132,12 +136,16 @@ func parsePlainClientLine(line string) Entry {
 
 	if strings.HasPrefix(entry.Message, "client sync:") {
 		entry.Event = "client.sync"
+		entry.Component = "sync"
 	} else if strings.HasPrefix(entry.Message, "client login:") {
 		entry.Event = "client.login"
+		entry.Component = "auth"
 	} else if strings.HasPrefix(entry.Message, "tray:") {
 		entry.Event = "tray"
+		entry.Component = "tray"
 	} else if strings.HasPrefix(entry.Message, "sync:") || strings.HasPrefix(entry.Message, "manifest:") {
 		entry.Event = "sync"
+		entry.Component = "sync"
 	} else {
 		entry.Event = entry.Message
 		if len(entry.Event) > 60 {
@@ -146,6 +154,25 @@ func parsePlainClientLine(line string) Entry {
 	}
 
 	return entry
+}
+
+func deriveClientComponent(entry Entry, kv map[string]string) string {
+	if c := kv["component"]; c != "" {
+		return strings.ToLower(c)
+	}
+	msg := strings.ToLower(entry.Message)
+	switch {
+	case strings.HasPrefix(msg, "tray:"):
+		return "tray"
+	case strings.HasPrefix(msg, "client login:"):
+		return "auth"
+	case strings.HasPrefix(msg, "client sync:"), strings.HasPrefix(msg, "sync:"), strings.HasPrefix(msg, "manifest:"):
+		return "sync"
+	case strings.Contains(msg, "setup"):
+		return "setup"
+	default:
+		return "client"
+	}
 }
 
 // parseKeyValuePairs parses slog text handler key=value pairs, including quoted values.

@@ -7,6 +7,7 @@ type Entry struct {
 	Message   string
 	Raw       string
 	Event     string
+	Component string
 	Summary   string
 	Context   string
 	Method    string

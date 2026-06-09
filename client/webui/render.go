@@ -32,11 +32,7 @@ type LogsPageData struct {
 	LogSourcePath    string
 	LogSourcePresent bool
 	LogSourceInfo    string
-	Level            string
-	Query            string
-	Limit            int
-	AutoRefresh      bool
-	RefreshSeconds   int
+	Query            logview.Query
 }
 
 var tmpl *template.Template

@@ -32,29 +32,37 @@
         <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
       </div>
       <form id="logs-filters" class="filter-toolbar" method="get" action="/logs">
-        <select name="level" class="filter-select">
-          <option value="all" {{if eq .Level "all"}}selected{{end}}>All levels</option>
-          <option value="debug" {{if eq .Level "debug"}}selected{{end}}>debug</option>
-          <option value="info" {{if eq .Level "info"}}selected{{end}}>info</option>
-          <option value="warn" {{if eq .Level "warn"}}selected{{end}}>warn</option>
-          <option value="error" {{if eq .Level "error"}}selected{{end}}>error</option>
+        <select name="component" class="filter-select" aria-label="Application">
+          <option value="all" {{if eq .Query.Component "all"}}selected{{end}}>All applications</option>
+          <option value="sync" {{if eq .Query.Component "sync"}}selected{{end}}>sync</option>
+          <option value="auth" {{if eq .Query.Component "auth"}}selected{{end}}>auth</option>
+          <option value="tray" {{if eq .Query.Component "tray"}}selected{{end}}>tray</option>
+          <option value="setup" {{if eq .Query.Component "setup"}}selected{{end}}>setup</option>
+          <option value="client" {{if eq .Query.Component "client"}}selected{{end}}>client</option>
         </select>
-        <input type="search" class="search-input filter-search" name="q" value="{{.Query}}" placeholder="Search op, game_id, path_key, error…">
+        <select name="level" class="filter-select">
+          <option value="all" {{if eq .Query.Level "all"}}selected{{end}}>All levels</option>
+          <option value="debug" {{if eq .Query.Level "debug"}}selected{{end}}>debug</option>
+          <option value="info" {{if eq .Query.Level "info"}}selected{{end}}>info</option>
+          <option value="warn" {{if eq .Query.Level "warn"}}selected{{end}}>warn</option>
+          <option value="error" {{if eq .Query.Level "error"}}selected{{end}}>error</option>
+        </select>
+        <input type="search" class="search-input filter-search" name="q" value="{{.Query.Text}}" placeholder="Search op, game_id, path_key, error…">
         <select name="limit" class="filter-select">
-          <option value="100" {{if eq .Limit 100}}selected{{end}}>100 lines</option>
-          <option value="200" {{if eq .Limit 200}}selected{{end}}>200 lines</option>
-          <option value="500" {{if eq .Limit 500}}selected{{end}}>500 lines</option>
-          <option value="1000" {{if eq .Limit 1000}}selected{{end}}>1000 lines</option>
+          <option value="100" {{if eq .Query.Limit 100}}selected{{end}}>100 lines</option>
+          <option value="200" {{if eq .Query.Limit 200}}selected{{end}}>200 lines</option>
+          <option value="500" {{if eq .Query.Limit 500}}selected{{end}}>500 lines</option>
+          <option value="1000" {{if eq .Query.Limit 1000}}selected{{end}}>1000 lines</option>
         </select>
         <label class="checkbox-label">
-          <input type="checkbox" name="auto" value="1" {{if .AutoRefresh}}checked{{end}}>
+          <input type="checkbox" name="auto" value="1" {{if .Query.AutoRefresh}}checked{{end}}>
           Auto-refresh
         </label>
         <select name="refresh" class="filter-select">
-          <option value="2" {{if eq .RefreshSeconds 2}}selected{{end}}>2s</option>
-          <option value="5" {{if eq .RefreshSeconds 5}}selected{{end}}>5s</option>
-          <option value="10" {{if eq .RefreshSeconds 10}}selected{{end}}>10s</option>
-          <option value="30" {{if eq .RefreshSeconds 30}}selected{{end}}>30s</option>
+          <option value="2" {{if eq .Query.RefreshSeconds 2}}selected{{end}}>2s</option>
+          <option value="5" {{if eq .Query.RefreshSeconds 5}}selected{{end}}>5s</option>
+          <option value="10" {{if eq .Query.RefreshSeconds 10}}selected{{end}}>10s</option>
+          <option value="30" {{if eq .Query.RefreshSeconds 30}}selected{{end}}>30s</option>
         </select>
         <button type="submit" class="btn-primary-sm">Apply</button>
       </form>

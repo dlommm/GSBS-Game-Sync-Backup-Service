@@ -137,13 +137,37 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		}
 		stats.GamesTotal = phase1.RemoteTotalIDs
 	} else {
-		// Resuming into Phase 2: load Phase 1 stats from prior run.
-		if latest, err := st.GetLatestPCGWSyncRun(ctx); err == nil && latest != nil {
+		// Resuming into Phase 2: load Phase 1 stats from the run we resumed from.
+		resumeFromID := opts.ResumedFromRunID
+		if resumeFromID != "" {
+			if prior, err := st.GetPCGWSyncRunByID(ctx, resumeFromID); err == nil && prior != nil {
+				phase1.RemoteTotalIDs = prior.RemoteTotalIDs
+				phase1.MissingLocalIDs = prior.MissingLocalIDs
+			}
+		} else if latest, err := st.GetLatestPCGWSyncRun(ctx); err == nil && latest != nil {
 			phase1.RemoteTotalIDs = latest.RemoteTotalIDs
-			// Do not restore CatalogHash from prior run — let backlog checks decide
-			// whether Phase 2 should run rather than relying on a potentially stale hash.
 			phase1.MissingLocalIDs = latest.MissingLocalIDs
 		}
+	}
+
+	if incomplete, catStats, _ := catalogIncomplete(ctx, st, phase1.RemoteTotalIDs); incomplete {
+		logx.Logger().Warn().Str("component", "pcgw").
+			Int("catalog_rows", catStats.RemoteTotal).Int("remote_total", phase1.RemoteTotalIDs).
+			Msg("pcgw sync: catalog incomplete — running Phase 1 rescan")
+		var err error
+		phase1, err = RunCatalogScan(ctx, st, client, runID, reportEx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				_ = st.UpdatePCGWSyncRunCheckpoint(ctx, runID, 0, stats)
+				finishRun(ctxStatus(ctx), ctx.Err().Error())
+				return totalUpserted, ctx.Err()
+			}
+			finishRun(JobFailed, err.Error())
+			return totalUpserted, err
+		}
+		stats.GamesTotal = phase1.RemoteTotalIDs
+		opts.ResumeCatalogScan = false
+		opts.ResumeQueueCursor = 0
 	}
 
 	if opts.SkipIngestPhase {
@@ -152,7 +176,12 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	}
 
 	// ─── Catalog hash no-op optimization ─────────────────────────────────────
-	if !opts.Full && !opts.RetryFailedOnly && phase1.CatalogHash != "" {
+	incompleteCatalog, catStats, _ := catalogIncomplete(ctx, st, phase1.RemoteTotalIDs)
+	if incompleteCatalog {
+		logx.Logger().Info().Str("component", "pcgw").
+			Int("catalog_rows", catStats.RemoteTotal).Int("remote_total", phase1.RemoteTotalIDs).
+			Msg("pcgw sync: catalog incomplete vs remote — skipping no-op gate")
+	} else if !opts.Full && !opts.RetryFailedOnly && phase1.CatalogHash != "" {
 		if prev, err := getPreviousCatalogHash(ctx, st); err == nil && prev == phase1.CatalogHash {
 			// Catalog is unchanged — skip Phase 2 only when there is no backlog at all.
 			failedCount := 0
@@ -377,6 +406,18 @@ func ctxStatus(ctx context.Context) string {
 	return JobInterrupted
 }
 
+// catalogIncomplete is true when pcgw_catalog has fewer rows than the last Phase 1 remote count.
+func catalogIncomplete(ctx context.Context, st store.Store, remoteTotal int) (bool, types.PCGWCatalogStats, error) {
+	catStats, err := st.GetPCGWCatalogStats(ctx)
+	if err != nil {
+		return false, catStats, err
+	}
+	if remoteTotal <= 0 {
+		return false, catStats, nil
+	}
+	return catStats.RemoteTotal < remoteTotal, catStats, nil
+}
+
 // getPreviousCatalogHash retrieves the catalog_hash from the last completed sync run.
 func getPreviousCatalogHash(ctx context.Context, st store.Store) (string, error) {
 	runs, err := st.ListPCGWSyncRuns(ctx, 5)
@@ -456,7 +497,7 @@ func shouldSkipPage(ctx context.Context, st store.Store, client *pcgw.Client, pa
 	if err != nil {
 		return false, nil
 	}
-	rev, err := client.GetPageRevision(strconv.FormatInt(pageID, 10))
+	rev, err := client.GetPageRevision(ctx, strconv.FormatInt(pageID, 10))
 	if err != nil {
 		return false, err
 	}
@@ -471,7 +512,7 @@ func shouldSkipPage(ctx context.Context, st store.Store, client *pcgw.Client, pa
 }
 
 func syncOnePage(ctx context.Context, st store.Store, client *pcgw.Client, runID string, pageID int64, p pcgw.PageInfo, stats *store.PCGWSyncRunStats, filters PCGWFilters) (int, error) {
-	result, err := pcgw.IngestPage(client, pageID, p)
+	result, err := pcgw.IngestPage(ctx, client, pageID, p)
 	if err != nil {
 		return 0, err
 	}

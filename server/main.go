@@ -125,6 +125,7 @@ func logRequests(next http.Handler, mc *metrics.Collector) http.Handler {
 			mc.RecordDuration(r.URL.Path, time.Since(start))
 		}
 		logx.Logger().Info().
+			Str("component", "http").
 			Str("event", "http.request").
 			Str("request_id", rid).
 			Str("method", r.Method).

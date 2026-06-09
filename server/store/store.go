@@ -187,11 +187,13 @@ type Store interface {
 	UpdatePCGWSyncRunCheckpoint(ctx context.Context, runID string, offset int, stats PCGWSyncRunStats) error
 	FinishPCGWSyncRun(ctx context.Context, runID, status, errMsg string, stats PCGWSyncRunStats) error
 	GetLatestPCGWSyncRun(ctx context.Context) (*types.PCGWSyncRun, error)
+	GetPCGWSyncRunByID(ctx context.Context, runID string) (*types.PCGWSyncRun, error)
 	// ListPCGWSyncRuns returns recent sync runs, newest first.
 	ListPCGWSyncRuns(ctx context.Context, limit int) ([]types.PCGWSyncRun, error)
 	GetResumablePCGWSyncRun(ctx context.Context, mode string) (*types.PCGWSyncRun, error)
 	ReconcileStalePCGWSyncRuns(ctx context.Context) error
 	HasRunningPCGWSync(ctx context.Context) bool
+	CancelRunningPCGWSyncRuns(ctx context.Context, errMsg string) error
 
 	// PCGW catalog (two-phase sync)
 	UpsertPCGWCatalogBatch(ctx context.Context, entries []types.PCGWCatalogEntry) error

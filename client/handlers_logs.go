@@ -10,13 +10,13 @@ import (
 )
 
 func handleLogsPage(w http.ResponseWriter, r *http.Request) {
-	level, query, limit, autoRefresh, refreshSeconds := logview.ParseQuery(r)
+	q := logview.ParseQuery(r)
 	sourcePath, sourcePresent := resolveClientLogSource()
 	sourceInfo := clientLogSourceInfo(sourcePath, sourcePresent)
 
 	entries := []logview.Entry{}
 	if sourcePresent {
-		loaded, err := loadClientLogEntries(sourcePath, level, query, limit)
+		loaded, err := loadClientLogEntries(sourcePath, q)
 		if err != nil {
 			sourceInfo = fmt.Sprintf("Failed to read log file: %v", err)
 		} else {
@@ -33,22 +33,18 @@ func handleLogsPage(w http.ResponseWriter, r *http.Request) {
 		LogSourcePath:    sourcePath,
 		LogSourcePresent: sourcePresent,
 		LogSourceInfo:    sourceInfo,
-		Level:            level,
-		Query:            query,
-		Limit:            limit,
-		AutoRefresh:      autoRefresh,
-		RefreshSeconds:   refreshSeconds,
+		Query:            q,
 	})
 }
 
 func handleLogsPartial(w http.ResponseWriter, r *http.Request) {
-	level, query, limit, _, _ := logview.ParseQuery(r)
+	q := logview.ParseQuery(r)
 	sourcePath, sourcePresent := resolveClientLogSource()
 	sourceInfo := clientLogSourceInfo(sourcePath, sourcePresent)
 
 	entries := []logview.Entry{}
 	if sourcePresent {
-		loaded, err := loadClientLogEntries(sourcePath, level, query, limit)
+		loaded, err := loadClientLogEntries(sourcePath, q)
 		if err != nil {
 			sourceInfo = fmt.Sprintf("Failed to read log file: %v", err)
 		} else {
@@ -61,9 +57,7 @@ func handleLogsPartial(w http.ResponseWriter, r *http.Request) {
 		LogSourcePath:    sourcePath,
 		LogSourcePresent: sourcePresent,
 		LogSourceInfo:    sourceInfo,
-		Level:            level,
-		Query:            query,
-		Limit:            limit,
+		Query:            q,
 	})
 }
 
@@ -82,6 +76,6 @@ func clientLogSourceInfo(path string, present bool) string {
 	return fmt.Sprintf("No log file found yet at %s. Logs are created when the client starts.", path)
 }
 
-func loadClientLogEntries(path, level, query string, limit int) ([]logview.Entry, error) {
-	return logview.LoadEntries(path, level, query, limit, logview.ParseClientLine)
+func loadClientLogEntries(path string, q logview.Query) ([]logview.Entry, error) {
+	return logview.LoadEntries(path, q, logview.ParseClientLine)
 }

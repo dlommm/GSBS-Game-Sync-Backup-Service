@@ -365,22 +365,19 @@ func templateTestData(name string) interface{} {
 			},
 			Entries: []logview.Entry{
 				{
-					Timestamp: now, Level: "info", Event: "http.request",
+					Timestamp: now, Level: "info", Event: "http.request", Component: "http",
 					Summary:   "GET /api/manifest → 200 in 12ms from 10.0.0.5",
 					Message:   "GET /api/manifest → 200 in 12ms from 10.0.0.5",
-					Context:   "request_id=abc123 user_id=user-1",
+					Context:   "component=http request_id=abc123 user_id=user-1",
 					Method:    "GET", Path: "/api/manifest", Status: "200", Duration: "12ms",
 					RequestID: "abc123", IP: "10.0.0.5", UserID: "user-1",
-					Raw:       `{"level":"info","event":"http.request","message":"GET /api/manifest 200","method":"GET","path":"/api/manifest","status":200,"duration":12,"ip":"10.0.0.5","request_id":"abc123","user_id":"user-1"}`,
+					Raw:       `{"level":"info","event":"http.request","component":"http","message":"GET /api/manifest 200","method":"GET","path":"/api/manifest","status":200,"duration":12,"ip":"10.0.0.5","request_id":"abc123","user_id":"user-1"}`,
 				},
 			},
 			LogSourcePath:    "/tmp/server.log",
 			LogSourceInfo:    "Using GSBS_SERVICE_LOG_PATH.",
 			LogSourcePresent: true,
-			Level:            "all",
-			Query:            "",
-			Limit:            200,
-			RefreshSeconds:   5,
+			Query:            logview.Query{Level: "all", Limit: 200, RefreshSeconds: 5, Component: "all", HideHTTPNoise: true},
 		}
 	case "admin_pcgw.html":
 		return adminPCGWData{

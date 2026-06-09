@@ -45,7 +45,7 @@ func main() {
 
 	if len(ids) > 0 {
 		for _, id := range ids {
-			pid, err := client.GetPageIDBySteamAppID(id)
+			pid, err := client.GetPageIDBySteamAppID(ctx, id)
 			if err != nil {
 				log.Printf("steam %s: %v", id, err)
 				continue
@@ -88,7 +88,7 @@ func runOne(ctx context.Context, client *pcgw.Client, st store.Store, pageID int
 		fmt.Printf("page %d: persisted %d manifest paths\n", pageID, n)
 		return
 	}
-	result, err := pcgw.IngestPage(client, pageID, pcgw.PageInfo{PageID: pageID})
+	result, err := pcgw.IngestPage(ctx, client, pageID, pcgw.PageInfo{PageID: pageID})
 	if err != nil {
 		log.Fatal(err)
 	}
