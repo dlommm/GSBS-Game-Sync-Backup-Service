@@ -4,7 +4,7 @@
 <div class="pcgw-job-status-wrap">
   <p class="notice notice-running notice-compact"><span class="badge-running">Sync running</span>{{if .JobAutoCatchUp}} — Auto catch-up mode{{end}}</p>
   <div class="quota-bar-header">
-    <span>Phase: <strong>{{if .JobPhase}}{{.JobPhase}}{{else}}listing{{end}}</strong></span>
+    <span>{{if .JobPhaseLabel}}{{.JobPhaseLabel}}{{else}}Phase: <strong>{{if .JobPhase}}{{.JobPhase}}{{else}}listing{{end}}</strong>{{end}}</span>
     <span>{{.JobProgressPages}}{{if gt .JobProgressTotal 0}} / {{.JobProgressTotal}}{{end}} pages ({{if gt .JobProgressTotal 0}}{{printf "%.0f" (percentInt .JobProgressPages .JobProgressTotal)}}%{{else}}—{{end}}){{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
   </div>
   <div class="quota-bar-track">
@@ -12,6 +12,16 @@
     <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}%;"></div>
     {{else}}
     <div class="quota-bar-fill" style="width:100%;opacity:0.35;"></div>
+    {{end}}
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:0.25rem;">
+    {{if .JobElapsedSec}}
+    <span class="cell-muted" style="font-size:0.75rem;">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
+    {{else}}<span></span>{{end}}
+    {{if ge .JobETAMin 0}}
+    <span class="cell-muted" style="font-size:0.75rem;">
+      {{if eq .JobETAMin 0}}Almost done{{else if lt .JobETAMin 2}}~1 min remaining{{else}}~{{.JobETAMin}} min remaining{{end}}
+    </span>
     {{end}}
   </div>
 </div>

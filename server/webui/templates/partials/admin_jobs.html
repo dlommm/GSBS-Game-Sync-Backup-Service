@@ -50,6 +50,9 @@
     <div class="quota-bar-fill" style="width:100%;opacity:0.35;animation:pulse 1.5s ease-in-out infinite;"></div>
     {{end}}
   </div>
+  {{if .JobElapsedSec}}
+  <span class="cell-muted" style="font-size:0.75rem;">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
+  {{end}}
 </div>
 {{end}}
 {{if .ShowPCGWControls}}

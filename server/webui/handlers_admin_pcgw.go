@@ -41,9 +41,14 @@ type adminPCGWData struct {
 	JobGamesSkipped   int
 	JobPhase          string
 	JobAutoCatchUp    bool
-	MaxPagesPerRun   int
-	CapStatusText    string
-	CapReached       bool
+	MaxPagesPerRun    int
+	CapStatusText     string
+	CapReached        bool
+	JobElapsedSec     int
+	JobPagesPerSec    float64
+	JobETAMin         int
+	JobPhaseLabel     string
+	AvgHistPagesPerSec float64
 }
 
 type PCGWStatsView struct {
@@ -159,15 +164,20 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 		End:              end,
 		PrevPage:         prevPage,
 		NextPage:         nextPage,
-		JobRunning:        jobs.JobRunning,
-		JobProgressPages:  jobs.JobProgressPages,
-		JobProgressTotal:  jobs.JobProgressTotal,
-		JobGamesSkipped:   jobs.JobGamesSkipped,
-		JobPhase:          jobs.JobPhase,
-		JobAutoCatchUp:    jobs.JobAutoCatchUp,
-		MaxPagesPerRun:   jobs.MaxPagesPerRun,
-		CapStatusText:    jobs.CapStatusText,
-		CapReached:       jobs.CapReached,
+		JobRunning:         jobs.JobRunning,
+		JobProgressPages:   jobs.JobProgressPages,
+		JobProgressTotal:   jobs.JobProgressTotal,
+		JobGamesSkipped:    jobs.JobGamesSkipped,
+		JobPhase:           jobs.JobPhase,
+		JobAutoCatchUp:     jobs.JobAutoCatchUp,
+		MaxPagesPerRun:     jobs.MaxPagesPerRun,
+		CapStatusText:      jobs.CapStatusText,
+		CapReached:         jobs.CapReached,
+		JobElapsedSec:      jobs.JobElapsedSec,
+		JobPagesPerSec:     jobs.JobPagesPerSec,
+		JobETAMin:          jobs.JobETAMin,
+		JobPhaseLabel:      jobs.JobPhaseLabel,
+		AvgHistPagesPerSec: jobs.AvgHistPagesPerSec,
 	})
 }
 
@@ -185,13 +195,18 @@ func (h *WebHandler) serveAdminPCGWJobStatusPartial(w http.ResponseWriter, r *ht
 	}
 	data := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret), false)
 	h.renderPartial(w, "partials/admin_pcgw_job_status.html", map[string]interface{}{
-		"JobRunning":       data.JobRunning,
-		"JobProgressPages": data.JobProgressPages,
-		"JobProgressTotal": data.JobProgressTotal,
-		"JobGamesSkipped":  data.JobGamesSkipped,
-		"JobPhase":         data.JobPhase,
-		"JobAutoCatchUp":   data.JobAutoCatchUp,
-		"CSRFToken":        data.CSRFToken,
+		"JobRunning":         data.JobRunning,
+		"JobProgressPages":   data.JobProgressPages,
+		"JobProgressTotal":   data.JobProgressTotal,
+		"JobGamesSkipped":    data.JobGamesSkipped,
+		"JobPhase":           data.JobPhase,
+		"JobAutoCatchUp":     data.JobAutoCatchUp,
+		"CSRFToken":          data.CSRFToken,
+		"JobElapsedSec":      data.JobElapsedSec,
+		"JobPagesPerSec":     data.JobPagesPerSec,
+		"JobETAMin":          data.JobETAMin,
+		"JobPhaseLabel":      data.JobPhaseLabel,
+		"AvgHistPagesPerSec": data.AvgHistPagesPerSec,
 	})
 }
 

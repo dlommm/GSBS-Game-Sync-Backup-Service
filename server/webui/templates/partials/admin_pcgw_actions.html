@@ -54,18 +54,33 @@
     <div class="pcgw-progress-row" aria-live="polite">
       <div class="pcgw-progress-header">
         <span class="badge-running">Sync running</span>
-        {{if .JobAutoCatchUp}}<span class="cell-muted">Auto catch-up mode</span>{{end}}
-        <span class="cell-muted">Phase: <strong>{{if .JobPhase}}{{.JobPhase}}{{else}}listing{{end}}</strong></span>
+        {{if .JobAutoCatchUp}}<span class="cell-muted">Auto catch-up</span>{{end}}
+        <span class="cell-muted">{{if .JobPhaseLabel}}{{.JobPhaseLabel}}{{else}}Running{{end}}</span>
         <form method="post" action="/admin/jobs/pcgw/cancel" class="pcgw-cancel-form">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
           <button type="submit" class="btn-ghost-sm">Cancel</button>
         </form>
       </div>
       {{if gt .JobProgressTotal 0}}
-      <div class="quota-bar-track">
+      <div class="quota-bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="{{.JobProgressTotal}}" aria-valuenow="{{.JobProgressPages}}">
         <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}%;"></div>
       </div>
-      <span class="cell-muted">{{.JobProgressPages}} / {{.JobProgressTotal}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:0.25rem;">
+        <span class="cell-muted">{{.JobProgressPages}} / {{.JobProgressTotal}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
+        {{if ge .JobETAMin 0}}
+        <span class="cell-muted">
+          {{if eq .JobETAMin 0}}Almost done{{else if lt .JobETAMin 2}}~1 min remaining{{else}}~{{.JobETAMin}} min remaining{{end}}
+        </span>
+        {{end}}
+      </div>
+      {{else}}
+      <div class="quota-bar-track">
+        <div class="quota-bar-fill" style="width:100%;opacity:0.35;animation:pulse 1.5s ease-in-out infinite;"></div>
+      </div>
+      <span class="cell-muted">Listing game catalog…</span>
+      {{end}}
+      {{if .JobElapsedSec}}
+      <span class="cell-muted" style="font-size:0.75rem;">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
       {{end}}
     </div>
     {{end}}

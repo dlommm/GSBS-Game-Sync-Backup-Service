@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -91,6 +92,7 @@ func resolveClientLogoPath() string {
 		filepath.Join("assets", "client-logo.png"),
 		filepath.Join("assets", "client-logo.jpg"),
 		filepath.Join("assets", "logo.png"),
+		filepath.Join("docs", "images", "gsbs-icon.png"),
 	}
 	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
@@ -114,6 +116,19 @@ func handleClientLogo(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, p)
 		return
 	}
+	// Fall back to embedded logo.png from the compiled static assets.
+	fs := clientwebui.StaticFiles()
+	f, err := fs.Open("logo.png")
+	if err == nil {
+		defer f.Close()
+		stat, err := f.Stat()
+		if err == nil {
+			w.Header().Set("Content-Type", "image/png")
+			http.ServeContent(w, r, "logo.png", stat.ModTime(), f.(io.ReadSeeker))
+			return
+		}
+	}
+	// Final SVG fallback (should rarely reach here).
 	w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
 	w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#6366f1"/><path d="M15 24v10h2.2m29 4A21 21 0 0 0 17.2 34M17.2 34H29m20 18V42h-2.2m0 0A21 21 0 0 1 17 37.5M46.8 42H35" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>`))
 }
