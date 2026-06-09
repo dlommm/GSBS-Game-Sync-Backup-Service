@@ -241,6 +241,71 @@ func TestPersistIngestResult_UsesSeededPageInfoTitle(t *testing.T) {
 	}
 }
 
+// TestPersistIngestResult_FailedFetchWritesStubRow verifies that a partial IngestResult
+// returned when ParsePageWikitext fails (ParseStatus="failed", no sections, no wikitext)
+// is still written to pcgw_games. This is the precondition for the syncOnePage fix that
+// prevents fetch-failed pages from staying in the "missing" queue forever.
+func TestPersistIngestResult_FailedFetchWritesStubRow(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	const pageID = int64(55555)
+
+	// Seed the catalog so the page shows up in ListPCGWCatalogMissing initially.
+	_ = st.UpsertPCGWCatalogBatch(ctx, []types.PCGWCatalogEntry{
+		{PageID: pageID, Title: "Test Game", FirstSeenAt: "2025-01-01T00:00:00Z", LastSeenAt: "2025-01-01T00:00:00Z"},
+	})
+
+	missing, _ := st.ListPCGWCatalogMissing(ctx, 0, 0)
+	if len(missing) != 1 {
+		t.Fatalf("expected page in missing queue before stub write, got %d", len(missing))
+	}
+
+	// Simulate the partial result returned by IngestPage when ParsePageWikitext errors.
+	failedResult := &pcgw.IngestResult{
+		Bundle: pcgw.GameBundle{
+			PageID:      pageID,
+			ParseStatus: "failed",
+			PageInfo:    pcgw.PageInfo{PageID: pageID, Title: "Test Game"},
+			Sections:    make(map[string]pcgw.SectionResult),
+		},
+		Errors: []string{"http: connection refused"},
+	}
+
+	n, persistErr := PersistIngestResult(ctx, st, "", failedResult, PCGWFilters{})
+	if persistErr != nil {
+		t.Fatalf("PersistIngestResult with failed result: %v", persistErr)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 entries (no save locations), got %d", n)
+	}
+
+	// The stub row must exist in pcgw_games with parse_status="failed".
+	game, err := st.GetPCGWGame(ctx, pageID)
+	if err != nil {
+		t.Fatalf("GetPCGWGame after stub write: %v", err)
+	}
+	if game.ParseStatus != "failed" {
+		t.Errorf("stub row parse_status: got %q, want %q", game.ParseStatus, "failed")
+	}
+
+	// The page must no longer appear in the "missing" queue.
+	missing2, _ := st.ListPCGWCatalogMissing(ctx, 0, 0)
+	if len(missing2) != 0 {
+		t.Errorf("page should not appear in missing queue after stub write, got %d", len(missing2))
+	}
+
+	// The page must appear in the "failed/partial" queue so it can be retried.
+	failed, _ := st.ListPCGWCatalogFailedPartial(ctx, 0, 0)
+	if len(failed) != 1 || failed[0] != pageID {
+		t.Errorf("page should appear in failed queue after stub write, got %v", failed)
+	}
+}
+
 func TestPhase2StartCursor_IgnoresStaleResumeCursor(t *testing.T) {
 	tests := []struct {
 		name              string

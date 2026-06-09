@@ -2,6 +2,18 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.5] - 2026-06-09
+
+### Fixed
+
+- **PCGW sync (critical)**: Phase 2 ingest was discarding the partial result when `IngestPage` returned an error. This caused failed pages to accumulate retries without ever being written to `pcgw_games`, eventually becoming `dead_letter=1`. Because both the "missing" and "failed/partial" queues exclude dead-lettered pages, every subsequent Phase 2 run (Auto Catch-Up, Parse Missing Only, Retry Failed Pages) saw an empty queue and exited immediately — leaving Local count frozen at 3,945 indefinitely. Fixed by persisting the stub `parse_status="failed"` row to `pcgw_games` before returning the error, so failed pages move to the retryable failed-partial queue instead of silent limbo.
+
+### Added
+
+- **Server/WebUI**: `ResetPCGWDeadLetter` store method + `POST /admin/pcgw/reset-dead-letter` handler — clears `dead_letter=1` and `retry_count` on all blocked catalog entries so they re-enter Phase 2 queues on the next run.
+- **Server/WebUI**: "Reset Dead Letter" button in Advanced Maintenance (always visible). When blocked pages exist, a prominent warning banner with count appears above the maintenance actions.
+- **Server/WebUI**: Success/error flash messages for the reset action on the Activity page.
+
 ## [2.1.4] - 2026-06-09
 
 ### Added

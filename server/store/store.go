@@ -204,6 +204,7 @@ type Store interface {
 	ListPCGWCatalogDeadLetter(ctx context.Context, limit int) ([]types.PCGWCatalogEntry, error)
 	IncrementCatalogRetry(ctx context.Context, pageID int64, reason string) error
 	ClearCatalogDeadLetter(ctx context.Context, pageID int64) error
+	ResetPCGWDeadLetter(ctx context.Context) (int64, error)
 	ComputeCatalogHash(ctx context.Context) (string, error)
 	UpdatePCGWSyncRunPhase1Stats(ctx context.Context, runID string, stats types.Phase1Stats) error
 	UpdatePCGWSyncRunPhase2Progress(ctx context.Context, runID string, processed, cursor int) error

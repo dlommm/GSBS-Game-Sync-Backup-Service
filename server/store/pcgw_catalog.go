@@ -230,6 +230,18 @@ func (s *sqliteStore) ClearCatalogDeadLetter(ctx context.Context, pageID int64) 
 	return err
 }
 
+// ResetPCGWDeadLetter clears dead_letter=1 for all catalog entries, returning the number of rows
+// updated. This unblocks pages that exhausted their retry budget so they re-enter Phase 2
+// queues (ListPCGWCatalogMissing or ListPCGWCatalogFailedPartial) on the next sync run.
+func (s *sqliteStore) ResetPCGWDeadLetter(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE pcgw_catalog SET dead_letter=0, retry_count=0, dead_letter_reason='' WHERE dead_letter=1`)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // ComputeCatalogHash computes a SHA-256 hash of sorted page_id list from pcgw_catalog.
 // Two identical sets of page IDs always produce the same hash.
 func (s *sqliteStore) ComputeCatalogHash(ctx context.Context) (string, error) {

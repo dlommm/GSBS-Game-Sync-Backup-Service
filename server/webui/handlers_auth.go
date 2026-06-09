@@ -305,6 +305,9 @@ func adminQuerySuccess(r *http.Request) string {
 	if n := q.Get("purged"); n != "" {
 		return fmt.Sprintf("Purged stored full wikitext for %s row(s).", n)
 	}
+	if n := q.Get("reset_dead_letter"); n != "" {
+		return fmt.Sprintf("Dead-letter reset: %s page(s) unblocked and re-queued for Phase 2. Run Auto Catch-Up to process them.", n)
+	}
 	return ""
 }
 
@@ -354,6 +357,8 @@ func adminQueryError(r *http.Request) string {
 		return "Cannot wipe while a PCGW sync is running."
 	case "wipe_failed":
 		return "PCGW wipe failed. See server log."
+	case "reset_dead_letter_failed":
+		return "Dead-letter reset failed. See server log."
 	default:
 		return r.URL.Query().Get("error")
 	}

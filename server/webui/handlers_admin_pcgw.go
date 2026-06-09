@@ -581,6 +581,25 @@ func (h *WebHandler) handleAdminPCGWSyncAutoCatchUp(w http.ResponseWriter, r *ht
 	Redirect(w, r, "/admin/activity?job_started=1&job_action=auto_catchup")
 }
 
+func (h *WebHandler) handleAdminPCGWResetDeadLetter(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	n, err := h.store.ResetPCGWDeadLetter(r.Context())
+	if err != nil {
+		logx.Logger().Error().Err(err).Msg("webui admin pcgw: reset dead-letter failed")
+		Redirect(w, r, "/admin/activity?error=reset_dead_letter_failed")
+		return
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "pcgw_reset_dead_letter", "", fmt.Sprintf("rows=%d", n))
+	Redirect(w, r, fmt.Sprintf("/admin/activity?reset_dead_letter=%d", n))
+}
+
 func (h *WebHandler) handleAdminPCGWRebuildManifest(w http.ResponseWriter, r *http.Request) {
 	if !ValidateCSRF(r, h.secret) {
 		http.Error(w, "Invalid security token.", http.StatusBadRequest)
@@ -641,6 +660,10 @@ func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool
 	}
 	if path == "/admin/pcgw/rebuild-manifest" && r.Method == http.MethodPost {
 		h.handleAdminPCGWRebuildManifest(w, r)
+		return true
+	}
+	if path == "/admin/pcgw/reset-dead-letter" && r.Method == http.MethodPost {
+		h.handleAdminPCGWResetDeadLetter(w, r)
 		return true
 	}
 	if path == "/admin/pcgw/wipe" && r.Method == http.MethodPost {
