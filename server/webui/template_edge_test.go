@@ -39,11 +39,11 @@ func TestAdminJobsPartialAfterSync(t *testing.T) {
 func TestAdminPCGWJobStatusEmbedded(t *testing.T) {
 	tmpl := parseTemplates()
 	data := adminPCGWData{
-		PageData:         PageData{CSRFToken: "csrf", PageName: "admin_pcgw"},
-		JobRunning:       true,
-		JobProgress:      100,
-		JobProgressTotal: 500,
-		JobGamesSkipped:  2,
+		PageData:          PageData{CSRFToken: "csrf", PageName: "admin_pcgw"},
+		JobRunning:        true,
+		JobProgressPages:  100,
+		JobProgressTotal:  500,
+		JobGamesSkipped:   2,
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "partials/admin_pcgw_job_status.html", data); err != nil {
@@ -70,11 +70,13 @@ func TestAdminPCGWActionLabelsClarifyPhases(t *testing.T) {
 	}
 	html := buf.String()
 	want := []string{
-		"Phase 1+2: Refresh IDs and Parse/Store Backlog",
-		"Phase 1 Only: Refresh Catalog IDs",
-		"Phase 2: Parse/Store Missing Pages Only",
-		"Phase 2: Retry Failed/Partial Pages",
-		"Fetches the remote ID catalog only; does not parse/store page detail.",
+		"Incremental Sync",
+		"Refresh New Games",
+		"Auto Catch-Up",
+		"Parse Missing Only",
+		"Retry Failed Pages",
+		"Refresh Catalog Only",
+		"Full Reparse",
 	}
 	for _, needle := range want {
 		if !strings.Contains(html, needle) {

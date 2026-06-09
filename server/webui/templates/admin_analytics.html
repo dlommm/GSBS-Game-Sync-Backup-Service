@@ -77,7 +77,7 @@
       {{if .TopUsers}}
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>User</th><th>Saves</th><th>Storage</th><th>Quota</th></tr></thead>
+          <thead><tr><th scope="col">User</th><th scope="col">Saves</th><th scope="col">Storage</th><th scope="col">Quota</th></tr></thead>
           <tbody>
             {{range .TopUsers}}
             <tr>
@@ -100,7 +100,7 @@
       {{if .TopSaveGames}}
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>Game</th><th>Saves</th><th>Storage</th></tr></thead>
+          <thead><tr><th scope="col">Game</th><th scope="col">Saves</th><th scope="col">Storage</th></tr></thead>
           <tbody>
             {{range .TopSaveGames}}
             <tr>
@@ -259,7 +259,7 @@
       {{if .ParseFailures}}
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>When</th><th>Game</th><th>Section</th><th>Error</th></tr></thead>
+          <thead><tr><th scope="col">When</th><th scope="col">Game</th><th scope="col">Section</th><th scope="col">Error</th></tr></thead>
           <tbody>
             {{range .ParseFailures}}
             <tr>
@@ -329,13 +329,13 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>Started</th>
-            <th>Mode</th>
-            <th>Status</th>
-            <th>Games</th>
-            <th>OK / Partial / Failed / Skipped</th>
-            <th>Avg parse</th>
-            <th>Duration</th>
+            <th scope="col">Started</th>
+            <th scope="col">Mode</th>
+            <th scope="col">Status</th>
+            <th scope="col">Games</th>
+            <th scope="col">OK / Partial / Failed / Skipped</th>
+            <th scope="col">Avg parse</th>
+            <th scope="col">Duration</th>
           </tr>
         </thead>
         <tbody>

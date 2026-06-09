@@ -1,7 +1,9 @@
 {{define "partials/admin_pcgw_actions.html"}}
 <div class="pcgw-controls-grid">
-  <section class="pcgw-control-card pcgw-primary-controls">
-    <h3 class="pcgw-card-title">PCGW Status</h3>
+
+  {{/* ── Status Summary ─────────────────────────────────────────────────── */}}
+  <section class="pcgw-control-card">
+    <h3 class="pcgw-card-title">Sync Status</h3>
     <div class="config-grid">
       <div class="config-item">
         <span class="config-key">Last run</span>
@@ -14,166 +16,200 @@
       </div>
       <div class="config-item">
         <span class="config-key">Remote / Local / Missing</span>
-        <span class="config-val">{{.CatalogStats.RemoteTotal}} / {{.CatalogStats.LocalTotal}} / {{.CatalogStats.MissingLocal}}</span>
+        <span class="config-val">
+          {{.CatalogStats.RemoteTotal}} / {{.CatalogStats.LocalTotal}} /
+          {{if gt .CatalogStats.MissingLocal 0}}
+            <strong class="pcgw-warning-text">{{.CatalogStats.MissingLocal}}</strong>
+          {{else}}0{{end}}
+        </span>
       </div>
       <div class="config-item">
         <span class="config-key">Dead-letter</span>
         <span class="config-val">
           {{if gt .CatalogStats.DeadLetter 0}}
             <a href="/admin/pcgw?status=failed">{{.CatalogStats.DeadLetter}}</a>
+            <span class="cell-muted"> — permanently failed pages</span>
           {{else}}0{{end}}
         </span>
       </div>
-      {{if .LatestSyncRun}}
-      {{if gt .LatestSyncRun.TargetedQueueSize 0}}
+      {{if .LatestSyncRun}}{{if gt .LatestSyncRun.TargetedQueueSize 0}}
       <div class="config-item">
         <span class="config-key">Last queue size</span>
         <span class="config-val">{{.LatestSyncRun.TargetedQueueSize}}</span>
       </div>
-      {{end}}
-      {{end}}
-      {{if .JobRunning}}
-      <div class="pcgw-progress-row">
-        <div class="pcgw-progress-header">
-          <span class="badge-running">Sync running</span>
-          <span class="cell-muted">Phase: <strong>{{if .JobPhase}}{{.JobPhase}}{{else}}listing{{end}}</strong></span>
-        </div>
-        {{if gt .JobProgressTotal 0}}
-        <div class="quota-bar-track">
-          <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}%;"></div>
-        </div>
-        <span class="cell-muted">{{.JobProgressPages}} / {{.JobProgressTotal}}</span>
-        {{end}}
+      {{end}}{{end}}
+      {{if .ResumableSyncRun}}
+      <div class="config-item">
+        <span class="config-key">Resumable run</span>
+        <span class="config-val cell-muted">{{formatTime .ResumableSyncRun.StartedAt}} — interrupted at {{.ResumableSyncRun.CheckpointPhase}} cursor {{.ResumableSyncRun.CheckpointQueueCursor}}</span>
       </div>
       {{end}}
+      <div class="config-item">
+        <span class="config-key">Manifest budget</span>
+        <span class="config-val cell-muted">{{.CapStatusText}}</span>
+      </div>
     </div>
+
+    {{if .JobRunning}}
+    <div class="pcgw-progress-row" aria-live="polite">
+      <div class="pcgw-progress-header">
+        <span class="badge-running">Sync running</span>
+        {{if .JobAutoCatchUp}}<span class="cell-muted">Auto catch-up mode</span>{{end}}
+        <span class="cell-muted">Phase: <strong>{{if .JobPhase}}{{.JobPhase}}{{else}}listing{{end}}</strong></span>
+        <form method="post" action="/admin/jobs/pcgw/cancel" class="pcgw-cancel-form">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <button type="submit" class="btn-ghost-sm">Cancel</button>
+        </form>
+      </div>
+      {{if gt .JobProgressTotal 0}}
+      <div class="quota-bar-track">
+        <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}%;"></div>
+      </div>
+      <span class="cell-muted">{{.JobProgressPages}} / {{.JobProgressTotal}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
+      {{end}}
+    </div>
+    {{end}}
   </section>
 
-  <section class="pcgw-control-card">
-    <h3 class="pcgw-card-title">Sync Jobs</h3>
-    <p class="pcgw-card-subtitle">{{.CapStatusText}}</p>
+  {{/* ── Quick Actions ───────────────────────────────────────────────────── */}}
+  <section class="pcgw-control-card pcgw-primary-controls">
+    <h3 class="pcgw-card-title">Quick Actions</h3>
+    <p class="pcgw-card-subtitle">Start a sync to update the games catalog and process save location data from PCGamingWiki.</p>
     {{if .CapReached}}
-    <p class="pcgw-card-subtitle" style="color:var(--warning);margin-top:-0.35rem;">Run a Phase 2 parse/store action again to continue the remaining queue.</p>
+    <p class="pcgw-card-subtitle pcgw-warning-text">Page budget reached for this run — run again to continue the remaining queue.</p>
     {{end}}
     <div class="pcgw-actions-stack">
       {{if .JobRunning}}
       <div class="pcgw-action-row">
-        <span class="badge-running">Sync in progress</span>
-        {{if .JobAutoCatchUp}}<span class="cell-muted"><strong>Auto catch-up mode</strong></span>{{end}}
-        <form method="post" action="/admin/jobs/pcgw/cancel" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm">Cancel</button>
-        </form>
+        <span class="badge-running">Sync in progress — use Cancel in the status card above.</span>
       </div>
       {{else}}
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/sync" class="inline-form">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-primary-sm">Phase 1+2: Refresh IDs and Parse/Store Backlog</button>
+          <button type="submit" class="btn-primary-sm" aria-describedby="help-incremental-sync">Incremental Sync</button>
         </form>
-        <span class="pcgw-action-help">Runs Phase 1 catalog ID refresh, then Phase 2 parse/store for missing, failed/partial, and changed pages.</span>
+        <span id="help-incremental-sync" class="pcgw-action-help">Refreshes the game catalog and processes any new, changed, or previously failed games. The safe default for routine use.</span>
       </div>
       <div class="pcgw-action-row">
-        <form method="post" action="/admin/pcgw/sync" class="inline-form" onsubmit="return confirm('Force a full PCGW resync? This bypasses resume and may take many hours.');">
+        <form method="post" action="/admin/pcgw/sync/refresh-new" class="inline-form">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <input type="hidden" name="full" value="1">
-          <button type="submit" class="btn-ghost-sm">Phase 1+2 Full Reparse (No Resume)</button>
+          <button type="submit" class="btn-ghost-sm" aria-describedby="help-refresh-new">Refresh New Games</button>
         </form>
-        <span class="pcgw-action-help">Bypasses resume checkpoints and reparses all pages from scratch.</span>
+        <span id="help-refresh-new" class="pcgw-action-help">Runs a fresh catalog scan and processes only newly discovered or missing games. Lighter than incremental when you just want to pick up new additions.</span>
+      </div>
+      <div class="pcgw-action-row">
+        <form method="post" action="/admin/pcgw/sync/auto-catch-up" class="inline-form">
+          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+          <button type="submit" class="btn-ghost-sm" aria-describedby="help-auto-catchup">Auto Catch-Up</button>
+        </form>
+        <span id="help-auto-catchup" class="pcgw-action-help">Automatically repeats sync cycles until the full backlog is cleared. Useful after a long outage or first-time setup.</span>
       </div>
       {{end}}
     </div>
   </section>
 
+  {{/* ── Advanced Maintenance ────────────────────────────────────────────── */}}
+  <section class="pcgw-control-card">
+    <details>
+      <summary class="pcgw-card-title">Advanced Maintenance</summary>
+      <p class="pcgw-card-subtitle">Targeted operations for specific recovery and maintenance scenarios. Use these when standard sync options are insufficient.</p>
+      <div class="pcgw-actions-stack">
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/sync/missing-local" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-missing-only">Parse Missing Only</button>
+          </form>
+          <span id="help-missing-only" class="pcgw-action-help">Skips catalog refresh — directly parses catalog entries not yet stored locally.</span>
+        </div>
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/sync/retry-failed" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-retry-failed">Retry Failed Pages</button>
+          </form>
+          <span id="help-retry-failed" class="pcgw-action-help">Retries only pages that previously failed or parsed partially. Does not refresh the catalog.</span>
+        </div>
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/rebuild-manifest" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-rebuild-manifest">Rebuild Save Locations</button>
+          </form>
+          <span id="help-rebuild-manifest" class="pcgw-action-help">Rebuilds the game save location index from stored PCGW data without re-fetching anything from the internet.</span>
+        </div>
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/sync/catalog-only" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-catalog-only">Refresh Catalog Only</button>
+          </form>
+          <span id="help-catalog-only" class="pcgw-action-help">Updates the list of known game IDs from PCGamingWiki without parsing any page content.</span>
+        </div>
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/sync" class="inline-form" onsubmit="return confirm('Force a full PCGW reparse? This bypasses resume and may take many hours.');">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <input type="hidden" name="full" value="1">
+            <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-full-reparse">Full Reparse</button>
+          </form>
+          <span id="help-full-reparse" class="pcgw-action-help">Forces a complete reparse of all PCGW pages from scratch, bypassing resume. Rarely needed — prefer Incremental Sync for routine updates.</span>
+        </div>
+        <div class="pcgw-action-row">
+          <form method="post" action="/admin/pcgw/purge-wikitext" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <button type="submit" class="btn-ghost-sm" aria-describedby="help-purge-wikitext">Purge Stored Wikitext</button>
+          </form>
+          <span id="help-purge-wikitext" class="pcgw-action-help">Removes compressed wikitext blobs to reclaim disk space. Safe to run — data can be re-fetched on next sync.</span>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  {{/* ── Import / Export ─────────────────────────────────────────────────── */}}
   <section class="pcgw-control-card">
     <h3 class="pcgw-card-title">Import / Export</h3>
+    <p class="pcgw-card-subtitle">Transfer PCGW mirror data between instances. Useful for seeding a new server without a full sync.</p>
     <div class="pcgw-actions-stack">
       <div class="pcgw-action-row">
-        <a href="/admin/pcgw/export/manifest.json.gz" class="btn-ghost-sm">Export Bundle</a>
-        <span class="pcgw-action-help">Download the full PCGW mirror + manifest projection.</span>
+        <a href="/admin/pcgw/export/manifest.json.gz" class="btn-ghost-sm" aria-describedby="help-export-bundle">Export Bundle</a>
+        <span id="help-export-bundle" class="pcgw-action-help">Download the full PCGW mirror and save location data as a portable bundle.</span>
       </div>
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/import" enctype="multipart/form-data" class="inline-form">
           <input type="hidden" name="csrf" value="{{.CSRFToken}}">
           <input type="hidden" name="mode" value="merge">
-          <label class="btn-ghost-sm pcgw-upload-btn">
+          <label class="btn-ghost-sm pcgw-upload-btn" aria-describedby="help-import-merge">
             Import (merge)
             <input type="file" name="file" accept=".json,.gz,application/gzip,application/json" class="pcgw-upload-input" onchange="this.form.submit()">
           </label>
         </form>
-        <span class="pcgw-action-help">Merge an exported bundle into current rows.</span>
+        <span id="help-import-merge" class="pcgw-action-help">Merge a previously exported bundle into the current data — existing records are kept.</span>
       </div>
     </div>
   </section>
 
-  <section class="pcgw-control-card">
-    <h3 class="pcgw-card-title">Maintenance</h3>
-    <div class="pcgw-actions-stack">
-      <div class="pcgw-action-row">
-        <form method="post" action="/admin/pcgw/sync/missing-local" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Phase 2: Parse/Store Missing Pages Only</button>
-        </form>
-        <span class="pcgw-action-help">Skips catalog refresh and only parses/stores catalog IDs that are missing locally.</span>
-      </div>
-      <div class="pcgw-action-row">
-        <form method="post" action="/admin/pcgw/sync/auto-catch-up" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Auto Catch-Up Missing Backlog</button>
-        </form>
-        <span class="pcgw-action-help">Automatically repeats budgeted Phase 2 parse/store cycles until missing/failed backlog reaches zero, or stops on error/no-progress.</span>
-      </div>
-      <div class="pcgw-action-row">
-        <form method="post" action="/admin/pcgw/sync/retry-failed" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Phase 2: Retry Failed/Partial Pages</button>
-        </form>
-        <span class="pcgw-action-help">Skips catalog refresh and retries only failed/partial parse rows.</span>
-      </div>
-      <div class="pcgw-action-row">
-        <form method="post" action="/admin/pcgw/rebuild-manifest" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Rebuild Manifest Projection</button>
-        </form>
-        <span class="pcgw-action-help">Rebuild `game_save_locations` from existing PCGW data.</span>
-      </div>
-      <div class="pcgw-action-row">
-        <form method="post" action="/admin/pcgw/sync/catalog-only" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled{{end}}>Phase 1 Only: Refresh Catalog IDs</button>
-        </form>
-        <span class="pcgw-action-help">Fetches the remote ID catalog only; does not parse/store page detail.</span>
-      </div>
-      <div class="pcgw-action-row">
-        <form method="post" action="/admin/pcgw/purge-wikitext" class="inline-form">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <button type="submit" class="btn-ghost-sm">Purge Stored Wikitext</button>
-        </form>
-        <span class="pcgw-action-help">Remove compressed full-page wikitext blobs to reclaim disk.</span>
-      </div>
-    </div>
-  </section>
-
+  {{/* ── Destructive Actions ─────────────────────────────────────────────── */}}
   <section class="pcgw-control-card pcgw-group-danger">
     <h3 class="pcgw-card-title">Destructive Actions</h3>
+    <p class="pcgw-card-subtitle pcgw-danger-text">These actions permanently delete data and cannot be undone. Export a bundle first if you may need to recover.</p>
     <div class="pcgw-actions-stack">
       <div class="pcgw-action-row">
-        <form method="post" action="/admin/pcgw/wipe" class="inline-form" onsubmit="return confirm('Are you sure you want to wipe PCGW mirror data? This cannot be undone.');">
+        <form method="post" action="/admin/pcgw/wipe" class="inline-form"
+              onsubmit="return confirm('Permanently wipe all PCGW mirror data? The catalog ID list is kept but all parsed page data will be deleted. This cannot be undone.');">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
           <input type="hidden" name="mode" value="mirror_only">
-          <button type="submit" class="btn-danger-sm" {{if .JobRunning}}disabled{{end}}>Wipe PCGW Mirror Only</button>
+          <button type="submit" class="btn-danger-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-wipe-mirror">Wipe Mirror Data</button>
         </form>
-        <span class="pcgw-action-help">Deletes all `pcgw_*` mirror rows except catalog IDs.</span>
+        <span id="help-wipe-mirror" class="pcgw-action-help">Permanently deletes all parsed PCGW page data while keeping catalog IDs. Cannot be undone — run Incremental Sync afterwards to rebuild.</span>
       </div>
       <div class="pcgw-action-row">
-        <form method="post" action="/admin/pcgw/wipe" class="inline-form" onsubmit="return confirm('Are you sure you want to wipe PCGW mirror and manifest data? This cannot be undone.');">
+        <form method="post" action="/admin/pcgw/wipe" class="inline-form"
+              onsubmit="return confirm('Permanently wipe ALL PCGW data including the save location manifest? All clients will lose PCGW-based save paths. This cannot be undone.');">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
           <input type="hidden" name="mode" value="mirror_and_manifest">
-          <button type="submit" class="btn-danger-sm" {{if .JobRunning}}disabled{{end}}>Wipe PCGW + Manifest Data</button>
+          <button type="submit" class="btn-danger-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-wipe-all">Wipe Mirror + Manifest</button>
         </form>
-        <span class="pcgw-action-help">Deletes all `pcgw_*` rows and PCGW-sourced manifest entries.</span>
+        <span id="help-wipe-all" class="pcgw-action-help">Permanently deletes all PCGW data including save location entries. Clients will lose PCGW-sourced save paths until fully re-fetched. Cannot be undone.</span>
       </div>
     </div>
   </section>
+
 </div>
 {{end}}

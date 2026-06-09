@@ -37,7 +37,7 @@ When started without `--console`, the client runs in the system tray.
 - **Issues** — conflict count, pending offline uploads, last error (with link to log).
 - **Account & Setup** (submenu) — server URL, sync interval, login, **Detect launcher paths**, **Refresh manifest**.
 - **Advanced** (submenu) — edit config, view log, open data folder, run at startup, version, check/install updates.
-  - **Local status page** — opens a local browser page (`http://127.0.0.1:41234/dashboard`) with live sync status, watched games, pending uploads, and conflicts.
+  - **Local status page** — opens a local browser page (`http://127.0.0.1:41234/dashboard`) with live sync status, watched games, pending uploads, and conflicts. The page uses the same professional dark design system as the server WebUI (compiled CSS, DM Sans font, indigo accent — fully offline, no CDN).
 
 Ready + enabled discovered games sync automatically; there is no separate "add to sync" step for games the manifest covers and whose save folder exists. For games the manifest doesn't cover (or with a non-standard folder), use **Add a game manually…**.
 
@@ -48,6 +48,8 @@ Toasts (via the OS notification system) for sync complete/failed, new saves uplo
 ### First-run setup wizard
 
 If not logged in, the tray opens a local browser setup page (`http://127.0.0.1:41234`). On Windows, tray **Login...** now opens this browser page by default; the native Walk dialog is available as a fallback via a direct sub-item. After login, the page polls `/status` for discovery progress and lists matched games.
+
+The local browser UI (`client/webui/`) is fully embedded in the client binary — it shares the server's compiled CSS, vendored fonts (DM Sans, JetBrains Mono), and component classes, so both UIs look like the same product. All pages (Setup, Dashboard, Games, Quick Actions, Help, About) are served from `127.0.0.1` only and use the same dark theme with indigo accent.
 
 ### Autostart
 

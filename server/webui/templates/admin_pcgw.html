@@ -1,21 +1,37 @@
 {{template "layout" .}}
-{{define "admin_pcgw_title"}}PCGW Games — GSBS Admin{{end}}
+{{define "admin_pcgw_title"}}PCGW Sync — GSBS Admin{{end}}
 {{define "admin_pcgw_content"}}
-<section class="stats-row stats-row-5" aria-label="PCGW statistics">
+<nav class="breadcrumb" aria-label="Breadcrumb">
+  <a href="/admin">Admin</a> / PCGW Sync
+</nav>
+
+<div class="panel">
+  <div class="panel-header">
+    <h2>PCGW Sync</h2>
+  </div>
+  <p class="panel-subtitle">Manage PCGamingWiki game data synchronization. Browse the games catalog, trigger sync jobs, and manage the save location manifest served to GSBS clients.</p>
+</div>
+
+<section class="stats-row stats-row-6" aria-label="PCGW statistics">
   <div class="stat-card"><div class="stat-value">{{.Stats.TotalGames}}</div><div class="stat-label">Total games</div></div>
-  <div class="stat-card"><div class="stat-value">{{.Stats.OK}}</div><div class="stat-label">OK</div></div>
+  <div class="stat-card"><div class="stat-value">{{.Stats.OK}}</div><div class="stat-label">Parse OK</div></div>
   <div class="stat-card"><div class="stat-value">{{.Stats.Partial}}</div><div class="stat-label">Partial</div></div>
   <div class="stat-card"><div class="stat-value">{{.Stats.Failed}}</div><div class="stat-label">Failed</div></div>
-  <div class="stat-card"><div class="stat-value">v{{.Stats.ManifestVersion}}</div><div class="stat-label">Manifest</div></div>
+  <div class="stat-card">
+    <div class="stat-value stat-value-sm">{{if .LatestSyncRun}}{{formatTime .LatestSyncRun.StartedAt}}{{else}}—{{end}}</div>
+    <div class="stat-label">Last sync</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value stat-value-sm">{{if .JobRunning}}Running{{else if .LatestSyncRun}}Idle{{else}}Never{{end}}</div>
+    <div class="stat-label">Status</div>
+  </div>
 </section>
 
-<div id="job-status">
+<div id="job-status" role="status" aria-live="polite" aria-label="PCGW sync job status">
   {{template "partials/admin_pcgw_job_status.html" .}}
 </div>
-<p class="cell-muted jobs-meta" style="margin:-0.25rem 0 1rem 1.25rem;">{{.CapStatusText}}</p>
-{{if .CapReached}}
-<p class="notice notice-warn" style="margin:0 1.25rem 1rem;">Run another Phase 2 parse/store action to continue the remaining queue.</p>
-{{end}}
+
+{{template "partials/admin_pcgw_actions.html" .}}
 
 <section class="panel">
   <div class="panel-header-actions">
@@ -70,6 +86,6 @@
 {{define "admin_pcgw_scripts"}}
 <div hidden
      sse-swap="job-progress,job-finished"
-     hx-trigger="job-progress from:body"
+     hx-trigger="job-progress from:body, job-finished from:body"
      hx-get="/admin/partial/pcgw-job-status" hx-target="#job-status" hx-swap="innerHTML"></div>
 {{end}}

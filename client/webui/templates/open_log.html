@@ -1,0 +1,41 @@
+{{define "open_log"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GSBS — Open log</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="app-shell">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  {{template "partials/topbar.html" .}}
+  <main id="main-content" class="page-content" role="main">
+    {{template "partials/alerts.html" .}}
+
+    <h1 style="font-size:1.1rem;font-weight:700;margin:0 0 1.25rem;">Open client log</h1>
+
+    <section class="panel" aria-labelledby="log-heading">
+      <div class="panel-header">
+        <h2 id="log-heading">Log file</h2>
+      </div>
+      <div style="padding:0 1.25rem 1.25rem;">
+        <p style="margin:0 0 0.75rem;font-size:0.875rem;color:var(--text-secondary);">
+          Opening your local client log in the default application.
+        </p>
+        {{if .LogPath}}
+        <p style="margin:0 0 0.75rem;"><code class="code-inline">{{.LogPath}}</code></p>
+        {{end}}
+        <p style="margin:0;font-size:0.8125rem;color:var(--text-muted);">
+          If nothing opens, copy the path above and open it manually in your preferred text editor.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;max-width:24rem;"></div>
+  <script src="/static/toast.js"></script>
+</body>
+</html>
+{{end}}

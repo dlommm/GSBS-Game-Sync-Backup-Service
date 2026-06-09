@@ -6,9 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{renderPageBlock .PageName "title" .}}</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body class="{{if .BodyClass}}{{.BodyClass}}{{else if .AdminNav}}admin-shell{{else}}app-shell{{end}}"
@@ -25,12 +22,20 @@
   {{end}}
   <script src="/static/htmx.min.js"></script>
   <script src="/static/ext/sse.js"></script>
+  <script src="/static/toast.js"></script>
   <script>
   document.body.addEventListener('htmx:configRequest', function(evt) {
     evt.detail.credentials = 'same-origin';
   });
+  document.body.addEventListener('audit-updated', function(evt) {
+    if (window.gsbs && window.gsbs.toast) {
+      var msg = (evt.detail && evt.detail.data) ? evt.detail.data : 'Activity log updated';
+      window.gsbs.toast(msg, 'info', 3000);
+    }
+  });
   </script>
   {{renderPageBlock .PageName "scripts" .}}
+  <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>
 {{end}}

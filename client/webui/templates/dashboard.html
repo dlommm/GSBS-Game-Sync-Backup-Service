@@ -1,0 +1,231 @@
+{{define "dashboard"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GSBS — Local Status</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="app-shell">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  {{template "partials/topbar.html" .}}
+  <main id="main-content" class="page-content" role="main">
+    {{template "partials/alerts.html" .}}
+
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.25rem;">
+      <div>
+        <h1 style="font-size:1.1rem;font-weight:700;margin:0 0 0.15rem;">GSBS Local Status</h1>
+        <p id="refreshLabel" style="margin:0;font-size:0.75rem;color:var(--text-muted);" aria-live="polite">Loading…</p>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button id="syncNowBtn" class="btn-primary" onclick="triggerSync()" type="button">Sync now</button>
+        <a id="serverDashLink" href="#" target="_blank" rel="noopener" class="btn-ghost">Server dashboard →</a>
+      </div>
+    </div>
+
+    <div class="stats-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.75rem;margin-bottom:1rem;" role="region" aria-label="Status overview">
+      <div class="stat-card">
+        <div class="stat-label">Connection</div>
+        <div id="connStatus" style="display:flex;align-items:center;gap:0.35rem;margin:0.25rem 0;">
+          <span id="conn-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-muted);flex-shrink:0;" aria-hidden="true"></span>
+          <span id="conn-label" class="stat-value" style="font-size:0.9rem;">—</span>
+        </div>
+        <p id="serverURLLabel" style="margin:0;font-size:0.7rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></p>
+        <p id="authFailedLabel" class="hidden" style="margin:0.2rem 0 0;font-size:0.75rem;font-weight:600;color:var(--error);" aria-live="polite">⚠ Re-login required</p>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Last sync</div>
+        <div id="lastSyncStatus" style="display:flex;align-items:center;gap:0.35rem;margin:0.25rem 0;">
+          <span id="sync-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-muted);flex-shrink:0;" aria-hidden="true"></span>
+          <span id="sync-label" class="stat-value" style="font-size:0.9rem;">—</span>
+        </div>
+        <p id="lastSyncErr" style="margin:0;font-size:0.7rem;color:var(--error);overflow:hidden;text-overflow:ellipsis;" aria-live="polite"></p>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Watcher</div>
+        <div id="watcherStatus" style="display:flex;align-items:center;gap:0.35rem;margin:0.25rem 0;">
+          <span id="watch-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-muted);flex-shrink:0;" aria-hidden="true"></span>
+          <span id="watch-label" class="stat-value" style="font-size:0.9rem;">—</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Discovered</div>
+        <div id="discoveredCount" class="stat-value">—</div>
+        <p style="margin:0;font-size:0.7rem;color:var(--text-muted);">games matched</p>
+      </div>
+    </div>
+
+    <div id="updateCard" class="notice notice-warn hidden" style="display:none;margin-bottom:1rem;" role="status">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
+        <div>
+          <p style="margin:0;font-size:0.75rem;font-weight:600;">Update available</p>
+          <p id="updateTag" style="margin:0.2rem 0 0;font-size:0.9rem;font-weight:700;">—</p>
+        </div>
+        <svg style="width:1.25rem;height:1.25rem;flex-shrink:0;color:var(--warning);" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+      </div>
+      <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">Open the tray menu → Advanced → Install update</p>
+    </div>
+
+    <div id="updateCheckedRow" style="display:none;margin-bottom:0.75rem;font-size:0.75rem;color:var(--text-muted);" aria-live="polite">
+      <span>Update check: </span>
+      <span id="updateCheckedAgo">—</span>
+      <span id="updateUpToDateBadge" class="hidden" style="margin-left:0.35rem;display:inline-flex;align-items:center;gap:0.2rem;border-radius:9999px;background:var(--success-muted);color:var(--success);padding:0.1rem 0.5rem;font-size:0.7rem;">
+        <svg style="width:0.65rem;height:0.65rem;" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+        up to date
+      </span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
+      <div id="pendingCard" style="display:none;" role="status" aria-live="polite">
+        <div class="stat-card" style="background:var(--warning-muted);border-color:rgba(234,179,8,.25);">
+          <div class="stat-label" style="color:var(--warning);">Pending uploads</div>
+          <div id="pendingCount" class="stat-value" style="color:var(--warning);">0</div>
+        </div>
+      </div>
+      <div id="conflictCard" style="display:none;" role="alert" aria-live="polite">
+        <div class="stat-card" style="background:var(--error-muted);border-color:rgba(239,68,68,.25);">
+          <div class="stat-label" style="color:var(--error);">Conflicts</div>
+          <div id="conflictCount" class="stat-value" style="color:var(--error);">0</div>
+          <p style="margin:0.25rem 0 0;font-size:0.7rem;color:var(--error);">Use tray menu to resolve</p>
+        </div>
+      </div>
+    </div>
+
+    <section class="panel" aria-labelledby="gameList-heading">
+      <div class="panel-header">
+        <h2 id="gameList-heading">Matched games</h2>
+      </div>
+      <ul id="gameList" role="list" aria-live="polite">
+        <li class="panel-empty">Loading…</li>
+      </ul>
+    </section>
+
+    <p style="margin-top:1rem;text-align:center;font-size:0.75rem;color:var(--text-muted);">
+      <a href="/quick-actions" style="color:inherit;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Quick actions</a>
+      &nbsp;·&nbsp;
+      <a href="/help" style="color:inherit;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Help</a>
+      &nbsp;·&nbsp;
+      <a href="/open-log" style="color:inherit;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Open log</a>
+    </p>
+  </main>
+
+  <div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;max-width:24rem;"></div>
+  <script src="/static/toast.js"></script>
+  <script>
+  function timeAgo(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    var sec = Math.floor((Date.now() - d) / 1000);
+    if (sec < 5) return 'just now';
+    if (sec < 60) return sec + 's ago';
+    if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+    if (sec < 86400) return (sec / 3600).toFixed(1) + 'h ago';
+    return Math.floor(sec / 86400) + 'd ago';
+  }
+
+  function setDot(dotId, labelId, ok) {
+    var dot = document.getElementById(dotId);
+    var lbl = document.getElementById(labelId);
+    if (dot) dot.style.background = ok === true ? 'var(--success)' : ok === false ? 'var(--error)' : 'var(--text-muted)';
+    return lbl;
+  }
+
+  function refresh() {
+    fetch('/status').then(function(r) { return r.json(); }).then(function(s) {
+      document.getElementById('refreshLabel').textContent = 'Updated just now';
+
+      var connLabel = setDot('conn-dot', 'conn-label', s.logged_in ? (s.auth_failed ? false : true) : false);
+      connLabel.textContent = s.auth_failed ? 'Re-login required' : (s.logged_in ? 'Logged in' : 'Not connected');
+      document.getElementById('serverURLLabel').textContent = s.server_url || '';
+      var authFailed = document.getElementById('authFailedLabel');
+      if (authFailed) authFailed.classList.toggle('hidden', !s.auth_failed);
+      if (s.server_url) {
+        document.getElementById('serverDashLink').href = s.server_url.replace(/\/$/, '') + '/dashboard';
+      }
+
+      var syncOK = s.last_sync_at ? s.last_sync_ok : null;
+      var syncLabel = setDot('sync-dot', 'sync-label', syncOK);
+      syncLabel.textContent = s.last_sync_at ? timeAgo(s.last_sync_at) : 'Never';
+      var errEl = document.getElementById('lastSyncErr');
+      errEl.textContent = s.last_sync_err || '';
+
+      var watchLabel = setDot('watch-dot', 'watch-label', s.watcher_healthy);
+      watchLabel.textContent = s.watcher_healthy ? 'Healthy' : 'Recovering';
+
+      document.getElementById('discoveredCount').textContent = s.matched_games;
+
+      var pending = document.getElementById('pendingCard');
+      document.getElementById('pendingCount').textContent = s.pending_uploads;
+      pending.style.display = s.pending_uploads === 0 ? 'none' : '';
+
+      var conflict = document.getElementById('conflictCard');
+      document.getElementById('conflictCount').textContent = s.conflict_count;
+      conflict.style.display = s.conflict_count === 0 ? 'none' : '';
+
+      var updateCard = document.getElementById('updateCard');
+      var updateCheckedRow = document.getElementById('updateCheckedRow');
+      var updateUpToDateBadge = document.getElementById('updateUpToDateBadge');
+      if (s.update_status === 'available' && s.update_available_tag) {
+        document.getElementById('updateTag').textContent = s.update_available_tag;
+        updateCard.style.display = '';
+      } else {
+        updateCard.style.display = 'none';
+      }
+      if (s.update_last_checked_ago) {
+        document.getElementById('updateCheckedAgo').textContent = s.update_last_checked_ago;
+        updateCheckedRow.style.display = '';
+        if (updateUpToDateBadge) updateUpToDateBadge.classList.toggle('hidden', s.update_status !== 'up_to_date');
+      } else if (s.update_status === 'checking') {
+        document.getElementById('updateCheckedAgo').textContent = 'checking…';
+        updateCheckedRow.style.display = '';
+        if (updateUpToDateBadge) updateUpToDateBadge.classList.add('hidden');
+      } else {
+        updateCheckedRow.style.display = 'none';
+      }
+
+      var ul = document.getElementById('gameList');
+      var titles = s.game_titles || [];
+      if (titles.length === 0) {
+        ul.innerHTML = '<li class="panel-empty">No games matched yet — discovery runs automatically after login.</li>';
+      } else {
+        ul.innerHTML = titles.slice(0, 20).map(function(t) {
+          return '<li style="display:flex;align-items:center;gap:0.5rem;padding:0.625rem 1.25rem;font-size:0.875rem;border-bottom:1px solid var(--border);">' +
+            '<svg style="width:1rem;height:1rem;color:var(--success);flex-shrink:0;" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' +
+            '<span>' + t.replace(/</g, '&lt;') + '</span>' +
+            '</li>';
+        }).join('');
+        if (titles.length > 20) {
+          ul.innerHTML += '<li class="panel-empty">… and ' + (titles.length - 20) + ' more</li>';
+        }
+      }
+    }).catch(function() {
+      document.getElementById('refreshLabel').textContent = 'Could not reach status endpoint';
+    });
+  }
+
+  function triggerSync() {
+    var btn = document.getElementById('syncNowBtn');
+    btn.disabled = true;
+    btn.textContent = 'Syncing…';
+    fetch('/api/sync-now', { method: 'POST' }).then(function() {
+      setTimeout(function() {
+        btn.disabled = false;
+        btn.textContent = 'Sync now';
+        refresh();
+      }, 2000);
+    }).catch(function() {
+      btn.disabled = false;
+      btn.textContent = 'Sync now';
+    });
+  }
+
+  refresh();
+  setInterval(refresh, 5000);
+  </script>
+</body>
+</html>
+{{end}}

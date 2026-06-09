@@ -13,7 +13,7 @@
   {{if .Fetches}}
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th>Client</th><th>User</th><th>Entries</th><th>Fetched</th></tr></thead>
+      <thead><tr><th scope="col">Client</th><th scope="col">User</th><th scope="col">Entries</th><th scope="col">Fetched</th></tr></thead>
       <tbody>
         {{range .Fetches}}
         <tr>
@@ -34,7 +34,7 @@
   {{if .AuditLog}}
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th></tr></thead>
+      <thead><tr><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Target</th><th scope="col">Details</th></tr></thead>
       <tbody>
         {{range .AuditLog}}
         <tr>
@@ -56,7 +56,7 @@
   {{if .StatsSnapshots}}
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th>Time</th><th>Users</th><th>Clients</th><th>Saves</th><th>Storage</th></tr></thead>
+      <thead><tr><th scope="col">Time</th><th scope="col">Users</th><th scope="col">Clients</th><th scope="col">Saves</th><th scope="col">Storage</th></tr></thead>
       <tbody>
         {{range .StatsSnapshots}}
         <tr>

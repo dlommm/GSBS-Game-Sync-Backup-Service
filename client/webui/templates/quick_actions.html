@@ -1,0 +1,52 @@
+{{define "quick_actions"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GSBS — Quick actions</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="app-shell">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  {{template "partials/topbar.html" .}}
+  <main id="main-content" class="page-content" role="main">
+    {{template "partials/alerts.html" .}}
+
+    <h1 style="font-size:1.1rem;font-weight:700;margin:0 0 0.25rem;">Quick actions</h1>
+    <p style="font-size:0.875rem;color:var(--text-secondary);margin:0 0 1.25rem;">Fast shortcuts for common local client tasks</p>
+
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:0.75rem;">
+      <button type="button" id="syncNowBtn" onclick="triggerSync(this)" class="btn-primary" style="text-align:left;padding:0.875rem 1rem;">
+        Run sync now
+      </button>
+      <a href="/dashboard" class="btn-ghost" style="display:block;padding:0.875rem 1rem;text-align:left;">Open local dashboard</a>
+      <a href="/games" class="btn-ghost" style="display:block;padding:0.875rem 1rem;text-align:left;">Add a game folder</a>
+      <a href="/open-log" class="btn-ghost" style="display:block;padding:0.875rem 1rem;text-align:left;">Open log file</a>
+      <a href="/help" class="btn-ghost" style="display:block;padding:0.875rem 1rem;text-align:left;">Troubleshooting help</a>
+      <a href="/" class="btn-ghost" style="display:block;padding:0.875rem 1rem;text-align:left;">Return to setup</a>
+    </div>
+  </main>
+
+  <div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;max-width:24rem;"></div>
+  <script src="/static/toast.js"></script>
+  <script>
+  function triggerSync(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Syncing…';
+    fetch('/api/sync-now', { method: 'POST' }).then(function() {
+      btn.textContent = 'Sync requested';
+      setTimeout(function() {
+        btn.disabled = false;
+        btn.textContent = 'Run sync now';
+      }, 1600);
+    }).catch(function() {
+      btn.disabled = false;
+      btn.textContent = 'Try sync again';
+    });
+  }
+  </script>
+</body>
+</html>
+{{end}}

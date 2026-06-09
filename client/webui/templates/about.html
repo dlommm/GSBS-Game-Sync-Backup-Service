@@ -1,0 +1,47 @@
+{{define "about"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GSBS — About this client</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="app-shell">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  {{template "partials/topbar.html" .}}
+  <main id="main-content" class="page-content" role="main">
+    {{template "partials/alerts.html" .}}
+
+    <h1 style="font-size:1.1rem;font-weight:700;margin:0 0 1.25rem;">About this client</h1>
+
+    <section class="panel" aria-labelledby="about-heading">
+      <div class="panel-header">
+        <h2 id="about-heading">Build &amp; runtime details</h2>
+      </div>
+      <dl class="config-grid" style="padding:0 1.25rem 1.25rem;">
+        <div>
+          <dt style="font-size:0.8125rem;color:var(--text-muted);">Client version</dt>
+          <dd style="margin-top:0.25rem;font-weight:600;font-size:0.9375rem;">{{if .Version}}{{.Version}}{{else}}—{{end}}</dd>
+        </div>
+        <div>
+          <dt style="font-size:0.8125rem;color:var(--text-muted);">Runtime</dt>
+          <dd style="margin-top:0.25rem;font-weight:600;font-size:0.9375rem;">{{if .GOOS}}{{.GOOS}}/{{.GOARCH}}{{else}}—{{end}}</dd>
+        </div>
+        <div style="grid-column:1/-1;">
+          <dt style="font-size:0.8125rem;color:var(--text-muted);">What this client does</dt>
+          <dd style="margin-top:0.25rem;color:var(--text-secondary);font-size:0.875rem;">
+            Watches local save folders, uploads changes on detection, and pulls fresh saves from your GSBS server.
+            Installed games are matched automatically via the manifest from the server.
+          </dd>
+        </div>
+      </dl>
+    </section>
+  </main>
+
+  <div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;max-width:24rem;"></div>
+  <script src="/static/toast.js"></script>
+</body>
+</html>
+{{end}}

@@ -2,6 +2,27 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.0] - 2026-06-09
+
+### Added
+
+- **Unified WebUI design system**: Server and client browser UIs now share one compiled dark theme (indigo accent, DM Sans / JetBrains Mono), vendored woff2 fonts (no CDN), and semantic component classes (`.panel`, `.stat-card`, `.btn-primary`, `.topbar`, etc.).
+- **Client WebUI package** (`client/webui/`): Embedded Go templates replace inline HTML in `setup_server.go`; pages for Setup, Dashboard, Games, Quick Actions, Help, About, and Open Log; `/static/` served from embedded assets (works offline).
+- **Shared toast notifications**: `toast.js` on server and client for success/error/info/warn feedback; server wires `audit-updated` SSE events to toasts.
+- **PCGW admin polish**: Six-card stats summary (total games, save locations, last sync, status), breadcrumb, improved action cards with `aria-describedby`, idle job state, and table caption for accessibility.
+- **Client WebUI tests**: `client/webui/template_names_test.go` — parse and render tests for all client pages.
+
+### Changed
+
+- **Build**: `script/build-webui.sh` compiles Tailwind once and syncs `app.css`, fonts, favicon, and logo to both `server/webui/static/` and `client/webui/static/`.
+- **Server WebUI**: Removed Google Fonts CDN; self-hosted fonts; `scope="col"` on table headers; improved empty states, ARIA labels, and mobile responsive rules for admin timeline and PCGW controls.
+- **Client local UI**: Dropped Tailwind CDN; unified topbar nav (About included); form validation uses toasts instead of `alert()`.
+- **Documentation**: `docs/ARCHITECTURE.md` and `docs/CLIENT.md` updated for shared WebUI architecture.
+
+### Fixed
+
+- **Server/job**: PCGW incremental sync no-op gate now accounts for missing backlog entries so Phase 2 ingest is not skipped when pages remain unprocessed.
+
 ## [2.0.6] - 2026-06-08
 
 ### Fixed

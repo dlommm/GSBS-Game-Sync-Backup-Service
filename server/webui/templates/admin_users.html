@@ -9,7 +9,7 @@
   {{if .Users}}
   <div class="table-wrap users-table-wrap">
     <table class="data-table users-table">
-      <thead><tr><th>Username</th><th>Status</th><th>Quota</th><th class="col-clients">Clients</th><th class="col-saves">Saves</th><th class="col-storage">Storage</th><th class="th-action">Actions</th></tr></thead>
+      <thead><tr><th scope="col">Username</th><th scope="col">Status</th><th scope="col">Quota</th><th scope="col" class="col-clients">Clients</th><th scope="col" class="col-saves">Saves</th><th scope="col" class="col-storage">Storage</th><th scope="col" class="th-action">Actions</th></tr></thead>
       <tbody>
         {{range .Users}}
         <tr>
@@ -58,7 +58,7 @@
       </tbody>
     </table>
   </div>
-  {{else}}<div class="panel-empty"><p>No users.</p></div>{{end}}
+  {{else}}<div class="panel-empty"><p>No users yet. Use the button above to create the first account.</p></div>{{end}}
 </section>
 
 <section class="panel">
@@ -66,7 +66,7 @@
   {{if .Clients}}
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th>User</th><th>Name</th><th>Platform</th><th>Last active</th><th class="th-action"></th></tr></thead>
+      <thead><tr><th scope="col">User</th><th scope="col">Name</th><th scope="col">Platform</th><th scope="col">Last active</th><th scope="col" class="th-action"></th></tr></thead>
       <tbody>
         {{range .Clients}}
         <tr>
@@ -86,7 +86,7 @@
       </tbody>
     </table>
   </div>
-  {{else}}<div class="panel-empty"><p>No clients.</p></div>{{end}}
+  {{else}}<div class="panel-empty"><p>No clients registered. Run <code>gsbs-client login</code> on a PC to connect it.</p></div>{{end}}
 </section>
 
 <dialog id="create-user-dialog">

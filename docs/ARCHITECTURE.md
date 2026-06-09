@@ -115,11 +115,21 @@ sequenceDiagram
 - **PCGW export/import**: Admin can download `GET /admin/pcgw/export/manifest.json.gz` (gzip bundle with manifest + PCGW mirror tables) and upload via `POST /admin/pcgw/import` (`merge` or `full_replace`). Post-import validation counts rows and samples game_data.
 - **First-start auto sync**: Optional `pcgw_auto_run_on_first_start` in admin settings; runs incremental sync once when `pcgw_first_run_done` is unset.
 
-## Admin WebUI
+## WebUI (server and client)
 
-Premium WebUI under `server/webui/`: Tailwind-compiled `static/app.css`, embedded HTMX 2.0.4 + SSE extension, shared `templates/layout.html`, and HTMX partials for live updates.
+Both UIs share a single compiled design system. Run `./script/build-webui.sh` (requires Node/npx) before building — this compiles Tailwind CSS from `server/webui/static/src/input.css` and syncs the output (`app.css`, fonts, favicon) to both `server/webui/static/` and `client/webui/static/`. Fonts (DM Sans, JetBrains Mono) are vendored as woff2 files — no CDN dependency, works offline and in Docker.
 
-- **Dashboard** (`GET /dashboard`): Stats quota bar, clients (with user revoke via `POST /dashboard/clients/revoke`), searchable saves, activity timeline. SSE on `GET /dashboard/events`; partials refresh on `save-updated`.
+### Shared design system
+
+- **Source**: `server/webui/static/src/input.css` — CSS variables (dark theme tokens), 60+ semantic component classes (`.panel`, `.stat-card`, `.btn-primary`, `.topbar`, `.badge-*`, etc.), and `@font-face` rules for vendored fonts.
+- **Build**: `script/build-webui.sh` compiles via `tailwindcss@3` scanning both `server/webui/templates/**` and `client/webui/templates/**`, then syncs assets to the client.
+- **Toast system**: `server/webui/static/toast.js` (also synced to `client/webui/static/`) provides `gsbs.toast(msg, type)` for success/error/info/warn notifications. Wired to SSE `audit-updated` events on the server; wired to client polling callbacks.
+
+### Server WebUI
+
+`server/webui/`: Tailwind-compiled `static/app.css`, embedded HTMX 2.0.4 + SSE extension, shared `templates/layout.html`, and HTMX partials for live updates.
+
+- **Dashboard** (`GET /dashboard`): Stats quota bar, clients (with user revoke via `POST /dashboard/clients/revoke`), searchable saves, activity timeline. SSE on `GET /dashboard/events`; partials refresh on `save-updated`. `audit-updated` SSE events surface as toast notifications.
 - **Admin routes** (session + admin role / `GSBS_ADMIN_USERNAME`):
   - `GET /admin` — overview with SVG charts from `stats_snapshots`, global stats, server config
   - `GET /admin/users` — users table with client-count bars, all clients with revoke
@@ -127,9 +137,20 @@ Premium WebUI under `server/webui/`: Tailwind-compiled `static/app.css`, embedde
   - `GET /admin/activity` — jobs (`GET /admin/partial/jobs`), manifest fetches, audit log, stats snapshots
   - `GET /admin/settings` — PCGW cron, filters, first-start auto sync (`POST /admin/settings/save`)
   - `GET /admin/analytics` — storage, active clients, sync volume, PCGW coverage %, SVG trend charts
+  - `GET /admin/pcgw` — PCGW sync status with 6 summary stat cards, control actions, job progress
 - **Admin POST**: `POST /admin/revoke`, `/admin/push-manifest`, `/admin/run-job`, user disable/enable/delete/quota (unchanged paths).
-- **Assets**: Run `./script/build-webui.sh` before server build (also in `script/release.sh`). Icons via `go run ./cmd/resize-icon`.
 - **Handler layout**: `server/webui/router.go`, `handlers_*.go`, `render.go` (template funcs: `chartLineSVG`, `auditLabel`).
+
+### Client WebUI
+
+`client/webui/`: Embedded Go templates + the same compiled `app.css` (synced from server). Served locally on `127.0.0.1:41234–41239`. No CDN dependency — fonts, CSS, and JS are all embedded in the binary.
+
+- **Package**: `github.com/gsbs/gsbs/client/webui` — `embed.go` (embeds templates + static), `render.go` (`PageData`, `ParseTemplates()`, `RenderPage()`).
+- **Pages**: Setup/login (`/`), Dashboard (`/dashboard`), Add game (`/games`), Quick actions (`/quick-actions`), Help (`/help`), About (`/about`), Open log (`/open-log`).
+- **JSON endpoints** (not pages): `/status`, `/games/search`, `/api/sync-now`.
+- **Navigation**: All 6 pages share the same `.topbar` + `.topbar-nav` structure as the server UI; About is included in the nav (previously orphaned).
+- **Live updates**: Dashboard polls `/status` every 5 seconds; status dots use `var(--success)` / `var(--error)` CSS variables; toast notifications replace `alert()` calls.
+- **Setup handler** (`client/setup_server.go`): Port binding, tray wiring, and JSON logic unchanged; HTML rendering delegates to `client/webui` templates.
 
 ## Operational behaviour
 
@@ -166,3 +187,33 @@ GSBS 2.0 introduces a one-way DB migration that:
    Check the logs for row counts and any warnings.
 3. **Upgrade for real** by restarting the container without `GSBS_DRY_RUN_MIGRATION`. The migration runs automatically on startup.
 4. After the migration, existing clients will re-sync saves for PCGW-tracked games using the new `path_key` scheme (a one-time re-sync check — no data loss).
+
+## PCGW Sync Troubleshooting
+
+### Choosing a sync action
+
+| Action | When to use |
+|---|---|
+| **Incremental Sync** | Routine use. Refreshes the game catalog, then processes new, changed, or previously failed games. Handles the full backlog safely. |
+| **Refresh New Games** | When you want to pick up newly added games from PCGamingWiki without waiting for changed-page detection. Performs a fresh catalog scan and processes missing entries. Equivalent to Incremental Sync after the no-op reliability fix (missing entries are always processed). |
+| **Auto Catch-Up** | After a long outage or first-time setup. Repeats budgeted sync cycles automatically until the backlog is empty (up to 25 cycles). Stops early if no progress is made in two consecutive cycles. |
+| **Full Reparse** | Rarely needed. Re-fetches and re-parses all PCGW pages from scratch, bypassing resume checkpoints. May take many hours. |
+
+### Understanding the status card
+
+- **Remote / Local / Missing**: Remote = total page IDs in the PCGamingWiki catalog. Local = pages successfully stored in GSBS. Missing = pages in the catalog that have never been processed. A non-zero Missing count means data is incomplete; run Incremental Sync to process it.
+- **Dead-letter**: Pages that have failed repeatedly and been permanently excluded from normal sync. They still appear in the catalog but won't be retried unless you use "Retry Failed Pages". Click the count to see which games are affected.
+- **Last queue size**: How many pages were queued for processing in the most recent run. A queue of 0 with a non-zero Missing count indicates the no-op gate fired (possible stale state — run Incremental Sync to force a check).
+- **Resumable run**: A prior run that was interrupted mid-ingest. The next Incremental Sync will automatically resume from where it left off.
+- **Manifest budget**: Maximum number of pages parsed per run, controlled by `GSBS_PCGW_MAX_PAGES_PER_RUN` (default 5000). If the budget is exhausted before the backlog is cleared, run Incremental Sync again or use Auto Catch-Up.
+
+### No-op skip reliability
+
+The incremental sync includes an optimization that skips Phase 2 (page ingest) when the catalog hash is unchanged and there is no known backlog. Prior to the reliability fix, this check did not query the **missing** entries list, so a budget-interrupted run could leave entries unprocessed even after repeated incremental syncs. The fix adds a `missingCount` check: Phase 2 is only skipped when `missingCount == 0 AND failedCount == 0 AND titleBackfillCount == 0`. If you suspect the no-op is incorrectly firing, run a Full Reparse or inspect the Missing count in the status card.
+
+### Dead-letters and permanent failures
+
+A page becomes a dead-letter when its retry count exceeds the configured threshold. Dead-letter pages are excluded from Incremental Sync to avoid repeated failures. To clear them:
+1. Investigate the parse failure via the game detail page (`/admin/pcgw/<pageID>`).
+2. Use "Retry Failed Pages" from Advanced Maintenance to force a retry attempt.
+3. If the page consistently fails, it may have non-standard wikitext that the parser does not support.

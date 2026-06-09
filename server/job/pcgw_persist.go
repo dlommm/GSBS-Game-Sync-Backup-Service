@@ -140,7 +140,8 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		// Resuming into Phase 2: load Phase 1 stats from prior run.
 		if latest, err := st.GetLatestPCGWSyncRun(ctx); err == nil && latest != nil {
 			phase1.RemoteTotalIDs = latest.RemoteTotalIDs
-			phase1.CatalogHash = latest.CatalogHash
+			// Do not restore CatalogHash from prior run — let backlog checks decide
+			// whether Phase 2 should run rather than relying on a potentially stale hash.
 			phase1.MissingLocalIDs = latest.MissingLocalIDs
 		}
 	}
@@ -153,7 +154,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	// ─── Catalog hash no-op optimization ─────────────────────────────────────
 	if !opts.Full && !opts.RetryFailedOnly && phase1.CatalogHash != "" {
 		if prev, err := getPreviousCatalogHash(ctx, st); err == nil && prev == phase1.CatalogHash {
-			// No new IDs and no known failures — skip Phase 2.
+			// Catalog is unchanged — skip Phase 2 only when there is no backlog at all.
 			failedCount := 0
 			if ids, err := st.ListPCGWCatalogFailedPartial(ctx, 1, 0); err == nil {
 				failedCount = len(ids)
@@ -162,11 +163,16 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 			if rows, err := st.ListPCGWCatalogTitleBackfill(ctx, 1, 0); err == nil {
 				titleBackfillCount = len(rows)
 			}
-			if failedCount == 0 && titleBackfillCount == 0 {
-				log.Printf("pcgw sync: catalog hash unchanged, no pending failures/title backfills — skipping Phase 2")
+			missingCount := 0
+			if ids, err := st.ListPCGWCatalogMissing(ctx, 1, 0); err == nil {
+				missingCount = len(ids)
+			}
+			if missingCount == 0 && failedCount == 0 && titleBackfillCount == 0 {
+				log.Printf("pcgw sync: catalog hash unchanged, no missing/failed/title-backfill — skipping Phase 2")
 				finishRun(JobSuccess, "")
 				return bumpManifestAndReturn(ctx, st, 0)
 			}
+			log.Printf("pcgw sync: catalog hash unchanged but backlog non-empty (missing=%d failed=%d title_backfill=%d) — proceeding to Phase 2", missingCount, failedCount, titleBackfillCount)
 		}
 	}
 
@@ -182,38 +188,48 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		inQueue[id] = true
 	}
 
+	var missing []int64
+	var titleBackfill []types.PCGWCatalogEntry
+	var failedPartial []int64
+	var changedIDs []int64
+
 	if !opts.RetryFailedOnly {
 		// Priority 1: missing IDs
-		missing, err := st.ListPCGWCatalogMissing(ctx, 0, 0)
+		var err error
+		missing, err = st.ListPCGWCatalogMissing(ctx, 0, 0)
 		if err != nil {
 			log.Printf("pcgw sync: list missing: %v", err)
-		} else {
-			for _, id := range missing {
-				enqueue(id)
-			}
+			missing = nil
+		}
+		for _, id := range missing {
+			enqueue(id)
 		}
 	}
 
 	if !opts.RetryFailedOnly {
 		// Priority 2: rows with blank local title/page_name but non-empty catalog title.
-		titleBackfill, err := st.ListPCGWCatalogTitleBackfill(ctx, 0, 0)
+		var err error
+		titleBackfill, err = st.ListPCGWCatalogTitleBackfill(ctx, 0, 0)
 		if err != nil {
 			log.Printf("pcgw sync: list title-backfill: %v", err)
-		} else {
-			for _, row := range titleBackfill {
-				enqueue(row.PageID)
-				if strings.TrimSpace(row.Title) != "" {
-					titleHints[row.PageID] = strings.TrimSpace(row.Title)
-				}
+			titleBackfill = nil
+		}
+		for _, row := range titleBackfill {
+			enqueue(row.PageID)
+			if strings.TrimSpace(row.Title) != "" {
+				titleHints[row.PageID] = strings.TrimSpace(row.Title)
 			}
 		}
 	}
 
 	// Priority 3: failed/partial IDs
-	failedPartial, err := st.ListPCGWCatalogFailedPartial(ctx, 0, 0)
-	if err != nil {
-		log.Printf("pcgw sync: list failed/partial: %v", err)
-	} else {
+	{
+		var err error
+		failedPartial, err = st.ListPCGWCatalogFailedPartial(ctx, 0, 0)
+		if err != nil {
+			log.Printf("pcgw sync: list failed/partial: %v", err)
+			failedPartial = nil
+		}
 		for _, id := range failedPartial {
 			enqueue(id)
 		}
@@ -221,13 +237,14 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 
 	// Priority 4: changed rev IDs (only on full or incremental when not retry-only)
 	if !opts.RetryFailedOnly {
-		changedIDs, err := buildChangedQueue(ctx, st, client, filters)
+		var err error
+		changedIDs, err = buildChangedQueue(ctx, st, client, filters)
 		if err != nil {
 			log.Printf("pcgw sync: build changed queue: %v", err)
-		} else {
-			for _, id := range changedIDs {
-				enqueue(id)
-			}
+			changedIDs = nil
+		}
+		for _, id := range changedIDs {
+			enqueue(id)
 		}
 	}
 
@@ -245,7 +262,8 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		})
 	}
 
-	log.Printf("pcgw sync phase2: queue=%d budget=%d (resume_cursor=%d)", queueSize, budget, opts.ResumeQueueCursor)
+	log.Printf("pcgw sync phase2: queue=%d (missing=%d, title_backfill=%d, failed=%d, changed=%d) budget=%d (resume_cursor=%d)",
+		queueSize, len(missing), len(titleBackfill), len(failedPartial), len(changedIDs), budget, opts.ResumeQueueCursor)
 
 	// ─── Phase 2: Process queue with budget ───────────────────────────────────
 	startCursor := phase2StartCursor(opts.ResumeQueueCursor, queueSize, opts.ResumeCatalogScan)

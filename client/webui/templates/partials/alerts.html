@@ -1,0 +1,4 @@
+{{define "partials/alerts.html"}}
+{{if .Error}}<div class="alert alert-error" role="alert" aria-live="assertive">{{.Error}}</div>{{end}}
+{{if .Success}}<div class="alert alert-success" role="alert">{{.Success}}</div>{{end}}
+{{end}}

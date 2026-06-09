@@ -1,0 +1,54 @@
+{{define "help"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GSBS — Help</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="app-shell">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  {{template "partials/topbar.html" .}}
+  <main id="main-content" class="page-content" role="main">
+    {{template "partials/alerts.html" .}}
+
+    <h1 style="font-size:1.1rem;font-weight:700;margin:0 0 1.25rem;">Client help</h1>
+
+    <section class="panel" aria-labelledby="status-help-heading" style="margin-bottom:1rem;">
+      <div class="panel-header">
+        <h2 id="status-help-heading">What each status means</h2>
+      </div>
+      <div style="padding:0 1.25rem 1.25rem;">
+        <ul style="margin:0;padding:0;list-style:none;display:grid;gap:0.5rem;font-size:0.875rem;color:var(--text-secondary);">
+          <li><strong style="color:var(--text);">Connection:</strong> login and token state for this client.</li>
+          <li><strong style="color:var(--text);">Watcher:</strong> file watch pipeline health on your local save folders.</li>
+          <li><strong style="color:var(--text);">Pending uploads:</strong> queued files still waiting to push to the server.</li>
+          <li><strong style="color:var(--text);">Conflicts:</strong> manual choice needed — open the tray menu to resolve.</li>
+          <li><strong style="color:var(--text);">Discovered:</strong> number of installed games matched to the sync manifest.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="troubleshoot-heading">
+      <div class="panel-header">
+        <h2 id="troubleshoot-heading">Quick troubleshooting</h2>
+      </div>
+      <div style="padding:0 1.25rem 1.25rem;">
+        <ol style="margin:0;padding-left:1.25rem;display:grid;gap:0.5rem;font-size:0.875rem;color:var(--text-secondary);">
+          <li>Open <a href="/dashboard" style="color:var(--accent);text-decoration:none;font-weight:500;">Dashboard</a> and check for auth or watcher warnings.</li>
+          <li>Use <a href="/open-log" style="color:var(--accent);text-decoration:none;font-weight:500;">Open log</a> to inspect recent sync errors.</li>
+          <li>If a game is missing, add the save folder from <a href="/games" style="color:var(--accent);text-decoration:none;font-weight:500;">Add game</a>.</li>
+          <li>Run a manual sync from <a href="/quick-actions" style="color:var(--accent);text-decoration:none;font-weight:500;">Quick actions</a>.</li>
+          <li>If re-login is required, go to <a href="/" style="color:var(--accent);text-decoration:none;font-weight:500;">Setup</a> and reconnect.</li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;max-width:24rem;"></div>
+  <script src="/static/toast.js"></script>
+</body>
+</html>
+{{end}}
