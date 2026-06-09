@@ -68,6 +68,10 @@ type jobsViewData struct {
 	JobETAMin             int
 	JobPhaseLabel         string
 	AvgHistPagesPerSec    float64
+	// Idle ETA: how long to clear the remaining backlog when no job is running
+	IdleRunsNeeded   int
+	IdleTotalETASec  int
+	IdlePerRunETASec int
 }
 
 func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGWControls bool) jobsViewData {
@@ -178,6 +182,24 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 	} else {
 		data.JobETAMin = -1
 	}
+	// Idle ETA: estimate time to clear MissingLocal backlog (shown when no job is running)
+	if !data.JobRunning && data.CatalogStats.MissingLocal > 0 {
+		remaining := data.CatalogStats.MissingLocal
+		budget := data.MaxPagesPerRun
+		if budget <= 0 {
+			budget = 5000
+		}
+		data.IdleRunsNeeded = int(math.Ceil(float64(remaining) / float64(budget)))
+		if data.AvgHistPagesPerSec > 0.01 {
+			data.IdleTotalETASec = int(float64(remaining) / data.AvgHistPagesPerSec)
+			perRunPages := remaining
+			if budget < perRunPages {
+				perRunPages = budget
+			}
+			data.IdlePerRunETASec = int(float64(perRunPages) / data.AvgHistPagesPerSec)
+		}
+	}
+
 	// Human-readable phase label
 	switch data.JobPhase {
 	case "listing":
@@ -235,11 +257,15 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 		CapStatusText:         jobsData.CapStatusText,
 		ShowPCGWControls:      jobsData.ShowPCGWControls,
 		ResumableSyncRun:      jobsData.ResumableSyncRun,
+		CatalogStats:          jobsData.CatalogStats,
 		JobElapsedSec:         jobsData.JobElapsedSec,
 		JobPagesPerSec:        jobsData.JobPagesPerSec,
 		JobETAMin:             jobsData.JobETAMin,
 		JobPhaseLabel:         jobsData.JobPhaseLabel,
 		AvgHistPagesPerSec:    jobsData.AvgHistPagesPerSec,
+		IdleRunsNeeded:        jobsData.IdleRunsNeeded,
+		IdleTotalETASec:       jobsData.IdleTotalETASec,
+		IdlePerRunETASec:      jobsData.IdlePerRunETASec,
 	})
 }
 
@@ -377,6 +403,9 @@ func (h *WebHandler) serveAdminActivity(w http.ResponseWriter, r *http.Request) 
 		JobETAMin:             jobsData.JobETAMin,
 		JobPhaseLabel:         jobsData.JobPhaseLabel,
 		AvgHistPagesPerSec:    jobsData.AvgHistPagesPerSec,
+		IdleRunsNeeded:        jobsData.IdleRunsNeeded,
+		IdleTotalETASec:       jobsData.IdleTotalETASec,
+		IdlePerRunETASec:      jobsData.IdlePerRunETASec,
 	})
 }
 

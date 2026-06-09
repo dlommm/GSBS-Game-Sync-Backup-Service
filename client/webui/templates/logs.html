@@ -29,7 +29,10 @@
     <section class="panel">
       <div class="panel-header-actions">
         <h2>Filters</h2>
-        <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
+        <div class="panel-actions">
+          <a id="logs-csv-btn" href="/logs/export.csv" class="btn-ghost-sm" download="client-logs.csv">Export CSV</a>
+          <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
+        </div>
       </div>
       <form id="logs-filters" class="filter-toolbar" method="get" action="/logs">
         <select name="component" class="filter-select" aria-label="Application">
@@ -117,7 +120,12 @@
       }
     }
 
-    form.addEventListener('change', syncAutoRefresh);
+    form.addEventListener('change', function (evt) {
+      syncAutoRefresh();
+      if (evt.target.name !== 'auto' && evt.target.name !== 'refresh') {
+        refreshLogs();
+      }
+    });
     syncAutoRefresh();
   })();
   </script>

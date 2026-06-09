@@ -1,12 +1,14 @@
 package webui
 
 import (
+	"encoding/csv"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/gsbs/gsbs/pkg/logview"
 	"github.com/gsbs/gsbs/server/logx"
@@ -118,4 +120,34 @@ func adminLogSourceCandidates(goos string, getenv func(string) string) []adminLo
 
 func loadAdminLogEntries(path string, q logview.Query) ([]logview.Entry, error) {
 	return logview.LoadEntries(path, q, logview.ParseZerologLine)
+}
+
+func (h *WebHandler) serveAdminLogsCSV(w http.ResponseWriter, r *http.Request) {
+	if _, _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	q := logview.ParseQuery(r)
+	// Allow larger exports
+	if q.Limit < logview.MaxLimit {
+		q.Limit = logview.MaxLimit
+	}
+	sourcePath, _, sourcePresent := resolveAdminLogSource()
+	entries := []logview.Entry{}
+	if sourcePresent {
+		loaded, err := loadAdminLogEntries(sourcePath, q)
+		if err == nil {
+			entries = loaded
+		}
+	}
+
+	filename := "server-logs-" + time.Now().UTC().Format("2006-01-02T150405") + ".csv"
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"time", "app", "level", "event", "summary", "context", "raw"})
+	for _, e := range entries {
+		_ = cw.Write([]string{e.Timestamp, e.Component, e.Level, e.Event, e.Summary, e.Context, e.Raw})
+	}
+	cw.Flush()
 }

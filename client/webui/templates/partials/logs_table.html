@@ -18,7 +18,7 @@
         </td>
         <td class="log-event">{{if .Event}}{{.Event}}{{else}}—{{end}}</td>
         <td class="log-summary">{{if .Summary}}{{.Summary}}{{else}}{{.Message}}{{end}}</td>
-        <td class="log-context cell-muted">{{if .Context}}{{.Context}}{{else}}—{{end}}</td>
+        <td class="log-context cell-muted" title="{{.Context}}">{{if .Context}}{{.Context}}{{else}}—{{end}}</td>
         <td class="log-details">
           <details>
             <summary class="btn-ghost-sm">Raw</summary>
