@@ -349,6 +349,13 @@ func templateTestData(name string) interface{} {
 			MaxPagesPerRun:       500,
 			MaxPagesPerRunSource: "GSBS_PCGW_MAX_PAGES_PER_RUN",
 			CapStatusText:        "Phase 2 parse/store cap: 500 pages per run (GSBS_PCGW_MAX_PAGES_PER_RUN). Phase 1 catalog scan always fetches all IDs.",
+			ShowPCGWControls:     true,
+			ResumableSyncRun:     &types.PCGWSyncRun{ID: "r1", Mode: "incremental", Status: "interrupted", StartedAt: now, CheckpointPhase: "ingest", CheckpointQueueCursor: 42},
+			JobElapsedSec:        120,
+			JobPagesPerSec:       2.5,
+			JobETAMin:            15,
+			JobPhaseLabel:        "Phase 2: Parsing game data",
+			AvgHistPagesPerSec:   3.0,
 		}
 	case "admin_logs.html":
 		return adminLogsData{
@@ -504,10 +511,18 @@ func templateTestData(name string) interface{} {
 			"RecentJobs": []store.JobRun{
 				{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
 			},
-			"JobRunning":       false,
-			"JobProgressPages": 0,
-			"CapStatusText":    "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
-			"CSRFToken":        "csrf-test",
+			"JobRunning":         false,
+			"JobProgressPages":   0,
+			"JobProgressTotal":   0,
+			"JobGamesSkipped":    0,
+			"JobElapsedSec":      0,
+			"JobETAMin":          -1,
+			"JobPhaseLabel":      "",
+			"ResumableSyncRun":   (*types.PCGWSyncRun)(nil),
+			"CapStatusText":      "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
+			"CSRFToken":          "csrf-test",
+			"ShowPCGWControls":   false,
+			"LastSuccessfulSyncAt": now,
 		}
 	case "partials/admin_logs_table.html":
 		return map[string]interface{}{
@@ -532,8 +547,17 @@ func templateTestData(name string) interface{} {
 		}
 	case "partials/admin_pcgw_job_status.html":
 		return map[string]interface{}{
-			"JobRunning": true, "JobProgressPages": 42, "JobProgressTotal": 100, "JobGamesSkipped": 3,
-			"JobPhase": "ingest", "CSRFToken": "csrf-test",
+			"JobRunning":       true,
+			"JobProgressPages": 42,
+			"JobProgressTotal": 100,
+			"JobGamesSkipped":  3,
+			"JobPhase":         "ingest",
+			"CSRFToken":        "csrf-test",
+			"JobElapsedSec":    90,
+			"JobPagesPerSec":   1.5,
+			"JobETAMin":        5,
+			"JobPhaseLabel":    "Phase 2: Parsing game data",
+			"AvgHistPagesPerSec": 2.0,
 		}
 	case "partials/loading_skeleton.html":
 		return map[string]interface{}{}

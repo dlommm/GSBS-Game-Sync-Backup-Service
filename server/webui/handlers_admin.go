@@ -5,8 +5,10 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/gsbs/gsbs/server/job"
@@ -60,6 +62,12 @@ type jobsViewData struct {
 	CapStatusText         string
 	ShowPCGWControls      bool
 	CSRFToken             string
+	ResumableSyncRun      *types.PCGWSyncRun
+	JobElapsedSec         int
+	JobPagesPerSec        float64
+	JobETAMin             int
+	JobPhaseLabel         string
+	AvgHistPagesPerSec    float64
 }
 
 func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGWControls bool) jobsViewData {
@@ -116,6 +124,75 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 		data.JobPhase = h.jobRunner.ProgressPhase()
 		data.JobAutoCatchUp = h.jobRunner.ProgressMode() == "auto-catch-up"
 	}
+	data.ResumableSyncRun, _ = h.store.GetResumablePCGWSyncRun(ctx, "incremental")
+	// Elapsed time and current throughput
+	if data.JobRunning && data.LatestSyncRun != nil {
+		startedAt, err := time.Parse(time.RFC3339, data.LatestSyncRun.StartedAt)
+		if err == nil {
+			elapsed := time.Since(startedAt)
+			data.JobElapsedSec = int(elapsed.Seconds())
+			if elapsed.Seconds() > 5 && data.JobProgressPages > 0 {
+				data.JobPagesPerSec = float64(data.JobProgressPages) / elapsed.Seconds()
+			}
+		}
+	}
+	// Historical average from last 3 successful runs
+	var totalRate float64
+	var rateCount int
+	for _, r := range data.RecentJobs {
+		if r.Status == "success" && r.EntriesCount > 0 && r.FinishedAt != "" && r.StartedAt != "" {
+			s, err1 := time.Parse(time.RFC3339, r.StartedAt)
+			f, err2 := time.Parse(time.RFC3339, r.FinishedAt)
+			if err1 == nil && err2 == nil && f.After(s) {
+				dur := f.Sub(s).Seconds()
+				if dur > 0 {
+					totalRate += float64(r.EntriesCount) / dur
+					rateCount++
+					if rateCount >= 3 {
+						break
+					}
+				}
+			}
+		}
+	}
+	if rateCount > 0 {
+		data.AvgHistPagesPerSec = totalRate / float64(rateCount)
+	}
+	// ETA calculation
+	if data.JobRunning && data.JobProgressTotal > 0 {
+		remaining := data.JobProgressTotal - data.JobProgressPages
+		if remaining > 0 {
+			rate := data.JobPagesPerSec
+			if rate < 0.01 && data.AvgHistPagesPerSec > 0 {
+				rate = data.AvgHistPagesPerSec
+			}
+			if rate > 0.01 {
+				etaSec := float64(remaining) / rate
+				data.JobETAMin = int(math.Ceil(etaSec / 60))
+			} else {
+				data.JobETAMin = -1
+			}
+		} else {
+			data.JobETAMin = 0
+		}
+	} else {
+		data.JobETAMin = -1
+	}
+	// Human-readable phase label
+	switch data.JobPhase {
+	case "listing":
+		data.JobPhaseLabel = "Phase 1: Listing game catalog"
+	case "queueing":
+		data.JobPhaseLabel = "Phase 1: Building queue"
+	case "parsing", "ingest":
+		data.JobPhaseLabel = "Phase 2: Parsing game data"
+	default:
+		if data.JobPhase != "" {
+			data.JobPhaseLabel = "Phase: " + data.JobPhase
+		} else {
+			data.JobPhaseLabel = "Starting\u2026"
+		}
+	}
 	return data
 }
 
@@ -157,6 +234,12 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 		CapReached:            jobsData.CapReached,
 		CapStatusText:         jobsData.CapStatusText,
 		ShowPCGWControls:      jobsData.ShowPCGWControls,
+		ResumableSyncRun:      jobsData.ResumableSyncRun,
+		JobElapsedSec:         jobsData.JobElapsedSec,
+		JobPagesPerSec:        jobsData.JobPagesPerSec,
+		JobETAMin:             jobsData.JobETAMin,
+		JobPhaseLabel:         jobsData.JobPhaseLabel,
+		AvgHistPagesPerSec:    jobsData.AvgHistPagesPerSec,
 	})
 }
 
@@ -288,6 +371,12 @@ func (h *WebHandler) serveAdminActivity(w http.ResponseWriter, r *http.Request) 
 		CapReached:            jobsData.CapReached,
 		CapStatusText:         jobsData.CapStatusText,
 		ShowPCGWControls:      jobsData.ShowPCGWControls,
+		ResumableSyncRun:      jobsData.ResumableSyncRun,
+		JobElapsedSec:         jobsData.JobElapsedSec,
+		JobPagesPerSec:        jobsData.JobPagesPerSec,
+		JobETAMin:             jobsData.JobETAMin,
+		JobPhaseLabel:         jobsData.JobPhaseLabel,
+		AvgHistPagesPerSec:    jobsData.AvgHistPagesPerSec,
 	})
 }
 
@@ -315,6 +404,12 @@ func (h *WebHandler) serveAdminJobsPartial(w http.ResponseWriter, r *http.Reques
 		"CapStatusText":         data.CapStatusText,
 		"ShowPCGWControls":      data.ShowPCGWControls,
 		"CSRFToken":             data.CSRFToken,
+		"ResumableSyncRun":      data.ResumableSyncRun,
+		"JobElapsedSec":         data.JobElapsedSec,
+		"JobPagesPerSec":        data.JobPagesPerSec,
+		"JobETAMin":             data.JobETAMin,
+		"JobPhaseLabel":         data.JobPhaseLabel,
+		"AvgHistPagesPerSec":    data.AvgHistPagesPerSec,
 	})
 }
 

@@ -94,6 +94,12 @@ type adminOverviewData struct {
 	CapReached            bool
 	CapStatusText         string
 	ShowPCGWControls      bool
+	ResumableSyncRun      *types.PCGWSyncRun
+	JobElapsedSec         int
+	JobPagesPerSec        float64
+	JobETAMin             int
+	JobPhaseLabel         string
+	AvgHistPagesPerSec    float64
 }
 
 type adminUsersData struct {
@@ -140,6 +146,12 @@ type adminActivityData struct {
 	CapReached            bool
 	CapStatusText         string
 	ShowPCGWControls      bool
+	ResumableSyncRun      *types.PCGWSyncRun
+	JobElapsedSec         int
+	JobPagesPerSec        float64
+	JobETAMin             int
+	JobPhaseLabel         string
+	AvgHistPagesPerSec    float64
 }
 
 type adminLogEntry struct {
@@ -179,6 +191,8 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 		"renderPageBlock": renderPageBlock(t),
 		"add":             func(a, b int) int { return a + b },
 		"sub":             func(a, b int) int { return a - b },
+		"div":             func(a, b int) int { if b == 0 { return 0 }; return a / b },
+		"mod":             func(a, b int) int { if b == 0 { return 0 }; return a % b },
 		"join":            strings.Join,
 	}
 }

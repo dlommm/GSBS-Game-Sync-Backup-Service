@@ -11,16 +11,16 @@
 <body class="auth-page">
   <a href="#main-content" class="skip-link">Skip to main content</a>
   <main id="main-content" class="auth-card" role="main">
-    <img src="/client-logo" alt="GSBS" class="auth-logo">
+    <img src="/client-logo" alt="GSBS" class="auth-logo-icon">
     <h1>GSBS Client</h1>
     <p class="subtitle">Game Sync &amp; Backup Service</p>
 
-    <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;font-weight:500;margin-bottom:1.25rem;">
-      <span style="border-radius:9999px;background:var(--accent);color:#fff;padding:0.15rem 0.65rem;">1 — Connect</span>
-      <span style="color:var(--text-muted)">→</span>
-      <span style="border-radius:9999px;background:var(--surface-hover);color:var(--text-muted);padding:0.15rem 0.65rem;">2 — Discover</span>
-      <span style="color:var(--text-muted)">→</span>
-      <span style="border-radius:9999px;background:var(--surface-hover);color:var(--text-muted);padding:0.15rem 0.65rem;">3 — Sync</span>
+    <div class="wizard-steps">
+      <span class="wizard-step wizard-step-active">1 — Connect</span>
+      <span class="wizard-sep">→</span>
+      <span class="wizard-step wizard-step-pending">2 — Discover</span>
+      <span class="wizard-sep">→</span>
+      <span class="wizard-step wizard-step-pending">3 — Sync</span>
     </div>
 
     {{if .Error}}
@@ -28,21 +28,21 @@
     {{end}}
 
     {{if .SetupDone}}
-    <div id="discoveryPanel" style="margin-bottom:1.25rem;padding:1rem;background:var(--success-muted);border:1px solid rgba(34,197,94,.25);border-radius:var(--radius-sm);">
-      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
-        <svg style="width:1.125rem;height:1.125rem;color:var(--success);flex-shrink:0;" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+    <div id="discoveryPanel" class="discovery-panel">
+      <div class="discovery-header">
+        <svg class="discovery-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
         </svg>
         <span style="font-weight:600;color:var(--success);">Connected — Step 2: Discovery</span>
       </div>
-      <p id="discStatus" style="font-size:0.875rem;color:var(--success);margin:0 0 0.5rem;">Scanning installed games…</p>
-      <ul id="gameList" style="margin:0;padding:0;list-style:none;font-size:0.875rem;color:var(--success);display:grid;gap:0.2rem;" aria-live="polite"></ul>
-      <p style="margin:0.75rem 0 0;font-size:0.75rem;color:var(--text-muted);">When your games appear, close this page — sync continues from the tray icon.</p>
-      <div style="margin-top:0.75rem;display:flex;gap:1rem;">
-        <a id="dashLink" href="#" target="_blank" rel="noopener" style="font-size:0.875rem;font-weight:500;color:var(--success);text-decoration:underline;">
+      <p id="discStatus" class="discovery-status">Scanning installed games…</p>
+      <ul id="gameList" class="discovery-games" aria-live="polite"></ul>
+      <p class="discovery-footer">When your games appear, close this page — sync continues from the tray icon.</p>
+      <div class="discovery-links">
+        <a id="dashLink" href="#" target="_blank" rel="noopener" class="discovery-link">
           Open server dashboard →
         </a>
-        <a href="/dashboard" style="font-size:0.875rem;font-weight:500;color:var(--success);text-decoration:underline;">
+        <a href="/dashboard" class="discovery-link">
           Local status →
         </a>
       </div>
@@ -53,12 +53,12 @@
       <label for="server_url">Server URL</label>
       <input type="text" name="server_url" id="server_url" value="{{.SetupServerURL}}"
         placeholder="https://your-server:8080" required autocomplete="url">
-      <span style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;display:block;">e.g. https://your-server:8080 or http://localhost:8080</span>
+      <span class="form-hint">e.g. https://your-server:8080 or http://localhost:8080</span>
       <label for="username">Username</label>
       <input type="text" name="username" id="username" required autocomplete="username">
       <label for="password">Password</label>
       <input type="password" name="password" id="password" required autocomplete="current-password">
-      <label for="client_name">Client name <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+      <label for="client_name">Client name <span style="font-weight:400;" class="cell-muted">(optional)</span></label>
       <input type="text" name="client_name" id="client_name" value="{{.SetupClientName}}"
         placeholder="this PC name" autocomplete="off">
       <button type="submit">Connect</button>

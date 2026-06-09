@@ -2,6 +2,20 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.1] - 2026-06-09
+
+### Fixed
+
+- **Server/WebUI**: PCGW sync controls (Quick Actions, Advanced Maintenance, Import/Export, Destructive Actions) removed from the PCGW page — they now appear exclusively on Activity & Jobs where they belong.
+- **Server/WebUI**: Fixed runtime template error on Activity & Jobs page caused by `admin_pcgw_actions.html` referencing `.ResumableSyncRun`, a field that was missing from `jobsViewData`; field is now populated from `GetResumablePCGWSyncRun`.
+- **Client/WebUI**: Setup page now shows the real GSBS icon (`gsbs-icon.png`) embedded in the binary instead of the SVG fallback; `handleClientLogo` falls back to the embedded logo.png.
+- **Client/WebUI**: Setup page wizard step pills and discovery panel replaced all inline styles with proper CSS classes (`.wizard-steps`, `.discovery-*`).
+
+### Changed
+
+- **Server/WebUI**: Sync status now shows a human-readable phase label ("Phase 1: Listing game catalog" / "Phase 2: Parsing game data"), a progress bar with ARIA attributes, elapsed run time, and estimated time remaining computed from current throughput and historical average of the last 3 successful runs.
+- **Build**: `script/build-webui.sh` now copies `docs/images/gsbs-icon.png` (not the server logo) to `client/webui/static/logo.png` on each CSS rebuild.
+
 ## [2.1.0] - 2026-06-09
 
 ### Added
