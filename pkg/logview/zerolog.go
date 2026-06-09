@@ -41,6 +41,7 @@ func ParseZerologLine(line string) Entry {
 	entry.PathKey = payloadString(payload, "path_key")
 	entry.ClientID = payloadString(payload, "client_id")
 	entry.Error = payloadString(payload, "error")
+	entry.Component = deriveComponent(entry, payload)
 
 	if lvl, ok := payload["level"].(string); ok {
 		switch strings.ToLower(strings.TrimSpace(lvl)) {
@@ -54,17 +55,90 @@ func ParseZerologLine(line string) Entry {
 	}
 
 	if entry.Event == "" {
-		if isHTTPRequestLog(entry) {
-			entry.Event = "http.request"
-		} else {
-			entry.Event = entry.Message
-		}
+		entry.Event = deriveEvent(entry, payload)
 	}
 
 	entry.Summary = buildZerologSummary(entry, payload)
 	entry.Context = buildZerologContext(entry, payload)
 	entry.Message = entry.Summary
 	return entry
+}
+
+func deriveComponent(entry Entry, payload map[string]interface{}) string {
+	if c := payloadString(payload, "component"); c != "" {
+		return strings.ToLower(c)
+	}
+	msg := strings.ToLower(strings.TrimSpace(entry.Message))
+	switch {
+	case isHTTPRequestLog(entry):
+		return "http"
+	case strings.HasPrefix(msg, "sse:"):
+		return "sse"
+	case strings.Contains(msg, "pcgw") || strings.Contains(msg, "catalog scan"):
+		return "pcgw"
+	case strings.HasPrefix(msg, "job"):
+		return "job"
+	case strings.Contains(msg, "cron:"):
+		return "cron"
+	case strings.Contains(msg, "migrate") || strings.Contains(msg, "gsbs migrate"):
+		return "migration"
+	case strings.Contains(msg, "reconcile:") || strings.Contains(msg, "database:"):
+		return "store"
+	case strings.Contains(msg, "webui"):
+		return "webui"
+	case strings.HasPrefix(msg, "api ") || strings.Contains(msg, "api "):
+		return "api"
+	case msg == "listening" || strings.Contains(msg, "file logging") || strings.Contains(msg, "metrics:"):
+		return "server"
+	default:
+		return "server"
+	}
+}
+
+func deriveEvent(entry Entry, payload map[string]interface{}) string {
+	if e := payloadString(payload, "event"); e != "" {
+		return e
+	}
+	if isHTTPRequestLog(entry) {
+		return "http.request"
+	}
+	msg := strings.TrimSpace(entry.Message)
+	if msg == "" {
+		return "log"
+	}
+	// Normalize common operational messages into stable event ids.
+	lower := strings.ToLower(msg)
+	switch {
+	case strings.HasPrefix(lower, "catalog scan:"):
+		return "pcgw.catalog.scan"
+	case strings.HasPrefix(lower, "pcgw sync phase2:"):
+		return "pcgw.sync.phase2"
+	case strings.HasPrefix(lower, "pcgw sync:"):
+		return "pcgw.sync"
+	case strings.HasPrefix(lower, "job runner:"):
+		return "job.runner"
+	case strings.HasPrefix(lower, "job:"):
+		return "job.lifecycle"
+	case strings.HasPrefix(lower, "sse:"):
+		return strings.ReplaceAll(strings.TrimPrefix(lower, "sse:"), " ", ".")
+	case strings.HasPrefix(lower, "cron:"):
+		return "cron." + slugToken(msg)
+	}
+	return slugToken(msg)
+}
+
+func slugToken(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			return r
+		}
+		return '.'
+	}, s)
+	for strings.Contains(s, "..") {
+		s = strings.ReplaceAll(s, "..", ".")
+	}
+	return strings.Trim(s, ".")
 }
 
 func isHTTPRequestLog(entry Entry) bool {
@@ -133,6 +207,12 @@ func buildZerologSummary(entry Entry, payload map[string]interface{}) string {
 		return panicVal
 	}
 
+	if entry.Component == "pcgw" || entry.Component == "job" || strings.Contains(msg, "pcgw") || strings.HasPrefix(msg, "job") {
+		if enriched := buildDomainSummary(entry, payload); enriched != "" {
+			return enriched
+		}
+	}
+
 	extras := make([]string, 0, 6)
 	for _, pair := range []struct{ key, val string }{
 		{"operation", payloadString(payload, "operation")},
@@ -158,13 +238,48 @@ func buildZerologSummary(entry Entry, payload map[string]interface{}) string {
 	return entry.Event
 }
 
+func buildDomainSummary(entry Entry, payload map[string]interface{}) string {
+	parts := make([]string, 0, 8)
+	msg := strings.TrimSpace(entry.Message)
+	if msg != "" {
+		parts = append(parts, msg)
+	}
+	addKV := func(key, val string) {
+		if val != "" {
+			parts = append(parts, key+"="+val)
+		}
+	}
+	addKV("job", payloadString(payload, "job"))
+	addKV("run_id", payloadString(payload, "run_id"))
+	addKV("phase", payloadString(payload, "phase"))
+	addKV("mode", payloadString(payload, "mode"))
+	addKV("queue", payloadAny(payload, "queue"))
+	addKV("missing", payloadAny(payload, "missing"))
+	addKV("remote", payloadAny(payload, "remote"))
+	addKV("catalog_rows", payloadAny(payload, "catalog_rows"))
+	addKV("remote_total", payloadAny(payload, "remote_total"))
+	addKV("upserted", payloadAny(payload, "upserted"))
+	addKV("ok", payloadAny(payload, "ok"))
+	addKV("partial", payloadAny(payload, "partial"))
+	addKV("failed", payloadAny(payload, "failed"))
+	addKV("skipped", payloadAny(payload, "skipped"))
+	addKV("budget", payloadAny(payload, "budget"))
+	addKV("cursor", payloadAny(payload, "cursor"))
+	addKV("entries", payloadAny(payload, "entries"))
+	if len(parts) <= 1 {
+		return ""
+	}
+	return strings.Join(parts, " · ")
+}
+
 func buildZerologContext(entry Entry, payload map[string]interface{}) string {
-	pairs := make([]string, 0, 12)
+	pairs := make([]string, 0, 16)
 	add := func(key, val string) {
 		if strings.TrimSpace(val) != "" {
 			pairs = append(pairs, key+"="+val)
 		}
 	}
+	add("component", entry.Component)
 	add("request_id", entry.RequestID)
 	add("user_id", entry.UserID)
 	add("username", entry.Username)
@@ -172,6 +287,14 @@ func buildZerologContext(entry Entry, payload map[string]interface{}) string {
 	add("path_key", entry.PathKey)
 	add("client_id", entry.ClientID)
 	add("error", entry.Error)
+	add("job", payloadString(payload, "job"))
+	add("run_id", payloadString(payload, "run_id"))
+	add("phase", payloadString(payload, "phase"))
+	add("queue", payloadAny(payload, "queue"))
+	add("remote", payloadAny(payload, "remote"))
+	add("catalog_rows", payloadAny(payload, "catalog_rows"))
+	add("remote_total", payloadAny(payload, "remote_total"))
+	add("upserted", payloadAny(payload, "upserted"))
 	add("operation", payloadString(payload, "operation"))
 	add("addr", payloadString(payload, "addr"))
 	add("size", payloadAny(payload, "size"))

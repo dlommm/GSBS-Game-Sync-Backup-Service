@@ -2,6 +2,25 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.3] - 2026-06-09
+
+### Added
+
+- **Server/WebUI**: Admin logs **App** column and application filter (pcgw, job, sse, http, store, cron, etc.); **Hide routine HTTP** by default (health checks, static assets, log/jobs partial polling, SSE dashboard).
+- **Client/WebUI**: Same application filter and App column on `/logs` (sync, auth, tray, setup, client).
+- **pkg/logview**: Component-aware filtering, HTTP noise detection, enriched PCGW/job summaries (run_id, queue, ok/partial/failed), and stable event ids (`pcgw.sync`, `job.lifecycle`, etc.).
+
+### Fixed
+
+- **PCGW sync**: Incremental sync no longer reports success with 0 pages when the catalog is incomplete — Phase 1 rescan runs when local catalog count is below remote total; resume stats load from the resumed run id.
+- **PCGW sync**: Cancel now marks the DB run and job as canceled immediately and aborts in-flight HTTP/rate-limit waits via context cancellation.
+- **PCGW sync**: Refresh-new uses force-full ingest; canceled runs are no longer picked up as resumable.
+
+### Changed
+
+- **pkg/pcgw**: All PCGW HTTP and rate-limit sleeps honor `context.Context` so job cancel stops network activity promptly.
+- **Server**: HTTP request logs include `component=http` for filtering.
+
 ## [2.1.2] - 2026-06-09
 
 ### Added

@@ -87,7 +87,7 @@ func TestLoadEntriesClientLog(t *testing.T) {
 		t.Fatalf("write log: %v", err)
 	}
 
-	byGame, err := LoadEntries(path, "all", "730", 10, ParseClientLine)
+	byGame, err := LoadEntries(path, Query{Level: "all", Text: "730", Limit: 10, Component: "all"}, ParseClientLine)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestLoadEntriesClientLog(t *testing.T) {
 		t.Fatalf("game search: %+v", byGame)
 	}
 
-	errOnly, err := LoadEntries(path, "error", "", 10, ParseClientLine)
+	errOnly, err := LoadEntries(path, Query{Level: "error", Limit: 10, Component: "all"}, ParseClientLine)
 	if err != nil {
 		t.Fatalf("load error level: %v", err)
 	}

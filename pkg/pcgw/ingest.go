@@ -1,6 +1,7 @@
 package pcgw
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -8,7 +9,7 @@ import (
 )
 
 // IngestPage fetches and parses a PCGW game page with section-level resilience.
-func IngestPage(client *Client, pageID int64, pageInfo PageInfo) (*IngestResult, error) {
+func IngestPage(ctx context.Context, client *Client, pageID int64, pageInfo PageInfo) (*IngestResult, error) {
 	if client == nil {
 		return nil, fmt.Errorf("client is nil")
 	}
@@ -26,7 +27,7 @@ func IngestPage(client *Client, pageID int64, pageInfo PageInfo) (*IngestResult,
 		},
 	}
 
-	wikitext, pageTitle, err := client.ParsePageWikitext(pageIDStr)
+	wikitext, pageTitle, err := client.ParsePageWikitext(ctx, pageIDStr)
 	if err != nil {
 		result.Errors = append(result.Errors, err.Error())
 		result.Bundle.ParseStatus = "failed"
@@ -48,7 +49,7 @@ func IngestPage(client *Client, pageID int64, pageInfo PageInfo) (*IngestResult,
 		}
 	}
 
-	if rev, err := client.GetPageRevision(pageIDStr); err == nil {
+	if rev, err := client.GetPageRevision(ctx, pageIDStr); err == nil {
 		result.Bundle.RevisionID = rev.RevID
 		result.Bundle.RevisionTimestamp = rev.Timestamp
 	} else {

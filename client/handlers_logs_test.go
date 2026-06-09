@@ -22,7 +22,7 @@ func TestLoadClientLogEntriesFromTempFile(t *testing.T) {
 		t.Fatalf("write log: %v", err)
 	}
 
-	entries, err := loadClientLogEntries(path, "all", "push_ok", 10)
+	entries, err := loadClientLogEntries(path, logview.Query{Level: "all", Text: "push_ok", Limit: 10, Component: "all"})
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -30,19 +30,27 @@ func TestLoadClientLogEntriesFromTempFile(t *testing.T) {
 		t.Fatalf("unexpected entries: %+v", entries)
 	}
 
-	errEntries, err := loadClientLogEntries(path, "error", "", 10)
+	errEntries, err := loadClientLogEntries(path, logview.Query{Level: "error", Limit: 10, Component: "all"})
 	if err != nil {
 		t.Fatalf("load error: %v", err)
 	}
 	if len(errEntries) != 1 {
 		t.Fatalf("error entries len=%d want 1", len(errEntries))
 	}
+
+	syncOnly, err := loadClientLogEntries(path, logview.Query{Level: "all", Limit: 10, Component: "sync"})
+	if err != nil {
+		t.Fatalf("load sync component: %v", err)
+	}
+	if len(syncOnly) != 3 {
+		t.Fatalf("sync component len=%d want 3", len(syncOnly))
+	}
 }
 
 func TestClientLogQueryParsing(t *testing.T) {
-	r := httptest.NewRequest("GET", "/logs?level=warn&limit=500&q=tray&auto=1&refresh=10", nil)
-	level, query, limit, auto, refresh := logview.ParseQuery(r)
-	if level != "warn" || query != "tray" || limit != 500 || !auto || refresh != 10 {
-		t.Fatalf("parsed %q %q %d %v %d", level, query, limit, auto, refresh)
+	r := httptest.NewRequest("GET", "/logs?level=warn&limit=500&q=tray&auto=1&refresh=10&component=tray", nil)
+	q := logview.ParseQuery(r)
+	if q.Level != "warn" || q.Text != "tray" || q.Limit != 500 || !q.AutoRefresh || q.RefreshSeconds != 10 || q.Component != "tray" {
+		t.Fatalf("parsed %+v", q)
 	}
 }

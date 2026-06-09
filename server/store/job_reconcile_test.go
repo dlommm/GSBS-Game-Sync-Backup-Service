@@ -106,6 +106,14 @@ func TestGetResumablePCGWSyncRun(t *testing.T) {
 	if r, _ := st.GetResumablePCGWSyncRun(ctx, "incremental"); r == nil || r.ID != runID {
 		t.Fatalf("expected first failed run, got %+v", r)
 	}
+
+	// canceled runs must not be resumable
+	runID3, _ := st.StartPCGWSyncRun(ctx, "incremental")
+	_ = st.UpdatePCGWSyncRunPhase2Progress(ctx, runID3, 0, 10)
+	_ = st.FinishPCGWSyncRun(ctx, runID3, "canceled", "context canceled", PCGWSyncRunStats{})
+	if r, _ := st.GetResumablePCGWSyncRun(ctx, "incremental"); r != nil && r.ID == runID3 {
+		t.Fatalf("canceled run should not be resumable, got %+v", r)
+	}
 }
 
 func TestStartPCGWSyncRunWithResume(t *testing.T) {

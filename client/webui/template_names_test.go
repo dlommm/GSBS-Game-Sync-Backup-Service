@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	clientwebui "github.com/gsbs/gsbs/client/webui"
+	"github.com/gsbs/gsbs/pkg/logview"
 )
 
 var pageNames = []string{"setup", "dashboard", "games", "quick_actions", "help", "about", "open_log", "logs"}
@@ -26,8 +27,7 @@ func TestRenderPages(t *testing.T) {
 						NavActive: "logs",
 						Title:     "Test",
 					},
-					Level: "all",
-					Limit: 200,
+					Query: logview.Query{Level: "all", Limit: 200, Component: "all"},
 				})
 			} else {
 				clientwebui.RenderPage(rec, name, clientwebui.PageData{

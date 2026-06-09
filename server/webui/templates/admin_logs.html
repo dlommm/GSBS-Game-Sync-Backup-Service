@@ -19,29 +19,44 @@
     <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
   </div>
   <form id="logs-filters" class="filter-toolbar" method="get" action="/admin/logs">
+    <select name="component" class="filter-select" aria-label="Application">
+      <option value="all" {{if eq .Query.Component "all"}}selected{{end}}>All applications</option>
+      <option value="pcgw" {{if eq .Query.Component "pcgw"}}selected{{end}}>pcgw</option>
+      <option value="job" {{if eq .Query.Component "job"}}selected{{end}}>job</option>
+      <option value="sse" {{if eq .Query.Component "sse"}}selected{{end}}>sse</option>
+      <option value="store" {{if eq .Query.Component "store"}}selected{{end}}>store</option>
+      <option value="cron" {{if eq .Query.Component "cron"}}selected{{end}}>cron</option>
+      <option value="http" {{if eq .Query.Component "http"}}selected{{end}}>http</option>
+      <option value="api" {{if eq .Query.Component "api"}}selected{{end}}>api</option>
+      <option value="server" {{if eq .Query.Component "server"}}selected{{end}}>server</option>
+    </select>
     <select name="level" class="filter-select">
-      <option value="all" {{if eq .Level "all"}}selected{{end}}>All levels</option>
-      <option value="debug" {{if eq .Level "debug"}}selected{{end}}>debug</option>
-      <option value="info" {{if eq .Level "info"}}selected{{end}}>info</option>
-      <option value="warn" {{if eq .Level "warn"}}selected{{end}}>warn</option>
-      <option value="error" {{if eq .Level "error"}}selected{{end}}>error</option>
+      <option value="all" {{if eq .Query.Level "all"}}selected{{end}}>All levels</option>
+      <option value="debug" {{if eq .Query.Level "debug"}}selected{{end}}>debug</option>
+      <option value="info" {{if eq .Query.Level "info"}}selected{{end}}>info</option>
+      <option value="warn" {{if eq .Query.Level "warn"}}selected{{end}}>warn</option>
+      <option value="error" {{if eq .Query.Level "error"}}selected{{end}}>error</option>
     </select>
-    <input type="search" class="search-input filter-search" name="q" value="{{.Query}}" placeholder="Search method, path, status, user_id, request_id…">
+    <input type="search" class="search-input filter-search" name="q" value="{{.Query.Text}}" placeholder="Search event, summary, run_id, request_id…">
     <select name="limit" class="filter-select">
-      <option value="100" {{if eq .Limit 100}}selected{{end}}>100 lines</option>
-      <option value="200" {{if eq .Limit 200}}selected{{end}}>200 lines</option>
-      <option value="500" {{if eq .Limit 500}}selected{{end}}>500 lines</option>
-      <option value="1000" {{if eq .Limit 1000}}selected{{end}}>1000 lines</option>
+      <option value="100" {{if eq .Query.Limit 100}}selected{{end}}>100 lines</option>
+      <option value="200" {{if eq .Query.Limit 200}}selected{{end}}>200 lines</option>
+      <option value="500" {{if eq .Query.Limit 500}}selected{{end}}>500 lines</option>
+      <option value="1000" {{if eq .Query.Limit 1000}}selected{{end}}>1000 lines</option>
     </select>
+    <label class="checkbox-label" title="Include health checks, static assets, log polling, SSE dashboard">
+      <input type="checkbox" name="show_http" value="1" {{if not .Query.HideHTTPNoise}}checked{{end}}>
+      Show routine HTTP
+    </label>
     <label class="checkbox-label">
-      <input type="checkbox" name="auto" value="1" {{if .AutoRefresh}}checked{{end}}>
+      <input type="checkbox" name="auto" value="1" {{if .Query.AutoRefresh}}checked{{end}}>
       Auto-refresh
     </label>
     <select name="refresh" class="filter-select">
-      <option value="2" {{if eq .RefreshSeconds 2}}selected{{end}}>2s</option>
-      <option value="5" {{if eq .RefreshSeconds 5}}selected{{end}}>5s</option>
-      <option value="10" {{if eq .RefreshSeconds 10}}selected{{end}}>10s</option>
-      <option value="30" {{if eq .RefreshSeconds 30}}selected{{end}}>30s</option>
+      <option value="2" {{if eq .Query.RefreshSeconds 2}}selected{{end}}>2s</option>
+      <option value="5" {{if eq .Query.RefreshSeconds 5}}selected{{end}}>5s</option>
+      <option value="10" {{if eq .Query.RefreshSeconds 10}}selected{{end}}>10s</option>
+      <option value="30" {{if eq .Query.RefreshSeconds 30}}selected{{end}}>30s</option>
     </select>
     <button type="submit" class="btn-primary-sm">Apply</button>
   </form>

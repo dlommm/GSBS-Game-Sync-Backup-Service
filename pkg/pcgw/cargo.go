@@ -1,6 +1,7 @@
 package pcgw
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,9 +21,9 @@ const infoboxGameFields = "Infobox_game._pageID=PageID,Infobox_game._pageName=Ti
 const listGamePagesFields = infoboxGameFields
 
 // FetchInfoboxGame returns Infobox_game Cargo rows for a page ID.
-func (c *Client) FetchInfoboxGame(pageID string) (map[string]interface{}, error) {
+func (c *Client) FetchInfoboxGame(ctx context.Context, pageID string) (map[string]interface{}, error) {
 	where := fmt.Sprintf("Infobox_game._pageID=\"%s\"", pageID)
-	rows, err := c.CargoQuery("Infobox_game", infoboxGameFields, where, 1, 0)
+	rows, err := c.CargoQuery(ctx, "Infobox_game", infoboxGameFields, where, 1, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -33,14 +34,14 @@ func (c *Client) FetchInfoboxGame(pageID string) (map[string]interface{}, error)
 }
 
 // FetchAvailability returns Availability Cargo rows for a page ID when present.
-func (c *Client) FetchAvailability(pageID string) (map[string]interface{}, error) {
+func (c *Client) FetchAvailability(ctx context.Context, pageID string) (map[string]interface{}, error) {
 	where := fmt.Sprintf("Availability._pageID=\"%s\"", pageID)
 	fields := "Availability._pageID=PageID,Availability.Steam_AppID=SteamAppID," +
 		"Availability.GOGcom_ID=GOGID,Availability.Epic_Games_Store_ID=EpicID," +
 		"Availability.Microsoft_Store_ID=MicrosoftID,Availability.Ubisoft_Connect_ID=UbisoftID"
-	rows, err := c.CargoQuery("Availability", fields, where, 1, 0)
+	rows, err := c.CargoQuery(ctx, "Availability", fields, where, 1, 0)
 	if err != nil {
-		rows, err = c.CargoQuery("Availability", "Availability._pageID=PageID", where, 1, 0)
+		rows, err = c.CargoQuery(ctx, "Availability", "Availability._pageID=PageID", where, 1, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -52,11 +53,11 @@ func (c *Client) FetchAvailability(pageID string) (map[string]interface{}, error
 }
 
 // ListGamePages returns game pages from the Infobox_game Cargo table (only actual game pages).
-func (c *Client) ListGamePages(limit, offset int) ([]PageInfo, error) {
+func (c *Client) ListGamePages(ctx context.Context, limit, offset int) ([]PageInfo, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 500
 	}
-	rows, err := c.CargoQuery("Infobox_game", listGamePagesFields, "", limit, offset)
+	rows, err := c.CargoQuery(ctx, "Infobox_game", listGamePagesFields, "", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +132,7 @@ func parseCargoMultiValue(v interface{}) []string {
 }
 
 // CargoQuery runs a cargoquery action.
-func (c *Client) CargoQuery(tables, fields, where string, limit, offset int) ([]map[string]interface{}, error) {
+func (c *Client) CargoQuery(ctx context.Context, tables, fields, where string, limit, offset int) ([]map[string]interface{}, error) {
 	u := c.baseURL() + "/w/api.php?action=cargoquery&format=json"
 	u += "&tables=" + url.QueryEscape(tables)
 	u += "&fields=" + url.QueryEscape(fields)
@@ -147,7 +148,7 @@ func (c *Client) CargoQuery(tables, fields, where string, limit, offset int) ([]
 	if offset > 0 {
 		u += "&offset=" + strconv.Itoa(offset)
 	}
-	resp, err := c.doGet(u)
+	resp, err := c.doGet(ctx, u)
 	if err != nil {
 		return nil, err
 	}

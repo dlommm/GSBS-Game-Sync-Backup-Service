@@ -13,36 +13,45 @@ import (
 
 func TestParseAdminLogQueryDefaultsAndBounds(t *testing.T) {
 	r := httptest.NewRequest("GET", "/admin/logs", nil)
-	level, query, limit, auto, refresh := logview.ParseQuery(r)
-	if level != "all" {
-		t.Fatalf("level=%q want all", level)
+	q := logview.ParseQuery(r)
+	if q.Level != "all" {
+		t.Fatalf("level=%q want all", q.Level)
 	}
-	if query != "" {
-		t.Fatalf("query=%q want empty", query)
+	if q.Text != "" {
+		t.Fatalf("text=%q want empty", q.Text)
 	}
-	if limit != logview.DefaultLimit {
-		t.Fatalf("limit=%d want %d", limit, logview.DefaultLimit)
+	if q.Component != "all" {
+		t.Fatalf("component=%q want all", q.Component)
 	}
-	if auto {
+	if !q.HideHTTPNoise {
+		t.Fatalf("HideHTTPNoise should default true")
+	}
+	if q.Limit != logview.DefaultLimit {
+		t.Fatalf("limit=%d want %d", q.Limit, logview.DefaultLimit)
+	}
+	if q.AutoRefresh {
 		t.Fatalf("auto should be false by default")
 	}
-	if refresh != logview.DefaultRefresh {
-		t.Fatalf("refresh=%d want %d", refresh, logview.DefaultRefresh)
+	if q.RefreshSeconds != logview.DefaultRefresh {
+		t.Fatalf("refresh=%d want %d", q.RefreshSeconds, logview.DefaultRefresh)
 	}
 
-	r = httptest.NewRequest("GET", "/admin/logs?level=error&limit=9000&auto=1&refresh=1&q=panic", nil)
-	level, query, limit, auto, refresh = logview.ParseQuery(r)
-	if level != "error" || query != "panic" {
-		t.Fatalf("parsed unexpected level/query: %q / %q", level, query)
+	r = httptest.NewRequest("GET", "/admin/logs?level=error&limit=9000&auto=1&refresh=1&q=panic&component=pcgw&show_http=1", nil)
+	q = logview.ParseQuery(r)
+	if q.Level != "error" || q.Text != "panic" || q.Component != "pcgw" {
+		t.Fatalf("parsed unexpected filters: %+v", q)
 	}
-	if limit != logview.MaxLimit {
-		t.Fatalf("limit=%d want %d", limit, logview.MaxLimit)
+	if q.HideHTTPNoise {
+		t.Fatalf("show_http=1 should disable HideHTTPNoise")
 	}
-	if !auto {
+	if q.Limit != logview.MaxLimit {
+		t.Fatalf("limit=%d want %d", q.Limit, logview.MaxLimit)
+	}
+	if !q.AutoRefresh {
 		t.Fatalf("auto should be true")
 	}
-	if refresh != logview.MinRefresh {
-		t.Fatalf("refresh=%d want %d", refresh, logview.MinRefresh)
+	if q.RefreshSeconds != logview.MinRefresh {
+		t.Fatalf("refresh=%d want %d", q.RefreshSeconds, logview.MinRefresh)
 	}
 }
 
@@ -50,6 +59,9 @@ func TestParseAdminLogLineJSONAndRaw(t *testing.T) {
 	entry := logview.ParseZerologLine(`{"level":"warning","time":"2026-01-01T00:00:00Z","message":"slow request"}`)
 	if entry.Level != "warn" {
 		t.Fatalf("level=%q want warn", entry.Level)
+	}
+	if entry.Component != "server" {
+		t.Fatalf("component=%q want server", entry.Component)
 	}
 	if entry.Timestamp == "" || entry.Summary != "slow request" || entry.Message != "slow request" {
 		t.Fatalf("unexpected parsed entry: %+v", entry)
@@ -62,10 +74,13 @@ func TestParseAdminLogLineJSONAndRaw(t *testing.T) {
 }
 
 func TestParseAdminLogLineHTTPRequest(t *testing.T) {
-	line := `{"level":"info","time":"2026-06-09T12:00:00Z","event":"http.request","message":"GET /api/manifest 200","request_id":"req-42","method":"GET","path":"/api/manifest","status":200,"ip":"10.0.0.5","duration":12,"user_id":"user-9"}`
+	line := `{"level":"info","time":"2026-06-09T12:00:00Z","event":"http.request","component":"http","message":"GET /api/manifest 200","request_id":"req-42","method":"GET","path":"/api/manifest","status":200,"ip":"10.0.0.5","duration":12,"user_id":"user-9"}`
 	entry := logview.ParseZerologLine(line)
 	if entry.Event != "http.request" {
 		t.Fatalf("event=%q want http.request", entry.Event)
+	}
+	if entry.Component != "http" {
+		t.Fatalf("component=%q want http", entry.Component)
 	}
 	wantSummary := "GET /api/manifest → 200 in 12ms from 10.0.0.5"
 	if entry.Summary != wantSummary {
@@ -87,8 +102,22 @@ func TestParseAdminLogLineHTTPRequest(t *testing.T) {
 			t.Fatalf("field got %q want %q", pair.got, pair.want)
 		}
 	}
-	if !strings.Contains(entry.Context, "request_id=req-42") || !strings.Contains(entry.Context, "user_id=user-9") {
+	if !strings.Contains(entry.Context, "component=http") || !strings.Contains(entry.Context, "request_id=req-42") {
 		t.Fatalf("context=%q missing expected fields", entry.Context)
+	}
+}
+
+func TestParseAdminLogLinePCGWComponent(t *testing.T) {
+	line := `{"level":"info","component":"pcgw","message":"pcgw sync: phase2 batch","run_id":"run-1","queue":120,"ok":10,"partial":2,"failed":1}`
+	entry := logview.ParseZerologLine(line)
+	if entry.Component != "pcgw" {
+		t.Fatalf("component=%q want pcgw", entry.Component)
+	}
+	if entry.Event != "pcgw.sync" {
+		t.Fatalf("event=%q want pcgw.sync", entry.Event)
+	}
+	if !strings.Contains(entry.Summary, "queue=120") || !strings.Contains(entry.Summary, "ok=10") {
+		t.Fatalf("summary=%q missing domain fields", entry.Summary)
 	}
 }
 
@@ -98,8 +127,8 @@ func TestParseAdminLogLineRateLimit(t *testing.T) {
 	if entry.Summary != want {
 		t.Fatalf("summary=%q want %q", entry.Summary, want)
 	}
-	if entry.Event != "rate limit: default" {
-		t.Fatalf("event=%q want rate limit message", entry.Event)
+	if entry.Event != "rate.limit.default" {
+		t.Fatalf("event=%q want rate.limit.default", entry.Event)
 	}
 }
 
@@ -117,11 +146,13 @@ func TestParseAdminLogLineErrorField(t *testing.T) {
 	}
 }
 
-func TestLoadAdminLogEntriesSearchSummaryAndContext(t *testing.T) {
+func TestLoadAdminLogEntriesSearchAndFilters(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "server.log")
 	lines := []string{
-		`{"level":"info","event":"http.request","message":"GET /api/manifest 200","method":"GET","path":"/api/manifest","status":200,"duration":8,"ip":"127.0.0.1","request_id":"hidden-id"}`,
+		`{"level":"info","event":"http.request","component":"http","message":"GET /api/manifest 200","method":"GET","path":"/api/manifest","status":200,"duration":8,"ip":"127.0.0.1","request_id":"hidden-id"}`,
+		`{"level":"info","event":"http.request","component":"http","message":"GET /api/health 200","method":"GET","path":"/api/health","status":200,"duration":0,"ip":"127.0.0.1"}`,
+		`{"level":"info","component":"pcgw","message":"pcgw sync: started","run_id":"run-9"}`,
 		`{"level":"warn","message":"rate limit exceeded","key":"10.0.0.1","limit":"auth","path":"/api/login"}`,
 		`{"level":"error","message":"store open failed","error":"permission denied"}`,
 	}
@@ -129,7 +160,7 @@ func TestLoadAdminLogEntriesSearchSummaryAndContext(t *testing.T) {
 		t.Fatalf("write log: %v", err)
 	}
 
-	byPath, err := loadAdminLogEntries(path, "all", "/api/manifest", 10)
+	byPath, err := loadAdminLogEntries(path, logview.Query{Level: "all", Text: "/api/manifest", Limit: 10, Component: "all", HideHTTPNoise: false})
 	if err != nil {
 		t.Fatalf("load by path: %v", err)
 	}
@@ -140,20 +171,30 @@ func TestLoadAdminLogEntriesSearchSummaryAndContext(t *testing.T) {
 		t.Fatalf("unexpected summary: %q", byPath[0].Summary)
 	}
 
-	byRequestID, err := loadAdminLogEntries(path, "all", "hidden-id", 10)
+	hidden, err := loadAdminLogEntries(path, logview.Query{Level: "all", Text: "hidden-id", Limit: 10, Component: "all", HideHTTPNoise: true})
 	if err != nil {
 		t.Fatalf("load by request_id: %v", err)
 	}
-	if len(byRequestID) != 1 {
-		t.Fatalf("request_id search len=%d want 1", len(byRequestID))
+	if len(hidden) != 1 {
+		t.Fatalf("request_id search len=%d want 1", len(hidden))
 	}
 
-	byRateLimit, err := loadAdminLogEntries(path, "all", "rate limit exceeded", 10)
+	pcgwOnly, err := loadAdminLogEntries(path, logview.Query{Level: "all", Limit: 10, Component: "pcgw", HideHTTPNoise: true})
 	if err != nil {
-		t.Fatalf("load by summary: %v", err)
+		t.Fatalf("load pcgw: %v", err)
 	}
-	if len(byRateLimit) != 1 || !strings.Contains(byRateLimit[0].Summary, "rate limit exceeded") {
-		t.Fatalf("summary search unexpected: %+v", byRateLimit)
+	if len(pcgwOnly) != 1 || pcgwOnly[0].Component != "pcgw" {
+		t.Fatalf("pcgw filter unexpected: %+v", pcgwOnly)
+	}
+
+	noNoise, err := loadAdminLogEntries(path, logview.Query{Level: "all", Limit: 10, Component: "all", HideHTTPNoise: true})
+	if err != nil {
+		t.Fatalf("load no noise: %v", err)
+	}
+	for _, e := range noNoise {
+		if e.Path == "/api/health" {
+			t.Fatalf("health check should be filtered: %+v", e)
+		}
 	}
 }
 

@@ -37,26 +37,39 @@ func ReadRecentLines(path string, maxBytes int64) ([]string, error) {
 }
 
 // LoadEntries reads recent lines from path, parses them, and returns newest-first matches.
-func LoadEntries(path, level, query string, limit int, parseFn ParseFunc) ([]Entry, error) {
+func LoadEntries(path string, q Query, parseFn ParseFunc) ([]Entry, error) {
 	lines, err := ReadRecentLines(path, MaxReadBytes)
 	if err != nil {
 		return nil, err
 	}
-	q := strings.ToLower(strings.TrimSpace(query))
-	out := make([]Entry, 0, limit)
-	for i := len(lines) - 1; i >= 0 && len(out) < limit; i-- {
+	out := make([]Entry, 0, q.Limit)
+	for i := len(lines) - 1; i >= 0 && len(out) < q.Limit; i-- {
 		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue
 		}
 		entry := parseFn(line)
-		if level != "all" && entry.Level != level {
+		if q.Level != "all" && entry.Level != q.Level {
 			continue
 		}
-		if q != "" && !MatchQuery(entry, q) {
+		if q.HideHTTPNoise && IsRoutineHTTPNoise(entry) {
+			continue
+		}
+		if !MatchComponent(entry, q.Component) {
+			continue
+		}
+		if q.Text != "" && !MatchQuery(entry, q.Text) {
 			continue
 		}
 		out = append(out, entry)
 	}
 	return out, nil
+}
+
+// LoadEntriesLegacy is a thin wrapper for callers that only need level/text/limit filters.
+func LoadEntriesLegacy(path, level, query string, limit int, parseFn ParseFunc) ([]Entry, error) {
+	if strings.TrimSpace(level) == "" {
+		level = "all"
+	}
+	return LoadEntries(path, Query{Level: level, Text: query, Limit: limit, Component: "all", HideHTTPNoise: true}, parseFn)
 }

@@ -1,6 +1,7 @@
 package pcgw
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,10 +17,10 @@ type PageRevision struct {
 }
 
 // GetPageRevision returns the latest revision ID and timestamp for a page.
-func (c *Client) GetPageRevision(pageID string) (*PageRevision, error) {
+func (c *Client) GetPageRevision(ctx context.Context, pageID string) (*PageRevision, error) {
 	u := c.baseURL() + "/w/api.php?action=query&format=json&pageids=" + url.QueryEscape(pageID) +
 		"&prop=revisions&rvlimit=1&rvprop=" + url.QueryEscape("ids|timestamp")
-	resp, err := c.doGet(u)
+	resp, err := c.doGet(ctx, u)
 	if err != nil {
 		return nil, err
 	}
@@ -67,10 +68,10 @@ func (c *Client) GetPageRevision(pageID string) (*PageRevision, error) {
 
 // ResolveRedirect returns the target page ID and title when pageID is a redirect.
 // If not a redirect, returns the same page ID and its title.
-func (c *Client) ResolveRedirect(pageID string) (targetPageID string, targetTitle string, err error) {
+func (c *Client) ResolveRedirect(ctx context.Context, pageID string) (targetPageID string, targetTitle string, err error) {
 	u := c.baseURL() + "/w/api.php?action=query&format=json&pageids=" + url.QueryEscape(pageID) +
 		"&redirects=1&prop=info"
-	resp, err := c.doGet(u)
+	resp, err := c.doGet(ctx, u)
 	if err != nil {
 		return "", "", err
 	}

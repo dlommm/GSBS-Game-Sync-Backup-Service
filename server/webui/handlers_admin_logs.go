@@ -17,11 +17,11 @@ func (h *WebHandler) serveAdminLogs(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	level, query, limit, autoRefresh, refreshSeconds := logview.ParseQuery(r)
+	q := logview.ParseQuery(r)
 	sourcePath, sourceInfo, sourcePresent := resolveAdminLogSource()
 	entries := []logview.Entry{}
 	if sourcePresent {
-		loaded, err := loadAdminLogEntries(sourcePath, level, query, limit)
+		loaded, err := loadAdminLogEntries(sourcePath, q)
 		if err != nil {
 			sourceInfo = fmt.Sprintf("Failed to read log source: %v", err)
 		} else {
@@ -33,7 +33,7 @@ func (h *WebHandler) serveAdminLogs(w http.ResponseWriter, r *http.Request) {
 		PageData:      h.adminPageData(w, r, userID, username, "logs", "admin_logs"),
 		Entries:       entries,
 		LogSourcePath: sourcePath, LogSourceInfo: sourceInfo, LogSourcePresent: sourcePresent,
-		Level: level, Query: query, Limit: limit, AutoRefresh: autoRefresh, RefreshSeconds: refreshSeconds,
+		Query: q,
 	})
 }
 
@@ -41,11 +41,11 @@ func (h *WebHandler) serveAdminLogsPartial(w http.ResponseWriter, r *http.Reques
 	if _, _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
-	level, query, limit, _, _ := logview.ParseQuery(r)
+	q := logview.ParseQuery(r)
 	sourcePath, sourceInfo, sourcePresent := resolveAdminLogSource()
 	entries := []logview.Entry{}
 	if sourcePresent {
-		loaded, err := loadAdminLogEntries(sourcePath, level, query, limit)
+		loaded, err := loadAdminLogEntries(sourcePath, q)
 		if err != nil {
 			sourceInfo = fmt.Sprintf("Failed to read log source: %v", err)
 		} else {
@@ -53,9 +53,11 @@ func (h *WebHandler) serveAdminLogsPartial(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	h.renderPartial(w, "partials/admin_logs_table.html", map[string]interface{}{
-		"Entries":       entries,
-		"LogSourcePath": sourcePath, "LogSourceInfo": sourceInfo, "LogSourcePresent": sourcePresent,
-		"Level": level, "Query": query, "Limit": limit,
+		"Entries":          entries,
+		"LogSourcePath":    sourcePath,
+		"LogSourceInfo":    sourceInfo,
+		"LogSourcePresent": sourcePresent,
+		"Query":            q,
 	})
 }
 
@@ -114,6 +116,6 @@ func adminLogSourceCandidates(goos string, getenv func(string) string) []adminLo
 	return candidates
 }
 
-func loadAdminLogEntries(path, level, query string, limit int) ([]logview.Entry, error) {
-	return logview.LoadEntries(path, level, query, limit, logview.ParseZerologLine)
+func loadAdminLogEntries(path string, q logview.Query) ([]logview.Entry, error) {
+	return logview.LoadEntries(path, q, logview.ParseZerologLine)
 }

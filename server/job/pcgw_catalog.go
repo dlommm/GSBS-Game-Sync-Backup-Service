@@ -60,7 +60,7 @@ func RunCatalogScan(ctx context.Context, st store.Store, client *pcgw.Client, ru
 		default:
 		}
 
-		pages, err := client.ListGamePages(catalogChunkSize, offset)
+		pages, err := client.ListGamePages(ctx, catalogChunkSize, offset)
 		if err != nil {
 			return stats, err
 		}

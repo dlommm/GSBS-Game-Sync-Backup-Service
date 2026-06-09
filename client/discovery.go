@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"os"
@@ -184,6 +185,7 @@ func appendUniquePath(slice []string, p string) []string {
 // resolveUnmatchedSteam tries PCGW lookup for unmatched Steam games (rate-limited, cached).
 func resolveUnmatchedSteam(installed []discovery.InstalledGame, idx *discovery.ManifestV2Index, idMap map[string]string) {
 	client := pcgw.NewClient()
+	ctx := context.Background()
 	for _, g := range installed {
 		if g.Launcher != "steam" {
 			continue
@@ -195,7 +197,7 @@ func resolveUnmatchedSteam(installed []discovery.InstalledGame, idx *discovery.M
 		if idx.ResolveManifestGameID(g, idMap) != "" {
 			continue
 		}
-		pageID, err := client.GetPageIDBySteamAppID(g.GameID)
+		pageID, err := client.GetPageIDBySteamAppID(ctx, g.GameID)
 		if err != nil {
 			log.Printf("discovery: PCGW lookup failed steam:%s: %v", g.GameID, err)
 			continue

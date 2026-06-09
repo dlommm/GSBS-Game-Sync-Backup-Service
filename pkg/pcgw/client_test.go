@@ -1,6 +1,7 @@
 package pcgw
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,7 +23,7 @@ func TestGetWith5xxRetry_SucceedsAfterTransient(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL, testBackoff: time.Millisecond}
-	wikitext, title, err := c.ParsePageWikitext("5")
+	wikitext, title, err := c.ParsePageWikitext(context.Background(), "5")
 	if err != nil {
 		t.Fatalf("expected success after retries: %v", err)
 	}
@@ -46,7 +47,7 @@ func TestGetWith5xxRetry_ExhaustsRetries(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL, testBackoff: time.Millisecond}
-	resp, err := c.doGet(srv.URL + "/w/api.php?action=parse&format=json&pageid=5&prop=wikitext")
+	resp, err := c.doGet(context.Background(), srv.URL+"/w/api.php?action=parse&format=json&pageid=5&prop=wikitext")
 	if err != nil {
 		t.Fatalf("expected 500 response returned (not error) after retries: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestParsePageWikitext_MediaWikiError(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL}
-	_, _, err := c.ParsePageWikitext("99999")
+	_, _, err := c.ParsePageWikitext(context.Background(), "99999")
 	if err == nil {
 		t.Fatal("expected error for MediaWiki error response")
 	}
@@ -84,7 +85,7 @@ func TestGetPageRevision_MediaWikiError(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL}
-	_, err := c.GetPageRevision("???")
+	_, err := c.GetPageRevision(context.Background(), "???")
 	if err == nil {
 		t.Fatal("expected error for MediaWiki error response")
 	}
@@ -104,7 +105,7 @@ func TestCargoQueryReturnsAPIError(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL}
-	_, err := c.CargoQuery("Infobox_game", "Infobox_game._pageID=PageID", "", 1, 0)
+	_, err := c.CargoQuery(context.Background(), "Infobox_game", "Infobox_game._pageID=PageID", "", 1, 0)
 	if err == nil {
 		t.Fatal("expected cargo API error")
 	}
@@ -121,7 +122,7 @@ func TestListGamePagesParsesRows(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL}
-	pages, err := c.ListGamePages(10, 0)
+	pages, err := c.ListGamePages(context.Background(), 10, 0)
 	if err != nil {
 		t.Fatalf("ListGamePages: %v", err)
 	}
@@ -149,7 +150,7 @@ func TestListGamePagesIntegration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("live PCGW API")
 	}
-	pages, err := NewClient().ListGamePages(3, 0)
+	pages, err := NewClient().ListGamePages(context.Background(), 3, 0)
 	if err != nil {
 		t.Fatalf("ListGamePages: %v", err)
 	}
@@ -206,7 +207,7 @@ func TestGetPageRevisionMock(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL}
-	rev, err := c.GetPageRevision("5")
+	rev, err := c.GetPageRevision(context.Background(), "5")
 	if err != nil {
 		t.Fatalf("GetPageRevision: %v", err)
 	}
@@ -262,7 +263,7 @@ func TestIngestPageMock(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL}
-	result, err := IngestPage(c, 5, PageInfo{PageID: 5})
+	result, err := IngestPage(context.Background(), c, 5, PageInfo{PageID: 5})
 	if err != nil {
 		t.Fatalf("IngestPage: %v", err)
 	}
