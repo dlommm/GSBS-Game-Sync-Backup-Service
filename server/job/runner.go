@@ -137,6 +137,13 @@ func (r *Runner) RunPCGWSyncAutoCatchUp(ctx context.Context) (bool, error) {
 	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{AutoCatchUp: true})
 }
 
+// RunPCGWSyncRefreshNew starts a targeted incremental sync after a fresh catalog scan.
+// It is equivalent to a regular incremental sync but always performs Phase 1 (no resume skip).
+// After the no-op fix, a fresh catalog scan with non-empty missing backlog will always proceed to Phase 2.
+func (r *Runner) RunPCGWSyncRefreshNew(ctx context.Context) (bool, error) {
+	return r.TryRunPCGWSync(ctx)
+}
+
 // CancelAll cancels every in-flight job. Used during graceful shutdown.
 func (r *Runner) CancelAll() {
 	r.mu.Lock()

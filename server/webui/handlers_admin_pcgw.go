@@ -35,12 +35,12 @@ type adminPCGWData struct {
 	End              int
 	PrevPage         int
 	NextPage         int
-	JobRunning       bool
-	JobProgress      int
-	JobProgressTotal int
-	JobGamesSkipped  int
-	JobPhase         string
-	JobAutoCatchUp   bool
+	JobRunning        bool
+	JobProgressPages  int
+	JobProgressTotal  int
+	JobGamesSkipped   int
+	JobPhase          string
+	JobAutoCatchUp    bool
 	MaxPagesPerRun   int
 	CapStatusText    string
 	CapReached       bool
@@ -159,12 +159,12 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 		End:              end,
 		PrevPage:         prevPage,
 		NextPage:         nextPage,
-		JobRunning:       jobs.JobRunning,
-		JobProgress:      jobs.JobProgressPages,
-		JobProgressTotal: jobs.JobProgressTotal,
-		JobGamesSkipped:  jobs.JobGamesSkipped,
-		JobPhase:         jobs.JobPhase,
-		JobAutoCatchUp:   jobs.JobAutoCatchUp,
+		JobRunning:        jobs.JobRunning,
+		JobProgressPages:  jobs.JobProgressPages,
+		JobProgressTotal:  jobs.JobProgressTotal,
+		JobGamesSkipped:   jobs.JobGamesSkipped,
+		JobPhase:          jobs.JobPhase,
+		JobAutoCatchUp:    jobs.JobAutoCatchUp,
 		MaxPagesPerRun:   jobs.MaxPagesPerRun,
 		CapStatusText:    jobs.CapStatusText,
 		CapReached:       jobs.CapReached,
@@ -186,9 +186,10 @@ func (h *WebHandler) serveAdminPCGWJobStatusPartial(w http.ResponseWriter, r *ht
 	data := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret), false)
 	h.renderPartial(w, "partials/admin_pcgw_job_status.html", map[string]interface{}{
 		"JobRunning":       data.JobRunning,
-		"JobProgress":      data.JobProgressPages,
+		"JobProgressPages": data.JobProgressPages,
 		"JobProgressTotal": data.JobProgressTotal,
 		"JobGamesSkipped":  data.JobGamesSkipped,
+		"JobPhase":         data.JobPhase,
 		"JobAutoCatchUp":   data.JobAutoCatchUp,
 		"CSRFToken":        data.CSRFToken,
 	})
@@ -509,6 +510,34 @@ func (h *WebHandler) handleAdminPCGWSyncMissingLocal(w http.ResponseWriter, r *h
 	Redirect(w, r, "/admin/activity?job_started=1&job_action=missing_local")
 }
 
+func (h *WebHandler) handleAdminPCGWSyncRefreshNew(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if h.jobRunner != nil {
+		started, err := h.jobRunner.RunPCGWSyncRefreshNew(context.Background())
+		if err != nil {
+			if errors.Is(err, job.ErrJobAlreadyRunning) {
+				Redirect(w, r, "/admin/activity?error=job_already_running")
+				return
+			}
+			Redirect(w, r, "/admin/activity?error=job_start_failed")
+			return
+		}
+		if !started {
+			Redirect(w, r, "/admin/activity?error=job_already_running")
+			return
+		}
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "pcgw_sync_refresh_new", "")
+	Redirect(w, r, "/admin/pcgw")
+}
+
 func (h *WebHandler) handleAdminPCGWSyncAutoCatchUp(w http.ResponseWriter, r *http.Request) {
 	if !ValidateCSRF(r, h.secret) {
 		http.Error(w, "Invalid security token.", http.StatusBadRequest)
@@ -585,6 +614,10 @@ func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool
 	}
 	if path == "/admin/pcgw/sync/missing-local" && r.Method == http.MethodPost {
 		h.handleAdminPCGWSyncMissingLocal(w, r)
+		return true
+	}
+	if path == "/admin/pcgw/sync/refresh-new" && r.Method == http.MethodPost {
+		h.handleAdminPCGWSyncRefreshNew(w, r)
 		return true
 	}
 	if path == "/admin/pcgw/sync/auto-catch-up" && r.Method == http.MethodPost {

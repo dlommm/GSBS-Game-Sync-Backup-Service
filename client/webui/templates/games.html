@@ -1,0 +1,110 @@
+{{define "games"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GSBS — Add a game</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="app-shell">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  {{template "partials/topbar.html" .}}
+  <main id="main-content" class="page-content" role="main">
+    {{template "partials/alerts.html" .}}
+
+    <section class="panel" aria-labelledby="search-heading">
+      <div class="panel-header">
+        <h2 id="search-heading">Search games</h2>
+      </div>
+      <div style="padding:1rem 1.25rem;">
+        <p style="margin:0 0 0.75rem;font-size:0.875rem;color:var(--text-secondary);">
+          Search by game name to fill the save folder automatically, or paste the full path manually.
+          The save folder must already exist on this PC.
+        </p>
+        <div class="form-group">
+          <label for="search">Search by game name</label>
+          <input type="text" id="search" class="search-input" placeholder="e.g. Witcher 3" autocomplete="off" aria-controls="results">
+        </div>
+        <ul id="results" role="list" aria-live="polite" style="margin-top:0.75rem;display:grid;gap:0.5rem;"></ul>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="manual-heading" style="margin-top:1rem;">
+      <div class="panel-header">
+        <h2 id="manual-heading">Save folder details</h2>
+      </div>
+      <form method="post" action="/games/add" style="padding:1rem 1.25rem;display:grid;gap:0.75rem;">
+        <div class="form-group">
+          <label for="game_id">Game ID</label>
+          <input type="text" name="game_id" id="game_id" class="text-input" required placeholder="manifest game id">
+        </div>
+        <div class="form-group">
+          <label for="title">Title <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+          <input type="text" name="title" id="title" class="text-input" placeholder="display name">
+        </div>
+        <div class="form-group">
+          <label for="directory">Save folder (absolute path)</label>
+          <input type="text" name="directory" id="directory" class="text-input" required
+            placeholder="e.g. C:\Users\you\Documents\The Witcher 3">
+          <span class="form-hint">Subfolders are watched too. The folder must exist.</span>
+        </div>
+        <div class="form-group">
+          <label for="patterns">Include patterns <span style="font-weight:400;color:var(--text-muted);">(optional, comma-separated)</span></label>
+          <input type="text" name="patterns" id="patterns" class="text-input"
+            placeholder="*.sav, *.save  (leave blank to sync all files)">
+        </div>
+        <button type="submit" class="btn-primary">Add game</button>
+      </form>
+    </section>
+  </main>
+
+  <div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;max-width:24rem;"></div>
+  <script src="/static/toast.js"></script>
+  <script>
+  var searchTimer;
+  var searchBox = document.getElementById('search');
+  searchBox.addEventListener('input', function() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 250);
+  });
+  function runSearch() {
+    var q = searchBox.value;
+    fetch('/games/search?q=' + encodeURIComponent(q)).then(function(r) { return r.json(); }).then(function(d) {
+      var ul = document.getElementById('results');
+      ul.innerHTML = '';
+      (d.results || []).forEach(function(g) {
+        var li = document.createElement('li');
+        var badgeStyle = g.exists
+          ? 'background:var(--success-muted);color:var(--success);border:1px solid rgba(34,197,94,.2);'
+          : 'background:var(--surface-hover);color:var(--text-muted);border:1px solid var(--border);';
+        var badgeText = g.exists ? 'folder found' : 'folder missing';
+        li.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);padding:0.625rem 0.875rem;';
+        li.innerHTML =
+          '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;">' +
+            '<div>' +
+              '<div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">' +
+                '<span style="font-weight:500;font-size:0.875rem;">' + esc(g.title) + '</span>' +
+                '<span style="border-radius:9999px;padding:0.1rem 0.5rem;font-size:0.7rem;font-weight:500;' + badgeStyle + '">' + badgeText + '</span>' +
+              '</div>' +
+              '<div style="margin-top:0.2rem;font-size:0.75rem;color:var(--text-muted);">' + esc(g.game_id) + (g.directory ? ' · ' + esc(g.directory) : ' · (no path resolved)') + '</div>' +
+            '</div>' +
+            '<button type="button" class="use btn-ghost-sm" style="flex-shrink:0;">Use this</button>' +
+          '</div>';
+        li.querySelector('.use').addEventListener('click', function() {
+          document.getElementById('game_id').value = g.game_id;
+          document.getElementById('title').value = g.title;
+          document.getElementById('directory').value = g.directory || '';
+          window.scrollTo(0, document.body.scrollHeight);
+        });
+        ul.appendChild(li);
+      });
+    }).catch(function() {});
+  }
+  function esc(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  runSearch();
+  </script>
+</body>
+</html>
+{{end}}

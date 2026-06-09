@@ -10,7 +10,7 @@
   {{if .Versions}}
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th>Version</th><th>Updated</th><th>Size</th><th class="th-action">Actions</th></tr></thead>
+      <thead><tr><th scope="col">Version</th><th scope="col">Updated</th><th scope="col">Size</th><th scope="col" class="th-action">Actions</th></tr></thead>
       <tbody>
         {{range .Versions}}
         <tr{{if eq .Version $.CurrentVersion}} class="current-version"{{end}}>

@@ -4,10 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Two-factor authentication — GSBS</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body class="auth-page">
-  <main class="auth-card" role="main">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <main id="main-content" class="auth-card" role="main">
     <h1>Authenticator code</h1>
     <p class="subtitle">Enter the code from your authenticator app</p>
     {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}

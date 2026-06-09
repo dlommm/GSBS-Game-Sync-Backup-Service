@@ -1,0 +1,19 @@
+{{define "partials/topbar.html"}}
+<header class="topbar" role="banner">
+  <div class="topbar-left">
+    <img src="/client-logo" alt="GSBS" class="topbar-icon" width="24" height="24">
+    <span class="topbar-brand">GSBS Client</span>
+    <nav class="topbar-nav" role="navigation" aria-label="Main navigation">
+      <div class="topbar-nav-scroll">
+        {{$nav := .NavActive}}
+        <a href="/dashboard"     {{if eq $nav "dashboard"}}class="active" aria-current="page"{{end}}>Status</a>
+        <a href="/games"         {{if eq $nav "games"}}class="active" aria-current="page"{{end}}>Games</a>
+        <a href="/quick-actions" {{if eq $nav "quick-actions"}}class="active" aria-current="page"{{end}}>Actions</a>
+        <a href="/help"          {{if eq $nav "help"}}class="active" aria-current="page"{{end}}>Help</a>
+        <a href="/"              {{if eq $nav "setup"}}class="active" aria-current="page"{{end}}>Setup</a>
+        <a href="/about"         {{if eq $nav "about"}}class="active" aria-current="page"{{end}}>About</a>
+      </div>
+    </nav>
+  </div>
+</header>
+{{end}}

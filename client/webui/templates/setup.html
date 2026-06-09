@@ -1,0 +1,134 @@
+{{define "setup"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GSBS — Setup</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="auth-page">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <main id="main-content" class="auth-card" role="main">
+    <img src="/client-logo" alt="GSBS" class="auth-logo">
+    <h1>GSBS Client</h1>
+    <p class="subtitle">Game Sync &amp; Backup Service</p>
+
+    <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.75rem;font-weight:500;margin-bottom:1.25rem;">
+      <span style="border-radius:9999px;background:var(--accent);color:#fff;padding:0.15rem 0.65rem;">1 — Connect</span>
+      <span style="color:var(--text-muted)">→</span>
+      <span style="border-radius:9999px;background:var(--surface-hover);color:var(--text-muted);padding:0.15rem 0.65rem;">2 — Discover</span>
+      <span style="color:var(--text-muted)">→</span>
+      <span style="border-radius:9999px;background:var(--surface-hover);color:var(--text-muted);padding:0.15rem 0.65rem;">3 — Sync</span>
+    </div>
+
+    {{if .Error}}
+    <p class="error" role="alert">{{.Error}}</p>
+    {{end}}
+
+    {{if .SetupDone}}
+    <div id="discoveryPanel" style="margin-bottom:1.25rem;padding:1rem;background:var(--success-muted);border:1px solid rgba(34,197,94,.25);border-radius:var(--radius-sm);">
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+        <svg style="width:1.125rem;height:1.125rem;color:var(--success);flex-shrink:0;" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+        <span style="font-weight:600;color:var(--success);">Connected — Step 2: Discovery</span>
+      </div>
+      <p id="discStatus" style="font-size:0.875rem;color:var(--success);margin:0 0 0.5rem;">Scanning installed games…</p>
+      <ul id="gameList" style="margin:0;padding:0;list-style:none;font-size:0.875rem;color:var(--success);display:grid;gap:0.2rem;" aria-live="polite"></ul>
+      <p style="margin:0.75rem 0 0;font-size:0.75rem;color:var(--text-muted);">When your games appear, close this page — sync continues from the tray icon.</p>
+      <div style="margin-top:0.75rem;display:flex;gap:1rem;">
+        <a id="dashLink" href="#" target="_blank" rel="noopener" style="font-size:0.875rem;font-weight:500;color:var(--success);text-decoration:underline;">
+          Open server dashboard →
+        </a>
+        <a href="/dashboard" style="font-size:0.875rem;font-weight:500;color:var(--success);text-decoration:underline;">
+          Local status →
+        </a>
+      </div>
+    </div>
+    {{end}}
+
+    <form method="post" action="/login" id="loginForm" class="auth-form">
+      <label for="server_url">Server URL</label>
+      <input type="text" name="server_url" id="server_url" value="{{.SetupServerURL}}"
+        placeholder="https://your-server:8080" required autocomplete="url">
+      <span style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;display:block;">e.g. https://your-server:8080 or http://localhost:8080</span>
+      <label for="username">Username</label>
+      <input type="text" name="username" id="username" required autocomplete="username">
+      <label for="password">Password</label>
+      <input type="password" name="password" id="password" required autocomplete="current-password">
+      <label for="client_name">Client name <span style="font-weight:400;color:var(--text-muted);">(optional)</span></label>
+      <input type="text" name="client_name" id="client_name" value="{{.SetupClientName}}"
+        placeholder="this PC name" autocomplete="off">
+      <button type="submit">Connect</button>
+    </form>
+
+    <p class="auth-footer">
+      <a href="/open-log">Open log file</a>
+      &nbsp;·&nbsp;
+      <a href="/dashboard">Local status</a>
+      &nbsp;·&nbsp;
+      <a href="/games">Add a game</a>
+      &nbsp;·&nbsp;
+      <a href="/help">Help</a>
+    </p>
+  </main>
+
+  <div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;max-width:24rem;"></div>
+  <script src="/static/toast.js"></script>
+  <script>
+  document.getElementById('loginForm').addEventListener('submit', function(e) {
+    var server = (this.server_url && this.server_url.value) ? this.server_url.value.trim() : '';
+    if (!server) {
+      e.preventDefault();
+      if (window.gsbs && window.gsbs.toast) { window.gsbs.toast('Please enter the server URL.', 'error'); }
+      return;
+    }
+    if (server.indexOf('http://') !== 0 && server.indexOf('https://') !== 0) {
+      e.preventDefault();
+      if (window.gsbs && window.gsbs.toast) { window.gsbs.toast('Server URL should start with http:// or https://', 'error'); }
+      return;
+    }
+    if (!this.username.value.trim()) {
+      e.preventDefault();
+      if (window.gsbs && window.gsbs.toast) { window.gsbs.toast('Please enter username.', 'error'); }
+      return;
+    }
+    if (!this.password.value) {
+      e.preventDefault();
+      if (window.gsbs && window.gsbs.toast) { window.gsbs.toast('Please enter password.', 'error'); }
+      return;
+    }
+  });
+  {{if .SetupDone}}
+  (function poll() {
+    fetch('/status').then(function(r) { return r.json(); }).then(function(s) {
+      var el = document.getElementById('discStatus');
+      if (!el) return;
+      if (s.matched_games > 0) {
+        el.textContent = 'Found ' + s.matched_games + ' game(s) ready to sync.';
+        var ul = document.getElementById('gameList');
+        if (ul && s.game_titles) {
+          ul.innerHTML = s.game_titles.slice(0, 12).map(function(t) {
+            return '<li style="display:flex;align-items:center;gap:0.35rem;"><span style="color:var(--success);">✓</span>' + t.replace(/</g, '&lt;') + '</li>';
+          }).join('');
+          if (s.matched_games > 12) {
+            ul.innerHTML += '<li style="color:var(--text-muted);">… and ' + (s.matched_games - 12) + ' more</li>';
+          }
+        }
+      } else if (s.logged_in) {
+        el.textContent = 'Logged in — discovery in progress…';
+        setTimeout(poll, 2000);
+      }
+      if (s.server_url) {
+        var dash = document.getElementById('dashLink');
+        if (dash) dash.href = s.server_url.replace(/\/$/, '') + '/dashboard';
+      }
+    }).catch(function() { setTimeout(poll, 3000); });
+  })();
+  {{end}}
+  </script>
+</body>
+</html>
+{{end}}

@@ -4,7 +4,7 @@
   <a href="" hx-get="/dashboard/partial/stats" hx-target="closest section" hx-swap="innerHTML">Retry</a>
 </p>
 {{else}}
-<section class="stats-row" aria-label="Statistics">
+<section class="stats-row" aria-label="Sync statistics">
   <div class="stat-card"><div class="stat-value">{{.Stats.ClientCount}}</div><div class="stat-label">Clients</div></div>
   <div class="stat-card"><div class="stat-value">{{.Stats.GameCount}}</div><div class="stat-label">Games</div></div>
   <div class="stat-card"><div class="stat-value">{{.Stats.SaveCount}}</div><div class="stat-label">Synced saves</div></div>

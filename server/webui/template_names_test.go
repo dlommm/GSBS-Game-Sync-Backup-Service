@@ -376,7 +376,7 @@ func templateTestData(name string) interface{} {
 				{PageID: 123, Title: "Test Game", ParseStatus: "ok", UpdatedAt: now, SteamAppIDs: []string{"730"}, PlatformsPresent: []string{"windows"}},
 			},
 			Page: 1, PerPage: 20, Total: 1, TotalPages: 1, Start: 1, End: 1, PrevPage: 0, NextPage: 2,
-			JobRunning: true, JobProgress: 42, JobProgressTotal: 100, JobGamesSkipped: 1,
+			JobRunning: true, JobProgressPages: 42, JobProgressTotal: 100, JobGamesSkipped: 1,
 			CapStatusText: "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
 		}
 	case "admin_pcgw_detail.html":
@@ -532,8 +532,8 @@ func templateTestData(name string) interface{} {
 		}
 	case "partials/admin_pcgw_job_status.html":
 		return map[string]interface{}{
-			"JobRunning": true, "JobProgress": 42, "JobProgressTotal": 100, "JobGamesSkipped": 3,
-			"CSRFToken": "csrf-test",
+			"JobRunning": true, "JobProgressPages": 42, "JobProgressTotal": 100, "JobGamesSkipped": 3,
+			"JobPhase": "ingest", "CSRFToken": "csrf-test",
 		}
 	case "partials/loading_skeleton.html":
 		return map[string]interface{}{}

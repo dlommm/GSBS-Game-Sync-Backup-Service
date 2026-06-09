@@ -1,10 +1,10 @@
 {{define "partials/admin_logs_table.html"}}
 {{if not .LogSourcePresent}}
-<div class="panel-empty"><p>{{.LogSourceInfo}}</p></div>
+<div class="panel-empty" aria-live="polite"><p>{{.LogSourceInfo}}</p></div>
 {{else if .Entries}}
-<div class="table-wrap">
+<div class="table-wrap" aria-live="polite">
   <table class="data-table">
-    <thead><tr><th>Time</th><th>Level</th><th>Message</th></tr></thead>
+    <thead><tr><th scope="col">Time</th><th scope="col">Level</th><th scope="col">Message</th></tr></thead>
     <tbody>
       {{range .Entries}}
       <tr>

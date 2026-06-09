@@ -1,21 +1,24 @@
 {{define "partials/admin_pcgw_job_status.html"}}
+<div aria-label="PCGW sync job status">
 {{if .JobRunning}}
-<div class="job-progress-wrap" style="padding:0 1.25rem 1rem;">
-  <p class="notice notice-running" style="margin:0 0 0.75rem;"><span class="badge-running">Sync running</span></p>
-  {{if .JobAutoCatchUp}}
-  <p class="cell-muted" style="margin:0 0 0.5rem;">Mode: <strong>Auto catch-up</strong> (repeating Phase 2 until backlog is cleared).</p>
-  {{end}}
+<div class="pcgw-job-status-wrap">
+  <p class="notice notice-running notice-compact"><span class="badge-running">Sync running</span>{{if .JobAutoCatchUp}} — Auto catch-up mode{{end}}</p>
   <div class="quota-bar-header">
-    <span>Progress</span>
-    <span>{{.JobProgress}}{{if gt .JobProgressTotal 0}} / {{.JobProgressTotal}}{{end}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
+    <span>Phase: <strong>{{if .JobPhase}}{{.JobPhase}}{{else}}listing{{end}}</strong></span>
+    <span>{{.JobProgressPages}}{{if gt .JobProgressTotal 0}} / {{.JobProgressTotal}}{{end}} pages ({{if gt .JobProgressTotal 0}}{{printf "%.0f" (percentInt .JobProgressPages .JobProgressTotal)}}%{{else}}—{{end}}){{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
   </div>
   <div class="quota-bar-track">
     {{if gt .JobProgressTotal 0}}
-    <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgress .JobProgressTotal)}}%;"></div>
+    <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}%;"></div>
     {{else}}
     <div class="quota-bar-fill" style="width:100%;opacity:0.35;"></div>
     {{end}}
   </div>
 </div>
+{{else}}
+<div class="pcgw-idle-status">
+  <p>No sync job is currently running. Use <strong>Quick Actions</strong> to start an incremental sync, or <strong>Advanced Maintenance</strong> for targeted operations.</p>
+</div>
 {{end}}
+</div>
 {{end}}
