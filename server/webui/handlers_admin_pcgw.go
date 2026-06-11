@@ -51,6 +51,12 @@ type adminPCGWData struct {
 	JobCatalogScanMode string
 	JobPhaseLabel      string
 	AvgHistPagesPerSec float64
+	BundleSyncSource   string
+	BundleLastFetched  string
+	BundleLastExported string
+	BundleLastETag     string
+	BundleLastError    string
+	BundleJobRunning   bool
 }
 
 type PCGWStatsView struct {
@@ -182,6 +188,12 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 		JobCatalogScanMode: jobs.JobCatalogScanMode,
 		JobPhaseLabel:      jobs.JobPhaseLabel,
 		AvgHistPagesPerSec: jobs.AvgHistPagesPerSec,
+		BundleSyncSource:   jobs.BundleSyncSource,
+		BundleLastFetched:  jobs.BundleLastFetched,
+		BundleLastExported: jobs.BundleLastExported,
+		BundleLastETag:     jobs.BundleLastETag,
+		BundleLastError:    jobs.BundleLastError,
+		BundleJobRunning:   jobs.BundleJobRunning,
 	})
 }
 
@@ -626,6 +638,39 @@ func (h *WebHandler) handleAdminPCGWRebuildManifest(w http.ResponseWriter, r *ht
 	Redirect(w, r, "/admin/activity?job_started=1")
 }
 
+func (h *WebHandler) handleAdminPCGWBundleFetch(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	forceFull := r.FormValue("full") == "1"
+	if h.jobRunner != nil {
+		started, err := h.jobRunner.TryRunPCGWBundleFetch(context.Background(), forceFull)
+		if err != nil {
+			if errors.Is(err, job.ErrJobAlreadyRunning) {
+				Redirect(w, r, "/admin/activity?error=job_already_running")
+				return
+			}
+			Redirect(w, r, "/admin/activity?error=job_start_failed")
+			return
+		}
+		if !started {
+			Redirect(w, r, "/admin/activity?error=job_already_running")
+			return
+		}
+	}
+	action := "pcgw_bundle_fetch"
+	if forceFull {
+		action = "pcgw_bundle_fetch_full"
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", action, "")
+	Redirect(w, r, "/admin/activity?job_started=1")
+}
+
 func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool {
 	path := r.URL.Path
 	if path == "/admin/pcgw" && r.Method == http.MethodGet {
@@ -638,6 +683,10 @@ func (h *WebHandler) routeAdminPCGW(w http.ResponseWriter, r *http.Request) bool
 	}
 	if path == "/admin/partial/pcgw-job-status" && r.Method == http.MethodGet {
 		h.serveAdminPCGWJobStatusPartial(w, r)
+		return true
+	}
+	if path == "/admin/pcgw/bundle/fetch" && r.Method == http.MethodPost {
+		h.handleAdminPCGWBundleFetch(w, r)
 		return true
 	}
 	if path == "/admin/pcgw/sync" && r.Method == http.MethodPost {

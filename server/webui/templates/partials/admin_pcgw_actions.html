@@ -191,6 +191,41 @@
     </details>
   </section>
 
+  {{/* ── GitHub Bundle ───────────────────────────────────────────────────── */}}
+  <section class="pcgw-control-card">
+    <h3 class="pcgw-card-title">GitHub Manifest Bundle</h3>
+    <p class="pcgw-card-subtitle">Fetch pre-built PCGW data from the remote manifest repository (sync source: <strong>{{.BundleSyncSource}}</strong>).</p>
+    <div class="config-grid">
+      <div class="config-item"><span class="config-key">Last fetch</span><span class="config-val">{{if .BundleLastFetched}}{{formatTime .BundleLastFetched}}{{else}}—{{end}}</span></div>
+      <div class="config-item"><span class="config-key">Bundle exported</span><span class="config-val">{{if .BundleLastExported}}{{formatTime .BundleLastExported}}{{else}}—{{end}}</span></div>
+      <div class="config-item"><span class="config-key">ETag</span><span class="config-val cell-muted">{{if .BundleLastETag}}{{.BundleLastETag}}{{else}}—{{end}}</span></div>
+      {{if .BundleLastError}}
+      <div class="config-item"><span class="config-key">Last error</span><span class="config-val pcgw-warning-text">{{.BundleLastError}}</span></div>
+      {{end}}
+    </div>
+    <div class="pcgw-actions-stack">
+      {{if .BundleJobRunning}}
+      <span class="badge-running">Bundle fetch in progress…</span>
+      {{else}}
+      <div class="pcgw-action-row">
+        <form method="post" action="/admin/pcgw/bundle/fetch" class="inline-form">
+          <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+          <button type="submit" class="btn-primary-sm">Fetch bundle now</button>
+        </form>
+        <span class="pcgw-action-help">Delta fetch when seeded; full bundle on empty DB.</span>
+      </div>
+      <div class="pcgw-action-row">
+        <form method="post" action="/admin/pcgw/bundle/fetch" class="inline-form">
+          <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+          <input type="hidden" name="full" value="1">
+          <button type="submit" class="btn-ghost-sm">Force full bundle</button>
+        </form>
+        <span class="pcgw-action-help">Re-download and merge the full manifest bundle.</span>
+      </div>
+      {{end}}
+    </div>
+  </section>
+
   {{/* ── Import / Export ─────────────────────────────────────────────────── */}}
   <section class="pcgw-control-card">
     <h3 class="pcgw-card-title">Import / Export</h3>

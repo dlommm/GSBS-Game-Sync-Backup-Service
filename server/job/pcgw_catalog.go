@@ -48,10 +48,11 @@ func MaxPagesPerRunWithSource() (int, string) {
 
 // RunCatalogScan performs Phase 1: enumerate all PCGW game IDs via ListGamePages,
 // upsert them into pcgw_catalog, and compute the catalog hash.
-// It returns Phase1Stats and updates the sync run row in the store.
-func RunCatalogScan(ctx context.Context, st store.Store, client *pcgw.Client, runID string, reportEx ReportProgressEx) (types.Phase1Stats, error) {
+// reason is logged as phase1_reason so operators can see why a full scan ran.
+func RunCatalogScan(ctx context.Context, st store.Store, client *pcgw.Client, runID string, reason string, reportEx ReportProgressEx) (types.Phase1Stats, error) {
 	var stats types.Phase1Stats
 	offset := 0
+	logCatalogScanStart("full", reason, 0, 0)
 
 	for {
 		select {
@@ -87,6 +88,7 @@ func RunCatalogScan(ctx context.Context, st store.Store, client *pcgw.Client, ru
 		}
 
 		stats.RemoteTotalIDs = offset + len(pages)
+		logCatalogScanProgress("full", stats.RemoteTotalIDs, offset)
 		if reportEx != nil {
 			reportEx(PCGWSyncProgress{
 				PagesProcessed: stats.RemoteTotalIDs,
@@ -160,6 +162,7 @@ func ScanCatalogTail(ctx context.Context, st store.Store, client *pcgw.Client, r
 
 	newCount := 0
 	offset := startOffset
+	logCatalogScanStart("tail", "tail", startOffset, cachedTotal)
 
 	for {
 		select {
@@ -195,6 +198,7 @@ func ScanCatalogTail(ctx context.Context, st store.Store, client *pcgw.Client, r
 
 		newCount += len(pages)
 		stats.RemoteTotalIDs = cachedTotal + newCount
+		logCatalogScanProgress("tail", stats.RemoteTotalIDs, offset)
 
 		if reportEx != nil {
 			reportEx(PCGWSyncProgress{

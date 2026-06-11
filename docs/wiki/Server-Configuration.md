@@ -47,6 +47,17 @@
 | `GSBS_PCGW_USER_AGENT` | `GSBS/<version> (+https://...)` | User-Agent for PCGamingWiki requests |
 | `GSBS_PCGW_STORE_FULL_WIKITEXT` | `true` | Set `false` to skip storing full-page zstd wikitext |
 
+### Manifest bundle (GitHub sync)
+
+| Variable | Default | Description |
+|---|---|---|
+| `GSBS_PCGW_SYNC_SOURCE` | (from DB) | `github` or `api`. Fresh installs default to GitHub bundle fetch. |
+| `GSBS_PCGW_BUNDLE_URL` | Official gsbs-manifest URL | Full bundle URL |
+| `GSBS_PCGW_BUNDLE_DELTA_URL` | Official delta URL | Delta bundle for seeded servers |
+| `GSBS_PCGW_BUNDLE_CRON` | `0 4 * * *` | Bundle fetch schedule when source is `github` |
+
+See [MANIFEST_BUNDLE.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/MANIFEST_BUNDLE.md) in the main repo.
+
 ---
 
 ## Docker Compose (recommended)

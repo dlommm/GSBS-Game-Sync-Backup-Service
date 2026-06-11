@@ -117,6 +117,12 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_PCGW_USER_AGENT` | `GSBS/<version> (+https://github.com/…)` | User-Agent sent to PCGamingWiki. |
 | `GSBS_PCGW_STORE_FULL_WIKITEXT` | `true` | When `false`, skip storing zstd full-page wikitext (section text still stored). |
 | `GSBS_PCGW_MAX_PAGES_PER_RUN` | `5000` | Maximum number of pages to ingest in Phase 2 per sync run. Interrupted runs resume from checkpoint on next run. |
+| `GSBS_PCGW_SYNC_SOURCE` | (from DB) | `github` (manifest bundle fetch) or `api` (direct PCGW sync). Fresh installs default to `github`; existing DBs with games default to `api`. Overrides admin Settings when set. |
+| `GSBS_PCGW_BUNDLE_URL` | Official gsbs-manifest raw URL | Full manifest bundle URL when sync source is `github`. |
+| `GSBS_PCGW_BUNDLE_DELTA_URL` | Official gsbs-manifest delta URL | Delta bundle URL for seeded servers. |
+| `GSBS_PCGW_BUNDLE_CRON` | `0 4 * * *` | Cron for bundle fetch when sync source is `github`. Set to `""` to disable. Overrides admin Settings when set (including empty). |
+
+See [MANIFEST_BUNDLE.md](MANIFEST_BUNDLE.md) for bundle sync details.
 
 Example with all options:
 

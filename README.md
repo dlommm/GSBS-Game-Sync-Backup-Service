@@ -142,9 +142,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for lint, coverage, and conventions.
 
 ## Server configuration
 
-PCGW sync schedule: set `GSBS_PCGW_CRON` in Docker/compose (default `0 3 * * 0`, weekly Sunday 03:00; use `""` to disable). When the env var is **not** set, admins can configure cron in the WebUI under **Admin → Settings**.
+PCGW data: fresh installs default to **GitHub manifest bundle** sync (`pcgw_sync_source=github`) — the server fetches a pre-built bundle from [gsbs-manifest](https://github.com/dlommm/gsbs-manifest) on a schedule (ETag-aware). Existing installs with PCGW data stay on **API sync** until changed in **Admin → Settings**. See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
 
-Two-phase PCGW sync: Phase 1 enumerates all PCGW game IDs into `pcgw_catalog`; Phase 2 fetches only missing, failed/partial, and changed pages. Set `GSBS_PCGW_MAX_PAGES_PER_RUN` to cap the Phase 2 ingest budget per run (default 5000). Interrupted runs save a checkpoint and resume automatically on the next sync.
+API sync schedule: set `GSBS_PCGW_CRON` in Docker/compose (default `0 3 * * 0`, weekly Sunday 03:00; use `""` to disable). Bundle fetch cron defaults to daily 04:00 (`GSBS_PCGW_BUNDLE_CRON`). When env vars are **not** set, admins configure schedules in the WebUI under **Admin → Settings**.
+
+Two-phase PCGW API sync: Phase 1 enumerates all PCGW game IDs into `pcgw_catalog`; Phase 2 fetches only missing, failed/partial, and changed pages. Set `GSBS_PCGW_MAX_PAGES_PER_RUN` to cap the Phase 2 ingest budget per run (default 5000). Interrupted runs save a checkpoint and resume automatically on the next sync.
 
 Save storage: set `GSBS_SAVE_ROOT` (e.g. `/app/data/gamesaves` on the same Docker volume as `GSBS_DB`) to store save files on disk instead of SQLite BLOBs. Clients must send `X-Relative-Path` on push when filesystem storage is enabled. See [docs/DOCKER.md](docs/DOCKER.md) for all environment variables.
 

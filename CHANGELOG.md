@@ -2,6 +2,20 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- **Manifest bundle sync (GitHub mode)**: Servers can fetch pre-built PCGW manifest bundles from [gsbs-manifest](https://github.com/dlommm/gsbs-manifest) instead of live API sync. ETag 304 skip, smart merge import (`merge_skip_unchanged` / `delta`), delta bundles for seeded servers, admin sync-source toggle, bundle cron, and **Fetch bundle now** on Admin → PCGW. Fresh installs default to `github`; existing installs with PCGW data stay on `api`.
+- **Bundle schema v2**: Catalog export, lite profile (omit heavy wikitext), `deleted_game_ids` for deltas, manifest version bump only when rows change.
+- **CLI**: `cmd/pcgw-bundle-export` (`--full`, `--delta`, `--since`, `--lite`) for optional CLI export.
+- **PCGW sync logging**: Structured `phase1_reason`, rev-check decision/progress, catalog scan progress, and Phase 2 skip/progress events so slow runs show why Phase 1 ran or pages were not updated immediately.
+- **Docs**: [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
+
+### Changed
+
+- **Cron**: `pcgw_sync_source=github` schedules `pcgw_bundle_fetch`; `api` keeps incremental PCGW sync cron. First start runs bundle fetch in GitHub mode.
+
 ## [2.1.7] - 2026-06-10
 
 ### Fixed

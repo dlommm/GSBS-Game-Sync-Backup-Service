@@ -177,16 +177,24 @@ func (a *serverApp) Start(ctx context.Context) {
 		}
 		if shouldAutoRunPCGWOnFirstStart(context.Background(), a.st) {
 			go func() {
-				started, err := a.runner.TryRunPCGWSync(context.Background())
+				settings, _ := a.st.ListAdminSettings(context.Background())
+				source := store.PCGWSyncSourceFromSettings(settings)
+				var started bool
+				var err error
+				if source == store.PCGWSyncSourceGitHub {
+					started, err = a.runner.TryRunPCGWBundleFetch(context.Background(), true)
+				} else {
+					started, err = a.runner.TryRunPCGWSync(context.Background())
+				}
 				if err != nil {
-					logx.Logger().Error().Err(err).Msg("first-start pcgw sync")
+					logx.Logger().Error().Err(err).Str("source", source).Msg("first-start pcgw sync")
 					return
 				}
 				if started {
 					if err := a.st.SetAdminSetting(context.Background(), store.AdminSettingPCGWFirstRunDone, "true"); err != nil {
 						logx.Logger().Error().Err(err).Msg("first-start pcgw sync: set marker")
 					}
-					logx.Logger().Info().Msg("first-start pcgw sync started")
+					logx.Logger().Info().Str("source", source).Msg("first-start pcgw sync started")
 				}
 			}()
 		}

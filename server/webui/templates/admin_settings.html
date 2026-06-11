@@ -2,10 +2,61 @@
 {{define "admin_settings_title"}}Admin Settings — GSBS{{end}}
 {{define "admin_settings_content"}}
 <section class="panel">
-  <div class="panel-header"><h2>PCGW Sync Schedule</h2></div>
+  <div class="panel-header"><h2>PCGW Sync</h2></div>
   <form method="post" action="/admin/settings/save" class="settings-form">
     <input type="hidden" name="csrf" value="{{.CSRFToken}}">
 
+    <div class="settings-form-section">
+      <h3 class="settings-form-section-title">Sync source</h3>
+      <p class="settings-form-section-desc">Choose how the server updates PCGW mirror data. GitHub bundle fetch avoids direct PCGW API calls.</p>
+      {{if .PCGWSyncSourceEnvOverride}}
+      <p class="notice notice-warn">Sync source is controlled by <code>GSBS_PCGW_SYNC_SOURCE</code> environment variable.</p>
+      {{end}}
+      <div class="form-group">
+        <label class="radio-label">
+          <input type="radio" name="pcgw_sync_source" value="github" {{if eq .PCGWSyncSource "github"}}checked{{end}} {{if .PCGWSyncSourceEnvOverride}}disabled{{end}}>
+          <span>GitHub manifest bundle (recommended)</span>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="pcgw_sync_source" value="api" {{if eq .PCGWSyncSource "api"}}checked{{end}} {{if .PCGWSyncSourceEnvOverride}}disabled{{end}}>
+          <span>Direct PCGW API sync</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="settings-form-section">
+      <h3 class="settings-form-section-title">Bundle fetch schedule</h3>
+      <p class="settings-form-section-desc">Used when sync source is GitHub. Checks remote bundle with ETag (304 = no download).</p>
+      {{if .PCGWBundleCronEnvOverride}}
+      <p class="notice notice-warn">Bundle cron is controlled by <code>GSBS_PCGW_BUNDLE_CRON</code> environment variable.</p>
+      {{end}}
+      <div class="form-group">
+        <label for="pcgw_bundle_cron">Bundle cron expression</label>
+        <input type="text" id="pcgw_bundle_cron" name="pcgw_bundle_cron" class="text-input" value="{{.PCGWBundleCron}}" {{if .PCGWBundleCronEnvOverride}}disabled{{end}} placeholder="0 4 * * *" autocomplete="off" spellcheck="false">
+        <p class="form-hint">Leave empty to disable scheduled bundle fetch.</p>
+        {{if .PCGWBundleCronNextRun}}
+        <div class="config-item"><span class="config-key">Next bundle fetch</span><span class="config-val">{{.PCGWBundleCronNextRun}}</span></div>
+        {{end}}
+      </div>
+      <div class="form-group">
+        <label for="pcgw_bundle_url">Full bundle URL</label>
+        <input type="url" id="pcgw_bundle_url" name="pcgw_bundle_url" class="text-input" value="{{.PCGWBundleURL}}" placeholder="https://raw.githubusercontent.com/.../manifest.json.gz">
+      </div>
+      <div class="form-group">
+        <label for="pcgw_bundle_delta_url">Delta bundle URL</label>
+        <input type="url" id="pcgw_bundle_delta_url" name="pcgw_bundle_delta_url" class="text-input" value="{{.PCGWBundleDeltaURL}}" placeholder="https://raw.githubusercontent.com/.../manifest.delta.json.gz">
+      </div>
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="pcgw_bundle_incremental_fallback" value="1" {{if .PCGWBundleIncrementalFB}}checked{{end}}>
+          <span>After bundle fetch, also run lightweight incremental PCGW API sync</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="settings-form-section">
+      <h3 class="settings-form-section-title">API sync schedule</h3>
+      <p class="settings-form-section-desc">Used when sync source is Direct PCGW API.</p>
     {{if .PCGWCronEnvOverride}}
     <p class="notice notice-warn">Cron is controlled by <code>GSBS_PCGW_CRON</code> environment variable (overrides database). Change it in Docker/compose and restart the server to update.</p>
     {{end}}
@@ -31,18 +82,19 @@
       <div class="config-item"><span class="config-key">Next run</span><span class="config-val">{{.PCGWCronNextRun}}</span></div>
       {{end}}
     </div>
+    </div>
 
     <div class="form-group">
       <label class="checkbox-label">
         <input type="checkbox" name="pcgw_auto_run_on_first_start" value="1" {{if .AutoRunFirstStart}}checked{{end}}>
-        <span>Auto-run PCGW incremental sync on first server start</span>
+        <span>Auto-run sync on first server start</span>
       </label>
-      <p class="form-hint">Runs once when the server starts for the first time (until the first-run marker is set).</p>
+      <p class="form-hint">GitHub mode: fetch full bundle. API mode: incremental PCGW sync. Runs once until the first-run marker is set.</p>
     </div>
 
     <div class="settings-form-section">
       <h3 class="settings-form-section-title">PCGW Filters</h3>
-      <p class="settings-form-section-desc">Substring excludes applied during sync. Path excludes use defaults when empty.</p>
+      <p class="settings-form-section-desc">Substring excludes applied during API sync. Path excludes use defaults when empty.</p>
 
       <div class="form-group">
         <label for="pcgw_title_excludes">Title excludes (JSON array)</label>

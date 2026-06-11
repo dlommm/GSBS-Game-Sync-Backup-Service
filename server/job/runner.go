@@ -493,6 +493,108 @@ func (r *Runner) runPCGWSyncAutoCatchUp(ctx context.Context, baseOpts PCGWSyncOp
 	return totalEntries, fmt.Errorf("auto catch-up stopped after %d cycles (safety limit reached); %s", autoCatchUpMaxCycles, latestBacklog.summary())
 }
 
+// TryRunPCGWBundleFetch starts a remote manifest bundle fetch if none is running.
+func (r *Runner) TryRunPCGWBundleFetch(ctx context.Context, forceFull bool) (bool, error) {
+	return r.tryRunPCGWBundleFetch(ctx, PCGWBundleFetchOptions{ForceFull: forceFull})
+}
+
+func (r *Runner) tryRunPCGWBundleFetch(ctx context.Context, opts PCGWBundleFetchOptions) (bool, error) {
+	const jobName = bundleFetchJobName
+	r.mu.Lock()
+	if r.running[jobName] {
+		r.mu.Unlock()
+		return false, ErrJobAlreadyRunning
+	}
+	r.mu.Unlock()
+
+	if r.store.HasRunningJob(ctx, jobName) {
+		return false, ErrJobAlreadyRunning
+	}
+
+	r.mu.Lock()
+	if r.running[jobName] {
+		r.mu.Unlock()
+		return false, ErrJobAlreadyRunning
+	}
+	r.running[jobName] = true
+	r.mu.Unlock()
+
+	r.wg.Add(1)
+	go r.runPCGWBundleFetch(ctx, jobName, opts)
+	return true, nil
+}
+
+func (r *Runner) runPCGWBundleFetch(parentCtx context.Context, jobName string, opts PCGWBundleFetchOptions) {
+	defer r.wg.Done()
+	defer func() {
+		r.mu.Lock()
+		r.running[jobName] = false
+		delete(r.cancelFuncs, jobName)
+		delete(r.jobRunIDs, jobName)
+		r.mu.Unlock()
+	}()
+
+	logx.Logger().Info().Str("component", "job").Str("job", jobName).Bool("force_full", opts.ForceFull).Msg("job: started")
+	jobCtx, cancel := context.WithTimeout(parentCtx, bundleHTTPTimeout+5*time.Minute)
+	defer cancel()
+
+	r.mu.Lock()
+	r.cancelFuncs[jobName] = cancel
+	r.mu.Unlock()
+
+	runID, err := r.store.LogJobStart(jobCtx, jobName)
+	if err != nil {
+		logx.Logger().Error().Str("component", "job").Str("job", jobName).Err(err).Msg("job runner: log start")
+	} else {
+		r.mu.Lock()
+		r.jobRunIDs[jobName] = runID
+		r.mu.Unlock()
+	}
+
+	fetchResult, fetchErr := PCGWBundleFetch(jobCtx, r.store, opts)
+
+	status := JobSuccess
+	errMsg := ""
+	entries := 0
+	if fetchErr != nil {
+		if errors.Is(fetchErr, context.Canceled) {
+			status = JobCanceled
+		} else {
+			status = JobFailed
+			errMsg = fetchErr.Error()
+		}
+	} else if fetchResult.NotModified {
+		entries = 0
+	} else {
+		entries = fetchResult.ImportResult.RowsChanged
+	}
+
+	if fetchErr == nil && status == JobSuccess {
+		settings, _ := r.store.ListAdminSettings(jobCtx)
+		if store.PCGWBundleIncrementalFallbackFromSettings(settings) {
+			if _, err := r.TryRunPCGWSync(jobCtx); err != nil && !errors.Is(err, ErrJobAlreadyRunning) {
+				logx.Logger().Warn().Err(err).Msg("bundle fetch: incremental fallback failed to start")
+			}
+		}
+	}
+
+	if runID != "" {
+		if err := r.store.LogJobFinish(jobCtx, runID, status, errMsg, entries); err != nil {
+			logx.Logger().Error().Str("component", "job").Str("job", jobName).Err(err).Msg("job runner: log finish")
+		}
+	}
+
+	if r.hub != nil {
+		r.hub.Broadcast(sse.Event{Type: "job-finished", Data: `{"job":"` + jobName + `","status":"` + status + `"}`})
+		if status == JobSuccess && entries > 0 {
+			if r.invalidator != nil {
+				r.invalidator.InvalidateManifestCache()
+			}
+			r.hub.Broadcast(sse.Event{Type: "manifest-updated", Data: "{}"})
+		}
+	}
+}
+
 func (r *Runner) currentPhase2Backlog(ctx context.Context) (phase2BacklogSnapshot, error) {
 	backlog := phase2BacklogSnapshot{}
 	missing, err := r.store.ListPCGWCatalogMissing(ctx, 0, 0)
