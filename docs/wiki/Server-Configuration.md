@@ -193,9 +193,14 @@ The admin interface is available at `/admin` (session required + must match `GSB
 
 | Action | How |
 |---|---|
-| Run incremental sync | Admin → PCGW → **Sync** |
-| Force full resync | Admin → PCGW → **Full sync** |
-| Rebuild manifest only | Admin → PCGW → **Rebuild manifest** |
+| Run incremental sync | Admin → PCGW → **Incremental Sync** |
+| Clear large backlog | Admin → PCGW → **Auto Catch-Up** |
+| Ingest never-fetched IDs only | Advanced Maintenance → **Parse Missing Only** |
+| Retry failed/partial pages | Advanced Maintenance → **Retry Failed Pages** |
+| Unblock dead-letter pages | Advanced Maintenance → **Reset Dead Letter** |
+| Force full catalog rescan + backlog | Advanced Maintenance → **Full Reparse** |
+| Bump manifest for clients | Advanced Maintenance → **Rebuild Save Locations** |
+| Refresh catalog IDs only | Advanced Maintenance → **Refresh Catalog Only** |
 | Export manifest bundle | `GET /admin/pcgw/export/manifest.json.gz` |
 | Import bundle | Admin → PCGW → **Import** |
 | Push manifest to clients | Admin → **Push manifest** (sends SSE event) |

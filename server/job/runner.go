@@ -125,7 +125,12 @@ func (r *Runner) RunPCGWSyncCatalogOnly(ctx context.Context) (bool, error) {
 
 // RunPCGWSyncRetryFailed runs a sync that only processes failed/partial pages.
 func (r *Runner) RunPCGWSyncRetryFailed(ctx context.Context) (bool, error) {
-	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{RetryFailedOnly: true})
+	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{RetryFailedOnly: true, SkipCatalogPhase: true})
+}
+
+// RunPCGWSyncMissingLocal runs Phase 2 for catalog entries not yet stored locally (no Phase 1).
+func (r *Runner) RunPCGWSyncMissingLocal(ctx context.Context) (bool, error) {
+	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{MissingOnly: true, SkipCatalogPhase: true})
 }
 
 // RunPCGWSyncRebuildManifest bumps the manifest without fetching any pages.
@@ -279,7 +284,7 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 	if opts.Full {
 		mode = "full"
 	}
-	if !opts.ForceFull && !opts.Full && !opts.RetryFailedOnly && !opts.SkipIngestPhase && !opts.RebuildManifestOnly {
+	if !opts.ForceFull && !opts.Full && !opts.RetryFailedOnly && !opts.MissingOnly && !opts.SkipIngestPhase && !opts.RebuildManifestOnly {
 		if resumable, err := r.store.GetResumablePCGWSyncRun(jobCtx, mode); err != nil {
 			logx.Logger().Error().Str("component", "job").Err(err).Msg("job runner: get resumable pcgw sync")
 		} else if resumable != nil {

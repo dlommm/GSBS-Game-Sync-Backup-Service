@@ -34,8 +34,16 @@ Usually a stale Docker image or missing embedded templates from a source build.
 ### PCGW manifest is empty or outdated
 
 - Admin → **PCGW**: check the last sync run status and any errors.
-- Manually trigger a sync: Admin → PCGW → **Sync** (or **Full sync** to force a complete re-ingest).
+- Manually trigger a sync: Admin → PCGW → **Incremental Sync** (routine) or **Auto Catch-Up** (large backlog).
 - Check `GSBS_PCGW_CRON` is not set to `""` (disabled).
+
+### PCGW Local count stuck / Missing not decreasing
+
+- Check **Dead-letter** on the PCGW status card. If non-zero, run **Reset Dead Letter** (Advanced Maintenance), then **Auto Catch-Up**.
+- Use **Parse Missing Only** to ingest never-fetched catalog IDs without a catalog refresh.
+- Use **Retry Failed Pages** for `failed`/`partial` rows only.
+- If the page budget is exhausted mid-run (`GSBS_PCGW_MAX_PAGES_PER_RUN`, default 5000), run **Incremental Sync** again or **Auto Catch-Up** to continue.
+- **Full Reparse** (Advanced Maintenance) forces a full catalog rescan and re-processes backlog plus wiki-changed pages — rarely needed.
 
 ### Docker container is unhealthy
 

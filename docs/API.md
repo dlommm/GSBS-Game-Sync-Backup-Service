@@ -67,9 +67,13 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/admin/pcgw/sync` | Run incremental PCGW sync. `full=1` body param forces full resync. |
+| `POST` | `/admin/pcgw/sync` | Run incremental PCGW sync. `full=1` body param forces full catalog rescan + backlog/changed ingest (bypasses resume). |
+| `POST` | `/admin/pcgw/sync/refresh-new` | Force full catalog rescan, then process missing entries. |
+| `POST` | `/admin/pcgw/sync/auto-catch-up` | Repeat budgeted incremental cycles until Phase 2 backlog is cleared (max 25 cycles). |
+| `POST` | `/admin/pcgw/sync/missing-local` | Phase 2 only — ingest catalog IDs not yet in `pcgw_games` (skips Phase 1). |
 | `POST` | `/admin/pcgw/sync/catalog-only` | Phase 1 only — refresh `pcgw_catalog` without fetching page detail. |
-| `POST` | `/admin/pcgw/sync/retry-failed` | Phase 2 only — re-process failed/partial pages. |
+| `POST` | `/admin/pcgw/sync/retry-failed` | Phase 2 only — re-process failed/partial pages (skips Phase 1). |
+| `POST` | `/admin/pcgw/reset-dead-letter` | Clear dead-letter flags on all blocked catalog entries. |
 | `POST` | `/admin/pcgw/rebuild-manifest` | Bump manifest version without fetching any pages. |
 | `POST` | `/admin/pcgw/wipe` | Execute wipe. Body: `mode=mirror_only\|mirror_and_manifest`. Triggered from a WebUI confirm dialog. Rejected if a sync is running. |
 

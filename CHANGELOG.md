@@ -2,6 +2,19 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.7] - 2026-06-10
+
+### Fixed
+
+- **PCGW sync (critical)**: **Parse Missing Only** previously invoked the same incremental sync as the main Sync button (Phase 1 probe + full backlog queue). It now skips Phase 1 (`catalog_scan_mode=skipped`) and processes only catalog IDs not yet in `pcgw_games`.
+- **PCGW sync**: **Retry Failed Pages** now skips Phase 1 as documented — Phase 2 only for `failed`/`partial` rows.
+- **WebUI**: Advanced Maintenance help text corrected for **Rebuild Save Locations** (manifest version bump only) and **Full Reparse** (full catalog rescan + backlog/changed pages, not every unchanged OK page).
+
+### Added
+
+- **PCGW sync**: `SkipCatalogPhase` and `MissingOnly` options on `PCGWSyncOptions`; `RunPCGWSyncMissingLocal` runner entry point.
+- **Tests**: `TestTargetedModes_SkipCatalogPhase` verifies missing-only and retry-failed skip catalog API calls and queue filtering.
+
 ## [2.1.6] - 2026-06-10
 
 ### Fixed
