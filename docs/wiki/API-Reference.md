@@ -347,9 +347,13 @@ Session auth required (admin role). These are WebUI-facing endpoints used by the
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/admin/pcgw/sync` | Run incremental PCGW sync (`full=1` body param forces full resync) |
+| `POST` | `/admin/pcgw/sync` | Run incremental PCGW sync (`full=1` forces full catalog rescan + backlog/changed ingest) |
+| `POST` | `/admin/pcgw/sync/refresh-new` | Force full catalog rescan, then process missing entries |
+| `POST` | `/admin/pcgw/sync/auto-catch-up` | Repeat budgeted incremental cycles until Phase 2 backlog cleared |
+| `POST` | `/admin/pcgw/sync/missing-local` | Phase 2 only — ingest IDs not yet in `pcgw_games` (skips Phase 1) |
 | `POST` | `/admin/pcgw/sync/catalog-only` | Phase 1 only — refresh `pcgw_catalog` |
-| `POST` | `/admin/pcgw/sync/retry-failed` | Phase 2 only — re-process failed/partial pages |
+| `POST` | `/admin/pcgw/sync/retry-failed` | Phase 2 only — re-process failed/partial pages (skips Phase 1) |
+| `POST` | `/admin/pcgw/reset-dead-letter` | Clear dead-letter flags on blocked catalog entries |
 | `POST` | `/admin/pcgw/rebuild-manifest` | Bump manifest version without fetching pages |
 | `POST` | `/admin/pcgw/wipe` | Execute wipe (`mode=mirror_only\|mirror_and_manifest`; confirmed in WebUI popup) |
 | `GET` | `/admin/pcgw/export/manifest.json.gz` | Download gzip manifest+mirror bundle |

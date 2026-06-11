@@ -499,3 +499,143 @@ func TestFastPath_SkipsBuildChangedQueue(t *testing.T) {
 		t.Error("expected last_rev_check_at to be set after SetLastRevCheckAt")
 	}
 }
+
+func mockPCGWServerWithCatalogCounter(pageIDs []int64) (*httptest.Server, *int) {
+	var catalogCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("tables") == "Infobox_game" {
+			catalogCalls++
+			rows := make([]map[string]interface{}, 0, len(pageIDs))
+			for _, id := range pageIDs {
+				rows = append(rows, map[string]interface{}{
+					"_pageName": fmt.Sprintf("Game_%d", id),
+					"PageID":    fmt.Sprintf("%d", id),
+					"Title":     fmt.Sprintf("Game %d", id),
+				})
+			}
+			resp := map[string]interface{}{"cargoquery": makeCargoRows(rows)}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		if q.Get("action") == "parse" {
+			resp := map[string]interface{}{
+				"parse": map[string]interface{}{
+					"title": "Test Game",
+					"wikitext": map[string]interface{}{
+						"*": "{{Infobox game\n|steam appid     = \n}}\n",
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		if q.Get("action") == "query" && q.Get("prop") == "revisions" {
+			pageID := q.Get("pageids")
+			resp := map[string]interface{}{
+				"query": map[string]interface{}{
+					"pages": map[string]interface{}{
+						pageID: map[string]interface{}{
+							"pageid": pageID,
+							"revisions": []map[string]interface{}{
+								{"revid": int64(9999), "timestamp": "2024-01-01T00:00:00Z"},
+							},
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	return srv, &catalogCalls
+}
+
+func seedCatalogAndPriorPhase1(t *testing.T, ctx context.Context, st store.Store, client *pcgw.Client, pageIDs []int64) types.Phase1Stats {
+	t.Helper()
+	runID, err := st.StartPCGWSyncRun(ctx, "incremental")
+	if err != nil {
+		t.Fatal(err)
+	}
+	phase1Stats, err := RunCatalogScan(ctx, st, client, runID, nil)
+	if err != nil {
+		t.Fatalf("catalog scan: %v", err)
+	}
+	if err := st.FinishPCGWSyncRun(ctx, runID, JobSuccess, "", store.PCGWSyncRunStats{}); err != nil {
+		t.Fatalf("finish run: %v", err)
+	}
+	if err := st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, phase1Stats, "full"); err != nil {
+		t.Fatalf("update phase1 stats: %v", err)
+	}
+	return phase1Stats
+}
+
+// TestTargetedModes_SkipCatalogPhase verifies Parse Missing Only / Retry Failed skip Phase 1.
+func TestTargetedModes_SkipCatalogPhase(t *testing.T) {
+	pageIDs := []int64{50001, 50002, 50003}
+	srv, catalogCalls := mockPCGWServerWithCatalogCounter(pageIDs)
+	defer srv.Close()
+
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	client := pcgw.NewClient()
+	client.BaseURL = srv.URL
+	seedCatalogAndPriorPhase1(t, ctx, st, client, pageIDs)
+
+	// One missing page, one failed page already stored locally.
+	const failedID = int64(50003)
+	if err := st.UpsertPCGWGame(ctx, &types.PCGWGame{
+		PageID: failedID, PageName: "50003", Title: "Game 50003", ParseStatus: "failed",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("GSBS_PCGW_MAX_PAGES_PER_RUN", "10")
+	*catalogCalls = 0
+	if _, err := PCGWSyncEx(ctx, st, client, nil, nil, PCGWSyncOptions{
+		MissingOnly: true, SkipCatalogPhase: true,
+	}); err != nil {
+		t.Fatalf("missing-only sync: %v", err)
+	}
+	if *catalogCalls != 0 {
+		t.Errorf("missing-only sync: expected 0 catalog API calls, got %d", *catalogCalls)
+	}
+	runs, _ := st.ListPCGWSyncRuns(ctx, 1)
+	if len(runs) == 0 || runs[0].CatalogScanMode != "skipped" {
+		t.Errorf("missing-only sync: expected catalog_scan_mode=skipped, got %q", runs[0].CatalogScanMode)
+	}
+	missingAfter, _ := st.ListPCGWCatalogMissing(ctx, 0, 0)
+	if len(missingAfter) != 0 {
+		t.Errorf("missing-only sync: expected all missing processed, still have %d", len(missingAfter))
+	}
+	failedStill, _ := st.ListPCGWCatalogFailedPartial(ctx, 0, 0)
+	if len(failedStill) != 1 || failedStill[0] != failedID {
+		t.Errorf("missing-only sync: failed page should remain queued, got %v", failedStill)
+	}
+
+	*catalogCalls = 0
+	if _, err := PCGWSyncEx(ctx, st, client, nil, nil, PCGWSyncOptions{
+		RetryFailedOnly: true, SkipCatalogPhase: true,
+	}); err != nil {
+		t.Fatalf("retry-failed sync: %v", err)
+	}
+	if *catalogCalls != 0 {
+		t.Errorf("retry-failed sync: expected 0 catalog API calls, got %d", *catalogCalls)
+	}
+	game, err := st.GetPCGWGame(ctx, failedID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if game.ParseStatus == "failed" {
+		t.Errorf("retry-failed sync: expected failed page to be retried, still failed")
+	}
+}

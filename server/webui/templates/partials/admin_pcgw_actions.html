@@ -163,7 +163,7 @@
             <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
             <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-rebuild-manifest">Rebuild Save Locations</button>
           </form>
-          <span id="help-rebuild-manifest" class="pcgw-action-help">Rebuilds the game save location index from stored PCGW data without re-fetching anything from the internet.</span>
+          <span id="help-rebuild-manifest" class="pcgw-action-help">Bumps the manifest version so clients re-fetch save locations from the server without downloading PCGW pages. Does not re-project rows from stored mirror data.</span>
         </div>
         <div class="pcgw-action-row">
           <form method="post" action="/admin/pcgw/sync/catalog-only" class="inline-form">
@@ -178,7 +178,7 @@
             <input type="hidden" name="full" value="1">
             <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-full-reparse">Full Reparse</button>
           </form>
-          <span id="help-full-reparse" class="pcgw-action-help">Forces a complete reparse of all PCGW pages from scratch, bypassing resume. Rarely needed — prefer Incremental Sync for routine updates.</span>
+          <span id="help-full-reparse" class="pcgw-action-help">Forces a full catalog rescan, then re-processes missing, failed, and wiki-changed pages (unchanged OK pages are skipped). Bypasses resume. Rarely needed — prefer Incremental Sync for routine updates.</span>
         </div>
         <div class="pcgw-action-row">
           <form method="post" action="/admin/pcgw/purge-wikitext" class="inline-form">

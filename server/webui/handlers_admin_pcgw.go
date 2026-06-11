@@ -513,7 +513,7 @@ func (h *WebHandler) handleAdminPCGWSyncMissingLocal(w http.ResponseWriter, r *h
 		return
 	}
 	if h.jobRunner != nil {
-		started, err := h.jobRunner.RunPCGWSync(context.Background())
+		started, err := h.jobRunner.RunPCGWSyncMissingLocal(context.Background())
 		if err != nil {
 			if errors.Is(err, job.ErrJobAlreadyRunning) {
 				Redirect(w, r, "/admin/activity?error=job_already_running")

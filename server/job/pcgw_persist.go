@@ -34,6 +34,10 @@ type PCGWSyncOptions struct {
 	ResumeQueueCursor int
 	// SkipCatalogScan is true when running catalog-only (no Phase 2).
 	SkipIngestPhase bool
+	// SkipCatalogPhase skips Phase 1 and reuses the last successful Phase 1 stats.
+	SkipCatalogPhase bool
+	// MissingOnly limits Phase 2 queue to catalog IDs not yet stored in pcgw_games.
+	MissingOnly bool
 	// RetryFailedOnly limits Phase 2 queue to failed/partial IDs only.
 	RetryFailedOnly bool
 	// RebuildManifestOnly skips all ingest and just bumps the manifest.
@@ -127,7 +131,18 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	var phase1 types.Phase1Stats
 	var catalogScanMode string
 	var tailGrew bool // true when tail scan found new IDs; gates deferred rev-check
-	if !opts.ResumeCatalogScan {
+	if opts.SkipCatalogPhase {
+		catalogScanMode = "skipped"
+		if prior, err := st.GetLastSuccessfulPhase1Stats(ctx); err == nil && prior != nil {
+			phase1 = *prior
+		}
+		if runID != "" && phase1.RemoteTotalIDs > 0 {
+			_ = st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, phase1, catalogScanMode)
+		}
+		logx.Logger().Info().Str("component", "pcgw").
+			Int("remote", phase1.RemoteTotalIDs).
+			Msg("pcgw sync: skipping Phase 1 catalog refresh")
+	} else if !opts.ResumeCatalogScan {
 		var err error
 		phase1, tailGrew, catalogScanMode, err = runCatalogPhase(ctx, st, client, runID, opts, reportEx, &stats)
 		if err != nil {
@@ -156,26 +171,28 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		}
 	}
 
-	if incomplete, catStats, _ := catalogIncomplete(ctx, st, phase1.RemoteTotalIDs); incomplete {
-		logx.Logger().Warn().Str("component", "pcgw").
-			Int("catalog_rows", catStats.RemoteTotal).Int("remote_total", phase1.RemoteTotalIDs).
-			Msg("pcgw sync: catalog incomplete — running Phase 1 rescan")
-		var err error
-		phase1, err = RunCatalogScan(ctx, st, client, runID, reportEx)
-		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				_ = st.UpdatePCGWSyncRunCheckpoint(ctx, runID, 0, stats)
-				finishRun(ctxStatus(ctx), ctx.Err().Error())
-				return totalUpserted, ctx.Err()
+	if !opts.SkipCatalogPhase {
+		if incomplete, catStats, _ := catalogIncomplete(ctx, st, phase1.RemoteTotalIDs); incomplete {
+			logx.Logger().Warn().Str("component", "pcgw").
+				Int("catalog_rows", catStats.RemoteTotal).Int("remote_total", phase1.RemoteTotalIDs).
+				Msg("pcgw sync: catalog incomplete — running Phase 1 rescan")
+			var err error
+			phase1, err = RunCatalogScan(ctx, st, client, runID, reportEx)
+			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					_ = st.UpdatePCGWSyncRunCheckpoint(ctx, runID, 0, stats)
+					finishRun(ctxStatus(ctx), ctx.Err().Error())
+					return totalUpserted, ctx.Err()
+				}
+				finishRun(JobFailed, err.Error())
+				return totalUpserted, err
 			}
-			finishRun(JobFailed, err.Error())
-			return totalUpserted, err
+			stats.GamesTotal = phase1.RemoteTotalIDs
+			catalogScanMode = "full"
+			tailGrew = true // treat as full growth so rev-check runs
+			opts.ResumeCatalogScan = false
+			opts.ResumeQueueCursor = 0
 		}
-		stats.GamesTotal = phase1.RemoteTotalIDs
-		catalogScanMode = "full"
-		tailGrew = true // treat as full growth so rev-check runs
-		opts.ResumeCatalogScan = false
-		opts.ResumeQueueCursor = 0
 	}
 
 	if opts.SkipIngestPhase {
@@ -189,7 +206,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		logx.Logger().Info().Str("component", "pcgw").
 			Int("catalog_rows", catStats.RemoteTotal).Int("remote_total", phase1.RemoteTotalIDs).
 			Msg("pcgw sync: catalog incomplete vs remote — skipping no-op gate")
-	} else if !opts.Full && !opts.RetryFailedOnly && phase1.CatalogHash != "" {
+	} else if !opts.Full && !opts.RetryFailedOnly && !opts.MissingOnly && phase1.CatalogHash != "" {
 		if prev, err := getPreviousCatalogHash(ctx, st); err == nil && prev == phase1.CatalogHash {
 			// Catalog is unchanged — skip Phase 2 only when there is no backlog at all.
 			failedCount := 0
@@ -246,7 +263,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		}
 	}
 
-	if !opts.RetryFailedOnly {
+	if !opts.RetryFailedOnly && !opts.MissingOnly {
 		// Priority 2: rows with blank local title/page_name but non-empty catalog title.
 		var err error
 		titleBackfill, err = st.ListPCGWCatalogTitleBackfill(ctx, 0, 0)
@@ -263,7 +280,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	}
 
 	// Priority 3: failed/partial IDs
-	{
+	if !opts.MissingOnly {
 		var err error
 		failedPartial, err = st.ListPCGWCatalogFailedPartial(ctx, 0, 0)
 		if err != nil {
@@ -277,7 +294,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 
 	// Priority 4: changed rev IDs — deferred when catalog is unchanged and not stale.
 	// Run when: full sync, tail scan found new IDs, or last rev-check was >7 days ago.
-	if !opts.RetryFailedOnly {
+	if !opts.RetryFailedOnly && !opts.MissingOnly {
 		shouldRunRevCheck := opts.Full || tailGrew
 		if !shouldRunRevCheck {
 			if meta, err := st.GetPCGWManifestMeta(ctx); err == nil && meta != nil {

@@ -196,14 +196,19 @@ GSBS 2.0 introduces a one-way DB migration that:
 |---|---|
 | **Incremental Sync** | Routine use. Performs a single-call catalog probe to detect new game IDs, then processes missing, changed, and previously failed games. Only runs a full catalog scan on first run, when the catalog is incomplete, or when a periodic interval triggers (`GSBS_PCGW_FULL_CATALOG_DAYS`). ETA shown live in the admin WebUI. |
 | **Refresh New Games** | When you want to force a full catalog rescan and pick up newly added games. Always runs Phase 1 in full (bypasses the fast probe). Processes missing entries afterward. |
-| **Auto Catch-Up** | After a long outage or first-time setup. Repeats budgeted sync cycles automatically until the backlog is empty (up to 25 cycles). Stops early if no progress is made in two consecutive cycles. |
-| **Full Reparse** | Rarely needed. Re-fetches and re-parses all PCGW pages from scratch, bypassing resume checkpoints. May take many hours. |
+| **Auto Catch-Up** | After a long outage or first-time setup. Repeats budgeted incremental sync cycles until missing/failed/title-backfill backlog is empty (up to 25 cycles). Stops early if no progress is made in two consecutive cycles. Does not process dead-letter pages — reset dead-letter first if that count is non-zero. |
+| **Parse Missing Only** | Skips Phase 1; ingests only catalog IDs not yet stored locally (`pcgw_catalog` minus `pcgw_games`, excluding dead-letter). Does not retry failed pages or run rev-check. |
+| **Retry Failed Pages** | Skips Phase 1; re-processes only `failed`/`partial` rows (excluding dead-letter). |
+| **Reset Dead Letter** | Clears `dead_letter=1` on blocked catalog rows so they re-enter Phase 2 queues. Run Auto Catch-Up or Incremental Sync afterward. |
+| **Rebuild Save Locations** | Bumps manifest version/etag so clients re-fetch `/api/manifest` without downloading PCGW pages. Does not re-project `game_save_locations` from stored mirror data. |
+| **Refresh Catalog Only** | Phase 1 only — updates `pcgw_catalog` without fetching page content. |
+| **Full Reparse** | Forces a full catalog rescan, then re-processes missing, failed, title-backfill, and wiki-changed pages. Unchanged OK pages are skipped. Bypasses resume checkpoints. |
 | **Full Catalog Rescan** | Triggered periodically via `GSBS_PCGW_FULL_CATALOG_DAYS` (default 7) or `GSBS_PCGW_FULL_CRON`. Runs a complete enumeration of all PCGW page IDs to detect deletions or ordering changes. Not required for routine incremental syncs. |
 
 ### Understanding the status card
 
 - **Remote / Local / Missing**: Remote = total page IDs in the PCGamingWiki catalog. Local = pages successfully stored in GSBS. Missing = pages in the catalog that have never been processed. A non-zero Missing count means data is incomplete; run Incremental Sync to process it.
-- **Dead-letter**: Pages that have failed repeatedly and been permanently excluded from normal sync. They still appear in the catalog but won't be retried unless you use "Retry Failed Pages". Click the count to see which games are affected.
+- **Dead-letter**: Pages that have failed repeatedly and been permanently excluded from normal sync. They still appear in the catalog but won't be retried until you use **Reset Dead Letter**, then **Retry Failed Pages** or **Auto Catch-Up**. Click the count to see which games are affected.
 - **Last queue size**: How many pages were queued for processing in the most recent run. A queue of 0 with a non-zero Missing count indicates the no-op gate fired (possible stale state — run Incremental Sync to force a check).
 - **Resumable run**: A prior run that was interrupted mid-ingest. The next Incremental Sync will automatically resume from where it left off.
 - **Manifest budget**: Maximum number of pages parsed per run, controlled by `GSBS_PCGW_MAX_PAGES_PER_RUN` (default 5000). If the budget is exhausted before the backlog is cleared, run Incremental Sync again or use Auto Catch-Up.

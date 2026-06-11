@@ -6,6 +6,26 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [2.1.7] — 2026-06-10
+
+### Fixed
+
+- **PCGW sync:** **Parse Missing Only** now skips Phase 1 and processes only catalog IDs not yet stored locally.
+- **PCGW sync:** **Retry Failed Pages** now skips Phase 1 as documented.
+- **WebUI:** Advanced Maintenance help text for Rebuild Save Locations and Full Reparse.
+
+### Added
+
+- `SkipCatalogPhase` / `MissingOnly` sync options and `RunPCGWSyncMissingLocal` runner.
+
+## [2.1.6] — 2026-06-10
+
+- Fast incremental Phase 1 (catalog probe + tail scan); deferred rev-check; dynamic job ETA in WebUI.
+
+## [2.1.5] — 2026-06-09
+
+- Phase 2 failed-page stub persistence; **Reset Dead Letter** admin action.
+
 ## [2.0.0] — 2026-06-07
 
 ### Fixed
