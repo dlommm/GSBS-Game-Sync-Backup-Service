@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 18
+const schemaVersion = 19
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -118,6 +118,7 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{16, s.stepMergeOSSlots},
 		{17, s.stepPCGWCatalog},
 		{18, s.stepPCGWIncrementalSpeed},
+		{19, s.stepPCGWBundleSettings},
 	}
 }
 
@@ -1130,6 +1131,29 @@ func (s *sqliteStore) stepPCGWCatalog(tx *sql.Tx) error {
 	} {
 		if _, err := tx.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate") {
 			return fmt.Errorf("step pcgw_catalog alter: %w", err)
+		}
+	}
+	return nil
+}
+
+// stepPCGWBundleSettings seeds admin settings for GitHub manifest bundle sync.
+func (s *sqliteStore) stepPCGWBundleSettings(tx *sql.Tx) error {
+	var gameCount int
+	_ = tx.QueryRow(`SELECT COUNT(*) FROM pcgw_games`).Scan(&gameCount)
+	syncSource := PCGWSyncSourceGitHub
+	if gameCount > 0 {
+		syncSource = PCGWSyncSourceAPI
+	}
+	defaults := map[string]string{
+		AdminSettingPCGWSyncSource:          syncSource,
+		AdminSettingPCGWBundleURL:           DefaultPCGWBundleURL,
+		AdminSettingPCGWBundleDeltaURL:      DefaultPCGWBundleDeltaURL,
+		AdminSettingPCGWBundleCron:          DefaultPCGWBundleCron,
+		AdminSettingPCGWBundleIncrementalFB: "false",
+	}
+	for k, v := range defaults {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO admin_settings (key, value) VALUES (?, ?)`, k, v); err != nil {
+			return err
 		}
 	}
 	return nil

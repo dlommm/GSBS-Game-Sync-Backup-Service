@@ -61,7 +61,7 @@ func TestRunCatalogScan_ProducesCorrectCounts(t *testing.T) {
 	ctx := context.Background()
 
 	runID, _ := st.StartPCGWSyncRun(ctx, "incremental")
-	stats, err := RunCatalogScan(ctx, st, client, runID, nil)
+	stats, err := RunCatalogScan(ctx, st, client, runID, "test", nil)
 	if err != nil {
 		t.Fatalf("catalog scan: %v", err)
 	}
@@ -99,10 +99,10 @@ func TestRunCatalogScan_HashStability(t *testing.T) {
 	ctx := context.Background()
 
 	runID, _ := st.StartPCGWSyncRun(ctx, "incremental")
-	stats1, _ := RunCatalogScan(ctx, st, client, runID, nil)
+	stats1, _ := RunCatalogScan(ctx, st, client, runID, "test", nil)
 
 	runID2, _ := st.StartPCGWSyncRun(ctx, "incremental")
-	stats2, _ := RunCatalogScan(ctx, st, client, runID2, nil)
+	stats2, _ := RunCatalogScan(ctx, st, client, runID2, "test", nil)
 
 	if stats1.CatalogHash != stats2.CatalogHash {
 		t.Errorf("hash not stable: %q vs %q", stats1.CatalogHash, stats2.CatalogHash)

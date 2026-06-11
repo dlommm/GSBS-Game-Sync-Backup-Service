@@ -228,8 +228,10 @@ type Store interface {
 	GetPCGWStats(ctx context.Context) (PCGWStats, error)
 	ExportPCGWGameJSON(ctx context.Context, pageID int64) ([]byte, error)
 	ExportPCGWManifestBundle(ctx context.Context, gsbsVersion string) ([]byte, error)
+	ExportPCGWManifestBundleWithOpts(ctx context.Context, gsbsVersion string, opts PCGWBundleExportOpts) ([]byte, *PCGWBundleMeta, error)
 	ImportPCGWManifestBundle(ctx context.Context, data []byte, mode string) (PCGWImportResult, error)
 	ValidatePCGWImport(ctx context.Context) (PCGWImportValidation, error)
+	IsPCGWBundleSeeded(ctx context.Context) (bool, error)
 
 	// Admin settings (key/value, persisted cron and PCGW filters).
 	GetAdminSetting(ctx context.Context, key string) (string, error)
@@ -405,18 +407,27 @@ type PCGWSyncRunStats struct {
 	AvgParseMs   int
 }
 
-// PCGWImportResult summarizes a manifest bundle import.
-type PCGWImportResult struct {
-	Mode              string
-	GameSaveLocations int
-	PCGWGames         int
-	PCGWGameData      int
-	PCGWMetadata      int
-	PCGWSections      int
-	PCGWSystemReqs    int
+// PCGWBundleMeta is the sidecar JSON published alongside manifest bundles.
+type PCGWBundleMeta struct {
+	SchemaVersion        int    `json:"schema_version"`
+	GSBSVersion          string `json:"gsbs_version"`
+	ExportedAt           string `json:"exported_at"`
+	FullExportedAt       string `json:"full_exported_at,omitempty"`
+	PreviousExportedAt   string `json:"previous_exported_at,omitempty"`
+	FullSHA256           string `json:"full_sha256,omitempty"`
+	DeltaSHA256          string `json:"delta_sha256,omitempty"`
+	FullBytes            int    `json:"full_bytes,omitempty"`
+	DeltaBytes           int    `json:"delta_bytes,omitempty"`
+	Counts               PCGWBundleMetaCounts `json:"counts,omitempty"`
 }
 
-// PCGWImportValidation is post-import row counts and sample checks.
+type PCGWBundleMetaCounts struct {
+	GameSaveLocations int `json:"game_save_locations"`
+	Games             int `json:"games"`
+	GameData          int `json:"game_data"`
+	Catalog           int `json:"catalog"`
+}
+
 type PCGWImportValidation struct {
 	GameSaveLocations int
 	PCGWGames         int

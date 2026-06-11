@@ -42,11 +42,12 @@ func TestAdminJobsPartialAfterSync(t *testing.T) {
 func TestAdminPCGWJobStatusEmbedded(t *testing.T) {
 	tmpl := parseTemplates()
 	data := adminPCGWData{
-		PageData:          PageData{CSRFToken: "csrf", PageName: "admin_pcgw"},
-		JobRunning:        true,
-		JobProgressPages:  100,
-		JobProgressTotal:  500,
-		JobGamesSkipped:   2,
+		PageData:           PageData{CSRFToken: "csrf", PageName: "admin_pcgw"},
+		JobRunning:         true,
+		JobProgressPages:   100,
+		JobProgressTotal:   500,
+		JobGamesSkipped:    2,
+		BundleSyncSource:   store.PCGWSyncSourceGitHub,
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "partials/admin_pcgw_job_status.html", data); err != nil {
@@ -60,13 +61,14 @@ func TestAdminPCGWJobStatusEmbedded(t *testing.T) {
 func TestAdminPCGWActionLabelsClarifyPhases(t *testing.T) {
 	tmpl := parseTemplates()
 	data := map[string]interface{}{
-		"JobRunning":     false,
-		"CSRFToken":      "csrf",
-		"CapStatusText":  "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 uses a fast catalog probe on incremental syncs; full scan only when needed.",
-		"LatestSyncRun":  nil,
-		"CatalogStats":   map[string]int{"RemoteTotal": 0, "LocalTotal": 0, "MissingLocal": 0, "DeadLetter": 0},
-		"MaxPagesPerRun": 5000,
-		"JobETASec":      -1,
+		"JobRunning":       false,
+		"CSRFToken":        "csrf",
+		"CapStatusText":    "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 uses a fast catalog probe on incremental syncs; full scan only when needed.",
+		"LatestSyncRun":    nil,
+		"CatalogStats":     map[string]int{"RemoteTotal": 0, "LocalTotal": 0, "MissingLocal": 0, "DeadLetter": 0},
+		"MaxPagesPerRun":   5000,
+		"JobETASec":        -1,
+		"BundleSyncSource": store.PCGWSyncSourceGitHub,
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "partials/admin_pcgw_actions.html", data); err != nil {

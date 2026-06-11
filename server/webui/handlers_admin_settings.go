@@ -13,14 +13,22 @@ import (
 
 type adminSettingsData struct {
 	PageData
-	PCGWCron              string
-	PCGWCronSource        string
-	PCGWCronDisabled      bool
-	PCGWCronEnvOverride   bool
-	PCGWCronNextRun       string
-	PCGWTitleExcludesJSON string
-	PCGWPathExcludesJSON  string
-	AutoRunFirstStart     bool
+	PCGWCron                   string
+	PCGWCronSource             string
+	PCGWCronDisabled           bool
+	PCGWCronEnvOverride        bool
+	PCGWCronNextRun            string
+	PCGWTitleExcludesJSON      string
+	PCGWPathExcludesJSON       string
+	AutoRunFirstStart          bool
+	PCGWSyncSource             string
+	PCGWBundleCron             string
+	PCGWBundleURL              string
+	PCGWBundleDeltaURL         string
+	PCGWBundleIncrementalFB    bool
+	PCGWSyncSourceEnvOverride  bool
+	PCGWBundleCronEnvOverride  bool
+	PCGWBundleCronNextRun      string
 }
 
 func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +43,11 @@ func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) 
 		PageData:              h.adminPageData(w, r, userID, username, "settings", "admin_settings"),
 		PCGWTitleExcludesJSON: settings[store.AdminSettingPCGWTitleExcludes],
 		PCGWPathExcludesJSON:  settings[store.AdminSettingPCGWPathExcludes],
+		PCGWSyncSource:        store.PCGWSyncSourceFromSettings(settings),
+		PCGWBundleCron:        store.PCGWBundleCronFromSettings(settings),
+		PCGWBundleURL:         store.PCGWBundleURLFromSettings(settings),
+		PCGWBundleDeltaURL:    store.PCGWBundleDeltaURLFromSettings(settings),
+		PCGWBundleIncrementalFB: store.PCGWBundleIncrementalFallbackFromSettings(settings),
 	}
 	if data.PCGWPathExcludesJSON == "" {
 		data.PCGWPathExcludesJSON = store.DefaultPCGWPathExcludesJSON
@@ -45,6 +58,13 @@ func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) 
 	auto := settings[store.AdminSettingPCGWAutoRunFirstStart]
 	data.AutoRunFirstStart = auto == "true" || auto == "1"
 
+	if _, ok := os.LookupEnv(store.EnvPCGWSyncSource); ok {
+		data.PCGWSyncSourceEnvOverride = true
+	}
+	if _, ok := os.LookupEnv(store.EnvPCGWBundleCron); ok {
+		data.PCGWBundleCronEnvOverride = true
+	}
+
 	if h.pcgwCron != nil {
 		view := h.pcgwCron.View(ctx)
 		data.PCGWCron = view.Expr
@@ -53,6 +73,9 @@ func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) 
 		data.PCGWCronEnvOverride = view.EnvOverride
 		if !view.NextRun.IsZero() {
 			data.PCGWCronNextRun = view.NextRun.Format("Mon, Jan 2 2006 15:04 MST")
+		}
+		if !view.BundleNext.IsZero() {
+			data.PCGWBundleCronNextRun = view.BundleNext.Format("Mon, Jan 2 2006 15:04 MST")
 		}
 	} else {
 		data.PCGWCron = store.PCGWCronFromSettings(settings)
@@ -97,6 +120,55 @@ func (h *WebHandler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Requ
 	}
 	_ = envCronOverride
 
+	if _, ok := os.LookupEnv(store.EnvPCGWSyncSource); !ok {
+		syncSource := strings.TrimSpace(strings.ToLower(r.FormValue("pcgw_sync_source")))
+		if syncSource != store.PCGWSyncSourceGitHub && syncSource != store.PCGWSyncSourceAPI {
+			syncSource = store.PCGWSyncSourceGitHub
+		}
+		if err := h.store.SetAdminSetting(ctx, store.AdminSettingPCGWSyncSource, syncSource); err != nil {
+			Redirect(w, r, "/admin/settings?error=save_failed")
+			return
+		}
+	}
+
+	if _, ok := os.LookupEnv(store.EnvPCGWBundleCron); !ok {
+		bundleCron := strings.TrimSpace(r.FormValue("pcgw_bundle_cron"))
+		if bundleCron != "" {
+			if _, err := cron.ParseStandard(bundleCron); err != nil {
+				Redirect(w, r, "/admin/settings?error=invalid_bundle_cron")
+				return
+			}
+		}
+		if err := h.store.SetAdminSetting(ctx, store.AdminSettingPCGWBundleCron, bundleCron); err != nil {
+			Redirect(w, r, "/admin/settings?error=save_failed")
+			return
+		}
+	}
+
+	bundleURL := strings.TrimSpace(r.FormValue("pcgw_bundle_url"))
+	if bundleURL != "" {
+		if err := h.store.SetAdminSetting(ctx, store.AdminSettingPCGWBundleURL, bundleURL); err != nil {
+			Redirect(w, r, "/admin/settings?error=save_failed")
+			return
+		}
+	}
+	bundleDeltaURL := strings.TrimSpace(r.FormValue("pcgw_bundle_delta_url"))
+	if bundleDeltaURL != "" {
+		if err := h.store.SetAdminSetting(ctx, store.AdminSettingPCGWBundleDeltaURL, bundleDeltaURL); err != nil {
+			Redirect(w, r, "/admin/settings?error=save_failed")
+			return
+		}
+	}
+
+	incFB := "false"
+	if r.FormValue("pcgw_bundle_incremental_fallback") == "1" {
+		incFB = "true"
+	}
+	if err := h.store.SetAdminSetting(ctx, store.AdminSettingPCGWBundleIncrementalFB, incFB); err != nil {
+		Redirect(w, r, "/admin/settings?error=save_failed")
+		return
+	}
+
 	titleJSON := strings.TrimSpace(r.FormValue("pcgw_title_excludes"))
 	if titleJSON == "" {
 		titleJSON = "[]"
@@ -133,7 +205,7 @@ func (h *WebHandler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if h.pcgwCron != nil && !envCronOverride {
+	if h.pcgwCron != nil {
 		if err := h.pcgwCron.Reschedule(ctx); err != nil {
 			logx.Logger().Error().Err(err).Msg("admin settings reschedule pcgw cron")
 			Redirect(w, r, "/admin/settings?error=cron_reschedule_failed")

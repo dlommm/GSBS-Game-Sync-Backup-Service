@@ -164,6 +164,12 @@ type adminActivityData struct {
 	IdleRunsNeeded        int
 	IdleTotalETASec       int
 	IdlePerRunETASec      int
+	BundleSyncSource      string
+	BundleLastFetched     string
+	BundleLastExported    string
+	BundleLastETag        string
+	BundleLastError       string
+	BundleJobRunning      bool
 }
 
 type adminLogsData struct {

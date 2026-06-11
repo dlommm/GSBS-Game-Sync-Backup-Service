@@ -124,7 +124,7 @@ func TestNoOpFix_UnchangedHashWithMissingBacklog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	phase1Stats, err := RunCatalogScan(ctx, st, client, runID, nil)
+	phase1Stats, err := RunCatalogScan(ctx, st, client, runID, "test", nil)
 	if err != nil {
 		t.Fatalf("catalog scan: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestNoOpFix_UnchangedHashEmptyBacklog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	phase1Stats, err := RunCatalogScan(ctx, st, client, runID, nil)
+	phase1Stats, err := RunCatalogScan(ctx, st, client, runID, "test", nil)
 	if err != nil {
 		t.Fatalf("catalog scan: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestNoOpFix_ResumeDoesNotUseStaleHash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	phase1Stats, err := RunCatalogScan(ctx, st, client, runID1, nil)
+	phase1Stats, err := RunCatalogScan(ctx, st, client, runID1, "test", nil)
 	if err != nil {
 		t.Fatalf("catalog scan: %v", err)
 	}
@@ -561,7 +561,7 @@ func seedCatalogAndPriorPhase1(t *testing.T, ctx context.Context, st store.Store
 	if err != nil {
 		t.Fatal(err)
 	}
-	phase1Stats, err := RunCatalogScan(ctx, st, client, runID, nil)
+	phase1Stats, err := RunCatalogScan(ctx, st, client, runID, "test", nil)
 	if err != nil {
 		t.Fatalf("catalog scan: %v", err)
 	}

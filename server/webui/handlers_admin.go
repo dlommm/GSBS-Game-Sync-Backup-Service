@@ -74,6 +74,12 @@ type jobsViewData struct {
 	IdleRunsNeeded   int
 	IdleTotalETASec  int
 	IdlePerRunETASec int
+	BundleSyncSource   string
+	BundleLastFetched  string
+	BundleLastExported string
+	BundleLastETag     string
+	BundleLastError    string
+	BundleJobRunning   bool
 }
 
 func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGWControls bool) jobsViewData {
@@ -233,6 +239,15 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 		} else {
 			data.JobPhaseLabel = "Starting\u2026"
 		}
+	}
+	settings, _ := h.store.ListAdminSettings(ctx)
+	data.BundleSyncSource = store.PCGWSyncSourceFromSettings(settings)
+	data.BundleLastFetched = settings[store.AdminSettingPCGWBundleLastFetchedAt]
+	data.BundleLastExported = settings[store.AdminSettingPCGWBundleLastExportedAt]
+	data.BundleLastETag = settings[store.AdminSettingPCGWBundleETag]
+	data.BundleLastError = settings[store.AdminSettingPCGWBundleLastFetchError]
+	if h.jobRunner != nil {
+		data.BundleJobRunning = h.jobRunner.IsRunning("pcgw_bundle_fetch")
 	}
 	return data
 }
@@ -429,6 +444,12 @@ func (h *WebHandler) serveAdminActivity(w http.ResponseWriter, r *http.Request) 
 		IdleRunsNeeded:        jobsData.IdleRunsNeeded,
 		IdleTotalETASec:       jobsData.IdleTotalETASec,
 		IdlePerRunETASec:      jobsData.IdlePerRunETASec,
+		BundleSyncSource:      jobsData.BundleSyncSource,
+		BundleLastFetched:     jobsData.BundleLastFetched,
+		BundleLastExported:    jobsData.BundleLastExported,
+		BundleLastETag:        jobsData.BundleLastETag,
+		BundleLastError:       jobsData.BundleLastError,
+		BundleJobRunning:      jobsData.BundleJobRunning,
 	})
 }
 
