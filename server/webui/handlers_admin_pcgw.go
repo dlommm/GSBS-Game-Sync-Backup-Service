@@ -44,10 +44,12 @@ type adminPCGWData struct {
 	MaxPagesPerRun    int
 	CapStatusText     string
 	CapReached        bool
-	JobElapsedSec     int
-	JobPagesPerSec    float64
-	JobETAMin         int
-	JobPhaseLabel     string
+	JobElapsedSec      int
+	JobPagesPerSec     float64
+	JobETAMin          int
+	JobETASec          int
+	JobCatalogScanMode string
+	JobPhaseLabel      string
 	AvgHistPagesPerSec float64
 }
 
@@ -176,6 +178,8 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 		JobElapsedSec:      jobs.JobElapsedSec,
 		JobPagesPerSec:     jobs.JobPagesPerSec,
 		JobETAMin:          jobs.JobETAMin,
+		JobETASec:          jobs.JobETASec,
+		JobCatalogScanMode: jobs.JobCatalogScanMode,
 		JobPhaseLabel:      jobs.JobPhaseLabel,
 		AvgHistPagesPerSec: jobs.AvgHistPagesPerSec,
 	})
@@ -205,6 +209,8 @@ func (h *WebHandler) serveAdminPCGWJobStatusPartial(w http.ResponseWriter, r *ht
 		"JobElapsedSec":      data.JobElapsedSec,
 		"JobPagesPerSec":     data.JobPagesPerSec,
 		"JobETAMin":          data.JobETAMin,
+		"JobETASec":          data.JobETASec,
+		"JobCatalogScanMode": data.JobCatalogScanMode,
 		"JobPhaseLabel":      data.JobPhaseLabel,
 		"AvgHistPagesPerSec": data.AvgHistPagesPerSec,
 	})

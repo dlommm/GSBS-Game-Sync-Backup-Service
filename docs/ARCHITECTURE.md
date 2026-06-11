@@ -194,10 +194,11 @@ GSBS 2.0 introduces a one-way DB migration that:
 
 | Action | When to use |
 |---|---|
-| **Incremental Sync** | Routine use. Refreshes the game catalog, then processes new, changed, or previously failed games. Handles the full backlog safely. |
-| **Refresh New Games** | When you want to pick up newly added games from PCGamingWiki without waiting for changed-page detection. Performs a fresh catalog scan and processes missing entries. Equivalent to Incremental Sync after the no-op reliability fix (missing entries are always processed). |
+| **Incremental Sync** | Routine use. Performs a single-call catalog probe to detect new game IDs, then processes missing, changed, and previously failed games. Only runs a full catalog scan on first run, when the catalog is incomplete, or when a periodic interval triggers (`GSBS_PCGW_FULL_CATALOG_DAYS`). ETA shown live in the admin WebUI. |
+| **Refresh New Games** | When you want to force a full catalog rescan and pick up newly added games. Always runs Phase 1 in full (bypasses the fast probe). Processes missing entries afterward. |
 | **Auto Catch-Up** | After a long outage or first-time setup. Repeats budgeted sync cycles automatically until the backlog is empty (up to 25 cycles). Stops early if no progress is made in two consecutive cycles. |
 | **Full Reparse** | Rarely needed. Re-fetches and re-parses all PCGW pages from scratch, bypassing resume checkpoints. May take many hours. |
+| **Full Catalog Rescan** | Triggered periodically via `GSBS_PCGW_FULL_CATALOG_DAYS` (default 7) or `GSBS_PCGW_FULL_CRON`. Runs a complete enumeration of all PCGW page IDs to detect deletions or ordering changes. Not required for routine incremental syncs. |
 
 ### Understanding the status card
 
@@ -209,7 +210,9 @@ GSBS 2.0 introduces a one-way DB migration that:
 
 ### No-op skip reliability
 
-The incremental sync includes an optimization that skips Phase 2 (page ingest) when the catalog hash is unchanged and there is no known backlog. Prior to the reliability fix, this check did not query the **missing** entries list, so a budget-interrupted run could leave entries unprocessed even after repeated incremental syncs. The fix adds a `missingCount` check: Phase 2 is only skipped when `missingCount == 0 AND failedCount == 0 AND titleBackfillCount == 0`. If you suspect the no-op is incorrectly firing, run a Full Reparse or inspect the Missing count in the status card.
+The incremental sync includes an optimization that skips Phase 2 (page ingest) when the catalog hash is unchanged and there is no known backlog. Phase 2 is only skipped when `missingCount == 0 AND failedCount == 0 AND titleBackfillCount == 0`. If you suspect the no-op is incorrectly firing, run a Full Reparse or inspect the Missing count in the status card.
+
+When the fast catalog probe finds no new IDs and the rev-check interval has not elapsed (default 7 days), `buildChangedQueue` is also skipped, making routine incremental runs exit in seconds. The `catalog_scan_mode` field on each sync run records how Phase 1 ran (`full`, `fast_probe`, `tail`, `skipped`, or `resumed`) — visible in the analytics page under "Latest sync run details".
 
 ### Dead-letters and permanent failures
 

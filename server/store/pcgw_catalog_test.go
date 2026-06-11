@@ -381,7 +381,7 @@ func TestUpdatePCGWSyncRunPhase1Stats(t *testing.T) {
 		CatalogHash:     "abc123",
 		CompletedAt:     "2025-06-01T00:00:00Z",
 	}
-	if err := st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, stats); err != nil {
+	if err := st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, stats, "full"); err != nil {
 		t.Fatalf("update phase1 stats: %v", err)
 	}
 
@@ -397,5 +397,76 @@ func TestUpdatePCGWSyncRunPhase1Stats(t *testing.T) {
 	}
 	if run.CheckpointPhase != "ingest" {
 		t.Errorf("checkpoint_phase: got %q, want ingest", run.CheckpointPhase)
+	}
+	if run.CatalogScanMode != "full" {
+		t.Errorf("catalog_scan_mode: got %q, want full", run.CatalogScanMode)
+	}
+}
+
+func TestGetLastSuccessfulPhase1Stats(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	// No runs yet — should return nil.
+	stats, err := st.GetLastSuccessfulPhase1Stats(ctx)
+	if err != nil {
+		t.Fatalf("GetLastSuccessfulPhase1Stats (empty): %v", err)
+	}
+	if stats != nil {
+		t.Errorf("expected nil when no runs exist, got %+v", stats)
+	}
+
+	// Insert a failed run — should still return nil.
+	runID1, _ := st.StartPCGWSyncRun(ctx, "incremental")
+	_ = st.FinishPCGWSyncRun(ctx, runID1, "failed", "err", PCGWSyncRunStats{})
+
+	stats, err = st.GetLastSuccessfulPhase1Stats(ctx)
+	if err != nil {
+		t.Fatalf("GetLastSuccessfulPhase1Stats (failed run only): %v", err)
+	}
+	if stats != nil {
+		t.Errorf("expected nil when no success runs, got %+v", stats)
+	}
+
+	// Insert a successful run with remote_total_ids=0 — should still return nil.
+	runID2, _ := st.StartPCGWSyncRun(ctx, "incremental")
+	_ = st.FinishPCGWSyncRun(ctx, runID2, "success", "", PCGWSyncRunStats{})
+
+	stats, err = st.GetLastSuccessfulPhase1Stats(ctx)
+	if err != nil {
+		t.Fatalf("GetLastSuccessfulPhase1Stats (zero total): %v", err)
+	}
+	if stats != nil {
+		t.Errorf("expected nil when remote_total_ids=0, got %+v", stats)
+	}
+
+	// Insert a successful run with real phase1 stats.
+	runID3, _ := st.StartPCGWSyncRun(ctx, "incremental")
+	want := types.Phase1Stats{
+		RemoteTotalIDs:  2500,
+		MissingLocalIDs: 10,
+		ExtraLocalIDs:   2,
+		CatalogHash:     "deadbeef",
+		CompletedAt:     "2025-06-01T00:00:00Z",
+	}
+	_ = st.UpdatePCGWSyncRunPhase1Stats(ctx, runID3, want, "full")
+	_ = st.FinishPCGWSyncRun(ctx, runID3, "success", "", PCGWSyncRunStats{})
+
+	stats, err = st.GetLastSuccessfulPhase1Stats(ctx)
+	if err != nil {
+		t.Fatalf("GetLastSuccessfulPhase1Stats: %v", err)
+	}
+	if stats == nil {
+		t.Fatal("expected non-nil stats after successful run")
+	}
+	if stats.RemoteTotalIDs != want.RemoteTotalIDs {
+		t.Errorf("RemoteTotalIDs: got %d, want %d", stats.RemoteTotalIDs, want.RemoteTotalIDs)
+	}
+	if stats.CatalogHash != want.CatalogHash {
+		t.Errorf("CatalogHash: got %q, want %q", stats.CatalogHash, want.CatalogHash)
 	}
 }

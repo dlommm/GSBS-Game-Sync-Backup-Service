@@ -122,10 +122,14 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	}
 
 	// ─── Phase 1: Catalog scan ────────────────────────────────────────────────
+	// ResumeCatalogScan=true is only set when checkpoint_phase=="ingest", meaning
+	// a full Phase 1 already completed in a prior interrupted run.
 	var phase1 types.Phase1Stats
+	var catalogScanMode string
+	var tailGrew bool // true when tail scan found new IDs; gates deferred rev-check
 	if !opts.ResumeCatalogScan {
 		var err error
-		phase1, err = RunCatalogScan(ctx, st, client, runID, reportEx)
+		phase1, tailGrew, catalogScanMode, err = runCatalogPhase(ctx, st, client, runID, opts, reportEx, &stats)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				_ = st.UpdatePCGWSyncRunCheckpoint(ctx, runID, 0, stats)
@@ -138,6 +142,8 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		stats.GamesTotal = phase1.RemoteTotalIDs
 	} else {
 		// Resuming into Phase 2: load Phase 1 stats from the run we resumed from.
+		// Invariant: ResumeCatalogScan=true iff checkpoint_phase=="ingest" (runner guarantees this).
+		catalogScanMode = "resumed"
 		resumeFromID := opts.ResumedFromRunID
 		if resumeFromID != "" {
 			if prior, err := st.GetPCGWSyncRunByID(ctx, resumeFromID); err == nil && prior != nil {
@@ -166,6 +172,8 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 			return totalUpserted, err
 		}
 		stats.GamesTotal = phase1.RemoteTotalIDs
+		catalogScanMode = "full"
+		tailGrew = true // treat as full growth so rev-check runs
 		opts.ResumeCatalogScan = false
 		opts.ResumeQueueCursor = 0
 	}
@@ -267,13 +275,31 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		}
 	}
 
-	// Priority 4: changed rev IDs (only on full or incremental when not retry-only)
+	// Priority 4: changed rev IDs — deferred when catalog is unchanged and not stale.
+	// Run when: full sync, tail scan found new IDs, or last rev-check was >7 days ago.
 	if !opts.RetryFailedOnly {
-		var err error
-		changedIDs, err = buildChangedQueue(ctx, st, client, filters)
-		if err != nil {
-			logx.Logger().Error().Str("component", "pcgw").Err(err).Msg("pcgw sync: build changed queue")
-			changedIDs = nil
+		shouldRunRevCheck := opts.Full || tailGrew
+		if !shouldRunRevCheck {
+			if meta, err := st.GetPCGWManifestMeta(ctx); err == nil && meta != nil {
+				if meta.LastRevCheckAt == "" {
+					shouldRunRevCheck = true
+				} else if t, err := time.Parse(time.RFC3339, meta.LastRevCheckAt); err == nil {
+					shouldRunRevCheck = time.Since(t) > 7*24*time.Hour
+				} else {
+					shouldRunRevCheck = true
+				}
+			} else {
+				shouldRunRevCheck = true
+			}
+		}
+		if shouldRunRevCheck {
+			var err error
+			changedIDs, err = buildChangedQueue(ctx, st, client, filters)
+			if err != nil {
+				logx.Logger().Error().Str("component", "pcgw").Err(err).Msg("pcgw sync: build changed queue")
+				changedIDs = nil
+			}
+			_ = st.SetLastRevCheckAt(ctx, time.Now())
 		}
 		for _, id := range changedIDs {
 			enqueue(id)
@@ -283,7 +309,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	queueSize := len(queue)
 	_ = st.UpdatePCGWSyncRunPhase2Progress(ctx, runID, 0, 0)
 
-	// Persist queue size into targeted_queue_size column.
+	// Persist queue size into targeted_queue_size column (preserves catalog_scan_mode).
 	if runID != "" {
 		_ = st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, types.Phase1Stats{
 			RemoteTotalIDs:  phase1.RemoteTotalIDs,
@@ -291,7 +317,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 			ExtraLocalIDs:   phase1.ExtraLocalIDs,
 			CatalogHash:     phase1.CatalogHash,
 			CompletedAt:     phase1.CompletedAt,
-		})
+		}, catalogScanMode)
 	}
 
 	logx.Logger().Info().Str("component", "pcgw").
@@ -404,6 +430,83 @@ func ctxStatus(ctx context.Context) string {
 		return JobCanceled
 	}
 	return JobInterrupted
+}
+
+// runCatalogPhase decides whether to run a full catalog scan, a tail scan, or skip entirely.
+// It returns the resulting Phase1Stats, whether the tail scan found new IDs (tailGrew),
+// the catalogScanMode string, and any error.
+//
+// Full scan is used when:
+//   - opts.Full or opts.ForceFull
+//   - catalog is empty (localCount == 0)
+//   - no prior successful Phase 1 exists
+//
+// Fast path (routine incremental):
+//   - Load last successful Phase 1 stats
+//   - Probe: call ListGamePages(ctx, 1, localCount)
+//   - If probe empty: use cached stats, mode="fast_probe", tailGrew=false
+//   - If probe non-empty: run ScanCatalogTail, mode="tail", tailGrew=true
+func runCatalogPhase(ctx context.Context, st store.Store, client *pcgw.Client, runID string, opts PCGWSyncOptions, reportEx ReportProgressEx, stats *store.PCGWSyncRunStats) (phase1 types.Phase1Stats, tailGrew bool, catalogScanMode string, err error) {
+	// Always do a full scan for full/force-full runs.
+	if opts.Full || opts.ForceFull {
+		phase1, err = RunCatalogScan(ctx, st, client, runID, reportEx)
+		if err == nil {
+			_ = st.UpdateLastFullSyncAt(ctx)
+		}
+		return phase1, true, "full", err
+	}
+
+	// Check local catalog count.
+	catStats, statsErr := st.GetPCGWCatalogStats(ctx)
+	if statsErr != nil {
+		// Can't determine local count; fall back to full scan.
+		phase1, err = RunCatalogScan(ctx, st, client, runID, reportEx)
+		if err == nil {
+			_ = st.UpdateLastFullSyncAt(ctx)
+		}
+		return phase1, true, "full", err
+	}
+	localCount := catStats.RemoteTotal
+
+	// No prior successful Phase 1 → full scan.
+	prior, priorErr := st.GetLastSuccessfulPhase1Stats(ctx)
+	if priorErr != nil || prior == nil || localCount == 0 {
+		phase1, err = RunCatalogScan(ctx, st, client, runID, reportEx)
+		if err == nil {
+			_ = st.UpdateLastFullSyncAt(ctx)
+		}
+		return phase1, true, "full", err
+	}
+
+	// Fast path: probe for growth beyond local count.
+	grew, probeErr := ProbeCatalogGrowth(ctx, client, localCount)
+	if probeErr != nil {
+		logx.Logger().Warn().Str("component", "pcgw").Err(probeErr).
+			Msg("pcgw sync: catalog probe failed, falling back to full scan")
+		phase1, err = RunCatalogScan(ctx, st, client, runID, reportEx)
+		if err == nil {
+			_ = st.UpdateLastFullSyncAt(ctx)
+		}
+		return phase1, true, "full", err
+	}
+
+	if !grew {
+		// No new pages beyond local count — use cached stats.
+		phase1 = *prior
+		if runID != "" {
+			_ = st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, phase1, "fast_probe")
+		}
+		logx.Logger().Info().Str("component", "pcgw").Int("local_count", localCount).
+			Msg("pcgw sync: fast probe — catalog unchanged, skipping full scan")
+		return phase1, false, "fast_probe", nil
+	}
+
+	// Tail growth found: scan only the new tail.
+	phase1, err = ScanCatalogTail(ctx, st, client, runID, localCount, prior.RemoteTotalIDs, reportEx)
+	if err != nil {
+		return phase1, false, "tail", err
+	}
+	return phase1, true, "tail", nil
 }
 
 // catalogIncomplete is true when pcgw_catalog has fewer rows than the last Phase 1 remote count.

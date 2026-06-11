@@ -67,10 +67,8 @@
       </div>
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:0.25rem;">
         <span class="cell-muted">{{.JobProgressPages}} / {{.JobProgressTotal}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
-        {{if ge .JobETAMin 0}}
-        <span class="cell-muted">
-          {{if eq .JobETAMin 0}}Almost done{{else if lt .JobETAMin 2}}~1 min remaining{{else}}~{{.JobETAMin}} min remaining{{end}}
-        </span>
+        {{if ge .JobETASec 0}}
+        <span class="cell-muted">{{formatETASec .JobETASec}}</span>
         {{end}}
       </div>
       {{else}}
@@ -104,14 +102,14 @@
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
           <button type="submit" class="btn-primary-sm" aria-describedby="help-incremental-sync">Incremental Sync</button>
         </form>
-        <span id="help-incremental-sync" class="pcgw-action-help">Refreshes the game catalog and processes any new, changed, or previously failed games. The safe default for routine use.</span>
+        <span id="help-incremental-sync" class="pcgw-action-help">Fast catalog probe + process backlog. Detects new game IDs with a single API call and processes missing, changed, or previously failed games. Full catalog scan only when needed. The safe default for routine use.</span>
       </div>
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/sync/refresh-new" class="inline-form">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
           <button type="submit" class="btn-ghost-sm" aria-describedby="help-refresh-new">Refresh New Games</button>
         </form>
-        <span id="help-refresh-new" class="pcgw-action-help">Runs a fresh catalog scan and processes only newly discovered or missing games. Lighter than incremental when you just want to pick up new additions.</span>
+        <span id="help-refresh-new" class="pcgw-action-help">Force full catalog rescan, then process missing entries. Use when you want to pick up newly added PCGW games without waiting for the periodic full-scan interval.</span>
       </div>
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/sync/auto-catch-up" class="inline-form">

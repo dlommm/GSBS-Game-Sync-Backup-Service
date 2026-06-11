@@ -649,7 +649,7 @@ func (s *sqliteStore) GetLatestPCGWSyncRun(ctx context.Context) (*types.PCGWSync
 			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message,
 			resumed_from_run_id, notes,
 			remote_total_ids, missing_local_ids, extra_local_ids, targeted_queue_size, targeted_processed,
-			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor
+			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor, catalog_scan_mode
 		FROM pcgw_sync_runs ORDER BY started_at DESC LIMIT 1`)
 }
 
@@ -659,7 +659,7 @@ func (s *sqliteStore) GetPCGWSyncRunByID(ctx context.Context, runID string) (*ty
 			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message,
 			resumed_from_run_id, notes,
 			remote_total_ids, missing_local_ids, extra_local_ids, targeted_queue_size, targeted_processed,
-			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor
+			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor, catalog_scan_mode
 		FROM pcgw_sync_runs WHERE id = ?`, runID)
 }
 
@@ -672,7 +672,7 @@ func (s *sqliteStore) ListPCGWSyncRuns(ctx context.Context, limit int) ([]types.
 			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message,
 			resumed_from_run_id, notes,
 			remote_total_ids, missing_local_ids, extra_local_ids, targeted_queue_size, targeted_processed,
-			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor
+			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor, catalog_scan_mode
 		FROM pcgw_sync_runs ORDER BY started_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -701,7 +701,7 @@ func (s *sqliteStore) GetResumablePCGWSyncRun(ctx context.Context, mode string) 
 			games_total, games_ok, games_partial, games_failed, games_skipped, avg_parse_ms, error_message,
 			resumed_from_run_id, notes,
 			remote_total_ids, missing_local_ids, extra_local_ids, targeted_queue_size, targeted_processed,
-			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor
+			phase1_completed_at, catalog_hash, checkpoint_phase, checkpoint_queue_cursor, catalog_scan_mode
 		FROM pcgw_sync_runs
 		WHERE mode = ? AND status IN ('interrupted', 'failed')
 		  AND (checkpoint_offset > 0 OR checkpoint_phase != '')
@@ -720,13 +720,13 @@ func (s *sqliteStore) scanPCGWSyncRun(ctx context.Context, query string, args ..
 // scanPCGWSyncRunRow scans a PCGWSyncRun from either a *sql.Row or *sql.Rows.
 func scanPCGWSyncRunRow(row interface{ Scan(...interface{}) error }) (*types.PCGWSyncRun, error) {
 	var r types.PCGWSyncRun
-	var finished, errMsg, resumedFrom, notes, phase1At, catalogHash, ckPhase sql.NullString
+	var finished, errMsg, resumedFrom, notes, phase1At, catalogHash, ckPhase, scanMode sql.NullString
 	err := row.Scan(
 		&r.ID, &r.Mode, &r.Status, &r.StartedAt, &finished, &r.CheckpointOffset,
 		&r.GamesTotal, &r.GamesOK, &r.GamesPartial, &r.GamesFailed, &r.GamesSkipped, &r.AvgParseMs, &errMsg,
 		&resumedFrom, &notes,
 		&r.RemoteTotalIDs, &r.MissingLocalIDs, &r.ExtraLocalIDs, &r.TargetedQueueSize, &r.TargetedProcessed,
-		&phase1At, &catalogHash, &ckPhase, &r.CheckpointQueueCursor,
+		&phase1At, &catalogHash, &ckPhase, &r.CheckpointQueueCursor, &scanMode,
 	)
 	if err != nil {
 		return nil, err
@@ -738,6 +738,7 @@ func scanPCGWSyncRunRow(row interface{ Scan(...interface{}) error }) (*types.PCG
 	r.Phase1CompletedAt = phase1At.String
 	r.CatalogHash = catalogHash.String
 	r.CheckpointPhase = ckPhase.String
+	r.CatalogScanMode = scanMode.String
 	return &r, nil
 }
 
@@ -805,16 +806,18 @@ func (s *sqliteStore) CancelRunningPCGWSyncRuns(ctx context.Context, errMsg stri
 
 func (s *sqliteStore) GetPCGWManifestMeta(ctx context.Context) (*types.PCGWManifestMeta, error) {
 	var m types.PCGWManifestMeta
-	var inc, full sql.NullString
+	var inc, full, revCheck sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-		SELECT manifest_version, manifest_etag, last_incremental_at, last_full_sync_at, db_wikitext_bytes
+		SELECT manifest_version, manifest_etag, last_incremental_at, last_full_sync_at, db_wikitext_bytes,
+			last_rev_check_at
 		FROM pcgw_manifest_meta WHERE id = 1`).
-		Scan(&m.ManifestVersion, &m.ManifestETag, &inc, &full, &m.DBWikitextBytes)
+		Scan(&m.ManifestVersion, &m.ManifestETag, &inc, &full, &m.DBWikitextBytes, &revCheck)
 	if err != nil {
 		return nil, err
 	}
 	m.LastIncrementalAt = inc.String
 	m.LastFullSyncAt = full.String
+	m.LastRevCheckAt = revCheck.String
 	return &m, nil
 }
 

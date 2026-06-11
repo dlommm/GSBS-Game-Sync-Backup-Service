@@ -100,6 +100,8 @@ type adminOverviewData struct {
 	JobElapsedSec         int
 	JobPagesPerSec        float64
 	JobETAMin             int
+	JobETASec             int
+	JobCatalogScanMode    string
 	JobPhaseLabel         string
 	AvgHistPagesPerSec    float64
 	IdleRunsNeeded        int
@@ -155,6 +157,8 @@ type adminActivityData struct {
 	JobElapsedSec         int
 	JobPagesPerSec        float64
 	JobETAMin             int
+	JobETASec             int
+	JobCatalogScanMode    string
 	JobPhaseLabel         string
 	AvgHistPagesPerSec    float64
 	IdleRunsNeeded        int

@@ -3,6 +3,7 @@ package schedule
 import (
 	"context"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,14 +13,15 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// PCGWCron manages the scheduled PCGW sync cron entry.
+// PCGWCron manages the scheduled PCGW sync cron entries (incremental and full).
 type PCGWCron struct {
 	cron   *cron.Cron
 	store  store.Store
 	runner *job.Runner
 
-	mu      sync.Mutex
-	entryID cron.EntryID
+	mu          sync.Mutex
+	entryID     cron.EntryID // incremental sync
+	fullEntryID cron.EntryID // full sync (GSBS_PCGW_FULL_CRON, env-only)
 }
 
 // CronView describes effective cron scheduling for the admin UI.
@@ -62,23 +64,44 @@ func (p *PCGWCron) Reschedule(ctx context.Context) error {
 		p.cron.Remove(p.entryID)
 		p.entryID = 0
 	}
+	if p.fullEntryID != 0 {
+		p.cron.Remove(p.fullEntryID)
+		p.fullEntryID = 0
+	}
 
 	if disabled {
 		logx.Logger().Info().Str("component", "cron").Msg("cron: PCGW sync disabled")
-		return nil
+	} else {
+		id, err := p.cron.AddFunc(expr, func() {
+			if _, err := p.runner.RunPCGWSync(context.Background()); err != nil {
+				logx.Logger().Error().Str("component", "cron").Err(err).Msg("cron: pcgw sync")
+			}
+		})
+		if err != nil {
+			return err
+		}
+		p.entryID = id
+		logx.Logger().Info().Str("component", "cron").Str("expr", expr).Str("source", source).
+			Msg("cron: PCGW sync scheduled")
 	}
 
-	id, err := p.cron.AddFunc(expr, func() {
-		if _, err := p.runner.RunPCGWSync(context.Background()); err != nil {
-			logx.Logger().Error().Str("component", "cron").Err(err).Msg("cron: pcgw sync")
+	// GSBS_PCGW_FULL_CRON: optional env-only cron for periodic full resync.
+	if fullExpr := strings.TrimSpace(os.Getenv("GSBS_PCGW_FULL_CRON")); fullExpr != "" {
+		fid, err := p.cron.AddFunc(fullExpr, func() {
+			if _, err := p.runner.RunPCGWSyncFull(context.Background()); err != nil {
+				logx.Logger().Error().Str("component", "cron").Err(err).Msg("cron: pcgw full sync")
+			}
+		})
+		if err != nil {
+			logx.Logger().Warn().Str("component", "cron").Str("expr", fullExpr).Err(err).
+				Msg("cron: GSBS_PCGW_FULL_CRON invalid — full sync not scheduled")
+		} else {
+			p.fullEntryID = fid
+			logx.Logger().Info().Str("component", "cron").Str("expr", fullExpr).
+				Msg("cron: PCGW full sync scheduled")
 		}
-	})
-	if err != nil {
-		return err
 	}
-	p.entryID = id
-	logx.Logger().Info().Str("component", "cron").Str("expr", expr).Str("source", source).
-		Msg("cron: PCGW sync scheduled")
+
 	return nil
 }
 

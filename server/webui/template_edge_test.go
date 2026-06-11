@@ -28,7 +28,7 @@ func TestAdminJobsPartialAfterSync(t *testing.T) {
 			"RecentJobs": []store.JobRun{{Status: "success", StartedAt: now, FinishedAt: now}},
 			"JobRunning": true, "JobProgressPages": 9000, "JobProgressTotal": 10000,
 			"JobGamesSkipped": 3, "CSRFToken": "csrf",
-			"JobPhaseLabel": "Phase 2: Parsing game data", "JobETAMin": 5,
+			"JobPhaseLabel": "Phase 2: Parsing game data", "JobETAMin": 5, "JobETASec": 300,
 		},
 	}
 	for i, data := range cases {
@@ -62,10 +62,11 @@ func TestAdminPCGWActionLabelsClarifyPhases(t *testing.T) {
 	data := map[string]interface{}{
 		"JobRunning":     false,
 		"CSRFToken":      "csrf",
-		"CapStatusText":  "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
+		"CapStatusText":  "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 uses a fast catalog probe on incremental syncs; full scan only when needed.",
 		"LatestSyncRun":  nil,
 		"CatalogStats":   map[string]int{"RemoteTotal": 0, "LocalTotal": 0, "MissingLocal": 0, "DeadLetter": 0},
 		"MaxPagesPerRun": 5000,
+		"JobETASec":      -1,
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "partials/admin_pcgw_actions.html", data); err != nil {

@@ -66,6 +66,8 @@ type jobsViewData struct {
 	JobElapsedSec         int
 	JobPagesPerSec        float64
 	JobETAMin             int
+	JobETASec             int    // ETA in seconds from runner; -1 = unknown
+	JobCatalogScanMode    string // catalog_scan_mode from LatestSyncRun ("full", "fast_probe", "tail", "skipped")
 	JobPhaseLabel         string
 	AvgHistPagesPerSec    float64
 	// Idle ETA: how long to clear the remaining backlog when no job is running
@@ -92,7 +94,7 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 		ShowPCGWControls:      showPCGWControls,
 		CSRFToken:             csrf,
 	}
-	data.CapStatusText = fmt.Sprintf("Phase 2 parse/store cap: %d pages per run (%s). Phase 1 catalog scan always fetches all IDs.", data.MaxPagesPerRun, data.MaxPagesPerRunSource)
+	data.CapStatusText = fmt.Sprintf("Phase 2 parse/store cap: %d pages per run (%s). Phase 1 uses a fast catalog probe on incremental syncs; full scan only when needed.", data.MaxPagesPerRun, data.MaxPagesPerRunSource)
 	if last, _ := h.store.GetLatestSuccessfulJobRun(ctx, "pcgw_sync"); last != nil {
 		data.LastSuccessfulSyncAt = last.FinishedAt
 		if data.LastSuccessfulSyncAt == "" {
@@ -103,6 +105,7 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 		if data.LatestSyncRun.GamesTotal > 0 {
 			data.JobProgressTotal = data.LatestSyncRun.GamesTotal
 		}
+		data.JobCatalogScanMode = data.LatestSyncRun.CatalogScanMode
 		data.JobGamesSkipped = data.LatestSyncRun.GamesSkipped
 		if jobRunning && jobProgress == 0 && data.LatestSyncRun.CheckpointOffset > 0 {
 			data.JobProgressPages = data.LatestSyncRun.CheckpointOffset
@@ -127,6 +130,12 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 	if h.jobRunner != nil && h.jobRunner.IsRunning("pcgw_sync") {
 		data.JobPhase = h.jobRunner.ProgressPhase()
 		data.JobAutoCatchUp = h.jobRunner.ProgressMode() == "auto-catch-up"
+		// Prefer live runner total over stale DB value.
+		if t := h.jobRunner.ProgressTotal(); t > 0 {
+			data.JobProgressTotal = t
+		} else if data.JobProgressTotal == 0 && data.CatalogStats.RemoteTotal > 0 {
+			data.JobProgressTotal = data.CatalogStats.RemoteTotal
+		}
 	}
 	data.ResumableSyncRun, _ = h.store.GetResumablePCGWSyncRun(ctx, "incremental")
 	// Elapsed time and current throughput
@@ -162,25 +171,35 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 	if rateCount > 0 {
 		data.AvgHistPagesPerSec = totalRate / float64(rateCount)
 	}
-	// ETA calculation
-	if data.JobRunning && data.JobProgressTotal > 0 {
-		remaining := data.JobProgressTotal - data.JobProgressPages
-		if remaining > 0 {
-			rate := data.JobPagesPerSec
-			if rate < 0.01 && data.AvgHistPagesPerSec > 0 {
-				rate = data.AvgHistPagesPerSec
+	// ETA calculation — prefer live runner ETA, fall back to rate-based computation.
+	data.JobETASec = -1
+	data.JobETAMin = -1
+	if data.JobRunning {
+		// Try live runner ETA first.
+		if h.jobRunner != nil {
+			if etaSec := h.jobRunner.ProgressETASec(); etaSec >= 0 {
+				data.JobETASec = etaSec
+				data.JobETAMin = int(math.Ceil(float64(etaSec) / 60))
 			}
-			if rate > 0.01 {
-				etaSec := float64(remaining) / rate
-				data.JobETAMin = int(math.Ceil(etaSec / 60))
-			} else {
-				data.JobETAMin = -1
-			}
-		} else {
-			data.JobETAMin = 0
 		}
-	} else {
-		data.JobETAMin = -1
+		// Fall back to rate-based ETA when runner hasn't warmed up yet.
+		if data.JobETASec < 0 && data.JobProgressTotal > 0 {
+			remaining := data.JobProgressTotal - data.JobProgressPages
+			if remaining > 0 {
+				rate := data.JobPagesPerSec
+				if rate < 0.01 && data.AvgHistPagesPerSec > 0 {
+					rate = data.AvgHistPagesPerSec
+				}
+				if rate > 0.01 {
+					etaSec := float64(remaining) / rate
+					data.JobETASec = int(math.Ceil(etaSec))
+					data.JobETAMin = int(math.Ceil(etaSec / 60))
+				}
+			} else {
+				data.JobETASec = 0
+				data.JobETAMin = 0
+			}
+		}
 	}
 	// Idle ETA: estimate time to clear MissingLocal backlog (shown when no job is running)
 	if !data.JobRunning && data.CatalogStats.MissingLocal > 0 {
@@ -202,10 +221,10 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 
 	// Human-readable phase label
 	switch data.JobPhase {
-	case "listing":
+	case "listing", "catalog":
 		data.JobPhaseLabel = "Phase 1: Listing game catalog"
 	case "queueing":
-		data.JobPhaseLabel = "Phase 1: Building queue"
+		data.JobPhaseLabel = "Phase 2: Building queue"
 	case "parsing", "ingest":
 		data.JobPhaseLabel = "Phase 2: Parsing game data"
 	default:
@@ -261,6 +280,8 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 		JobElapsedSec:         jobsData.JobElapsedSec,
 		JobPagesPerSec:        jobsData.JobPagesPerSec,
 		JobETAMin:             jobsData.JobETAMin,
+		JobETASec:             jobsData.JobETASec,
+		JobCatalogScanMode:    jobsData.JobCatalogScanMode,
 		JobPhaseLabel:         jobsData.JobPhaseLabel,
 		AvgHistPagesPerSec:    jobsData.AvgHistPagesPerSec,
 		IdleRunsNeeded:        jobsData.IdleRunsNeeded,
@@ -401,6 +422,8 @@ func (h *WebHandler) serveAdminActivity(w http.ResponseWriter, r *http.Request) 
 		JobElapsedSec:         jobsData.JobElapsedSec,
 		JobPagesPerSec:        jobsData.JobPagesPerSec,
 		JobETAMin:             jobsData.JobETAMin,
+		JobETASec:             jobsData.JobETASec,
+		JobCatalogScanMode:    jobsData.JobCatalogScanMode,
 		JobPhaseLabel:         jobsData.JobPhaseLabel,
 		AvgHistPagesPerSec:    jobsData.AvgHistPagesPerSec,
 		IdleRunsNeeded:        jobsData.IdleRunsNeeded,
@@ -437,6 +460,8 @@ func (h *WebHandler) serveAdminJobsPartial(w http.ResponseWriter, r *http.Reques
 		"JobElapsedSec":         data.JobElapsedSec,
 		"JobPagesPerSec":        data.JobPagesPerSec,
 		"JobETAMin":             data.JobETAMin,
+		"JobETASec":             data.JobETASec,
+		"JobCatalogScanMode":    data.JobCatalogScanMode,
 		"JobPhaseLabel":         data.JobPhaseLabel,
 		"AvgHistPagesPerSec":    data.AvgHistPagesPerSec,
 	})

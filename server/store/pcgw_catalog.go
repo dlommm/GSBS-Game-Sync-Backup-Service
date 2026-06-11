@@ -12,6 +12,44 @@ import (
 	"github.com/gsbs/gsbs/pkg/types"
 )
 
+// GetLastSuccessfulPhase1Stats returns Phase 1 stats from the most recent successful
+// sync run that has a non-zero remote_total_ids. Returns nil (no error) if no row exists.
+func (s *sqliteStore) GetLastSuccessfulPhase1Stats(ctx context.Context) (*types.Phase1Stats, error) {
+	var stats types.Phase1Stats
+	var catalogHash, phase1At sql.NullString
+	err := s.db.QueryRowContext(ctx, `
+		SELECT remote_total_ids, catalog_hash, phase1_completed_at
+		FROM pcgw_sync_runs
+		WHERE status = 'success' AND remote_total_ids > 0
+		ORDER BY started_at DESC LIMIT 1`).
+		Scan(&stats.RemoteTotalIDs, &catalogHash, &phase1At)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	stats.CatalogHash = catalogHash.String
+	stats.CompletedAt = phase1At.String
+	return &stats, nil
+}
+
+// SetLastRevCheckAt records when buildChangedQueue (rev-ID check) last ran.
+func (s *sqliteStore) SetLastRevCheckAt(ctx context.Context, t time.Time) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE pcgw_manifest_meta SET last_rev_check_at = ? WHERE id = 1`,
+		t.UTC().Format(time.RFC3339))
+	return err
+}
+
+// UpdateLastFullSyncAt records when the most recent full catalog scan completed.
+func (s *sqliteStore) UpdateLastFullSyncAt(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE pcgw_manifest_meta SET last_full_sync_at = ? WHERE id = 1`,
+		time.Now().UTC().Format(time.RFC3339))
+	return err
+}
+
 const deadLetterThreshold = 5
 
 // UpsertPCGWCatalogBatch upserts a batch of catalog entries. On first seen the
@@ -271,15 +309,18 @@ func (s *sqliteStore) ComputeCatalogHash(ctx context.Context) (string, error) {
 }
 
 // UpdatePCGWSyncRunPhase1Stats persists Phase 1 output onto an existing sync run row.
-func (s *sqliteStore) UpdatePCGWSyncRunPhase1Stats(ctx context.Context, runID string, stats types.Phase1Stats) error {
+// catalogScanMode values: "full", "fast_probe", "tail", "skipped", "resumed".
+func (s *sqliteStore) UpdatePCGWSyncRunPhase1Stats(ctx context.Context, runID string, stats types.Phase1Stats, catalogScanMode string) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE pcgw_sync_runs SET
 			remote_total_ids=?, missing_local_ids=?, extra_local_ids=?,
 			catalog_hash=?, phase1_completed_at=?,
+			catalog_scan_mode=?,
 			checkpoint_phase='ingest'
 		WHERE id=?`,
 		stats.RemoteTotalIDs, stats.MissingLocalIDs, stats.ExtraLocalIDs,
 		stats.CatalogHash, stats.CompletedAt,
+		catalogScanMode,
 		runID)
 	return err
 }

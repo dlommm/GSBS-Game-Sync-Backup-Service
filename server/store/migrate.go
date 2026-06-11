@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 17
+const schemaVersion = 18
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -117,6 +117,7 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{15, s.stepAdminSettings},
 		{16, s.stepMergeOSSlots},
 		{17, s.stepPCGWCatalog},
+		{18, s.stepPCGWIncrementalSpeed},
 	}
 }
 
@@ -1075,6 +1076,21 @@ func (s *sqliteStore) stepMergeOSSlots(tx *sql.Tx) error {
 	logx.Logger().Info().Str("component", "migration").
 		Int("merged", totalMerged).Int("versions", totalVersions).Int("updated", totalUpdated).
 		Msg("GSBS migrate step 16: merged slot(s)")
+	return nil
+}
+
+// stepPCGWIncrementalSpeed is migration step 18.
+// Adds catalog_scan_mode to pcgw_sync_runs and last_rev_check_at to pcgw_manifest_meta
+// to support the fast catalog probe / tail scan optimisation.
+func (s *sqliteStore) stepPCGWIncrementalSpeed(tx *sql.Tx) error {
+	for _, col := range []string{
+		`ALTER TABLE pcgw_sync_runs ADD COLUMN catalog_scan_mode TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE pcgw_manifest_meta ADD COLUMN last_rev_check_at TEXT`,
+	} {
+		if _, err := tx.Exec(col); err != nil && !strings.Contains(err.Error(), "duplicate") {
+			return fmt.Errorf("step pcgw_incremental_speed: %w", err)
+		}
+	}
 	return nil
 }
 

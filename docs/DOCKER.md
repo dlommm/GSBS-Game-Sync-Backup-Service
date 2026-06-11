@@ -111,7 +111,8 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token age (90 days). |
 | `GSBS_METRICS_TOKEN` | (unset) | Bearer token required for `/metrics` when set. |
 | `GSBS_PCGW_CRON` | `0 3 * * 0` | Cron expression for PCGW incremental sync. **Overrides** admin Settings when set (including `""` to disable). When unset, schedule comes from admin Settings (`pcgw_cron`, default weekly Sunday 03:00). |
-| `GSBS_PCGW_FULL_CRON` | (unset) | Optional cron for full PCGW resync. |
+| `GSBS_PCGW_FULL_CRON` | (unset) | Cron expression for a scheduled full PCGW catalog rescan (now implemented). Schedules `RunPCGWSyncFull` in addition to the normal incremental cron. |
+| `GSBS_PCGW_FULL_CATALOG_DAYS` | `7` | Days between forced full catalog scans during incremental sync. Set to `0` to disable. |
 | `GSBS_PCGW_RATE_LIMIT` | `2s` | Delay between PCGW HTTP requests. |
 | `GSBS_PCGW_USER_AGENT` | `GSBS/<version> (+https://github.com/…)` | User-Agent sent to PCGamingWiki. |
 | `GSBS_PCGW_STORE_FULL_WIKITEXT` | `true` | When `false`, skip storing zstd full-page wikitext (section text still stored). |

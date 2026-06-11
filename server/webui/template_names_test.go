@@ -355,6 +355,8 @@ func templateTestData(name string) interface{} {
 			JobElapsedSec:        120,
 			JobPagesPerSec:       2.5,
 			JobETAMin:            15,
+			JobETASec:            900,
+			JobCatalogScanMode:   "fast_probe",
 			JobPhaseLabel:        "Phase 2: Parsing game data",
 			AvgHistPagesPerSec:   3.0,
 		}
@@ -561,16 +563,17 @@ func templateTestData(name string) interface{} {
 		}
 	case "partials/admin_pcgw_job_status.html":
 		return map[string]interface{}{
-			"JobRunning":       true,
-			"JobProgressPages": 42,
-			"JobProgressTotal": 100,
-			"JobGamesSkipped":  3,
-			"JobPhase":         "ingest",
-			"CSRFToken":        "csrf-test",
-			"JobElapsedSec":    90,
-			"JobPagesPerSec":   1.5,
-			"JobETAMin":        5,
-			"JobPhaseLabel":    "Phase 2: Parsing game data",
+			"JobRunning":         true,
+			"JobProgressPages":   42,
+			"JobProgressTotal":   100,
+			"JobGamesSkipped":    3,
+			"JobPhase":           "ingest",
+			"CSRFToken":          "csrf-test",
+			"JobElapsedSec":      90,
+			"JobPagesPerSec":     1.5,
+			"JobETAMin":          5,
+			"JobETASec":          300,
+			"JobPhaseLabel":      "Phase 2: Parsing game data",
 			"AvgHistPagesPerSec": 2.0,
 		}
 	case "partials/loading_skeleton.html":

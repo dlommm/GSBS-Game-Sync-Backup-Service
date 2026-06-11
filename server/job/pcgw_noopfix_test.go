@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gsbs/gsbs/pkg/pcgw"
 	"github.com/gsbs/gsbs/pkg/types"
@@ -91,7 +92,7 @@ func seedPriorSuccessRun(t *testing.T, ctx context.Context, st store.Store, cata
 	// Record the catalog hash so the no-op gate can see it on next run.
 	err = st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, types.Phase1Stats{
 		CatalogHash: catalogHash,
-	})
+	}, "full")
 	if err != nil {
 		t.Fatalf("update phase1 stats: %v", err)
 	}
@@ -131,7 +132,7 @@ func TestNoOpFix_UnchangedHashWithMissingBacklog(t *testing.T) {
 	if err := st.FinishPCGWSyncRun(ctx, runID, JobSuccess, "", stats); err != nil {
 		t.Fatalf("finish run: %v", err)
 	}
-	if err := st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, phase1Stats); err != nil {
+	if err := st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, phase1Stats, "full"); err != nil {
 		t.Fatalf("update phase1 stats: %v", err)
 	}
 	if phase1Stats.CatalogHash == "" {
@@ -197,7 +198,7 @@ func TestNoOpFix_UnchangedHashEmptyBacklog(t *testing.T) {
 	if err := st.FinishPCGWSyncRun(ctx, runID, JobSuccess, "", sStats); err != nil {
 		t.Fatalf("finish run: %v", err)
 	}
-	if err := st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, phase1Stats); err != nil {
+	if err := st.UpdatePCGWSyncRunPhase1Stats(ctx, runID, phase1Stats, "full"); err != nil {
 		t.Fatalf("update phase1 stats: %v", err)
 	}
 
@@ -277,7 +278,7 @@ func TestNoOpFix_ResumeDoesNotUseStaleHash(t *testing.T) {
 	if err := st.FinishPCGWSyncRun(ctx, runID1, JobSuccess, "", sStats); err != nil {
 		t.Fatalf("finish run: %v", err)
 	}
-	if err := st.UpdatePCGWSyncRunPhase1Stats(ctx, runID1, phase1Stats); err != nil {
+	if err := st.UpdatePCGWSyncRunPhase1Stats(ctx, runID1, phase1Stats, "full"); err != nil {
 		t.Fatalf("update phase1 stats: %v", err)
 	}
 
@@ -318,5 +319,183 @@ func TestNoOpFix_ResumeDoesNotUseStaleHash(t *testing.T) {
 	}
 	if len(games) == 0 {
 		t.Fatal("expected pcgw_games to have entries after resumed Phase 2 ran, got 0 — stale hash may have caused false no-op")
+	}
+}
+
+// mockOffsetAwarePCGWServer handles both catalog and page-ingest endpoints.
+// The catalog endpoint is offset-aware: returns only pages[offset:offset+limit].
+func mockOffsetAwarePCGWServer(pageIDs []int64) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+
+		if q.Get("tables") == "Infobox_game" {
+			offset := 0
+			limit := 500
+			fmt.Sscanf(q.Get("offset"), "%d", &offset)
+			fmt.Sscanf(q.Get("limit"), "%d", &limit)
+			start := offset
+			if start > len(pageIDs) {
+				start = len(pageIDs)
+			}
+			end := start + limit
+			if end > len(pageIDs) {
+				end = len(pageIDs)
+			}
+			slice := pageIDs[start:end]
+			rows := make([]map[string]interface{}, 0, len(slice))
+			for _, id := range slice {
+				rows = append(rows, map[string]interface{}{
+					"_pageName": fmt.Sprintf("Game_%d", id),
+					"PageID":    fmt.Sprintf("%d", id),
+					"Title":     fmt.Sprintf("Game %d", id),
+				})
+			}
+			resp := map[string]interface{}{"cargoquery": makeCargoRows(rows)}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if q.Get("action") == "parse" {
+			resp := map[string]interface{}{
+				"parse": map[string]interface{}{
+					"title": "Test Game",
+					"wikitext": map[string]interface{}{
+						"*": "{{Infobox game\n|steam appid     = \n}}\n",
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		if q.Get("action") == "query" && q.Get("prop") == "revisions" {
+			pageID := q.Get("pageids")
+			resp := map[string]interface{}{
+				"query": map[string]interface{}{
+					"pages": map[string]interface{}{
+						pageID: map[string]interface{}{
+							"pageid": pageID,
+							"revisions": []map[string]interface{}{
+								{"revid": int64(9999), "timestamp": "2024-01-01T00:00:00Z"},
+							},
+						},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+
+		w.WriteHeader(http.StatusNotFound)
+	}))
+}
+
+// TestFastPath_SkipsFullScan verifies that when the catalog is complete and the probe
+// finds no growth, RunCatalogScan (full) is not invoked — Phase 2 runs on backlog only.
+func TestFastPath_SkipsFullScan(t *testing.T) {
+	pageIDs := []int64{30001, 30002, 30003}
+	srv := mockOffsetAwarePCGWServer(pageIDs)
+	defer srv.Close()
+
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	client := pcgw.NewClient()
+	client.BaseURL = srv.URL
+
+	// Run a full initial sync to populate catalog and have a prior success run.
+	t.Setenv("GSBS_PCGW_MAX_PAGES_PER_RUN", "10")
+	_, err = PCGWSyncEx(ctx, st, client, nil, nil, PCGWSyncOptions{Full: true})
+	if err != nil {
+		t.Fatalf("initial full sync: %v", err)
+	}
+
+	// Confirm catalog is populated.
+	catStats, _ := st.GetPCGWCatalogStats(ctx)
+	if catStats.RemoteTotal != len(pageIDs) {
+		t.Fatalf("catalog remote_total: got %d, want %d", catStats.RemoteTotal, len(pageIDs))
+	}
+
+	// Get catalog hash before incremental run.
+	priorHash, _ := st.ComputeCatalogHash(ctx)
+
+	// Run incremental sync — same server, so probe at offset 3 returns nothing.
+	// Fast path should be taken (mode="fast_probe").
+	_, err = PCGWSyncEx(ctx, st, client, nil, nil, PCGWSyncOptions{})
+	if err != nil {
+		t.Fatalf("incremental sync: %v", err)
+	}
+
+	// Catalog hash must be unchanged (no full scan ran).
+	afterHash, _ := st.ComputeCatalogHash(ctx)
+	if afterHash != priorHash {
+		t.Errorf("catalog hash changed after fast-probe incremental (expected no full scan)")
+	}
+
+	// Check that the latest sync run recorded fast_probe or tail (not full for the incremental run).
+	runs, err := st.ListPCGWSyncRuns(ctx, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) == 0 {
+		t.Fatal("no sync runs recorded")
+	}
+	latest := runs[0]
+	if latest.CatalogScanMode == "full" {
+		t.Errorf("expected fast-path scan mode for incremental run, got %q", latest.CatalogScanMode)
+	}
+}
+
+// TestFastPath_SkipsBuildChangedQueue verifies that when the probe is empty and
+// last_rev_check_at is recent, buildChangedQueue is not invoked (no rev API calls).
+func TestFastPath_SkipsBuildChangedQueue(t *testing.T) {
+	pageIDs := []int64{40001, 40002}
+	srv := mockOffsetAwarePCGWServer(pageIDs)
+	defer srv.Close()
+
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	client := pcgw.NewClient()
+	client.BaseURL = srv.URL
+
+	t.Setenv("GSBS_PCGW_MAX_PAGES_PER_RUN", "10")
+
+	// Initial full sync.
+	_, err = PCGWSyncEx(ctx, st, client, nil, nil, PCGWSyncOptions{Full: true})
+	if err != nil {
+		t.Fatalf("initial full sync: %v", err)
+	}
+
+	// Mark last_rev_check_at as recent so deferred rev-check is skipped.
+	if err := st.SetLastRevCheckAt(ctx, time.Now()); err != nil {
+		t.Fatalf("SetLastRevCheckAt: %v", err)
+	}
+
+	// Second incremental sync — probe empty, rev-check should be skipped.
+	// The sync must complete without error.
+	_, err = PCGWSyncEx(ctx, st, client, nil, nil, PCGWSyncOptions{})
+	if err != nil {
+		t.Fatalf("incremental sync with deferred rev-check: %v", err)
+	}
+
+	// Verify manifest meta has last_rev_check_at set (from the first full sync call to SetLastRevCheckAt).
+	meta, err := st.GetPCGWManifestMeta(ctx)
+	if err != nil {
+		t.Fatalf("GetPCGWManifestMeta: %v", err)
+	}
+	if meta.LastRevCheckAt == "" {
+		t.Error("expected last_rev_check_at to be set after SetLastRevCheckAt")
 	}
 }

@@ -121,15 +121,17 @@ type PCGWSyncRun struct {
 	Notes            string `json:"notes,omitempty"`
 
 	// Phase 1 (catalog scan) fields
-	RemoteTotalIDs       int    `json:"remote_total_ids"`
-	MissingLocalIDs      int    `json:"missing_local_ids"`
-	ExtraLocalIDs        int    `json:"extra_local_ids"`
-	TargetedQueueSize    int    `json:"targeted_queue_size"`
-	TargetedProcessed    int    `json:"targeted_processed"`
-	Phase1CompletedAt    string `json:"phase1_completed_at,omitempty"`
-	CatalogHash          string `json:"catalog_hash,omitempty"`
-	CheckpointPhase      string `json:"checkpoint_phase,omitempty"`      // "catalog" or "ingest"
-	CheckpointQueueCursor int   `json:"checkpoint_queue_cursor"`
+	RemoteTotalIDs        int    `json:"remote_total_ids"`
+	MissingLocalIDs       int    `json:"missing_local_ids"`
+	ExtraLocalIDs         int    `json:"extra_local_ids"`
+	TargetedQueueSize     int    `json:"targeted_queue_size"`
+	TargetedProcessed     int    `json:"targeted_processed"`
+	Phase1CompletedAt     string `json:"phase1_completed_at,omitempty"`
+	CatalogHash           string `json:"catalog_hash,omitempty"`
+	CheckpointPhase       string `json:"checkpoint_phase,omitempty"`       // "catalog" or "ingest"
+	CheckpointQueueCursor int    `json:"checkpoint_queue_cursor"`
+	// CatalogScanMode records how Phase 1 was executed: "full", "fast_probe", "tail", "skipped", or "resumed".
+	CatalogScanMode string `json:"catalog_scan_mode,omitempty"`
 }
 
 // PCGWCatalogEntry is one row in pcgw_catalog (the full remote game-ID inventory).
@@ -180,6 +182,8 @@ type PCGWManifestMeta struct {
 	LastIncrementalAt string `json:"last_incremental_at,omitempty"`
 	LastFullSyncAt    string `json:"last_full_sync_at,omitempty"`
 	DBWikitextBytes   int64  `json:"db_wikitext_bytes"`
+	// LastRevCheckAt records when buildChangedQueue (rev-ID check) last ran.
+	LastRevCheckAt string `json:"last_rev_check_at,omitempty"`
 }
 
 // ManifestV2Location is a save/config location in manifest v2.

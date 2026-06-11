@@ -18,10 +18,8 @@
     {{if .JobElapsedSec}}
     <span class="cell-muted" style="font-size:0.75rem;">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
     {{else}}<span></span>{{end}}
-    {{if ge .JobETAMin 0}}
-    <span class="cell-muted" style="font-size:0.75rem;">
-      {{if eq .JobETAMin 0}}Almost done{{else if lt .JobETAMin 2}}~1 min remaining{{else}}~{{.JobETAMin}} min remaining{{end}}
-    </span>
+    {{if ge .JobETASec 0}}
+    <span class="cell-muted" style="font-size:0.75rem;">{{formatETASec .JobETASec}}</span>
     {{end}}
   </div>
 </div>

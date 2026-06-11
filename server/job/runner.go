@@ -56,6 +56,8 @@ type Runner struct {
 	progressQueue  int    // queue size for current run
 	progressCursor int    // queue cursor for current run
 	progressMode   string // current mode: "single-run" or "auto-catch-up"
+	progressTotal  int    // best-known total pages for current run (remote_total_ids or queue size)
+	progressETASec int    // last computed ETA in seconds (-1 = unknown)
 }
 
 // NewRunner creates a Runner. hub may be nil if SSE is not needed.
@@ -100,6 +102,20 @@ func (r *Runner) ProgressMode() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.progressMode
+}
+
+// ProgressTotal returns the best-known total pages for the current run (0 if not available).
+func (r *Runner) ProgressTotal() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.progressTotal
+}
+
+// ProgressETASec returns the last computed ETA in seconds for the current run (-1 if unknown).
+func (r *Runner) ProgressETASec() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.progressETASec
 }
 
 // RunPCGWSyncCatalogOnly runs a catalog-scan-only sync (Phase 1, no ingest).
@@ -228,6 +244,8 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 		r.progressQueue = 0
 		r.progressCursor = 0
 		r.progressMode = ""
+		r.progressTotal = 0
+		r.progressETASec = -1
 		r.mu.Unlock()
 	}()
 
@@ -302,6 +320,12 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 		}
 	}
 
+	// Load last known remote total so Phase 1 catalog probe can show an ETA immediately.
+	var knownRemoteTotal int
+	if ps, err := r.store.GetLastSuccessfulPhase1Stats(jobCtx); err == nil && ps != nil {
+		knownRemoteTotal = ps.RemoteTotalIDs
+	}
+
 	pcgwClient := pcgw.NewClient()
 	progressFn := func(pages int) {
 		r.mu.Lock()
@@ -315,12 +339,28 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 	var lastPages int
 	var lastReport time.Time
 	var avgPerPage time.Duration
+	var lastPhase string
 	reportEx := func(p PCGWSyncProgress) {
 		r.mu.Lock()
+		// Reset EMA on phase transition so Phase 2 rate is not skewed by Phase 1 listing speed.
+		if lastPhase != "" && p.Phase != "" && p.Phase != lastPhase {
+			avgPerPage = 0
+			lastPages = 0
+			lastReport = time.Time{}
+		}
+		if p.Phase != "" {
+			lastPhase = p.Phase
+		}
 		r.progressPages = p.PagesProcessed
 		r.progressPhase = p.Phase
 		r.progressQueue = p.QueueSize
 		r.progressCursor = p.QueueCursor
+		// Use TotalEstimate from progress report; fall back to last known remote total during catalog phase.
+		if p.TotalEstimate > 0 {
+			r.progressTotal = p.TotalEstimate
+		} else if p.Phase == "catalog" && knownRemoteTotal > 0 && r.progressTotal == 0 {
+			r.progressTotal = knownRemoteTotal
+		}
 		mode := r.progressMode
 		r.mu.Unlock()
 		if r.hub != nil {
@@ -340,10 +380,19 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 				lastReport = now
 			}
 			eta := 0
-			if avgPerPage > 0 && p.TotalEstimate > p.PagesProcessed {
-				eta = int(avgPerPage.Seconds() * float64(p.TotalEstimate-p.PagesProcessed))
+			r.mu.Lock()
+			total := r.progressTotal
+			r.mu.Unlock()
+			if p.TotalEstimate > 0 {
+				total = p.TotalEstimate
+			}
+			if avgPerPage > 0 && total > p.PagesProcessed {
+				eta = int(avgPerPage.Seconds() * float64(total-p.PagesProcessed))
 			}
 			p.ETASeconds = eta
+			r.mu.Lock()
+			r.progressETASec = eta
+			r.mu.Unlock()
 			r.hub.Broadcast(sse.Event{Type: "job-progress", Data: fmt.Sprintf(
 				`{"job":"pcgw_sync","pages":%d,"total":%d,"phase":%q,"games_skipped":%d,"eta_seconds":%d,"queue_size":%d,"queue_cursor":%d,"mode":%q}`,
 				p.PagesProcessed, p.TotalEstimate, p.Phase, p.GamesSkipped, p.ETASeconds, p.QueueSize, p.QueueCursor, mode)})

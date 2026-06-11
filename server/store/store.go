@@ -206,8 +206,15 @@ type Store interface {
 	ClearCatalogDeadLetter(ctx context.Context, pageID int64) error
 	ResetPCGWDeadLetter(ctx context.Context) (int64, error)
 	ComputeCatalogHash(ctx context.Context) (string, error)
-	UpdatePCGWSyncRunPhase1Stats(ctx context.Context, runID string, stats types.Phase1Stats) error
+	// UpdatePCGWSyncRunPhase1Stats persists Phase 1 stats. catalogScanMode: "full", "fast_probe", "tail", "skipped", "resumed".
+	UpdatePCGWSyncRunPhase1Stats(ctx context.Context, runID string, stats types.Phase1Stats, catalogScanMode string) error
 	UpdatePCGWSyncRunPhase2Progress(ctx context.Context, runID string, processed, cursor int) error
+	// GetLastSuccessfulPhase1Stats returns Phase 1 stats from the most recent successful run. Returns nil if none.
+	GetLastSuccessfulPhase1Stats(ctx context.Context) (*types.Phase1Stats, error)
+	// SetLastRevCheckAt records when the rev-ID check (buildChangedQueue) last ran.
+	SetLastRevCheckAt(ctx context.Context, t time.Time) error
+	// UpdateLastFullSyncAt records the time of the most recent full catalog scan.
+	UpdateLastFullSyncAt(ctx context.Context) error
 	// Wipe operations
 	WipePCGWMirrorOnly(ctx context.Context) error
 	WipePCGWMirrorAndManifest(ctx context.Context) error
