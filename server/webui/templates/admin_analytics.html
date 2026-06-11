@@ -152,6 +152,7 @@
       <div class="config-item"><span class="config-key">Status</span><span class="config-val">{{.LatestSyncRun.Status}}</span></div>
       <div class="config-item"><span class="config-key">Started</span><span class="config-val">{{formatTime .LatestSyncRun.StartedAt}}</span></div>
       {{if .LatestSyncRun.Phase1CompletedAt}}<div class="config-item"><span class="config-key">Phase 1 completed</span><span class="config-val">{{formatTime .LatestSyncRun.Phase1CompletedAt}}</span></div>{{end}}
+      {{if .LatestSyncRun.CatalogScanMode}}<div class="config-item"><span class="config-key">Phase 1 scan mode</span><span class="config-val">{{.LatestSyncRun.CatalogScanMode}}</span></div>{{end}}
       {{if .LatestSyncRun.FinishedAt}}<div class="config-item"><span class="config-key">Finished</span><span class="config-val">{{formatTime .LatestSyncRun.FinishedAt}}</span></div>{{end}}
       <div class="config-item"><span class="config-key">Remote IDs</span><span class="config-val">{{.LatestSyncRun.RemoteTotalIDs}}</span></div>
       <div class="config-item"><span class="config-key">Missing IDs (phase 1)</span><span class="config-val">{{.LatestSyncRun.MissingLocalIDs}}</span></div>

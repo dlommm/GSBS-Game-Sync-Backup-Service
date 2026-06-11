@@ -2,6 +2,22 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.6] - 2026-06-10
+
+### Fixed
+
+- **PCGW sync (critical)**: Routine incremental sync no longer runs a full Phase 1 catalog scan (~4 hours for ~40k games). Incremental sync uses a single-call catalog probe and tail scan when new IDs exist; full scan only on first run, incomplete catalog, Refresh New Games, Full Reparse, or periodic interval (`GSBS_PCGW_FULL_CATALOG_DAYS`, default 7).
+- **PCGW sync**: `buildChangedQueue` (per-page rev-check) is deferred when the probe finds no new IDs and the rev-check interval has not elapsed (default 7 days), so no-op incremental runs exit in seconds.
+- **WebUI**: PCGW job status now shows a dynamic ETA during Phase 1 and Phase 2 via `formatETASec` (e.g. `~4h 12m`), using live runner throughput instead of minute-only estimates hidden when total was unknown.
+
+### Added
+
+- **PCGW sync**: `ProbeCatalogGrowth` and `ScanCatalogTail` in the catalog job; `runCatalogPhase` gates full vs fast Phase 1.
+- **PCGW sync**: `catalog_scan_mode` on sync runs (`full`, `fast_probe`, `tail`, `skipped`, `resumed`) surfaced in analytics.
+- **Server**: `GSBS_PCGW_FULL_CRON` now schedules periodic full catalog rescans; `GSBS_PCGW_FULL_CATALOG_DAYS` env var documented.
+- **Store**: Migration step 18 (`catalog_scan_mode`, `last_rev_check_at`); `GetLastSuccessfulPhase1Stats`, `SetLastRevCheckAt`, `UpdateLastFullSyncAt`.
+- **Runner**: `ProgressTotal()` and `ProgressETASec()` getters; EMA throughput resets on phase change.
+
 ## [2.1.5] - 2026-06-09
 
 ### Fixed
