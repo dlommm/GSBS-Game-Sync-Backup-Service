@@ -23,6 +23,7 @@ gsbs.db
 # IDE / OS
 .idea/
 .cursor/
+.cursorignore
 .claude/
 .DS_Store
 *.swp
