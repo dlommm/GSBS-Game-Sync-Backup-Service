@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/gsbs/gsbs/pkg/discovery"
@@ -22,6 +23,94 @@ func setupManifestTestDir(t *testing.T) {
 	dir := t.TempDir()
 	SetManifestPathForTest(filepath.Join(dir, "manifest.json"))
 	t.Cleanup(func() { SetManifestPathForTest("") })
+}
+
+func TestFetchManifestFull_V2PaginatesAllPages(t *testing.T) {
+	setupManifestTestDir(t)
+	const pageSize = manifestV2PageSize
+	const total = pageSize + 3
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/manifest/v2" {
+			http.NotFound(w, r)
+			return
+		}
+		calls++
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		if limit == 0 {
+			limit = pageSize
+		}
+		var games []types.ManifestV2Game
+		for i := offset; i < total && i < offset+limit; i++ {
+			id := strconv.Itoa(i)
+			games = append(games, types.ManifestV2Game{
+				GameID: id,
+				Title:  "Game " + id,
+				SaveLocations: []types.ManifestV2Location{{
+					Platform:      manifestPlatformParam(),
+					PathTemplates: []string{"/tmp/" + id},
+				}},
+			})
+		}
+		_ = json.NewEncoder(w).Encode(types.ManifestV2Response{
+			Version:    1,
+			ETag:       "full-etag",
+			Games:      games,
+			GamesTotal: total,
+		})
+	}))
+	defer srv.Close()
+
+	res, err := FetchManifestFull(context.Background(), srv.URL, "", "", "both")
+	require.NoError(t, err)
+	assert.Equal(t, 2, calls)
+	assert.Equal(t, total, len(res.Games))
+	assert.Equal(t, total, res.GamesTotal)
+	assert.Len(t, res.Entries, total)
+
+	f := LoadManifestFile()
+	assert.Equal(t, total, len(f.Games))
+	assert.Equal(t, total, f.GamesTotal)
+}
+
+func TestFetchManifestFull_V2RecoversTruncatedCache(t *testing.T) {
+	setupManifestTestDir(t)
+	const total = manifestV2PageSize + 1
+	require.NoError(t, SaveManifestFile(manifestFile{
+		Source:     "v2",
+		GamesTotal: total,
+		Games:      make([]types.ManifestV2Game, manifestV2PageSize),
+		ETag:       "old",
+	}))
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		assert.Empty(t, r.Header.Get("If-None-Match"))
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		var games []types.ManifestV2Game
+		for i := offset; i < total && i < offset+limit; i++ {
+			id := strconv.Itoa(i)
+			games = append(games, types.ManifestV2Game{
+				GameID: id,
+				Title:  "Game " + id,
+				SaveLocations: []types.ManifestV2Location{{
+					Platform:      manifestPlatformParam(),
+					PathTemplates: []string{"/tmp/" + id},
+				}},
+			})
+		}
+		_ = json.NewEncoder(w).Encode(types.ManifestV2Response{
+			Games: games, GamesTotal: total, ETag: "new",
+		})
+	}))
+	defer srv.Close()
+
+	res, err := FetchManifestFull(context.Background(), srv.URL, "", "", "both")
+	require.NoError(t, err)
+	assert.Equal(t, total, len(res.Games))
+	assert.GreaterOrEqual(t, calls, 2)
 }
 
 func TestFetchManifestFull_V2Success(t *testing.T) {
@@ -164,6 +253,7 @@ func TestMergeManifestFetch_DeletedGames(t *testing.T) {
 	res := manifestFetchResult{
 		DeletedIDs: []string{"1"},
 		ETag:       "new-etag",
+		DeltaOnly:  true,
 	}
 	merged := mergeManifestFetch(cached, res)
 	assert.Len(t, merged.Entries, 1)

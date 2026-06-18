@@ -77,8 +77,8 @@ func TestPCGWGameCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v2.Version != etag || len(v2.Games) != 1 {
-		t.Fatalf("v2: version=%d games=%d", v2.Version, len(v2.Games))
+	if v2.Version != etag || len(v2.Games) != 1 || v2.GamesTotal != 1 {
+		t.Fatalf("v2: version=%d games=%d total=%d", v2.Version, len(v2.Games), v2.GamesTotal)
 	}
 	if !v2.Games[0].HasSaveData {
 		t.Fatal("expected has_save_data")
