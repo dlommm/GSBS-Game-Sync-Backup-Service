@@ -227,6 +227,14 @@ func TestRevokeClientAPI(t *testing.T) {
 		t.Fatalf("revoke: %d %s", revokeRec.Code, revokeRec.Body.String())
 	}
 
+	clients, err = st.ListClientsByUserID(ctx, stMustUserID(t, st, "owner"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(clients) != 0 {
+		t.Fatalf("expected revoked client removed from list, got %d", len(clients))
+	}
+
 	pullReq := httptest.NewRequest(http.MethodGet, "/api/saves", nil)
 	pullReq.Header.Set("Authorization", "Bearer "+token)
 	pullRec := httptest.NewRecorder()

@@ -29,7 +29,7 @@ func (h *Handler) handleRevokeClient(w http.ResponseWriter, r *http.Request, use
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "client not found or not owned by you"})
 		return
 	}
-	if err := h.store.RegenerateClientToken(r.Context(), clientID); err != nil {
+	if err := h.store.RevokeClient(r.Context(), clientID); err != nil {
 		logx.Logger().Error().Str("user_id", userID).Str("client_id", clientID).Err(err).Msg("api revoke client failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "revoke failed"})
 		return

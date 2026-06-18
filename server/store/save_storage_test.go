@@ -62,6 +62,17 @@ func TestSQLite_FilesystemSave(t *testing.T) {
 		t.Fatalf("save file on disk: %v", err)
 	}
 
+	summaries, err := st.ListSaveSummaries(ctx, userID)
+	if err != nil {
+		t.Fatalf("ListSaveSummaries filesystem save: %v", err)
+	}
+	if len(summaries) != 1 {
+		t.Fatalf("ListSaveSummaries: got %d summaries, want 1", len(summaries))
+	}
+	if summaries[0].SizeBytes != int64(len(content)) {
+		t.Fatalf("ListSaveSummaries size_bytes = %d, want %d", summaries[0].SizeBytes, len(content))
+	}
+
 	if err := st.DeleteSave(ctx, userID, "game1", "pk1"); err != nil {
 		t.Fatalf("DeleteSave: %v", err)
 	}

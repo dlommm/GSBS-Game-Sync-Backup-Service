@@ -78,6 +78,36 @@ func TestSQLite_RegenerateClientToken(t *testing.T) {
 
 	clients, err := st.ListClientsByUserID(ctx, userID)
 	require.NoError(t, err)
-	require.Len(t, clients, 1)
+	require.Len(t, clients, 1, "regenerate keeps the client row for re-login")
 	assert.Equal(t, clientID, clients[0].ID)
+}
+
+func TestSQLite_RevokeClient(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	require.NoError(t, err)
+	defer st.Close()
+	ctx := context.Background()
+
+	userID, _ := st.CreateUser(ctx, "u", "h")
+	token, err := st.RegisterClient(ctx, userID, "pc", "linux")
+	require.NoError(t, err)
+
+	_, clientID, _, _, err := st.ClientByToken(ctx, token)
+	require.NoError(t, err)
+
+	require.NoError(t, st.RevokeClient(ctx, clientID))
+
+	_, _, _, _, err = st.ClientByToken(ctx, token)
+	assert.Error(t, err, "token should be invalid after revoke")
+
+	clients, err := st.ListClientsByUserID(ctx, userID)
+	require.NoError(t, err)
+	assert.Empty(t, clients, "revoked client should not appear in list")
+
+	all, err := st.ListAllClients(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, all)
+
+	err = st.RevokeClient(ctx, clientID)
+	assert.Error(t, err, "revoking again should fail")
 }

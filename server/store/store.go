@@ -65,6 +65,8 @@ type Store interface {
 	ListClientsByUserID(ctx context.Context, userID string) ([]ClientInfo, error)
 	// RegenerateClientToken issues a new token for the client; the old token is invalidated (client must re-login).
 	RegenerateClientToken(ctx context.Context, clientID string) error
+	// RevokeClient removes a client registration; its token stops working and it disappears from client lists.
+	RevokeClient(ctx context.Context, clientID string) error
 	// ClientUserID returns the owning user ID for a client, or error if not found.
 	ClientUserID(ctx context.Context, clientID string) (string, error)
 	// RefreshClientToken rotates token for the authenticated client; old token stops working.

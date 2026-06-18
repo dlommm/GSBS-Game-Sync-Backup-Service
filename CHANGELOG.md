@@ -4,6 +4,13 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.0.3] - 2026-06-18
+
+### Fixed
+
+- **Dashboard stats crash**: save summary queries used `LENGTH(content)` for `size_bytes`; filesystem-backed saves (`GSBS_SAVE_ROOT`) store NULL `content` and size in `content_size`, causing `sql: Scan error … converting NULL to int64`. Queries now use `COALESCE(content_size, LENGTH(content), 0)`.
+- **Client revoke in WebUI**: explicit revoke (admin, user dashboard, `POST /api/clients/revoke`) only rotated the API token and left the `clients` row, so revoked devices still appeared in the UI. Revoke now deletes the client registration; bulk token rotation on password/2FA change is unchanged.
+
 ## [3.0.2] - 2026-06-18
 
 ### Fixed

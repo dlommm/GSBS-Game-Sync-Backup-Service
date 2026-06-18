@@ -198,7 +198,7 @@ func (h *WebHandler) handleDashboardRevokeClient(w http.ResponseWriter, r *http.
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
-	if err := h.store.RegenerateClientToken(r.Context(), clientID); err != nil {
+	if err := h.store.RevokeClient(r.Context(), clientID); err != nil {
 		logx.Logger().Error().Str("client_id", clientID).Err(err).Msg("webui dashboard revoke failed")
 		Redirect(w, r, "/dashboard?error=revoke_failed")
 		return

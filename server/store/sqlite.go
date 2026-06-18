@@ -442,7 +442,8 @@ func (s *sqliteStore) ListClientsByUserID(ctx context.Context, userID string) ([
 	return out, rows.Err()
 }
 
-// RegenerateClientToken assigns a new token for the client; the previous token stops working (used by admin revoke).
+// RegenerateClientToken assigns a new token for the client; the previous token stops working.
+// The client row is kept (e.g. after password or 2FA change via RevokeAllClientTokens).
 func (s *sqliteStore) RegenerateClientToken(ctx context.Context, clientID string) error {
 	newToken, err := genID()
 	if err != nil {
@@ -451,6 +452,19 @@ func (s *sqliteStore) RegenerateClientToken(ctx context.Context, clientID string
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err = s.db.ExecContext(ctx, `UPDATE clients SET token = ?, token_created_at = ? WHERE id = ?`, hashToken(newToken), now, clientID)
 	return err
+}
+
+// RevokeClient deletes the client row so revoked devices no longer appear in WebUI lists.
+func (s *sqliteStore) RevokeClient(ctx context.Context, clientID string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM clients WHERE id = ?`, clientID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("client not found")
+	}
+	return nil
 }
 
 // RevokeAllClientTokens rotates the API token for every client owned by userID,
@@ -1167,7 +1181,7 @@ func (s *sqliteStore) UpdateClientLastSeen(ctx context.Context, clientID string)
 // ListSaveSummaries returns lightweight save info (no content blob) with game title from manifest.
 func (s *sqliteStore) ListSaveSummaries(ctx context.Context, userID string) ([]SaveSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT s.game_id, s.path_key, LENGTH(s.content) AS size_bytes, s.updated_at,
+		SELECT s.game_id, s.path_key, COALESCE(s.content_size, LENGTH(s.content), 0) AS size_bytes, s.updated_at,
 		       COALESCE(g.game_title, s.game_id) AS game_title,
 		       COALESCE(s.content_hash, '') AS content_hash,
 		       COALESCE(s.encrypted, 0) AS encrypted
@@ -1209,7 +1223,7 @@ func (s *sqliteStore) ListSaveSummariesPaginated(ctx context.Context, userID str
 		offset = 0
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT s.game_id, s.path_key, LENGTH(s.content) AS size_bytes, s.updated_at,
+		SELECT s.game_id, s.path_key, COALESCE(s.content_size, LENGTH(s.content), 0) AS size_bytes, s.updated_at,
 		       COALESCE(g.game_title, s.game_id) AS game_title,
 		       COALESCE(s.content_hash, '') AS content_hash,
 		       COALESCE(s.encrypted, 0) AS encrypted
@@ -1241,7 +1255,7 @@ func (s *sqliteStore) ListSaveSummariesFiltered(ctx context.Context, userID, que
 	}
 	pattern := "%" + q + "%"
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT s.game_id, s.path_key, LENGTH(s.content) AS size_bytes, s.updated_at,
+		SELECT s.game_id, s.path_key, COALESCE(s.content_size, LENGTH(s.content), 0) AS size_bytes, s.updated_at,
 		       COALESCE(g.game_title, s.game_id) AS game_title,
 		       COALESCE(s.content_hash, '') AS content_hash,
 		       COALESCE(s.encrypted, 0) AS encrypted
