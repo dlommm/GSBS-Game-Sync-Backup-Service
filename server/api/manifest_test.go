@@ -111,6 +111,9 @@ func TestHandler_ManifestV2_SinceAndPlatform(t *testing.T) {
 		PageID: 100, PlatformKey: "windows", PlatformRawLabel: "Windows",
 		SaveLocations: []types.PCGWPathEntry{{PathTemplates: []string{"C:\\save"}}},
 	}))
+	require.NoError(t, st.UpsertGameSaveLocations(ctx, []types.GameSaveLocation{
+		{GameID: "100", PCGWPageID: 100, GameTitle: "Win Game", Platform: "windows", PathTemplate: "C:\\save", Source: "pcgw"},
+	}))
 
 	since := time.Now().UTC().Format(time.RFC3339)
 	time.Sleep(1100 * time.Millisecond)
@@ -122,6 +125,9 @@ func TestHandler_ManifestV2_SinceAndPlatform(t *testing.T) {
 	require.NoError(t, st.UpsertPCGWGameData(ctx, &types.PCGWGameData{
 		PageID: 200, PlatformKey: "linux", PlatformRawLabel: "Linux",
 		SaveLocations: []types.PCGWPathEntry{{PathTemplates: []string{"/save"}}},
+	}))
+	require.NoError(t, st.UpsertGameSaveLocations(ctx, []types.GameSaveLocation{
+		{GameID: "200", PCGWPageID: 200, GameTitle: "Lin Game", Platform: "linux", PathTemplate: "/save", Source: "pcgw"},
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/manifest/v2?since="+since, nil)

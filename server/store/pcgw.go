@@ -888,6 +888,172 @@ func deriveProtonSupport(platforms []string, gameData []types.PCGWGameData) stri
 	return "unknown"
 }
 
+type manifestV2GameRef struct {
+	GameID string
+	Title  string
+}
+
+// listManifestV2GameRefs pages distinct games from game_save_locations — the same
+// table the admin manifest uses. pcgw_games alone can be a much smaller subset.
+func (s *sqliteStore) listManifestV2GameRefs(ctx context.Context, since, platform string, limit, offset int) ([]manifestV2GameRef, int, error) {
+	where := "1=1"
+	var args []interface{}
+	if since != "" {
+		where += " AND updated_at > ?"
+		args = append(args, since)
+	}
+	if platform != "" {
+		where += " AND platform = ?"
+		args = append(args, platform)
+	}
+	var total int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(DISTINCT game_id) FROM game_save_locations WHERE `+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	listArgs := append(append([]interface{}(nil), args...), limit, offset)
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT game_id, MIN(COALESCE(NULLIF(game_title,''), game_id)) AS title
+		FROM game_save_locations
+		WHERE `+where+`
+		GROUP BY game_id
+		ORDER BY title, game_id
+		LIMIT ? OFFSET ?`, listArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	var refs []manifestV2GameRef
+	for rows.Next() {
+		var ref manifestV2GameRef
+		if err := rows.Scan(&ref.GameID, &ref.Title); err != nil {
+			return nil, 0, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, total, rows.Err()
+}
+
+func (s *sqliteStore) buildManifestV2Game(ctx context.Context, gameID, title, platform string) (types.ManifestV2Game, error) {
+	pageID, _ := strconv.ParseInt(gameID, 10, 64)
+	var g *types.PCGWGame
+	if pageID > 0 {
+		g, _ = s.GetPCGWGame(ctx, pageID)
+	}
+
+	mg := types.ManifestV2Game{
+		GameID: gameID,
+		Title:  title,
+	}
+	if g != nil {
+		mg.PageName = g.PageName
+		if g.Title != "" {
+			mg.Title = g.Title
+		}
+		mg.SteamAppIDs = g.SteamAppIDs
+		mg.OtherIDs = g.OtherIDs
+		mg.PlatformsPresent = g.PlatformsPresent
+		mg.Platforms = g.PlatformsPresent
+		mg.Taxonomy = g.Taxonomy
+		mg.Engines = g.Engines
+		mg.CoverURL = g.CoverURL
+		mg.HLTBID = g.HLTBID
+		mg.IGDBID = g.IGDBID
+		mg.ParseStatus = g.ParseStatus
+		mg.LastUpdated = g.UpdatedAt
+		mg.GOGID = g.GOGID
+		mg.EpicID = g.EpicID
+		mg.UbisoftID = g.UbisoftID
+	}
+
+	var gameData []types.PCGWGameData
+	var avail *types.PCGWSectionRow
+	if pageID > 0 {
+		gameData, _ = s.ListPCGWGameData(ctx, pageID)
+		avail, _ = s.GetPCGWSection(ctx, pageID, "availability")
+		if g != nil {
+			mg.ProtonSupportLevel = deriveProtonSupport(g.PlatformsPresent, gameData)
+		}
+	}
+
+	var installPaths []string
+	cloud := map[string]interface{}{}
+	rawLabelByPlatform := map[string]string{}
+	gsEntries, _ := s.listGameSaveLocationsForGame(ctx, gameID)
+	useManifestEntries := len(gsEntries) > 0
+	for _, gd := range gameData {
+		if platform != "" && gd.PlatformKey != platform {
+			continue
+		}
+		rawLabelByPlatform[gd.PlatformKey] = gd.PlatformRawLabel
+		if !useManifestEntries {
+			for i, sl := range gd.SaveLocations {
+				rules := saveRulesFromPathTemplates(sl.PathTemplates, gd.PlatformKey, false, strconv.Itoa(i))
+				mg.SaveLocations = append(mg.SaveLocations, types.ManifestV2Location{
+					Platform: gd.PlatformKey, PlatformRawLabel: gd.PlatformRawLabel,
+					PathTemplates: sl.PathTemplates, SaveRules: rules, IsConfig: false, Notes: sl.Notes,
+				})
+				if len(sl.PathTemplates) > 0 {
+					mg.HasSaveData = true
+				}
+			}
+			for i, cl := range gd.ConfigLocations {
+				rules := saveRulesFromPathTemplates(cl.PathTemplates, gd.PlatformKey, true, strconv.Itoa(i))
+				mg.ConfigLocations = append(mg.ConfigLocations, types.ManifestV2Location{
+					Platform: gd.PlatformKey, PlatformRawLabel: gd.PlatformRawLabel,
+					PathTemplates: cl.PathTemplates, SaveRules: rules, IsConfig: true, Notes: cl.Notes,
+				})
+			}
+		}
+		for _, inst := range gd.InstallLocations {
+			if str, ok := inst.(string); ok && str != "" {
+				installPaths = append(installPaths, str)
+			}
+		}
+		for k, v := range gd.SaveGameCloudSync {
+			cloud[k] = v
+		}
+	}
+	if useManifestEntries {
+		for _, e := range gsEntries {
+			if platform != "" && e.Platform != platform {
+				continue
+			}
+			if mg.LastUpdated == "" || e.UpdatedAt > mg.LastUpdated {
+				mg.LastUpdated = e.UpdatedAt
+			}
+			rules := e.SaveRules
+			if len(rules) == 0 {
+				rules = pcgw.ParseSaveRules(e.PathTemplate, e.Platform, e.IsConfig)
+			}
+			loc := types.ManifestV2Location{
+				Platform:         e.Platform,
+				PlatformRawLabel: rawLabelByPlatform[e.Platform],
+				PathTemplates:    []string{e.PathTemplate},
+				SaveRules:        rules,
+				IsConfig:         e.IsConfig,
+				Notes:            e.Notes,
+			}
+			if e.IsConfig {
+				mg.ConfigLocations = append(mg.ConfigLocations, loc)
+			} else {
+				mg.SaveLocations = append(mg.SaveLocations, loc)
+				if e.PathTemplate != "" {
+					mg.HasSaveData = true
+				}
+			}
+		}
+	}
+	mg.CommonInstallPaths = dedupeStrings(installPaths)
+	if len(cloud) > 0 {
+		mg.CloudSync = cloud
+	}
+	if avail != nil && avail.Data != nil {
+		mg.AvailabilitySummary = avail.Data
+	}
+	return mg, nil
+}
+
 func (s *sqliteStore) BuildManifestV2(ctx context.Context, since, platform string, limit, offset int) (*types.ManifestV2Response, error) {
 	meta, err := s.GetPCGWManifestMeta(ctx)
 	if err != nil {
@@ -896,135 +1062,16 @@ func (s *sqliteStore) BuildManifestV2(ctx context.Context, since, platform strin
 	if limit <= 0 {
 		limit = 10000
 	}
-	where := "parse_status IN ('ok','partial')"
-	var args []interface{}
-	if since != "" {
-		where += " AND updated_at > ?"
-		args = append(args, since)
-	}
-	if platform != "" {
-		where += " AND platforms_present LIKE ?"
-		args = append(args, "%"+platform+"%")
-	}
-	var gamesTotal int
-	countArgs := append([]interface{}(nil), args...)
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pcgw_games WHERE `+where, countArgs...).Scan(&gamesTotal); err != nil {
-		return nil, err
-	}
-	args = append(args, limit, offset)
-	rows, err := s.db.QueryContext(ctx, pcgwGameSelect+` WHERE `+where+` ORDER BY title LIMIT ? OFFSET ?`, args...)
+	refs, gamesTotal, err := s.listManifestV2GameRefs(ctx, since, platform, limit, offset)
 	if err != nil {
-		return nil, err
-	}
-	var gameList []*types.PCGWGame
-	for rows.Next() {
-		g, err := scanPCGWGame(rows)
-		if err != nil {
-			rows.Close()
-			return nil, err
-		}
-		gameList = append(gameList, g)
-	}
-	if err := rows.Close(); err != nil {
 		return nil, err
 	}
 
 	var games []types.ManifestV2Game
-	for _, g := range gameList {
-		gameData, _ := s.ListPCGWGameData(ctx, g.PageID)
-		avail, _ := s.GetPCGWSection(ctx, g.PageID, "availability")
-
-		mg := types.ManifestV2Game{
-			GameID:             strconv.FormatInt(g.PageID, 10),
-			PageName:           g.PageName,
-			Title:              g.Title,
-			SteamAppIDs:        g.SteamAppIDs,
-			OtherIDs:           g.OtherIDs,
-			PlatformsPresent:   g.PlatformsPresent,
-			Platforms:          g.PlatformsPresent,
-			Taxonomy:           g.Taxonomy,
-			Engines:            g.Engines,
-			CoverURL:           g.CoverURL,
-			HLTBID:             g.HLTBID,
-			IGDBID:             g.IGDBID,
-			ParseStatus:        g.ParseStatus,
-			LastUpdated:        g.UpdatedAt,
-			GOGID:              g.GOGID,
-			EpicID:             g.EpicID,
-			UbisoftID:          g.UbisoftID,
-			ProtonSupportLevel: deriveProtonSupport(g.PlatformsPresent, gameData),
-		}
-		var installPaths []string
-		cloud := map[string]interface{}{}
-		rawLabelByPlatform := map[string]string{}
-		gsEntries, _ := s.listGameSaveLocationsForGame(ctx, mg.GameID)
-		useManifestEntries := len(gsEntries) > 0
-		for _, gd := range gameData {
-			if platform != "" && gd.PlatformKey != platform {
-				continue
-			}
-			rawLabelByPlatform[gd.PlatformKey] = gd.PlatformRawLabel
-			if !useManifestEntries {
-				for i, sl := range gd.SaveLocations {
-					rules := saveRulesFromPathTemplates(sl.PathTemplates, gd.PlatformKey, false, strconv.Itoa(i))
-					mg.SaveLocations = append(mg.SaveLocations, types.ManifestV2Location{
-						Platform: gd.PlatformKey, PlatformRawLabel: gd.PlatformRawLabel,
-						PathTemplates: sl.PathTemplates, SaveRules: rules, IsConfig: false, Notes: sl.Notes,
-					})
-					if len(sl.PathTemplates) > 0 {
-						mg.HasSaveData = true
-					}
-				}
-				for i, cl := range gd.ConfigLocations {
-					rules := saveRulesFromPathTemplates(cl.PathTemplates, gd.PlatformKey, true, strconv.Itoa(i))
-					mg.ConfigLocations = append(mg.ConfigLocations, types.ManifestV2Location{
-						Platform: gd.PlatformKey, PlatformRawLabel: gd.PlatformRawLabel,
-						PathTemplates: cl.PathTemplates, SaveRules: rules, IsConfig: true, Notes: cl.Notes,
-					})
-				}
-			}
-			for _, inst := range gd.InstallLocations {
-				if str, ok := inst.(string); ok && str != "" {
-					installPaths = append(installPaths, str)
-				}
-			}
-			for k, v := range gd.SaveGameCloudSync {
-				cloud[k] = v
-			}
-		}
-		if useManifestEntries {
-			for _, e := range gsEntries {
-				if platform != "" && e.Platform != platform {
-					continue
-				}
-				rules := e.SaveRules
-				if len(rules) == 0 {
-					rules = pcgw.ParseSaveRules(e.PathTemplate, e.Platform, e.IsConfig)
-				}
-				loc := types.ManifestV2Location{
-					Platform:         e.Platform,
-					PlatformRawLabel: rawLabelByPlatform[e.Platform],
-					PathTemplates:    []string{e.PathTemplate},
-					SaveRules:        rules,
-					IsConfig:         e.IsConfig,
-					Notes:            e.Notes,
-				}
-				if e.IsConfig {
-					mg.ConfigLocations = append(mg.ConfigLocations, loc)
-				} else {
-					mg.SaveLocations = append(mg.SaveLocations, loc)
-					if e.PathTemplate != "" {
-						mg.HasSaveData = true
-					}
-				}
-			}
-		}
-		mg.CommonInstallPaths = dedupeStrings(installPaths)
-		if len(cloud) > 0 {
-			mg.CloudSync = cloud
-		}
-		if avail != nil && avail.Data != nil {
-			mg.AvailabilitySummary = avail.Data
+	for _, ref := range refs {
+		mg, err := s.buildManifestV2Game(ctx, ref.GameID, ref.Title, platform)
+		if err != nil {
+			return nil, err
 		}
 		games = append(games, mg)
 	}

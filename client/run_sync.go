@@ -129,18 +129,20 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 	includeConfig := manifestInclude == "both" || manifestInclude == "config"
 	manifestEntries, lastManifestFetch := LoadManifestCache()
+	cachedManifest := LoadManifestFile()
 	since := ""
-	if !lastManifestFetch.IsZero() {
+	if !lastManifestFetch.IsZero() && manifestCacheComplete(cachedManifest) {
 		since = lastManifestFetch.UTC().Format(time.RFC3339)
 	}
-	if res, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
+	if res, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude, false); err == nil {
 		if !res.NotModified {
 			if since != "" && len(manifestEntries) > 0 && res.Source == "v1" {
 				manifestEntries = MergeManifestDelta(manifestEntries, res.Entries)
-			} else if len(res.Entries) > 0 {
+			} else if len(res.Entries) > 0 || res.Complete {
 				manifestEntries = res.Entries
 			}
-			log.Printf("manifest: fetched %d entries from server (source=%s since=%q)", len(res.Entries), res.Source, since)
+			log.Printf("manifest: fetched %d entries, %d games from server (source=%s since=%q complete=%v)",
+				len(res.Entries), len(res.Games), res.Source, since, res.Complete)
 		} else {
 			log.Printf("manifest: not modified (304), using cache (%d entries)", len(manifestEntries))
 		}
@@ -376,22 +378,29 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 
 	doManifestRefresh := func(reason string) {
 		log.Printf("manifest refresh (%s): starting", reason)
+		forceFull := reason == "manual"
+		cachedManifest := LoadManifestFile()
 		since := ""
-		if lastFetch := LoadManifestFile().LastFetchedAt; lastFetch != "" {
-			if t, err := time.Parse(time.RFC3339, lastFetch); err == nil {
-				since = t.UTC().Format(time.RFC3339)
+		if !forceFull && manifestCacheComplete(cachedManifest) {
+			if lastFetch := cachedManifest.LastFetchedAt; lastFetch != "" {
+				if t, err := time.Parse(time.RFC3339, lastFetch); err == nil {
+					since = t.UTC().Format(time.RFC3339)
+				}
 			}
 		}
-		if res, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude); err == nil {
+		if res, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude, forceFull); err == nil {
 			if !res.NotModified {
 				manifestMu.Lock()
 				if res.Source == "v1" && since != "" && len(manifestEntries) > 0 {
 					manifestEntries = MergeManifestDelta(manifestEntries, res.Entries)
-				} else if len(res.Entries) > 0 {
+				} else if len(res.Entries) > 0 || res.Complete {
 					manifestEntries = res.Entries
 				}
 				manifestMu.Unlock()
-				log.Printf("manifest refresh (%s): fetched %d entries (source=%s)", reason, len(res.Entries), res.Source)
+				log.Printf("manifest refresh (%s): fetched %d entries, %d games (source=%s complete=%v)",
+					reason, len(res.Entries), len(res.Games), res.Source, res.Complete)
+			} else {
+				log.Printf("manifest refresh (%s): not modified (304), using cache (%d entries)", reason, len(manifestEntries))
 			}
 			if reason == "discovery" || reason == "sse push" || reason == "manual" {
 				runDiscovery(manifestEntries)
@@ -491,11 +500,11 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 }
 
-func fetchManifestWithRetry(ctx context.Context, baseURL, token, since, include string) (manifestFetchResult, error) {
+func fetchManifestWithRetry(ctx context.Context, baseURL, token, since, include string, forceFull bool) (manifestFetchResult, error) {
 	var res manifestFetchResult
 	err := retry.Do(ctx, retry.DefaultBackoff(), 3, func() error {
 		var err error
-		res, err = FetchManifestFull(ctx, baseURL, token, since, include)
+		res, err = FetchManifestFull(ctx, baseURL, token, since, include, forceFull)
 		return err
 	})
 	return res, err

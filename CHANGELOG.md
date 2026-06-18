@@ -4,6 +4,13 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-06-18
+
+### Fixed
+
+- **Server manifest v2 catalog (critical)**: `GET /api/manifest/v2` listed games from `pcgw_games` (~581 Windows titles on typical installs) instead of the full `game_save_locations` catalog shown in Admin. v2 now pages distinct games from `game_save_locations`, matching v1 completeness for save paths while keeping grouped metadata.
+- **Client manifest cache completeness**: on-disk cache tracks a `complete` flag after a full paginated v2 download. Incomplete caches no longer accept **304 Not Modified** (which could freeze a partial catalog forever). Manual refresh forces a full re-download; delta `since=` is only used when the cache is complete.
+
 ## [3.0.1] - 2026-06-18
 
 ### Fixed

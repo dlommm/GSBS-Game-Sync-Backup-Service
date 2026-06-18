@@ -45,11 +45,12 @@ type manifestFetchResult struct {
 	Source      string // "v2" or "v1"
 	NotModified bool
 	DeltaOnly   bool // true when request used since= (empty payload means no changes)
+	Complete    bool // true when a full (non-delta) paginated download finished
 }
 
 // FetchManifest downloads the manifest from the server. Tries v2 first, falls back to v1 on error, 404, or empty entries.
 func FetchManifest(ctx context.Context, baseURL, token, since, include string) ([]types.GameSaveLocation, error) {
-	res, err := FetchManifestFull(ctx, baseURL, token, since, include)
+	res, err := FetchManifestFull(ctx, baseURL, token, since, include, false)
 	if err != nil {
 		return nil, err
 	}
@@ -57,15 +58,27 @@ func FetchManifest(ctx context.Context, baseURL, token, since, include string) (
 }
 
 // FetchManifestFull downloads manifest with v2 metadata; updates on-disk cache when not a 304.
-func FetchManifestFull(ctx context.Context, baseURL, token, since, include string) (manifestFetchResult, error) {
+// When forceFull is true, skips If-None-Match and since= so the entire catalog is re-downloaded
+// (used for manual refresh and recovering incomplete caches).
+func FetchManifestFull(ctx context.Context, baseURL, token, since, include string, forceFull bool) (manifestFetchResult, error) {
 	cached := LoadManifestFile()
+	if forceFull {
+		since = ""
+	} else if !manifestCacheComplete(cached) {
+		since = ""
+	}
 
-	if res, err := fetchManifestV2(ctx, baseURL, token, since, include, cached); err == nil {
+	if res, err := fetchManifestV2(ctx, baseURL, token, since, include, cached, forceFull); err == nil {
 		if res.NotModified {
-			clientlogx.Event("manifest_not_modified", "entries", len(cached.Entries), "etag", cached.ETag)
+			if !manifestCacheComplete(cached) {
+				log.Printf("manifest: server returned 304 but local cache is incomplete — forcing full re-download")
+				return FetchManifestFull(ctx, baseURL, token, "", include, true)
+			}
+			clientlogx.Event("manifest_not_modified", "entries", len(cached.Entries), "games", len(cached.Games), "etag", cached.ETag)
 			return manifestFetchResult{
 				Entries:     cached.Entries,
 				Games:       cached.Games,
+				GamesTotal:  cached.GamesTotal,
 				ETag:        cached.ETag,
 				Source:      "v2",
 				NotModified: true,
@@ -86,6 +99,7 @@ func FetchManifestFull(ctx context.Context, baseURL, token, since, include strin
 			Source:      "v2",
 			NotModified: false,
 			DeltaOnly:   res.DeltaOnly,
+			Complete:    res.Complete,
 		}, nil
 	}
 
@@ -150,14 +164,14 @@ func fetchManifestV1(ctx context.Context, baseURL, token, since, include string)
 	return out.Entries, nil
 }
 
-func fetchManifestV2(ctx context.Context, baseURL, token, since, include string, cached manifestFile) (manifestFetchResult, error) {
-	// Recover from a truncated on-disk cache (pre-pagination clients or interrupted fetch).
-	if cached.GamesTotal > 0 && len(cached.Games) > 0 && len(cached.Games) < cached.GamesTotal {
-		log.Printf("manifest: cached games %d/%d — forcing full re-download", len(cached.Games), cached.GamesTotal)
-		since = ""
-		cached.ETag = ""
-	} else if cached.Source == "v2" && cached.GamesTotal == 0 && len(cached.Games) >= 10000 {
-		log.Printf("manifest: cache may be truncated (%d games, no total) — forcing full re-download", len(cached.Games))
+func fetchManifestV2(ctx context.Context, baseURL, token, since, include string, cached manifestFile, forceFull bool) (manifestFetchResult, error) {
+	if forceFull || !manifestCacheComplete(cached) {
+		if forceFull {
+			log.Printf("manifest: forced full catalog download")
+		} else {
+			log.Printf("manifest: cache incomplete (%d games, %d entries, total=%d) — forcing full re-download",
+				len(cached.Games), len(cached.Entries), cached.GamesTotal)
+		}
 		since = ""
 		cached.ETag = ""
 	}
@@ -168,10 +182,11 @@ func fetchManifestV2(ctx context.Context, baseURL, token, since, include string,
 	var gamesTotal int
 	offset := 0
 	page := 0
+	useETag := cached.ETag != "" && since == ""
 
 	for {
 		page++
-		out, notModified, err := fetchManifestV2Page(ctx, baseURL, token, since, offset, page == 1, cached.ETag)
+		out, notModified, err := fetchManifestV2Page(ctx, baseURL, token, since, offset, page == 1 && useETag, cached.ETag)
 		if err != nil {
 			return manifestFetchResult{}, err
 		}
@@ -209,6 +224,7 @@ func fetchManifestV2(ctx context.Context, baseURL, token, since, include string,
 		GamesTotal:     gamesTotal,
 	}
 	entries := manifestV2ToEntries(v2, include)
+	complete := since == "" && (gamesTotal == 0 || len(allGames) >= gamesTotal)
 	return manifestFetchResult{
 		Entries:    entries,
 		Games:      allGames,
@@ -216,6 +232,7 @@ func fetchManifestV2(ctx context.Context, baseURL, token, since, include string,
 		DeletedIDs: deletedIDs,
 		ETag:       etag,
 		DeltaOnly:  since != "",
+		Complete:   complete,
 	}, nil
 }
 
@@ -330,12 +347,31 @@ func SetManifestPathForTest(path string) {
 
 // manifestFile is the on-disk manifest cache (flat entries + optional v2 game metadata).
 type manifestFile struct {
-	Entries       []types.GameSaveLocation `json:"entries"`
-	Games         []types.ManifestV2Game   `json:"games,omitempty"`
-	GamesTotal    int                      `json:"games_total,omitempty"`
-	ETag          string                   `json:"etag,omitempty"`
-	Source        string                   `json:"source,omitempty"` // "v2" or "v1"
-	LastFetchedAt string                   `json:"last_fetched_at,omitempty"`
+	Entries          []types.GameSaveLocation `json:"entries"`
+	Games            []types.ManifestV2Game   `json:"games,omitempty"`
+	GamesTotal       int                      `json:"games_total,omitempty"`
+	ManifestComplete bool                     `json:"manifest_complete,omitempty"`
+	ETag             string                   `json:"etag,omitempty"`
+	Source           string                   `json:"source,omitempty"` // "v2" or "v1"
+	LastFetchedAt    string                   `json:"last_fetched_at,omitempty"`
+}
+
+// manifestCacheComplete reports whether the on-disk manifest cache holds a full
+// catalog download. Incomplete caches must not use If-None-Match or since= deltas.
+func manifestCacheComplete(f manifestFile) bool {
+	if f.ManifestComplete {
+		if f.GamesTotal > 0 && len(f.Games) < f.GamesTotal {
+			return false
+		}
+		return len(f.Entries) > 0 || len(f.Games) > 0
+	}
+	if f.Source == "v2" {
+		if f.GamesTotal > 0 {
+			return len(f.Games) >= f.GamesTotal && len(f.Entries) > 0
+		}
+		return false
+	}
+	return len(f.Entries) > 0
 }
 
 // LoadManifestFromDisk returns cached manifest entries. Returns nil if file missing or invalid.
@@ -380,6 +416,7 @@ func mergeManifestFetch(cached manifestFile, res manifestFetchResult) manifestFi
 	if !res.DeltaOnly {
 		out.Entries = res.Entries
 		out.Games = res.Games
+		out.ManifestComplete = res.Complete
 		return out
 	}
 
