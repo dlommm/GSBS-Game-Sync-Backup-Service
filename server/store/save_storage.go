@@ -85,7 +85,7 @@ func (s *sqliteStore) migrateBlobsToFS() error {
 		if err := os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
 			return err
 		}
-		if err := os.WriteFile(absPath, b.content, 0o640); err != nil {
+		if err := atomicWriteFileSync(absPath, b.content, 0o640); err != nil {
 			return err
 		}
 		_, err = s.db.Exec(`
@@ -125,10 +125,50 @@ func (s *sqliteStore) writeSaveToFilesystem(ctx context.Context, userID, gameID,
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(absPath, content, 0o640); err != nil {
+	if err := atomicWriteFileSync(absPath, content, 0o640); err != nil {
 		return "", err
 	}
 	return absPath, nil
+}
+
+// atomicWriteFile writes content to a temp file in the same directory, fsyncs
+// it, then atomically renames it into place and fsyncs the parent directory.
+// This guarantees a reader never observes a torn or partial canonical save:
+// after a crash or power loss the destination is either the old bytes or the
+// complete new bytes, never a truncated mix. The destination directory is
+// assumed to already exist.
+func atomicWriteFileSync(path string, content []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".gsbs-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	// Best-effort cleanup if we fail before the rename; a no-op once renamed.
+	defer func() { _ = os.Remove(tmpName) }()
+	if _, err := tmp.Write(content); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, perm); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	// fsync the parent directory so the rename itself survives a crash.
+	if d, derr := os.Open(dir); derr == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
+	return nil
 }
 
 func removeSaveFile(storagePath string) {

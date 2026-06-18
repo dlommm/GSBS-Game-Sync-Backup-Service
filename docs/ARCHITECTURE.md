@@ -104,6 +104,9 @@ sequenceDiagram
 - **Save rules** (`pkg/saverule`): PCGW pipe/glob strings parse into directory + `include_patterns`. Example: `gamesaves/*.png|gamesaves/*.sav` → watch `gamesaves/`, upload only `*.png` and `*.sav`.
 - **Watcher supervisor**: `RunWatcherSupervisor` in `client/sync/` restarts fsnotify on channel close, filters events by manifest patterns, removes stale paths on manifest refresh/discovery, and exposes health via `WatcherHealthy`.
 - **Network retry**: Shared `pkg/retry` backoff for pull, push, manifest fetch, SSE, and outbox (outbox uses longer delays and drops entries after 7 days). Push skips unchanged content via client hash cache and server `unchanged` response.
+- **Change-detection hash**: dedup, `X-Content-Hash`, optimistic concurrency, watcher echo-suppression, and reconcile all key off the **plaintext** content hash (`ContentChangeHash`), not the encrypted wire bytes. AES-GCM is non-deterministic (fresh salt+nonce per call), so hashing ciphertext would make encrypted saves appear changed every cycle. The encrypted wire bytes are still what's transmitted/stored; `X-Content-Size` reports the wire (stored) length.
+- **Optimistic concurrency**: steady-state pushes send `X-GSBS-If-Hash` (last known content hash); the server returns 409 if its hash differs (no wall-clock involved). When a client has no known hash for a slot it sends `X-GSBS-If-Absent: 1` so the server rejects (409) rather than silently overwriting a *different* existing save. The first-push guard is enabled for `keep_local`/`keep_server`; `last_write_wins` keeps blind overwrite by design.
+- **Bounded pulls**: clients sync summaries-first (`/api/saves?summaries=1`) and fetch only changed blobs; the full-pull fallback paginates so neither side buffers an entire library.
 
 ## Job Runner
 
@@ -159,6 +162,7 @@ Both UIs share a single compiled design system. Run `./script/build-webui.sh` (r
 - **Push body limit**: POST `/api/saves` body is limited to 50 MiB to avoid resource exhaustion.
 - **Graceful shutdown**: Server handles SIGINT/SIGTERM, stops accepting new requests, and shuts down within 15 seconds.
 - **SQLite**: WAL mode and a single open connection are used for stability and to avoid “database is locked” under concurrent use.
+- **Crash-safe save writes**: with `GSBS_SAVE_ROOT` set, the canonical save file is written via temp-file + `fsync` + atomic `rename` + parent-directory `fsync`. After a crash or power loss the destination is either the previous bytes or the complete new bytes — never a torn/partial save.
 
 ## Security
 

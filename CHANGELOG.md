@@ -4,6 +4,8 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-06-18
+
 ### Added
 
 - **Manifest bundle sync (GitHub mode)**: Servers can fetch pre-built PCGW manifest bundles from [gsbs-manifest](https://github.com/dlommm/gsbs-manifest) instead of live API sync. ETag 304 skip, smart merge import (`merge_skip_unchanged` / `delta`), delta bundles for seeded servers, admin sync-source toggle, bundle cron, and **Fetch bundle now** on Admin → PCGW. Fresh installs default to `github`; existing installs with PCGW data stay on `api`.
@@ -11,10 +13,18 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 - **CLI**: `cmd/pcgw-bundle-export` (`--full`, `--delta`, `--since`, `--lite`) for optional CLI export.
 - **PCGW sync logging**: Structured `phase1_reason`, rev-check decision/progress, catalog scan progress, and Phase 2 skip/progress events so slow runs show why Phase 1 ran or pages were not updated immediately.
 - **Docs**: [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
+- **First-push overwrite guard (M2)**: when a client has no last-pushed hash for a slot (fresh client or cleared cache) it sends `X-GSBS-If-Absent: 1`; the server rejects with 409 if a *different* save already exists, surfacing a conflict instead of silently clobbering another machine's save. Identical content is allowed. Enabled for `keep_local`/`keep_server` policies; `last_write_wins` keeps blind overwrite by design. Backward compatible with old servers and clients.
+- **Paginated full-pull fallback**: the full-pull path (used when the summaries-first sync is unavailable) now fetches and applies saves in bounded pages so neither the server nor the client holds an entire library in memory at once.
+
+### Fixed
+
+- **Encrypted saves now dedup (sync correctness)**: change-detection keyed off the encrypted wire bytes, but AES-GCM uses a fresh random salt+nonce per encryption, so identical content hashed differently every cycle. Encrypted users re-uploaded the full save and minted a new server version on every sync. Change-detection (push-skip cache, `X-Content-Hash`, optimistic-concurrency, watcher echo-suppression, reconcile) now keys off the **plaintext** content hash, so unchanged encrypted saves are detected and skipped. Unencrypted behavior is unchanged (wire == plaintext). One-time: existing encrypted saves re-upload once after upgrade, then converge.
+- **Crash-safe server saves**: disk-backed canonical writes (`GSBS_SAVE_ROOT`) now use temp-file + `fsync` + atomic rename + parent-dir `fsync` instead of a direct `os.WriteFile`. A crash or power loss can no longer leave a truncated/torn canonical save.
 
 ### Changed
 
 - **Cron**: `pcgw_sync_source=github` schedules `pcgw_bundle_fetch`; `api` keeps incremental PCGW sync cron. First start runs bundle fetch in GitHub mode.
+- **CI**: `govulncheck` is now blocking (fails on a reachable/"called" vulnerability) and pinned to `v1.1.4` for reproducible runs. Keep the Go toolchain on its latest patch (CI tracks the latest `1.25.x`) so stdlib advisories stay resolved.
 
 ## [2.1.7] - 2026-06-10
 

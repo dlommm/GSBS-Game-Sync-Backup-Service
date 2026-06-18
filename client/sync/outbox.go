@@ -43,7 +43,7 @@ type OutboxEntry struct {
 	FilePath     string    `json:"file_path"`
 	RelativePath string    `json:"relative_path,omitempty"`
 	Content      string    `json:"content,omitempty"`      // legacy base64 inline payload
-	ContentHash  string    `json:"content_hash,omitempty"` // expected wire hash when Content empty
+	ContentHash  string    `json:"content_hash,omitempty"` // expected content change hash (plaintext SHA-256) when Content empty
 	ContentSize  int64     `json:"content_size,omitempty"` // plaintext size hint
 	CreatedAt    time.Time `json:"created_at"`
 	Attempts     int       `json:"attempts"`
@@ -144,7 +144,7 @@ func loadOutboxContent(entry *OutboxEntry, client *Client) ([]byte, error) {
 		return nil, err
 	}
 	if entry.ContentHash != "" {
-		hash, err := client.ContentWireHash(content)
+		hash, err := client.ContentChangeHash(content)
 		if err != nil {
 			return nil, err
 		}

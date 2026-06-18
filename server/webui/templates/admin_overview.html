@@ -10,6 +10,31 @@
   <div class="stat-card"><div class="stat-value">{{.SSEClients}}</div><div class="stat-label">SSE clients</div></div>
 </section>
 
+{{if .ShowSourcePrompt}}
+<section class="panel panel-compact" aria-label="Choose save-location source">
+  <div class="panel-header"><h2>Choose your game save-location source</h2></div>
+  <div class="panel-body">
+    <p class="cell-muted" style="margin:0 0 .75rem;">
+      GSBS needs PCGamingWiki save-location data to know where each game stores its saves. Pick how this server gets it — you can change this later in <a href="/admin/settings">Settings</a>.
+    </p>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
+      <form method="post" action="/admin/pcgw/source" class="inline-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <input type="hidden" name="source" value="s3">
+        <button type="submit" class="btn-primary">Use prebuilt S3 bundle <span class="badge-success">Recommended</span></button>
+        <span class="cell-muted" style="display:block;margin-top:.25rem;font-size:.85em;">Fast, low-maintenance. Avoids PCGamingWiki API limits. Falls back to the API automatically if no bundle is available yet.</span>
+      </form>
+      <form method="post" action="/admin/pcgw/source" class="inline-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <input type="hidden" name="source" value="api">
+        <button type="submit" class="btn-ghost">Manual (sync live from PCGamingWiki API)</button>
+        <span class="cell-muted" style="display:block;margin-top:.25rem;font-size:.85em;">Seeds once from the S3 bundle, then syncs on demand. Always current, but slower and subject to API rate limits.</span>
+      </form>
+    </div>
+  </div>
+</section>
+{{end}}
+
 {{if .ShowGettingStarted}}
 <section class="panel panel-compact">
   <div class="panel-header"><h2>Getting Started</h2></div>

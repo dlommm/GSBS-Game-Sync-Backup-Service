@@ -181,7 +181,7 @@ func (a *serverApp) Start(ctx context.Context) {
 				source := store.PCGWSyncSourceFromSettings(settings)
 				var started bool
 				var err error
-				if source == store.PCGWSyncSourceGitHub {
+				if source == store.PCGWSyncSourceS3 {
 					started, err = a.runner.TryRunPCGWBundleFetch(context.Background(), true)
 				} else {
 					started, err = a.runner.TryRunPCGWSync(context.Background())

@@ -47,7 +47,17 @@ type Client struct {
 	lastPushedHash    map[string]string // gameID+pathKey -> content hash
 	pushSem           chan struct{}
 	authRetried       bool
+	guardFirstPush    bool          // send X-GSBS-If-Absent on first push of a slot (conflict-aware policies)
 	TokenReload       func() string // optional: reload token from config on 401
+}
+
+// SetConflictGuard enables the expect-new precondition on the first push of a
+// slot (when this client has no last-pushed hash for it). With it on, the server
+// rejects the push with 409 if a different save already exists, surfacing a
+// conflict instead of silently overwriting another machine's save. Leave off for
+// last-write-wins, where blind overwrite is the user's intended behavior.
+func (c *Client) SetConflictGuard(enabled bool) {
+	c.guardFirstPush = enabled
 }
 
 // HTTP timeout for sync requests (pull can return large payloads).
@@ -170,7 +180,13 @@ type PullResponse struct {
 		Content   string `json:"content"` // base64
 		Encrypted bool   `json:"encrypted,omitempty"`
 	} `json:"saves"`
+	Total int `json:"total,omitempty"` // total saves on server (only set when paginated)
 }
+
+// fullPullPageSize bounds how many full save blobs are fetched per request in
+// the full-pull fallback so neither the server nor the client has to hold the
+// entire library in memory at once. The server caps limit at 500.
+const fullPullPageSize = 200
 
 // maxPullRetries is the number of retries on transient errors (5xx, timeouts).
 const maxPullRetries = 4
@@ -248,7 +264,17 @@ func (c *Client) pullSingle(ctx context.Context, gameID, pathKey string) (*PullR
 }
 
 func (c *Client) pullOnce(ctx context.Context) (*PullResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/saves", nil)
+	return c.pullPage(ctx, 0, 0)
+}
+
+// pullPage fetches a page of full saves. limit<=0 fetches the whole library
+// (legacy unbounded behavior); a positive limit bounds server and client memory.
+func (c *Client) pullPage(ctx context.Context, limit, offset int) (*PullResponse, error) {
+	url := c.baseURL + "/api/saves"
+	if limit > 0 || offset > 0 {
+		url = fmt.Sprintf("%s?limit=%d&offset=%d", url, limit, offset)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +349,10 @@ func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryRespo
 		if data, err := os.ReadFile(absPath); err == nil {
 			localExists = true
 			localHash = FileHash(data)
-			if s.ContentHash != "" && !s.Encrypted && localHash == s.ContentHash {
+			// s.ContentHash is the plaintext change hash (see ContentChangeHash),
+			// so this fast-path skip now works for encrypted saves too — local
+			// plaintext matches the server's recorded plaintext hash.
+			if s.ContentHash != "" && localHash == s.ContentHash {
 				continue
 			}
 			if fi, err := os.Stat(absPath); err == nil {
@@ -366,8 +395,45 @@ func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryRespo
 }
 
 func (c *Client) pullAndApplyFull(ctx context.Context, resolvePath func(gameID, pathKey string) string, opts PullOptions, onRetryIn func(time.Duration)) error {
-	var out *PullResponse
+	// Paginate so neither the server nor this client holds the whole library in
+	// memory at once. Each page is fetched (with retry/backoff) and applied
+	// before the next is requested.
+	offset := 0
+	for {
+		page, err := c.pullPageWithRetry(ctx, fullPullPageSize, offset, onRetryIn)
+		if err != nil {
+			return err
+		}
+		for _, s := range page.Saves {
+			absPath := resolvePath(s.GameID, s.PathKey)
+			if absPath == "" {
+				continue
+			}
+			elig := paths.EvaluatePullEligibility(absPath, s.GameID, opts.PullContext)
+			if elig == paths.SkipNotInstalled || elig == paths.SkipNoAnchor {
+				continue
+			}
+			if err := c.applyOneSaveEncrypted(s.GameID, s.PathKey, s.UpdatedAt, s.Content, absPath, opts, s.Encrypted); err != nil {
+				log.Printf("pull apply: %v", err)
+				if OnSaveEvent != nil {
+					OnSaveEvent(s.GameID, s.PathKey, "", SaveDirPull, err)
+				}
+			}
+		}
+		offset += len(page.Saves)
+		// Stop when a short page came back, or we've covered the reported total.
+		if len(page.Saves) < fullPullPageSize || (page.Total > 0 && offset >= page.Total) {
+			break
+		}
+	}
+	return nil
+}
+
+// pullPageWithRetry fetches one page of full saves, retrying transient errors
+// with backoff. onRetryIn (may be nil) reports the next retry delay for UI.
+func (c *Client) pullPageWithRetry(ctx context.Context, limit, offset int, onRetryIn func(time.Duration)) (*PullResponse, error) {
 	bo := retry.DefaultBackoff()
+	var out *PullResponse
 	var lastErr error
 	for attempt := 0; attempt <= maxPullRetries; attempt++ {
 		if attempt > 0 {
@@ -380,12 +446,12 @@ func (c *Client) pullAndApplyFull(ctx context.Context, resolvePath func(gameID, 
 				if onRetryIn != nil {
 					onRetryIn(0)
 				}
-				return ctx.Err()
+				return nil, ctx.Err()
 			case <-time.After(delay):
 			}
 			log.Printf("pull: retry %d/%d after %v", attempt, maxPullRetries, delay)
 		}
-		out, lastErr = c.pullOnce(ctx)
+		out, lastErr = c.pullPage(ctx, limit, offset)
 		if lastErr == nil {
 			break
 		}
@@ -393,32 +459,16 @@ func (c *Client) pullAndApplyFull(ctx context.Context, resolvePath func(gameID, 
 			if onRetryIn != nil {
 				onRetryIn(0)
 			}
-			return lastErr
+			return nil, lastErr
 		}
 	}
 	if onRetryIn != nil {
 		onRetryIn(0)
 	}
 	if lastErr != nil {
-		return fmt.Errorf("pull: %w", lastErr)
+		return nil, fmt.Errorf("pull: %w", lastErr)
 	}
-	for _, s := range out.Saves {
-		absPath := resolvePath(s.GameID, s.PathKey)
-		if absPath == "" {
-			continue
-		}
-		elig := paths.EvaluatePullEligibility(absPath, s.GameID, opts.PullContext)
-		if elig == paths.SkipNotInstalled || elig == paths.SkipNoAnchor {
-			continue
-		}
-		if err := c.applyOneSaveEncrypted(s.GameID, s.PathKey, s.UpdatedAt, s.Content, absPath, opts, s.Encrypted); err != nil {
-			log.Printf("pull apply: %v", err)
-			if OnSaveEvent != nil {
-				OnSaveEvent(s.GameID, s.PathKey, "", SaveDirPull, err)
-			}
-		}
-	}
-	return nil
+	return out, nil
 }
 
 func (c *Client) applyOneSave(gameID, pathKey, updatedAt, contentB64, absPath string, opts PullOptions) error {
@@ -494,8 +544,8 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 	}
 	// Suppress watcher echo: mark this content as already pushed so the
 	// fsnotify Write event for the file we just wrote doesn't trigger a re-upload.
-	if wireHash, whErr := c.ContentWireHash(content); whErr == nil {
-		c.markPushed(gameID, pathKey, wireHash)
+	if chHash, chErr := c.ContentChangeHash(content); chErr == nil {
+		c.markPushed(gameID, pathKey, chHash)
 	}
 	if c.verbose {
 		log.Printf("pull: wrote game=%s path=%s size=%d", gameID, absPath, len(content))
@@ -510,13 +560,20 @@ func (c *Client) pushSlotKey(gameID, pathKey string) string {
 	return gameID + "\x00" + pathKey
 }
 
-// ContentWireHash returns the SHA256 hex of encoded (possibly encrypted) push payload.
-func (c *Client) ContentWireHash(content []byte) (string, error) {
-	wire, _, err := c.encodeContent(content)
-	if err != nil {
-		return "", err
-	}
-	return FileHash(wire), nil
+// ContentChangeHash returns the SHA256 hex of the PLAINTEXT content. This is the
+// canonical change-detection / dedup key used by the push-skip cache, the
+// X-Content-Hash header, optimistic-concurrency (X-GSBS-If-Hash), watcher
+// echo-suppression, and reconcile.
+//
+// It deliberately hashes plaintext, not the encrypted wire bytes: AES-GCM uses a
+// fresh random salt+nonce per encryption, so the ciphertext of identical content
+// differs every time. Hashing the wire bytes (the old behavior) meant encrypted
+// saves were NEVER detected as unchanged — every sync cycle re-uploaded the full
+// save and minted a new server version. Hashing plaintext makes change detection
+// stable and identical to the unencrypted case (where wire == plaintext). The
+// error return is retained for call-site compatibility and is always nil.
+func (c *Client) ContentChangeHash(content []byte) (string, error) {
+	return FileHash(content), nil
 }
 
 // ShouldSkipPush reports whether content with hash was already pushed for the slot.
@@ -622,7 +679,11 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 	if err != nil {
 		return err
 	}
-	hash := FileHash(wire)
+	// Change-detection / dedup keys off the PLAINTEXT hash so encrypted saves
+	// dedup correctly (encryption is non-deterministic; see ContentChangeHash).
+	// X-Content-Size below still reports the encrypted wire length so quotas and
+	// the dashboard reflect actual stored bytes.
+	hash := FileHash(content)
 	if c.ShouldSkipPush(gameID, pathKey, hash) {
 		logSyncDebug("push_skip_unchanged", "game_id", gameID, "path_key", pathKey, "relative_path", relativePath, "file", filePath)
 		return nil
@@ -665,6 +726,10 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 	c.pushMu.Unlock()
 	if lastHash != "" {
 		req.Header.Set("X-GSBS-If-Hash", lastHash)
+	} else if c.guardFirstPush {
+		// No known hash for this slot: tell the server we expect it to be new so
+		// it rejects (409) rather than blindly overwriting a different existing save.
+		req.Header.Set("X-GSBS-If-Absent", "1")
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -815,8 +880,9 @@ func (c *Client) RestoreVersion(ctx context.Context, gameID, pathKey string, ver
 	return nil
 }
 
-// FetchServerHashes returns a map of "gameID\x00pathKey" -> wireContentHash for all saves on server.
-// Used by startup reconciliation to find saves missing on server.
+// FetchServerHashes returns a map of "gameID\x00pathKey" -> content change hash
+// (plaintext SHA-256; see ContentChangeHash) for all saves on the server.
+// Used by startup reconciliation to find saves missing on or differing from the server.
 func (c *Client) FetchServerHashes(ctx context.Context) (map[string]string, error) {
 	summaries, err := c.pullSummaries(ctx)
 	if err != nil {

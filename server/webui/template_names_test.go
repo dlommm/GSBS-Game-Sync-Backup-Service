@@ -359,7 +359,7 @@ func templateTestData(name string) interface{} {
 			JobCatalogScanMode:   "fast_probe",
 			JobPhaseLabel:        "Phase 2: Parsing game data",
 			AvgHistPagesPerSec:   3.0,
-			BundleSyncSource:     store.PCGWSyncSourceGitHub,
+			BundleSyncSource:     store.PCGWSyncSourceS3,
 			BundleLastFetched:    now,
 			BundleLastExported:   now,
 			BundleLastETag:       `"abc123"`,
@@ -397,7 +397,7 @@ func templateTestData(name string) interface{} {
 			Page: 1, PerPage: 20, Total: 1, TotalPages: 1, Start: 1, End: 1, PrevPage: 0, NextPage: 2,
 			JobRunning: true, JobProgressPages: 42, JobProgressTotal: 100, JobGamesSkipped: 1,
 			CapStatusText: "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
-			BundleSyncSource: store.PCGWSyncSourceGitHub,
+			BundleSyncSource: store.PCGWSyncSourceS3,
 			BundleLastFetched: now,
 			BundleLastETag:    `"etag-test"`,
 		}
@@ -419,10 +419,9 @@ func templateTestData(name string) interface{} {
 			PCGWCronSource:        "default",
 			PCGWTitleExcludesJSON: "[]",
 			PCGWPathExcludesJSON:  store.DefaultPCGWPathExcludesJSON,
-			PCGWSyncSource:        store.PCGWSyncSourceGitHub,
+			PCGWSyncSource:        store.PCGWSyncSourceS3,
 			PCGWBundleCron:        store.DefaultPCGWBundleCron,
 			PCGWBundleURL:         store.DefaultPCGWBundleURL,
-			PCGWBundleDeltaURL:    store.DefaultPCGWBundleDeltaURL,
 		}
 	case "admin_analytics.html":
 		return adminAnalyticsData{

@@ -640,7 +640,7 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 	if info == nil || content == nil {
 		return
 	}
-	hash, err := w.client.ContentWireHash(content)
+	hash, err := w.client.ContentChangeHash(content)
 	if err != nil {
 		logSyncWarn("watcher_hash", "game_id", gameID, "file", filePath, "error", err)
 		return

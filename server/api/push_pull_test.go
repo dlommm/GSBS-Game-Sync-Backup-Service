@@ -60,6 +60,64 @@ func TestPushGzipAndHashDedup(t *testing.T) {
 	}
 }
 
+// TestExpectAbsentPrecondition verifies the X-GSBS-If-Absent guard (M2): a
+// client that believes a slot is new must not silently overwrite a different
+// existing save, but an identical-content push and a genuinely-new push succeed.
+func TestExpectAbsentPrecondition(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := auth.NewService(st)
+	ctx := context.Background()
+	_, _ = svc.RegisterUser(ctx, "u1", "password123")
+	_, token, _ := svc.Login(ctx, "u1", "password123", "c", "linux")
+	h := NewHandler(st, svc, false, nil, nil, nil, nil, nil, nil, 0, false, "", "test")
+
+	push := func(body, hash string, ifAbsent bool) int {
+		req := httptest.NewRequest(http.MethodPost, "/api/saves", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("X-Game-ID", "game1")
+		req.Header.Set("X-Path-Key", "pk1")
+		req.Header.Set("X-Content-Hash", hash)
+		if ifAbsent {
+			req.Header.Set("X-GSBS-If-Absent", "1")
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// First push with expect-new on an empty slot: succeeds.
+	if code := push("machineA-save", "hashA", true); code != http.StatusOK {
+		t.Fatalf("first expect-new push: %d", code)
+	}
+	// A different machine that also thinks the slot is new must be rejected, not
+	// allowed to clobber machine A's save.
+	if code := push("machineB-save", "hashB", true); code != http.StatusConflict {
+		t.Fatalf("conflicting expect-new push: got %d, want 409", code)
+	}
+	// Identical content with expect-new is allowed (no false conflict).
+	if code := push("machineA-save", "hashA", true); code != http.StatusOK {
+		t.Fatalf("identical expect-new push: got %d, want 200", code)
+	}
+	// A brand-new slot with expect-new succeeds.
+	{
+		req := httptest.NewRequest(http.MethodPost, "/api/saves", strings.NewReader("x"))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("X-Game-ID", "game1")
+		req.Header.Set("X-Path-Key", "pk-new")
+		req.Header.Set("X-Content-Hash", "hashNew")
+		req.Header.Set("X-GSBS-If-Absent", "1")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("new-slot expect-new push: %d", rec.Code)
+		}
+	}
+}
+
 func TestPullSingleSave(t *testing.T) {
 	st, err := store.NewSQLite(":memory:")
 	if err != nil {
