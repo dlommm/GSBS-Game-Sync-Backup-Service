@@ -22,6 +22,8 @@ gsbs.db
 
 # IDE / OS
 .idea/
+.cursor/
+.claude/
 .DS_Store
 *.swp
 *.swo
