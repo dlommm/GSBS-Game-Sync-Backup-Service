@@ -107,6 +107,9 @@ type adminOverviewData struct {
 	IdleRunsNeeded        int
 	IdleTotalETASec       int
 	IdlePerRunETASec      int
+	// First-run onboarding: prompt the admin to choose a save-location source
+	// (prebuilt bundle vs live PCGW API) when none has been explicitly chosen.
+	ShowSourcePrompt bool
 }
 
 type adminUsersData struct {

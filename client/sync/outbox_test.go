@@ -96,7 +96,7 @@ func TestLoadOutboxContent_FileRef(t *testing.T) {
 	resolver := paths.NewResolver()
 	client, err := NewClient("http://127.0.0.1:1", "tok", resolver, paths.CurrentOS(), 0, false, false)
 	require.NoError(t, err)
-	hash, err := client.ContentWireHash([]byte("hello"))
+	hash, err := client.ContentChangeHash([]byte("hello"))
 	require.NoError(t, err)
 
 	entry := OutboxEntry{

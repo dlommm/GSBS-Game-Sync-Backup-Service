@@ -167,6 +167,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveAdminSettings(w, r)
 	case path == "/admin/settings/save" && r.Method == http.MethodPost:
 		h.handleAdminSettingsSave(w, r)
+	case path == "/admin/pcgw/source" && r.Method == http.MethodPost:
+		h.handleAdminChooseSource(w, r)
 	case path == "/admin/analytics" && r.Method == http.MethodGet:
 		h.serveAdminAnalytics(w, r)
 	case path == "/admin/partial/analytics-pcgw" && r.Method == http.MethodGet:

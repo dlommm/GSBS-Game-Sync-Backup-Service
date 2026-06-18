@@ -44,9 +44,10 @@ jobs:
       - name: Build client
         run: go build -o gsbs-client ./client
       - name: govulncheck
-        continue-on-error: true
+        # Blocking: a reachable ("called") known-vulnerable symbol fails CI.
+        # Pinned tool version keeps runs reproducible (no floating @latest).
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           govulncheck ./...
 
   test-windows:

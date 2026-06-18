@@ -8,25 +8,25 @@
 
     <div class="settings-form-section">
       <h3 class="settings-form-section-title">Sync source</h3>
-      <p class="settings-form-section-desc">Choose how the server updates PCGW mirror data. GitHub bundle fetch avoids direct PCGW API calls.</p>
+      <p class="settings-form-section-desc">Choose how the server updates PCGW mirror data. The S3 bundle is a prebuilt snapshot fetched from object storage (Cloudflare R2/S3) and avoids direct PCGW API calls. Switching to Manual imports the S3 bundle once to seed, then runs only on-demand PCGW API syncs.</p>
       {{if .PCGWSyncSourceEnvOverride}}
-      <p class="notice notice-warn">Sync source is controlled by <code>GSBS_PCGW_SYNC_SOURCE</code> environment variable.</p>
+      <p class="notice notice-warn">Sync source is controlled by the <code>GSBS_PCGW_SYNC_SOURCE</code> environment variable.</p>
       {{end}}
       <div class="form-group">
         <label class="radio-label">
-          <input type="radio" name="pcgw_sync_source" value="github" {{if eq .PCGWSyncSource "github"}}checked{{end}} {{if .PCGWSyncSourceEnvOverride}}disabled{{end}}>
-          <span>GitHub manifest bundle (recommended)</span>
+          <input type="radio" name="pcgw_sync_source" value="s3" {{if eq .PCGWSyncSource "s3"}}checked{{end}} {{if .PCGWSyncSourceEnvOverride}}disabled{{end}}>
+          <span>S3 manifest bundle (recommended)</span>
         </label>
         <label class="radio-label">
           <input type="radio" name="pcgw_sync_source" value="api" {{if eq .PCGWSyncSource "api"}}checked{{end}} {{if .PCGWSyncSourceEnvOverride}}disabled{{end}}>
-          <span>Direct PCGW API sync</span>
+          <span>Manual (direct PCGW API sync)</span>
         </label>
       </div>
     </div>
 
     <div class="settings-form-section">
       <h3 class="settings-form-section-title">Bundle fetch schedule</h3>
-      <p class="settings-form-section-desc">Used when sync source is GitHub. Checks remote bundle with ETag (304 = no download).</p>
+      <p class="settings-form-section-desc">Used when sync source is the S3 bundle. Fetches the small index.json version pointer and only downloads the full bundle when a newer version is published (ETag/304 = no download).</p>
       {{if .PCGWBundleCronEnvOverride}}
       <p class="notice notice-warn">Bundle cron is controlled by <code>GSBS_PCGW_BUNDLE_CRON</code> environment variable.</p>
       {{end}}
@@ -40,11 +40,8 @@
       </div>
       <div class="form-group">
         <label for="pcgw_bundle_url">Full bundle URL</label>
-        <input type="url" id="pcgw_bundle_url" name="pcgw_bundle_url" class="text-input" value="{{.PCGWBundleURL}}" placeholder="https://raw.githubusercontent.com/.../manifest.json.gz">
-      </div>
-      <div class="form-group">
-        <label for="pcgw_bundle_delta_url">Delta bundle URL</label>
-        <input type="url" id="pcgw_bundle_delta_url" name="pcgw_bundle_delta_url" class="text-input" value="{{.PCGWBundleDeltaURL}}" placeholder="https://raw.githubusercontent.com/.../manifest.delta.json.gz">
+        <input type="url" id="pcgw_bundle_url" name="pcgw_bundle_url" class="text-input" value="{{.PCGWBundleURL}}" placeholder="https://gsbs.ohhcloud.com/manifest/manifest.json.gz">
+        <p class="form-hint">index.json is derived from this URL's directory automatically.</p>
       </div>
       <div class="form-group">
         <label class="checkbox-label">
@@ -56,7 +53,7 @@
 
     <div class="settings-form-section">
       <h3 class="settings-form-section-title">API sync schedule</h3>
-      <p class="settings-form-section-desc">Used when sync source is Direct PCGW API.</p>
+      <p class="settings-form-section-desc">Used in Manual mode. Switching to Manual clears this schedule (manual-only); set a cron here to re-enable automatic PCGW API syncs.</p>
     {{if .PCGWCronEnvOverride}}
     <p class="notice notice-warn">Cron is controlled by <code>GSBS_PCGW_CRON</code> environment variable (overrides database). Change it in Docker/compose and restart the server to update.</p>
     {{end}}
@@ -89,7 +86,7 @@
         <input type="checkbox" name="pcgw_auto_run_on_first_start" value="1" {{if .AutoRunFirstStart}}checked{{end}}>
         <span>Auto-run sync on first server start</span>
       </label>
-      <p class="form-hint">GitHub mode: fetch full bundle. API mode: incremental PCGW sync. Runs once until the first-run marker is set.</p>
+      <p class="form-hint">S3 mode: fetch the full bundle. Manual mode: incremental PCGW sync. Runs once until the first-run marker is set.</p>
     </div>
 
     <div class="settings-form-section">

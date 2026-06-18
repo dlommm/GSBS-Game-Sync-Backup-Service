@@ -47,7 +47,7 @@ func TestAdminPCGWJobStatusEmbedded(t *testing.T) {
 		JobProgressPages:   100,
 		JobProgressTotal:   500,
 		JobGamesSkipped:    2,
-		BundleSyncSource:   store.PCGWSyncSourceGitHub,
+		BundleSyncSource:   store.PCGWSyncSourceS3,
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "partials/admin_pcgw_job_status.html", data); err != nil {
@@ -68,7 +68,7 @@ func TestAdminPCGWActionLabelsClarifyPhases(t *testing.T) {
 		"CatalogStats":     map[string]int{"RemoteTotal": 0, "LocalTotal": 0, "MissingLocal": 0, "DeadLetter": 0},
 		"MaxPagesPerRun":   5000,
 		"JobETASec":        -1,
-		"BundleSyncSource": store.PCGWSyncSourceGitHub,
+		"BundleSyncSource": store.PCGWSyncSourceS3,
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "partials/admin_pcgw_actions.html", data); err != nil {

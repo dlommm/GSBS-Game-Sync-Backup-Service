@@ -1,4 +1,10 @@
-// Command pcgw-bundle-export exports GSBS PCGW manifest bundles for publishing.
+// Command pcgw-bundle-export exports a GSBS PCGW manifest bundle for publishing.
+//
+// It always writes a single full bundle (manifest.json.gz) plus its metadata and,
+// when --base-url is given, advances index.json (the monotonic version pointer
+// consuming servers fetch). Delta bundles are no longer produced: servers always
+// merge the full bundle, which is cheap because the import skips unchanged rows
+// and reconciles deletions against the bundle's complete catalog.
 package main
 
 import (
@@ -17,17 +23,10 @@ import (
 func main() {
 	dbPath := flag.String("db", envOr("GSBS_DB", "gsbs.db"), "SQLite database path")
 	outDir := flag.String("out", ".", "Output directory")
-	full := flag.Bool("full", false, "Export full lite bundle (default when not delta)")
-	delta := flag.Bool("delta", false, "Export delta bundle (requires --since or existing meta)")
-	since := flag.String("since", "", "RFC3339 timestamp for delta export (default: full_exported_at from meta)")
 	lite := flag.Bool("lite", true, "Omit full wikitext metadata (recommended for publish)")
 	version := flag.String("version", "dev", "GSBS version string embedded in bundle")
-	prevExported := flag.String("previous-exported-at", "", "Override previous_exported_at for delta metadata")
+	baseURL := flag.String("base-url", "", "Public directory URL where artifacts are hosted; when set, writes/updates index.json (versioned sync)")
 	flag.Parse()
-
-	if !*delta && !*full {
-		*full = true
-	}
 
 	st, err := store.NewSQLite(*dbPath)
 	if err != nil {
@@ -38,52 +37,12 @@ func main() {
 	ctx := context.Background()
 	metaPath := filepath.Join(*outDir, "manifest.meta.json")
 
-	var existingMeta store.PCGWBundleMeta
-	if raw, err := os.ReadFile(metaPath); err == nil {
-		_ = json.Unmarshal(raw, &existingMeta)
-	}
-
-	opts := store.PCGWBundleExportOpts{Lite: *lite}
-	if *delta {
-		anchor := deltaAnchor(&existingMeta, strings.TrimSpace(*since))
-		if anchor == "" {
-			log.Fatal("--delta requires --since or existing manifest.meta.json with full_exported_at or exported_at from last full")
-		}
-		opts.Since = anchor
-		opts.FullExportedAt = anchor
-		opts.PreviousExportedAt = anchor
-		if v := strings.TrimSpace(*prevExported); v != "" {
-			opts.PreviousExportedAt = v
-		}
-	}
-
-	data, meta, err := st.ExportPCGWManifestBundleWithOpts(ctx, *version, opts)
+	data, meta, err := st.ExportPCGWManifestBundleWithOpts(ctx, *version, store.PCGWBundleExportOpts{Lite: *lite})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	name := "manifest.json.gz"
-	releaseType := "full"
-	sha256 := meta.FullSHA256
-	if *delta {
-		name = "manifest.delta.json.gz"
-		meta.DeltaSHA256 = meta.FullSHA256
-		meta.DeltaBytes = meta.FullBytes
-		meta.FullSHA256 = existingMeta.FullSHA256
-		meta.FullBytes = existingMeta.FullBytes
-		if meta.FullExportedAt == "" {
-			meta.FullExportedAt = deltaAnchor(&existingMeta, "")
-		}
-		if meta.PreviousExportedAt == "" {
-			meta.PreviousExportedAt = deltaAnchor(&existingMeta, "")
-		}
-		sha256 = meta.DeltaSHA256
-		releaseType = "delta"
-	} else if v := strings.TrimSpace(*prevExported); v != "" {
-		meta.PreviousExportedAt = v
-	}
-
-	gzPath := filepath.Join(*outDir, name)
+	gzPath := filepath.Join(*outDir, "manifest.json.gz")
 	if err := os.WriteFile(gzPath, data, 0o644); err != nil {
 		log.Fatal(err)
 	}
@@ -95,36 +54,36 @@ func main() {
 
 	releasesPath := filepath.Join(*outDir, "manifest.releases.json")
 	if err := store.UpdatePCGWManifestReleases(releasesPath, store.PCGWManifestReleaseEntry{
-		Type:           releaseType,
+		Type:           "full",
 		ExportedAt:     meta.ExportedAt,
 		FullExportedAt: meta.FullExportedAt,
-		SHA256:         sha256,
+		SHA256:         meta.FullSHA256,
 	}); err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Wrote %s (%d bytes, sha256=%s)\n", gzPath, len(data), sha256)
+	fmt.Printf("Wrote %s (%d bytes, sha256=%s)\n", gzPath, len(data), meta.FullSHA256)
 	fmt.Printf("Wrote %s\n", metaPath)
 	fmt.Printf("Wrote %s\n", releasesPath)
-}
 
-func deltaAnchor(existing *store.PCGWBundleMeta, sinceOverride string) string {
-	if sinceOverride != "" {
-		return sinceOverride
+	// Versioned-index publish: advance and write index.json so consuming servers
+	// can do atomic, monotonic catch-up by merging the current full bundle.
+	if strings.TrimSpace(*baseURL) != "" {
+		indexPath := filepath.Join(*outDir, "index.json")
+		var prevIndex store.PCGWBundleIndex
+		if raw, err := os.ReadFile(indexPath); err == nil {
+			_ = json.Unmarshal(raw, &prevIndex)
+		}
+		nextIndex, err := store.AdvanceBundleIndex(prevIndex, meta.FullSHA256, len(data), *baseURL, meta.ExportedAt)
+		if err != nil {
+			log.Fatalf("advance index: %v", err)
+		}
+		rawIndex, _ := json.MarshalIndent(nextIndex, "", "  ")
+		if err := os.WriteFile(indexPath, rawIndex, 0o644); err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Wrote %s (manifest_version=%d)\n", indexPath, nextIndex.ManifestVersion)
 	}
-	if existing == nil {
-		return ""
-	}
-	if v := strings.TrimSpace(existing.FullExportedAt); v != "" {
-		return v
-	}
-	if strings.TrimSpace(existing.FullSHA256) != "" && strings.TrimSpace(existing.DeltaSHA256) == "" {
-		return strings.TrimSpace(existing.ExportedAt)
-	}
-	if v := strings.TrimSpace(existing.PreviousExportedAt); v != "" {
-		return v
-	}
-	return strings.TrimSpace(existing.ExportedAt)
 }
 
 func envOr(key, def string) string {

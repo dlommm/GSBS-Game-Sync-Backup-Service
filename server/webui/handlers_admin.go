@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -267,7 +268,13 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 	}
 	stats := h.loadAdminStats(ctx)
 	showGettingStarted := stats.UserCount <= 1 && stats.ClientCount == 0 && stats.SaveCount == 0
+	// Show the source-choice card until the admin explicitly picks one (and only
+	// when not pinned by GSBS_PCGW_SYNC_SOURCE).
+	_, sourceEnvPinned := os.LookupEnv(store.EnvPCGWSyncSource)
+	settings, _ := h.store.ListAdminSettings(ctx)
+	showSourcePrompt := !sourceEnvPinned && strings.TrimSpace(settings[store.AdminSettingPCGWSyncSource]) == ""
 	h.render(w, "admin_overview.html", adminOverviewData{
+		ShowSourcePrompt:      showSourcePrompt,
 		PageData:              h.adminPageData(w, r, userID, username, "overview", "admin_overview"),
 		Stats:                 stats,
 		StatsSnapshots:        statsSnapshots,

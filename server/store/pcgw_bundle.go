@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/types"
+	"github.com/gsbs/gsbs/server/logx"
 )
 
 const (
@@ -21,20 +22,20 @@ const (
 )
 
 type pcgwManifestBundle struct {
-	SchemaVersion        int                           `json:"schema_version"`
-	GSBSVersion          string                        `json:"gsbs_version"`
-	ExportedAt           string                        `json:"exported_at"`
-	FullExportedAt       string                        `json:"full_exported_at,omitempty"`
-	PreviousExportedAt   string                        `json:"previous_exported_at,omitempty"`
-	Counts               pcgwBundleCounts              `json:"counts"`
-	GameSaveLocations    []types.GameSaveLocation      `json:"game_save_locations"`
-	Games                []types.PCGWGame              `json:"games"`
-	GameData             []types.PCGWGameData          `json:"game_data"`
-	Metadata             []types.PCGWMetadata          `json:"metadata"`
-	Sections             map[string][]sectionExport    `json:"sections"`
-	SystemRequirements   []types.PCGWSystemRequirement `json:"system_requirements"`
-	Catalog              []types.PCGWCatalogEntry      `json:"catalog,omitempty"`
-	DeletedGameIDs       []string                      `json:"deleted_game_ids,omitempty"`
+	SchemaVersion      int                           `json:"schema_version"`
+	GSBSVersion        string                        `json:"gsbs_version"`
+	ExportedAt         string                        `json:"exported_at"`
+	FullExportedAt     string                        `json:"full_exported_at,omitempty"`
+	PreviousExportedAt string                        `json:"previous_exported_at,omitempty"`
+	Counts             pcgwBundleCounts              `json:"counts"`
+	GameSaveLocations  []types.GameSaveLocation      `json:"game_save_locations"`
+	Games              []types.PCGWGame              `json:"games"`
+	GameData           []types.PCGWGameData          `json:"game_data"`
+	Metadata           []types.PCGWMetadata          `json:"metadata"`
+	Sections           map[string][]sectionExport    `json:"sections"`
+	SystemRequirements []types.PCGWSystemRequirement `json:"system_requirements"`
+	Catalog            []types.PCGWCatalogEntry      `json:"catalog,omitempty"`
+	DeletedGameIDs     []string                      `json:"deleted_game_ids,omitempty"`
 }
 
 type pcgwBundleCounts struct {
@@ -195,7 +196,7 @@ func (s *sqliteStore) ExportPCGWManifestBundleWithOpts(ctx context.Context, gsbs
 
 func (s *sqliteStore) ImportPCGWManifestBundle(ctx context.Context, data []byte, mode string) (PCGWImportResult, error) {
 	switch mode {
-	case "merge", "full_replace", "merge_skip_unchanged", "delta":
+	case "merge", "full_replace", "merge_skip_unchanged":
 	default:
 		return PCGWImportResult{}, fmt.Errorf("invalid import mode %q", mode)
 	}
@@ -213,11 +214,10 @@ func (s *sqliteStore) ImportPCGWManifestBundle(ctx context.Context, data []byte,
 		return PCGWImportResult{}, fmt.Errorf("unsupported schema_version %d", bundle.SchemaVersion)
 	}
 
-	skipUnchanged := mode == "merge_skip_unchanged" || mode == "delta"
-	applyDeletions := mode == "delta"
+	skipUnchanged := mode == "merge_skip_unchanged"
 
 	fullExportedAt := strings.TrimSpace(bundle.FullExportedAt)
-	if fullExportedAt == "" && !applyDeletions {
+	if fullExportedAt == "" {
 		fullExportedAt = bundle.ExportedAt
 	}
 	result := PCGWImportResult{Mode: mode, ExportedAt: bundle.ExportedAt, FullExportedAt: fullExportedAt}
@@ -228,14 +228,6 @@ func (s *sqliteStore) ImportPCGWManifestBundle(ctx context.Context, data []byte,
 		if err := s.clearPCGWBundleTables(ctx); err != nil {
 			return result, err
 		}
-	}
-
-	if applyDeletions && len(bundle.DeletedGameIDs) > 0 {
-		n, err := s.applyBundleDeletions(ctx, bundle.DeletedGameIDs)
-		if err != nil {
-			return result, err
-		}
-		changed += n
 	}
 
 	if len(bundle.Catalog) > 0 {
@@ -267,7 +259,23 @@ func (s *sqliteStore) ImportPCGWManifestBundle(ctx context.Context, data []byte,
 		}
 	}
 
+	// The child tables (game_data, metadata, sections, system_requirements) have
+	// a FOREIGN KEY to pcgw_games(page_id). A bundle can contain orphan child
+	// rows that reference a page_id with no game row (source-DB drift). Inserting
+	// one would fail the whole import on a FK constraint. Load the set of valid
+	// page_ids once and skip orphans — this keeps the DB referentially consistent
+	// and loses no real data (an orphan row for a non-existent game is unusable
+	// and is never save data).
+	validPages, err := s.loadPCGWGamePageIDs(ctx)
+	if err != nil {
+		return result, err
+	}
+
 	for i := range bundle.GameData {
+		if !validPages[bundle.GameData[i].PageID] {
+			result.SkippedOrphans++
+			continue
+		}
 		ok, err := s.importPCGWGameDataSmart(ctx, &bundle.GameData[i], skipUnchanged)
 		if err != nil {
 			return result, err
@@ -281,6 +289,10 @@ func (s *sqliteStore) ImportPCGWManifestBundle(ctx context.Context, data []byte,
 	}
 
 	for i := range bundle.Metadata {
+		if !validPages[bundle.Metadata[i].PageID] {
+			result.SkippedOrphans++
+			continue
+		}
 		if err := s.UpsertPCGWMetadata(ctx, &bundle.Metadata[i]); err != nil {
 			return result, err
 		}
@@ -290,6 +302,10 @@ func (s *sqliteStore) ImportPCGWManifestBundle(ctx context.Context, data []byte,
 
 	for _, rows := range bundle.Sections {
 		for _, row := range rows {
+			if !validPages[row.PageID] {
+				result.SkippedOrphans++
+				continue
+			}
 			sec := &types.PCGWSectionRow{
 				PageID: row.PageID, Data: row.Data, AllTemplates: row.AllTemplates,
 				SectionWikitext: row.SectionWikitext, UpdatedAt: row.UpdatedAt,
@@ -304,6 +320,10 @@ func (s *sqliteStore) ImportPCGWManifestBundle(ctx context.Context, data []byte,
 
 	byPage := map[int64][]types.PCGWSystemRequirement{}
 	for _, r := range bundle.SystemRequirements {
+		if !validPages[r.PageID] {
+			result.SkippedOrphans++
+			continue
+		}
 		byPage[r.PageID] = append(byPage[r.PageID], r)
 	}
 	for pageID, rows := range byPage {
@@ -312,6 +332,22 @@ func (s *sqliteStore) ImportPCGWManifestBundle(ctx context.Context, data []byte,
 		}
 		result.PCGWSystemReqs += len(rows)
 		changed += len(rows)
+	}
+	if result.SkippedOrphans > 0 {
+		logx.Logger().Warn().Int("count", result.SkippedOrphans).
+			Msg("pcgw import: skipped orphan child rows referencing a missing game")
+	}
+
+	// Reconcile upstream deletions: the full bundle's catalog is the authoritative
+	// complete set, so any local game whose page_id is absent from it was deleted
+	// upstream. full_replace already starts from an empty mirror, so it is exempt.
+	if mode != "full_replace" {
+		deleted, err := s.reconcilePCGWCatalogDeletions(ctx, bundle.Catalog)
+		if err != nil {
+			return result, err
+		}
+		result.Deleted = deleted
+		changed += deleted
 	}
 
 	if bundle.SchemaVersion >= pcgwBundleSchemaVersionV2 && len(bundle.Catalog) > 0 {
@@ -335,6 +371,25 @@ func (s *sqliteStore) ImportPCGWManifestBundle(ctx context.Context, data []byte,
 		}
 	}
 	return result, nil
+}
+
+// loadPCGWGamePageIDs returns the set of page_ids that currently have a
+// pcgw_games row, used to filter out orphan child rows before import.
+func (s *sqliteStore) loadPCGWGamePageIDs(ctx context.Context) (map[int64]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT page_id FROM pcgw_games`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	set := make(map[int64]bool)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		set[id] = true
+	}
+	return set, rows.Err()
 }
 
 func (s *sqliteStore) importGameSaveLocationsSmart(ctx context.Context, entries []types.GameSaveLocation, skipUnchanged bool) (changed, skipped int, err error) {
@@ -389,7 +444,10 @@ func (s *sqliteStore) gameSaveLocationUnchanged(ctx context.Context, e types.Gam
 func (s *sqliteStore) importPCGWGameSmart(ctx context.Context, g *types.PCGWGame, skipUnchanged bool) (changed bool, err error) {
 	if skipUnchanged && g.LastRevID > 0 {
 		local, err := s.GetPCGWGame(ctx, g.PageID)
-		if err != nil {
+		// A missing local row (sql.ErrNoRows) is the normal case on a fresh
+		// server — it means "not present yet", not a failure. Only a real query
+		// error should abort the import.
+		if err != nil && err != sql.ErrNoRows {
 			return false, err
 		}
 		if local != nil && local.LastRevID == g.LastRevID && local.ParseStatus == g.ParseStatus {
@@ -421,27 +479,81 @@ func (s *sqliteStore) importPCGWGameDataSmart(ctx context.Context, row *types.PC
 	return true, nil
 }
 
-func (s *sqliteStore) applyBundleDeletions(ctx context.Context, gameIDs []string) (int, error) {
-	if len(gameIDs) == 0 {
+// pcgwReconcileMaxDeleteFraction is a safety valve: if reconciling a full bundle
+// would remove more than this fraction of the local games, the removal is skipped
+// and logged instead — a guard against a truncated or malformed bundle wiping the
+// mirror. Legitimate upstream deletions are a tiny fraction of the catalog.
+const pcgwReconcileMaxDeleteFraction = 0.25
+
+// reconcilePCGWCatalogDeletions removes local games whose page_id is absent from
+// the full bundle's catalog (deleted upstream), cascading to save locations and
+// the PCGW child tables and the catalog row. It is a no-op when the bundle
+// carries no catalog (e.g. a schema-v1 bundle) or the mirror is empty. The
+// pcgw_games delete trigger records a tombstone in pcgw_manifest_deletions.
+func (s *sqliteStore) reconcilePCGWCatalogDeletions(ctx context.Context, catalog []types.PCGWCatalogEntry) (int, error) {
+	if len(catalog) == 0 {
 		return 0, nil
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	n := 0
-	for _, gid := range gameIDs {
-		gid = strings.TrimSpace(gid)
-		if gid == "" {
-			continue
-		}
-		if _, err := s.db.ExecContext(ctx,
-			`INSERT OR REPLACE INTO pcgw_manifest_deletions (game_id, deleted_at) VALUES (?, ?)`, gid, now); err != nil {
-			return n, err
-		}
-		if _, err := s.db.ExecContext(ctx, `DELETE FROM game_save_locations WHERE game_id = ?`, gid); err != nil {
-			return n, err
-		}
-		n++
+	keep := make(map[int64]bool, len(catalog))
+	for _, c := range catalog {
+		keep[c.PageID] = true
 	}
-	return n, nil
+	local, err := s.loadPCGWGamePageIDs(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if len(local) == 0 {
+		return 0, nil
+	}
+	var toDelete []int64
+	for pid := range local {
+		if !keep[pid] {
+			toDelete = append(toDelete, pid)
+		}
+	}
+	if len(toDelete) == 0 {
+		return 0, nil
+	}
+	if frac := float64(len(toDelete)) / float64(len(local)); frac > pcgwReconcileMaxDeleteFraction {
+		logx.Logger().Warn().
+			Int("would_delete", len(toDelete)).Int("local_games", len(local)).
+			Int("bundle_catalog", len(catalog)).Float64("fraction", frac).
+			Msg("pcgw import: skipping deletion reconciliation — removal set too large (possible partial/bad bundle)")
+		return 0, nil
+	}
+	for _, pid := range toDelete {
+		if err := s.deletePCGWGameByPageID(ctx, pid); err != nil {
+			return 0, err
+		}
+	}
+	logx.Logger().Info().Int("deleted", len(toDelete)).Msg("pcgw import: reconciled upstream deletions")
+	return len(toDelete), nil
+}
+
+// deletePCGWGameByPageID removes a single game and all of its dependent rows.
+func (s *sqliteStore) deletePCGWGameByPageID(ctx context.Context, pageID int64) error {
+	childTables := []string{
+		"pcgw_parse_failures", "pcgw_system_requirements", "pcgw_metadata", "pcgw_game_data",
+		"pcgw_availability", "pcgw_monetization", "pcgw_video", "pcgw_input",
+		"pcgw_audio", "pcgw_network", "pcgw_other", "pcgw_notes",
+		"pcgw_references", "pcgw_external_links",
+	}
+	for _, t := range childTables {
+		if _, err := s.db.ExecContext(ctx, `DELETE FROM `+t+` WHERE page_id = ?`, pageID); err != nil {
+			return err
+		}
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM game_save_locations WHERE pcgw_page_id = ?`, pageID); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM pcgw_catalog WHERE page_id = ?`, pageID); err != nil {
+		return err
+	}
+	// The pcgw_games AFTER DELETE trigger writes the manifest-deletion tombstone.
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM pcgw_games WHERE page_id = ?`, pageID); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *sqliteStore) listGameSaveLocationsForExport(ctx context.Context, since string) ([]types.GameSaveLocation, error) {
@@ -727,7 +839,7 @@ func (s *sqliteStore) upsertSectionByName(ctx context.Context, section string, r
 
 func (s *sqliteStore) listAllPCGWMetadata(ctx context.Context) ([]types.PCGWMetadata, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT page_id, full_wikitext_zstd, content_hash, section_hashes, uncompressed_size, last_fetched_at
+		SELECT page_id, full_wikitext_zstd, COALESCE(content_hash, ''), COALESCE(section_hashes, ''), uncompressed_size, last_fetched_at
 		FROM pcgw_metadata`)
 	if err != nil {
 		return nil, err

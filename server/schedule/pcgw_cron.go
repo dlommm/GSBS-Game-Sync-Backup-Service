@@ -59,7 +59,7 @@ func (p *PCGWCron) View(ctx context.Context) CronView {
 	}
 	bundleExpr, bundleDisabled := p.resolveBundleCron(settings)
 	view.BundleExpr = bundleExpr
-	if !bundleDisabled && bundleExpr != "" && syncSource == store.PCGWSyncSourceGitHub {
+	if !bundleDisabled && bundleExpr != "" && syncSource == store.PCGWSyncSourceS3 {
 		if sched, err := cron.ParseStandard(bundleExpr); err == nil {
 			view.BundleNext = sched.Next(time.Now())
 		}
@@ -90,7 +90,7 @@ func (p *PCGWCron) Reschedule(ctx context.Context) error {
 		p.fullEntryID = 0
 	}
 
-	if syncSource == store.PCGWSyncSourceGitHub {
+	if syncSource == store.PCGWSyncSourceS3 {
 		bundleExpr, bundleDisabled := p.resolveBundleCron(settings)
 		if bundleDisabled {
 			logx.Logger().Info().Str("component", "cron").Msg("cron: PCGW bundle fetch disabled")
@@ -110,7 +110,7 @@ func (p *PCGWCron) Reschedule(ctx context.Context) error {
 	} else {
 		expr, disabled, source, _ := p.resolveAPISync(ctx, settings)
 		if disabled {
-			logx.Logger().Info().Str("component", "cron").Msg("cron: PCGW sync disabled")
+			logx.Logger().Info().Str("component", "cron").Msg("cron: PCGW sync disabled (manual mode)")
 		} else {
 			id, err := p.cron.AddFunc(expr, func() {
 				if _, err := p.runner.RunPCGWSync(context.Background()); err != nil {

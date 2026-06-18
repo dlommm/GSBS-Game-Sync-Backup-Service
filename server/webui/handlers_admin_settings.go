@@ -1,6 +1,7 @@
 package webui
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -24,7 +25,6 @@ type adminSettingsData struct {
 	PCGWSyncSource             string
 	PCGWBundleCron             string
 	PCGWBundleURL              string
-	PCGWBundleDeltaURL         string
 	PCGWBundleIncrementalFB    bool
 	PCGWSyncSourceEnvOverride  bool
 	PCGWBundleCronEnvOverride  bool
@@ -46,7 +46,6 @@ func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) 
 		PCGWSyncSource:        store.PCGWSyncSourceFromSettings(settings),
 		PCGWBundleCron:        store.PCGWBundleCronFromSettings(settings),
 		PCGWBundleURL:         store.PCGWBundleURLFromSettings(settings),
-		PCGWBundleDeltaURL:    store.PCGWBundleDeltaURLFromSettings(settings),
 		PCGWBundleIncrementalFB: store.PCGWBundleIncrementalFallbackFromSettings(settings),
 	}
 	if data.PCGWPathExcludesJSON == "" {
@@ -90,6 +89,52 @@ func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) 
 	h.render(w, "admin_settings.html", data)
 }
 
+// handleAdminChooseSource records the first-run choice of save-location source
+// (prebuilt bundle vs live PCGW API) from the admin onboarding card and kicks
+// off the matching initial sync. The card disappears once a source is set.
+func (h *WebHandler) handleAdminChooseSource(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	if _, _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	if _, pinned := os.LookupEnv(store.EnvPCGWSyncSource); pinned {
+		Redirect(w, r, "/admin")
+		return
+	}
+	source := normalizeSyncSourceForm(r.FormValue("source"))
+	if err := h.store.SetAdminSetting(r.Context(), store.AdminSettingPCGWSyncSource, source); err != nil {
+		logx.Logger().Error().Err(err).Msg("admin choose-source save")
+		Redirect(w, r, "/admin?error=save_failed")
+		return
+	}
+	// Manual mode is manual-only by default: disable the scheduled PCGW crawl so
+	// the operator triggers syncs on demand (unless pinned by env). The admin can
+	// re-enable a schedule from Settings afterward.
+	if source == store.PCGWSyncSourceAPI {
+		if _, pinned := os.LookupEnv("GSBS_PCGW_CRON"); !pinned {
+			_ = h.store.SetAdminSetting(r.Context(), store.AdminSettingPCGWCron, "")
+		}
+	}
+	// Apply the new source to the cron schedule (bundle fetch vs. none).
+	if h.pcgwCron != nil {
+		if err := h.pcgwCron.Reschedule(r.Context()); err != nil {
+			logx.Logger().Error().Err(err).Msg("admin choose-source reschedule")
+		}
+	}
+	// Seed the local mirror from the prebuilt S3 bundle for BOTH modes — this
+	// avoids an initial multi-day PCGW crawl and keeps API load off PCGW. In S3
+	// mode the bundle is then refreshed on the bundle cron; in manual mode the
+	// admin triggers any further API syncs by hand. A best-effort fetch that fails
+	// (unpublished/unreachable bundle) falls back to an API sync automatically.
+	if h.jobRunner != nil {
+		_, _ = h.jobRunner.TryRunPCGWBundleFetch(context.Background(), true)
+	}
+	Redirect(w, r, "/admin?source_set=1")
+}
+
 func (h *WebHandler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Request) {
 	if !ValidateCSRF(r, h.secret) {
 		http.Error(w, "Invalid security token.", http.StatusBadRequest)
@@ -120,14 +165,24 @@ func (h *WebHandler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Requ
 	}
 	_ = envCronOverride
 
+	seedFromBundle := false
 	if _, ok := os.LookupEnv(store.EnvPCGWSyncSource); !ok {
-		syncSource := strings.TrimSpace(strings.ToLower(r.FormValue("pcgw_sync_source")))
-		if syncSource != store.PCGWSyncSourceGitHub && syncSource != store.PCGWSyncSourceAPI {
-			syncSource = store.PCGWSyncSourceGitHub
-		}
+		prevSettings, _ := h.store.ListAdminSettings(ctx)
+		prevSource := store.PCGWSyncSourceFromSettings(prevSettings)
+		syncSource := normalizeSyncSourceForm(r.FormValue("pcgw_sync_source"))
 		if err := h.store.SetAdminSetting(ctx, store.AdminSettingPCGWSyncSource, syncSource); err != nil {
 			Redirect(w, r, "/admin/settings?error=save_failed")
 			return
+		}
+		// Switching INTO manual mode seeds the mirror once from the S3 bundle so
+		// the operator doesn't trigger a full PCGW crawl just to get current data,
+		// and disables the scheduled crawl (manual-only by default; the cron field
+		// above is honored on subsequent saves if the admin re-enables it).
+		if syncSource == store.PCGWSyncSourceAPI && prevSource != store.PCGWSyncSourceAPI {
+			seedFromBundle = true
+			if _, pinned := os.LookupEnv("GSBS_PCGW_CRON"); !pinned {
+				_ = h.store.SetAdminSetting(ctx, store.AdminSettingPCGWCron, "")
+			}
 		}
 	}
 
@@ -152,14 +207,6 @@ func (h *WebHandler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
-	bundleDeltaURL := strings.TrimSpace(r.FormValue("pcgw_bundle_delta_url"))
-	if bundleDeltaURL != "" {
-		if err := h.store.SetAdminSetting(ctx, store.AdminSettingPCGWBundleDeltaURL, bundleDeltaURL); err != nil {
-			Redirect(w, r, "/admin/settings?error=save_failed")
-			return
-		}
-	}
-
 	incFB := "false"
 	if r.FormValue("pcgw_bundle_incremental_fallback") == "1" {
 		incFB = "true"
@@ -213,6 +260,22 @@ func (h *WebHandler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
+	// Seed once from the S3 bundle when the operator just switched into manual
+	// mode (best-effort, background). See handleAdminChooseSource for rationale.
+	if seedFromBundle && h.jobRunner != nil {
+		_, _ = h.jobRunner.TryRunPCGWBundleFetch(context.Background(), true)
+	}
+
 	h.appendAuditBroadcast(ctx, userID, username, "admin_settings_save", "", "")
 	Redirect(w, r, "/admin/settings?saved=1")
+}
+
+// normalizeSyncSourceForm maps a sync-source form value to its canonical stored
+// form. Anything that isn't explicitly "api" (manual) — including "s3", the
+// legacy "github", or an empty/unknown value — resolves to the S3 bundle source.
+func normalizeSyncSourceForm(v string) string {
+	if strings.TrimSpace(strings.ToLower(v)) == store.PCGWSyncSourceAPI {
+		return store.PCGWSyncSourceAPI
+	}
+	return store.PCGWSyncSourceS3
 }

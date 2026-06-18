@@ -815,6 +815,31 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			})
 			return
 		}
+	} else if r.Header.Get("X-GSBS-If-Absent") == "1" {
+		// Expect-new precondition: the client has no last-pushed hash for this
+		// slot, so it believes the save is new. Reject if a *different* save
+		// already exists — this stops a fresh client (or one whose push-hash
+		// cache was cleared) from silently clobbering another machine's save.
+		// Identical content is allowed: it falls through to the unchanged
+		// short-circuit in UpsertSaveWithMeta. Unknown to old servers (which
+		// ignore the header and upsert), so it is fully backward compatible.
+		incoming := strings.TrimSpace(r.Header.Get("X-Content-Hash"))
+		serverHash, serverVer, err := h.store.GetSaveHashAndVersion(r.Context(), userID, gameID, pathKey)
+		if err != nil {
+			logx.Logger().Error().
+				Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).
+				Err(err).Msg("api push expect-absent check failed")
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "hash check failed"})
+			return
+		}
+		if serverHash != "" && serverHash != incoming {
+			writeJSON(w, http.StatusConflict, map[string]interface{}{
+				"error":           "conflict",
+				"current_hash":    serverHash,
+				"current_version": serverVer,
+			})
+			return
+		}
 	}
 	logx.Logger().Debug().
 		Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).

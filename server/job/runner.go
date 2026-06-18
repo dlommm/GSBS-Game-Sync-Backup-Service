@@ -578,6 +578,21 @@ func (r *Runner) runPCGWBundleFetch(parentCtx context.Context, jobName string, o
 		}
 	}
 
+	// Failure fallback: when the bundle is unreachable or not published yet (and
+	// we're in S3 bundle mode), run an API sync so the server still gets fresh
+	// save-location data. The bundle's merged version is left untouched — it is
+	// only advanced after a successful import — so once the bundle becomes
+	// reachable again the next run resumes catch-up from where it left off.
+	if status == JobFailed {
+		settings, _ := r.store.ListAdminSettings(jobCtx)
+		if store.PCGWSyncSourceFromSettings(settings) == store.PCGWSyncSourceS3 {
+			logx.Logger().Warn().Err(fetchErr).Msg("bundle fetch failed; falling back to API sync to keep data fresh")
+			if _, err := r.TryRunPCGWSync(jobCtx); err != nil && !errors.Is(err, ErrJobAlreadyRunning) {
+				logx.Logger().Warn().Err(err).Msg("bundle fetch: API fallback failed to start")
+			}
+		}
+	}
+
 	if runID != "" {
 		if err := r.store.LogJobFinish(jobCtx, runID, status, errMsg, entries); err != nil {
 			logx.Logger().Error().Str("component", "job").Str("job", jobName).Err(err).Msg("job runner: log finish")

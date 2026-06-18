@@ -176,6 +176,10 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		log.Printf("account settings: %v (encryption disabled)", err)
 		client.SetEncryption(false, cfg.EncryptionPassphrase)
 	}
+	// Guard the first push of a slot against silently overwriting another
+	// machine's save — but only for conflict-aware policies. Under
+	// last_write_wins the user has opted into blind overwrite.
+	client.SetConflictGuard(cfg.effectiveConflictPolicy() != "last_write_wins")
 	SetSyncClient(client)
 	setupTrayCallbacks()
 	wireSyncTrayHooks()

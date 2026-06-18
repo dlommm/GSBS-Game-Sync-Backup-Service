@@ -69,6 +69,40 @@ func TestSQLite_FilesystemSave(t *testing.T) {
 	}
 }
 
+func TestAtomicWriteFileSync(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "slot.dat")
+
+	// Fresh write.
+	if err := atomicWriteFileSync(path, []byte("v1"), 0o640); err != nil {
+		t.Fatalf("write v1: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != "v1" {
+		t.Fatalf("read v1 = %q err=%v", got, err)
+	}
+	if fi, _ := os.Stat(path); fi != nil && fi.Mode().Perm() != 0o640 {
+		t.Errorf("perm = %v, want 0640", fi.Mode().Perm())
+	}
+
+	// Overwrite is atomic: the destination ends up as the complete new bytes.
+	if err := atomicWriteFileSync(path, []byte("version-two-longer"), 0o640); err != nil {
+		t.Fatalf("write v2: %v", err)
+	}
+	got, _ = os.ReadFile(path)
+	if string(got) != "version-two-longer" {
+		t.Fatalf("read v2 = %q", got)
+	}
+
+	// No temp files are left behind in the directory after success.
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".tmp" {
+			t.Errorf("leftover temp file: %s", e.Name())
+		}
+	}
+}
+
 func TestSQLite_MultiUserIsolation(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("GSBS_SAVE_ROOT", root)

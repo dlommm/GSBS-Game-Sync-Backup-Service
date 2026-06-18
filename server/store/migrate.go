@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 19
+const schemaVersion = 20
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -119,6 +119,7 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{17, s.stepPCGWCatalog},
 		{18, s.stepPCGWIncrementalSpeed},
 		{19, s.stepPCGWBundleSettings},
+		{20, s.stepPCGWSyncSourceS3},
 	}
 }
 
@@ -1136,18 +1137,19 @@ func (s *sqliteStore) stepPCGWCatalog(tx *sql.Tx) error {
 	return nil
 }
 
-// stepPCGWBundleSettings seeds admin settings for GitHub manifest bundle sync.
+// stepPCGWBundleSettings seeds admin settings for the prebuilt manifest bundle
+// (S3) sync. Fresh installs default to S3; an install that already has crawled
+// PCGW data defaults to manual API so it does not get overwritten by a bundle.
 func (s *sqliteStore) stepPCGWBundleSettings(tx *sql.Tx) error {
 	var gameCount int
 	_ = tx.QueryRow(`SELECT COUNT(*) FROM pcgw_games`).Scan(&gameCount)
-	syncSource := PCGWSyncSourceGitHub
+	syncSource := PCGWSyncSourceS3
 	if gameCount > 0 {
 		syncSource = PCGWSyncSourceAPI
 	}
 	defaults := map[string]string{
 		AdminSettingPCGWSyncSource:          syncSource,
 		AdminSettingPCGWBundleURL:           DefaultPCGWBundleURL,
-		AdminSettingPCGWBundleDeltaURL:      DefaultPCGWBundleDeltaURL,
 		AdminSettingPCGWBundleCron:          DefaultPCGWBundleCron,
 		AdminSettingPCGWBundleIncrementalFB: "false",
 	}
@@ -1157,4 +1159,15 @@ func (s *sqliteStore) stepPCGWBundleSettings(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+// stepPCGWSyncSourceS3 migrates existing installs from the legacy "github"
+// bundle-source value to the canonical "s3". The "api" (manual) value and any
+// stale delta-URL setting are left untouched (the latter is simply ignored now).
+func (s *sqliteStore) stepPCGWSyncSourceS3(tx *sql.Tx) error {
+	_, err := tx.Exec(
+		`UPDATE admin_settings SET value = ? WHERE key = ? AND value = ?`,
+		PCGWSyncSourceS3, AdminSettingPCGWSyncSource, PCGWSyncSourceGitHub,
+	)
+	return err
 }
