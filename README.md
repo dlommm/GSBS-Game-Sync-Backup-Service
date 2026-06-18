@@ -8,6 +8,15 @@
 
 ![GSBS logo](docs/images/gsbs-logo-sm.png)
 
+<table align="center">
+  <tr>
+    <td align="center" bgcolor="#4338ca">
+      <strong>🚀 GSBS v3 — Major release</strong><br>
+      S3 manifest bundle sync · full PCGW catalog in minutes, not days · far fewer API calls · sync reliability improvements
+    </td>
+  </tr>
+</table>
+
 **Sync game saves across Windows and Linux.** Run a central server, install clients on each PC, and GSBS keeps saves in sync — only writing pulled files where the game is actually installed.
 
 | Dashboard | System tray |
@@ -27,6 +36,8 @@ docker compose up -d
 ```
 
 Open `https://your-domain` (via Caddy) or use [docker-compose.dev.yml](docker-compose.dev.yml) for local HTTP on port 8080. See [docs/COMPOSE.md](docs/COMPOSE.md) and [docs/INSTALL.md](docs/INSTALL.md).
+
+On first boot, fresh installs fetch the **S3 manifest bundle** automatically — the full PCGW catalog is ready in minutes, not days.
 
 Windows hosts can also use `gsbs-server-setup-X.Y.Z-windows-amd64.exe` from Releases. The wizard writes `C:\ProgramData\GSBS\server.env`, installs/runs a Windows Service by default, and keeps ProgramData data on uninstall by default.
 
@@ -57,14 +68,20 @@ Register on the server WebUI, create an API token, and log in from the client. G
 - **WebUI + admin** — dashboard, save versions, activity, admin overview.
 - **Client auto-update** — checks GitHub Releases; install from the tray menu.
 
-### What's new in 2.0
+### What's new in v3
 
-- **Stability hardening**: panic recovery middleware, security headers (CSP, HSTS, X-Frame-Options), disabled-user session cutoff, and fail-closed quota enforcement on the server.
-- **Token revocation on credential change**: password change and 2FA disable now revoke all active client tokens.
-- **Updater fix**: missing JSON tag that silently broke the updater in production is fixed; manual update checks now show explicit status (available, up-to-date, network error, metered skip, etc.).
-- **Windows sync reliability**: fsnotify overflow now triggers a directory rescan; locked files are enqueued to the persistent outbox instead of silently dropped.
-- **Auth-failure containment**: `ErrUnauthorized` sentinel stops the outbox from hammering a 401; re-login prompt surfaced in local dashboard and tray tooltip.
-- **CI**: Windows test job, `govulncheck`, and release-assets completeness guard added.
+**Manifest ready in minutes, not days.** Fresh installs default to **S3 manifest bundle sync** — a pre-built PCGamingWiki snapshot on public object storage (Cloudflare R2, S3-compatible). The server downloads the full catalog (~40k+ games) in one fetch instead of crawling the PCGW API page-by-page, which previously took **days** on a new server.
+
+**Far fewer PCGW API calls.** Routine updates fetch a small `index.json` version pointer first. When nothing changed, ETag/`304 Not Modified` exits in seconds with **zero** bundle download and **no** PCGW traffic. When a new version is published, the server applies only what changed via smart merge.
+
+**Other v3 highlights:**
+
+- **Encrypted save dedup** — unchanged encrypted saves no longer re-upload every sync cycle
+- **First-push overwrite guard** — prevents a fresh client from silently clobbering another machine's save
+- **Crash-safe canonical saves** — atomic disk writes when using `GSBS_SAVE_ROOT`
+- **Client manifest pagination (3.0.1)** — full catalog download for large game libraries
+
+Switch sync mode anytime in **Admin → Settings** (`s3` bundle vs direct PCGW API). See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Documentation
 
@@ -120,7 +137,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for lint, coverage, and conventions.
 ```
                     ┌─────────────────────────────────────────┐
                     │              GSBS Server                 │
-                    │  Auth · WebUI · Save storage · PCGW job │
+                    │  Auth · WebUI · Save storage · PCGW job  │
+                    │         ← S3 manifest bundle             │
                     └─────────────────────────────────────────┘
                                       ▲
               ┌───────────────────────┼───────────────────────┐
@@ -142,9 +160,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for lint, coverage, and conventions.
 
 ## Server configuration
 
-PCGW data: fresh installs default to **GitHub manifest bundle** sync (`pcgw_sync_source=github`) — the server fetches a pre-built bundle from [gsbs-manifest](https://github.com/dlommm/gsbs-manifest) on a schedule (ETag-aware). Existing installs with PCGW data stay on **API sync** until changed in **Admin → Settings**. See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
+PCGW data: fresh installs default to **S3 manifest bundle** sync (`pcgw_sync_source=s3`) — the server fetches a pre-built bundle from public object storage (Cloudflare R2) on a schedule (ETag-aware, versioned `index.json`). Existing installs with PCGW data stay on **API sync** until changed in **Admin → Settings**. See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
 
-API sync schedule: set `GSBS_PCGW_CRON` in Docker/compose (default `0 3 * * 0`, weekly Sunday 03:00; use `""` to disable). Bundle fetch cron defaults to daily 04:00 (`GSBS_PCGW_BUNDLE_CRON`). When env vars are **not** set, admins configure schedules in the WebUI under **Admin → Settings**.
+Bundle fetch cron defaults to daily 04:00 (`GSBS_PCGW_BUNDLE_CRON`). API sync schedule: set `GSBS_PCGW_CRON` in Docker/compose (default `0 3 * * 0`, weekly Sunday 03:00; use `""` to disable). When env vars are **not** set, admins configure schedules in the WebUI under **Admin → Settings**.
 
 Two-phase PCGW API sync: Phase 1 enumerates all PCGW game IDs into `pcgw_catalog`; Phase 2 fetches only missing, failed/partial, and changed pages. Set `GSBS_PCGW_MAX_PAGES_PER_RUN` to cap the Phase 2 ingest budget per run (default 5000). Interrupted runs save a checkpoint and resume automatically on the next sync.
 
