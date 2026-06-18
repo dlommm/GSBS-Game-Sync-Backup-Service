@@ -4,6 +4,12 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-06-18
+
+### Fixed
+
+- **Client manifest v2 pagination (critical)**: clients previously downloaded only the first page of `GET /api/manifest/v2` (server default 10,000 games), so titles late in the alphabet — e.g. *The Witcher 3* — were missing from search, discovery, and the on-disk cache. Clients now fetch the catalog in 5,000-game chunks until complete, auto-detect and re-download truncated caches from older clients, and store `games_total` locally. Server v2 responses now include `games_total` for reliable pagination.
+
 ## [3.0.0] - 2026-06-18
 
 ### Added

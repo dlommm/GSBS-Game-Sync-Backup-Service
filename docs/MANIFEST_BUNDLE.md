@@ -77,7 +77,7 @@ See [gsbs-manifest/bundle/README.md](https://github.com/dlommm/gsbs-manifest/blo
 ### CLI export (optional)
 
 ```bash
-go run ./cmd/pcgw-bundle-export -db gsbs.db -out . -full -lite -version 3.0.0
+go run ./cmd/pcgw-bundle-export -db gsbs.db -out . -full -lite -version 3.0.1
 
 # Cumulative delta (since last full — reads full_exported_at from manifest.meta.json)
 go run ./cmd/pcgw-bundle-export -db gsbs.db -out . -delta -lite

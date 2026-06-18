@@ -31,10 +31,15 @@ type manifestResponse struct {
 
 const manifestFetchTimeout = 60 * time.Second
 
+// manifestV2PageSize bounds each GET /api/manifest/v2 request so neither side
+// holds the entire catalog in one response.
+const manifestV2PageSize = 5000
+
 // manifestFetchResult holds the outcome of a manifest download (v2 or v1).
 type manifestFetchResult struct {
 	Entries     []types.GameSaveLocation
 	Games       []types.ManifestV2Game
+	GamesTotal  int
 	DeletedIDs  []string
 	ETag        string
 	Source      string // "v2" or "v1"
@@ -71,10 +76,11 @@ func FetchManifestFull(ctx context.Context, baseURL, token, since, include strin
 			log.Println("save manifest cache:", err)
 		}
 		clientlogx.Event("manifest_v2_fetched", "entries", len(merged.Entries), "games", len(merged.Games),
-			"deleted", len(res.DeletedIDs), "etag", merged.ETag)
+			"games_total", merged.GamesTotal, "deleted", len(res.DeletedIDs), "etag", merged.ETag)
 		return manifestFetchResult{
 			Entries:     merged.Entries,
 			Games:       merged.Games,
+			GamesTotal:  merged.GamesTotal,
 			DeletedIDs:  res.DeletedIDs,
 			ETag:        merged.ETag,
 			Source:      "v2",
@@ -145,57 +151,121 @@ func fetchManifestV1(ctx context.Context, baseURL, token, since, include string)
 }
 
 func fetchManifestV2(ctx context.Context, baseURL, token, since, include string, cached manifestFile) (manifestFetchResult, error) {
-	url := baseURL + "/api/manifest/v2"
-	params := []string{"platform=" + manifestPlatformParam()}
+	// Recover from a truncated on-disk cache (pre-pagination clients or interrupted fetch).
+	if cached.GamesTotal > 0 && len(cached.Games) > 0 && len(cached.Games) < cached.GamesTotal {
+		log.Printf("manifest: cached games %d/%d — forcing full re-download", len(cached.Games), cached.GamesTotal)
+		since = ""
+		cached.ETag = ""
+	} else if cached.Source == "v2" && cached.GamesTotal == 0 && len(cached.Games) >= 10000 {
+		log.Printf("manifest: cache may be truncated (%d games, no total) — forcing full re-download", len(cached.Games))
+		since = ""
+		cached.ETag = ""
+	}
+
+	var allGames []types.ManifestV2Game
+	var deletedIDs []string
+	var etag string
+	var gamesTotal int
+	offset := 0
+	page := 0
+
+	for {
+		page++
+		out, notModified, err := fetchManifestV2Page(ctx, baseURL, token, since, offset, page == 1, cached.ETag)
+		if err != nil {
+			return manifestFetchResult{}, err
+		}
+		if notModified {
+			return manifestFetchResult{NotModified: true}, nil
+		}
+		if page == 1 {
+			etag = out.ETag
+			deletedIDs = out.DeletedGameIDs
+			gamesTotal = out.GamesTotal
+		}
+		allGames = append(allGames, out.Games...)
+		got := len(allGames)
+		if gamesTotal > 0 && got >= gamesTotal {
+			break
+		}
+		if len(out.Games) < manifestV2PageSize {
+			break
+		}
+		offset += len(out.Games)
+		log.Printf("manifest v2: page %d fetched %d games (%d so far)", page, len(out.Games), got)
+	}
+
+	if gamesTotal > 0 && len(allGames) < gamesTotal {
+		return manifestFetchResult{}, fmt.Errorf("manifest v2: incomplete download (%d/%d games)", len(allGames), gamesTotal)
+	}
+	if page > 1 {
+		log.Printf("manifest v2: downloaded %d games in %d pages", len(allGames), page)
+	}
+
+	v2 := types.ManifestV2Response{
+		Games:          allGames,
+		DeletedGameIDs: deletedIDs,
+		ETag:           etag,
+		GamesTotal:     gamesTotal,
+	}
+	entries := manifestV2ToEntries(v2, include)
+	return manifestFetchResult{
+		Entries:    entries,
+		Games:      allGames,
+		GamesTotal: gamesTotal,
+		DeletedIDs: deletedIDs,
+		ETag:       etag,
+		DeltaOnly:  since != "",
+	}, nil
+}
+
+func fetchManifestV2Page(ctx context.Context, baseURL, token, since string, offset int, sendETag bool, etag string) (types.ManifestV2Response, bool, error) {
+	params := []string{
+		"platform=" + manifestPlatformParam(),
+		fmt.Sprintf("limit=%d", manifestV2PageSize),
+		fmt.Sprintf("offset=%d", offset),
+	}
 	if since != "" {
 		params = append(params, "since="+since)
 	}
-	url += "?" + strings.Join(params, "&")
+	url := baseURL + "/api/manifest/v2?" + strings.Join(params, "&")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return manifestFetchResult{}, err
+		return types.ManifestV2Response{}, false, err
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	if cached.ETag != "" {
-		req.Header.Set("If-None-Match", cached.ETag)
+	if sendETag && etag != "" {
+		req.Header.Set("If-None-Match", etag)
 	}
 
 	client := &http.Client{Timeout: manifestFetchTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return manifestFetchResult{}, err
+		return types.ManifestV2Response{}, false, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotModified {
-		return manifestFetchResult{NotModified: true}, nil
+		return types.ManifestV2Response{}, true, nil
 	}
 	if resp.StatusCode == http.StatusNotFound {
-		return manifestFetchResult{}, fmt.Errorf("manifest v2: not found")
+		return types.ManifestV2Response{}, false, fmt.Errorf("manifest v2: not found")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return manifestFetchResult{}, fmt.Errorf("manifest v2: %s", resp.Status)
+		return types.ManifestV2Response{}, false, fmt.Errorf("manifest v2: %s", resp.Status)
 	}
 
 	var out types.ManifestV2Response
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return manifestFetchResult{}, err
+		return types.ManifestV2Response{}, false, err
 	}
-	etag := out.ETag
-	if etag == "" {
-		etag = resp.Header.Get("ETag")
+	if out.ETag == "" {
+		out.ETag = resp.Header.Get("ETag")
 	}
-	entries := manifestV2ToEntries(out, include)
-	return manifestFetchResult{
-		Entries:    entries,
-		Games:      out.Games,
-		DeletedIDs: out.DeletedGameIDs,
-		ETag:       etag,
-		DeltaOnly:  since != "",
-	}, nil
+	return out, false, nil
 }
 
 func manifestV2ToEntries(v2 types.ManifestV2Response, include string) []types.GameSaveLocation {
@@ -262,6 +332,7 @@ func SetManifestPathForTest(path string) {
 type manifestFile struct {
 	Entries       []types.GameSaveLocation `json:"entries"`
 	Games         []types.ManifestV2Game   `json:"games,omitempty"`
+	GamesTotal    int                      `json:"games_total,omitempty"`
 	ETag          string                   `json:"etag,omitempty"`
 	Source        string                   `json:"source,omitempty"` // "v2" or "v1"
 	LastFetchedAt string                   `json:"last_fetched_at,omitempty"`
@@ -296,32 +367,35 @@ func LoadManifestFile() manifestFile {
 	return f
 }
 
-// mergeManifestFetch merges a v2 fetch delta into the cached manifest file.
+// mergeManifestFetch merges a v2 fetch into the cached manifest file.
 func mergeManifestFetch(cached manifestFile, res manifestFetchResult) manifestFile {
 	out := cached
 	out.ETag = res.ETag
 	out.Source = "v2"
 	out.LastFetchedAt = time.Now().UTC().Format(time.RFC3339)
+	if res.GamesTotal > 0 {
+		out.GamesTotal = res.GamesTotal
+	}
+
+	if !res.DeltaOnly {
+		out.Entries = res.Entries
+		out.Games = res.Games
+		return out
+	}
 
 	if len(res.DeletedIDs) > 0 {
 		out.Entries = ApplyManifestDeletions(out.Entries, res.DeletedIDs)
 		out.Games = applyGameDeletions(out.Games, res.DeletedIDs)
 	}
-
 	if len(res.Entries) > 0 {
 		if len(cached.Entries) > 0 {
 			out.Entries = MergeManifestDelta(cached.Entries, res.Entries)
 		} else {
 			out.Entries = res.Entries
 		}
-	} else if !res.DeltaOnly && len(res.Games) == 0 && len(res.DeletedIDs) == 0 {
-		// Full v2 fetch with no games: authoritative empty manifest.
-		out.Entries = nil
 	}
 	if len(res.Games) > 0 {
 		out.Games = mergeV2Games(cached.Games, res.Games, res.DeletedIDs)
-	} else if len(cached.Games) == 0 && len(res.Entries) > 0 {
-		out.Games = nil
 	}
 	return out
 }

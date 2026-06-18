@@ -45,7 +45,7 @@ Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints exce
   - Pagination: `?limit=N&offset=M` (max limit 500). When paginating, response includes `"total":<int>` (total entries before pagination).
   - Filtering: `?include=saves` (save locations only) or `?include=config` (config locations only). Default returns all.
   - Delta: `?since=<RFC3339>` — returns only entries updated after the given time.
-- **Manifest v2 (rich)**: `GET /api/manifest/v2` — returns grouped per-game JSON (`games[]` with taxonomy, engines, `save_locations` / `config_locations` each with `path_templates` and `save_rules`, `has_save_data`, `proton_support_level`, etc.). Query: `?since=<RFC3339>`, `?platform=windows|linux|macos`. Supports `If-None-Match` → 304. Clients should prefer v2 when available.
+- **Manifest v2 (rich)**: `GET /api/manifest/v2` — returns grouped per-game JSON (`games[]` with taxonomy, engines, `save_locations` / `config_locations` each with `path_templates` and `save_rules`, `has_save_data`, `proton_support_level`, etc.). Query: `?since=<RFC3339>`, `?platform=windows|linux|macos`, `?limit=<n>`, `?offset=<n>`. Response includes `games_total` (count before pagination). Default `limit` is 10000 when omitted. Clients paginate until all games are fetched. Supports `If-None-Match` → 304 (first page only). Clients should prefer v2 when available.
 
 ## Server-Sent Events (authenticated)
 

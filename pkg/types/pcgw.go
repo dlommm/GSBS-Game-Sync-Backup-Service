@@ -235,4 +235,7 @@ type ManifestV2Response struct {
 	ETag           string           `json:"etag"`
 	Games          []ManifestV2Game `json:"games"`
 	DeletedGameIDs []string         `json:"deleted_game_ids,omitempty"`
+	// GamesTotal is the number of games matching the query (before limit/offset).
+	// Clients use it to paginate until all pages are fetched.
+	GamesTotal int `json:"games_total,omitempty"`
 }

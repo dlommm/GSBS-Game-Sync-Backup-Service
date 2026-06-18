@@ -906,6 +906,11 @@ func (s *sqliteStore) BuildManifestV2(ctx context.Context, since, platform strin
 		where += " AND platforms_present LIKE ?"
 		args = append(args, "%"+platform+"%")
 	}
+	var gamesTotal int
+	countArgs := append([]interface{}(nil), args...)
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pcgw_games WHERE `+where, countArgs...).Scan(&gamesTotal); err != nil {
+		return nil, err
+	}
 	args = append(args, limit, offset)
 	rows, err := s.db.QueryContext(ctx, pcgwGameSelect+` WHERE `+where+` ORDER BY title LIMIT ? OFFSET ?`, args...)
 	if err != nil {
@@ -1046,6 +1051,7 @@ func (s *sqliteStore) BuildManifestV2(ctx context.Context, since, platform strin
 		ETag:           meta.ManifestETag,
 		Games:          games,
 		DeletedGameIDs: deletedIDs,
+		GamesTotal:     gamesTotal,
 	}, nil
 }
 
