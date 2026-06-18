@@ -1,9 +1,0 @@
----
-description: Editing release script or version — delegate to gsbs-release subagent to keep context low
-globs: "script/**"
-alwaysApply: false
----
-
-# Release path — use gsbs-release
-
-You are in **script/** (release, build, version) or editing release-related files. For changes to the release script, Dockerfile, `server/version.go`, `client/version.go`, or `docs/DOCKER.md`, **invoke the gsbs-release subagent** at the start of the task (`.cursor/agents/gsbs-release.md` or `/gsbs-release`) instead of doing the work in the main chat. This keeps context focused and usage low.

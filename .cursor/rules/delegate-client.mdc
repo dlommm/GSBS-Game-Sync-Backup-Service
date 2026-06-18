@@ -1,9 +1,0 @@
----
-description: Editing client code — delegate implementation to gsbs-client subagent to keep context low
-globs: "client/**"
-alwaysApply: false
----
-
-# Client path — use gsbs-client
-
-You are in **client/** (sync, config, watcher, manifest, tray, list). For implementation or multi-file changes here, **invoke the gsbs-client subagent** at the start of the task (`.cursor/agents/gsbs-client.md` or `/gsbs-client`) instead of doing the work in the main chat. This keeps context focused and usage low.

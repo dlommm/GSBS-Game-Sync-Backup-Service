@@ -1,9 +1,0 @@
----
-description: Editing Dockerfile — delegate to gsbs-release for Docker/build changes
-globs: "Dockerfile"
-alwaysApply: false
----
-
-# Dockerfile — use gsbs-release
-
-You are editing the **Dockerfile**. For Docker or build changes, **invoke the gsbs-release subagent** (`.cursor/agents/gsbs-release.md` or `/gsbs-release`) at the start of the task. This keeps context focused and usage low.
