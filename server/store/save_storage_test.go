@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -81,8 +82,10 @@ func TestAtomicWriteFileSync(t *testing.T) {
 	if err != nil || string(got) != "v1" {
 		t.Fatalf("read v1 = %q err=%v", got, err)
 	}
-	if fi, _ := os.Stat(path); fi != nil && fi.Mode().Perm() != 0o640 {
-		t.Errorf("perm = %v, want 0640", fi.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if fi, _ := os.Stat(path); fi != nil && fi.Mode().Perm() != 0o640 {
+			t.Errorf("perm = %v, want 0640", fi.Mode().Perm())
+		}
 	}
 
 	// Overwrite is atomic: the destination ends up as the complete new bytes.
