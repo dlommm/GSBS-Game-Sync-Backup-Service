@@ -131,3 +131,37 @@ func TestPCGWBackfillFromManifest(t *testing.T) {
 		t.Fatalf("backfill: %+v", g)
 	}
 }
+
+func TestBuildManifestV2_UsesGameSaveLocationsNotPCGWGamesCount(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	// pcgw_games mirror alone would only expose this one title.
+	if err := st.UpsertPCGWGame(ctx, &types.PCGWGame{
+		PageID: 100, PageName: "Mirrored", Title: "Mirrored Game",
+		PlatformsPresent: []string{"windows"}, ParseStatus: "ok",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// game_save_locations holds the full manifest projection (bundle import path).
+	if err := st.UpsertGameSaveLocations(ctx, []types.GameSaveLocation{
+		{GameID: "100", GameTitle: "Mirrored Game", Platform: "windows", PathTemplate: "C:\\a", Source: "pcgw"},
+		{GameID: "200", GameTitle: "Bundle Only", Platform: "windows", PathTemplate: "C:\\b", Source: "pcgw"},
+		{GameID: "201", GameTitle: "Another Bundle", Platform: "windows", PathTemplate: "C:\\c", Source: "pcgw"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	v2, err := st.BuildManifestV2(ctx, "", "windows", 100, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v2.GamesTotal != 3 || len(v2.Games) != 3 {
+		t.Fatalf("games_total=%d len(games)=%d, want 3 (from game_save_locations)", v2.GamesTotal, len(v2.Games))
+	}
+}
