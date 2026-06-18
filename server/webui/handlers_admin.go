@@ -509,7 +509,7 @@ func (h *WebHandler) handleRevokeClient(w http.ResponseWriter, r *http.Request) 
 		Redirect(w, r, "/admin/users?error=missing_client")
 		return
 	}
-	if err := h.store.RegenerateClientToken(r.Context(), clientID); err != nil {
+	if err := h.store.RevokeClient(r.Context(), clientID); err != nil {
 		logx.Logger().Error().Str("client_id", clientID).Err(err).Msg("webui admin revoke failed")
 		Redirect(w, r, "/admin/users?error=revoke_failed")
 		return
