@@ -1,0 +1,75 @@
+# GSBS client — Flatpak manifest.
+# Build with: flatpak/build-flatpak.sh [VERSION]
+# The committed env values below are dev defaults; build-flatpak.sh injects the
+# real version/date/commit into a generated sibling manifest at release time.
+app-id: io.github.dlommm.GSBS
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.golang
+command: gsbs-client
+
+build-options:
+  append-path: /usr/lib/sdk/golang/bin
+  env:
+    GOFLAGS: -mod=vendor
+    GOTOOLCHAIN: local
+    GSBS_VERSION: 0.0.0-dev
+    GSBS_BUILD_DATE: ''
+    GSBS_COMMIT: ''
+
+finish-args:
+  # Network access to reach the GSBS server.
+  - --share=network
+  # Display + GPU (the tray runs under X11 or Wayland).
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  # Tray icon (StatusNotifier/AppIndicator) and desktop notifications.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=com.canonical.AppMenu.Registrar
+  # Autostart / run-in-background via the XDG portal.
+  - --talk-name=org.freedesktop.portal.Background
+  - --talk-name=org.freedesktop.portal.Flatpak
+  # OS keyring (Secret Service) for secure token storage.
+  - --talk-name=org.freedesktop.secrets
+  # Filesystem: home plus the sandboxed trees where launchers keep saves.
+  - --filesystem=home
+  - --filesystem=xdg-data/Steam:create
+  - --filesystem=~/.var/app/com.valvesoftware.Steam
+  - --filesystem=~/.var/app/com.heroicgameslauncher.hgl
+  - --filesystem=~/.var/app/net.lutris.Lutris
+  - --filesystem=~/.var/app/com.usebottles.bottles
+  # External / SD-card game libraries (e.g. Steam Deck microSD).
+  - --filesystem=/run/media
+
+modules:
+  - name: gsbs-client
+    buildsystem: simple
+    build-commands:
+      - |
+        go build -mod=vendor -trimpath -ldflags \
+          "-s -w -X main.Version=${GSBS_VERSION} -X main.BuildDate=${GSBS_BUILD_DATE} -X main.Commit=${GSBS_COMMIT}" \
+          -o gsbs-client ./client
+      - install -Dm755 gsbs-client /app/bin/gsbs-client
+      - install -Dm644 flatpak/io.github.dlommm.GSBS.desktop
+          /app/share/applications/io.github.dlommm.GSBS.desktop
+      - install -Dm644 flatpak/io.github.dlommm.GSBS.metainfo.xml
+          /app/share/metainfo/io.github.dlommm.GSBS.metainfo.xml
+      - |
+        for s in 16 32 48 64 128 256 512; do
+          install -Dm644 "flatpak/icons/${s}x${s}/io.github.dlommm.GSBS.png" \
+            "/app/share/icons/hicolor/${s}x${s}/apps/io.github.dlommm.GSBS.png"
+        done
+    sources:
+      - type: dir
+        path: ..
+        skip:
+          - .git
+          - .flatpak-builder
+          - flatpak/build-dir
+          - flatpak/repo
+          - dist
+          - node_modules

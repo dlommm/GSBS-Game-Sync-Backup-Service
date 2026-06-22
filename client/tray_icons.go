@@ -26,6 +26,9 @@ var (
 
 	iconRecoveringPNG []byte
 	iconRecoveringICO []byte
+
+	iconPausedPNG []byte
+	iconPausedICO []byte
 )
 
 // IconIdle returns platform-appropriate idle tray icon bytes (ICO on Windows, PNG elsewhere).
@@ -72,6 +75,21 @@ func IconRecovering() []byte {
 	return encodePNG(16, 0xff, 0xc1, 0x07)
 }
 
+// IconPaused returns platform-appropriate paused icon (muted grey GSBS logo).
+func IconPaused() []byte {
+	initIconVariants()
+	if runtime.GOOS == "windows" {
+		if len(iconPausedICO) > 0 {
+			return iconPausedICO
+		}
+		return ico.EncodeSolid(16, 0x9a, 0x9a, 0x9a)
+	}
+	if len(iconPausedPNG) > 0 {
+		return iconPausedPNG
+	}
+	return encodePNG(16, 0x9a, 0x9a, 0x9a)
+}
+
 // IconError returns platform-appropriate error icon (red).
 func IconError() []byte {
 	if runtime.GOOS == "windows" {
@@ -116,6 +134,7 @@ func initIconVariants() {
 	iconVariantsOnce.Do(func() {
 		iconSyncingPNG, iconSyncingICO = buildTintedVariants(0x2e, 0xc2, 0x7e)
 		iconRecoveringPNG, iconRecoveringICO = buildTintedVariants(0xff, 0xc1, 0x07)
+		iconPausedPNG, iconPausedICO = buildTintedVariants(0x9a, 0x9a, 0x9a)
 	})
 }
 

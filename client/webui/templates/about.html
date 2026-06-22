@@ -29,6 +29,18 @@
           <dt style="font-size:0.8125rem;color:var(--text-muted);">Runtime</dt>
           <dd style="margin-top:0.25rem;font-weight:600;font-size:0.9375rem;">{{if .GOOS}}{{.GOOS}}/{{.GOARCH}}{{else}}—{{end}}</dd>
         </div>
+        {{if .BuildDate}}
+        <div>
+          <dt style="font-size:0.8125rem;color:var(--text-muted);">Build date</dt>
+          <dd style="margin-top:0.25rem;font-weight:600;font-size:0.9375rem;">{{.BuildDate}}</dd>
+        </div>
+        {{end}}
+        {{if .Commit}}
+        <div>
+          <dt style="font-size:0.8125rem;color:var(--text-muted);">Commit</dt>
+          <dd style="margin-top:0.25rem;font-weight:600;font-size:0.9375rem;">{{.Commit}}</dd>
+        </div>
+        {{end}}
         <div style="grid-column:1/-1;">
           <dt style="font-size:0.8125rem;color:var(--text-muted);">What this client does</dt>
           <dd style="margin-top:0.25rem;color:var(--text-secondary);font-size:0.875rem;">
@@ -37,6 +49,17 @@
           </dd>
         </div>
       </dl>
+    </section>
+
+    <section class="panel" aria-labelledby="links-heading" style="margin-top:1.25rem;">
+      <div class="panel-header">
+        <h2 id="links-heading">Links</h2>
+      </div>
+      <ul style="list-style:none;margin:0;padding:0 1.25rem 1.25rem;display:flex;flex-direction:column;gap:0.5rem;font-size:0.9375rem;">
+        <li><a href="https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-" target="_blank" rel="noopener noreferrer">Project on GitHub →</a></li>
+        <li><a href="https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases" target="_blank" rel="noopener noreferrer">Releases &amp; changelog →</a></li>
+        <li><a href="https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/issues" target="_blank" rel="noopener noreferrer">Report an issue →</a></li>
+      </ul>
     </section>
   </main>
 

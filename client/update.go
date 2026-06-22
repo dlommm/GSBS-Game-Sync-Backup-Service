@@ -93,6 +93,15 @@ func CheckForUpdate(repo string, manual bool) UpdateCheckResult {
 		repo = defaultUpdateRepo
 	}
 
+	// In a Flatpak the binary is read-only; the software center / `flatpak
+	// update` owns updates, so never offer an in-place self-update.
+	if isFlatpak() {
+		return UpdateCheckResult{
+			Status:  "flatpak",
+			Message: "Updates are managed by your software center (flatpak update).",
+		}
+	}
+
 	if goos := goosForUpdate(); goos != "windows" && goos != "linux" {
 		return UpdateCheckResult{
 			Status:  "unsupported_arch",

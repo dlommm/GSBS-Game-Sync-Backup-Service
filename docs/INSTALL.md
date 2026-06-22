@@ -55,6 +55,19 @@ Download assets from the [latest GitHub Release](https://github.com/dlommm/GSBS-
 
 **Updates:** The tray menu checks GitHub daily. Use **Install update…** to download and replace the client without re-running the installer.
 
+### Linux — Flatpak (recommended for Steam Deck / Bazzite / immutable distros)
+
+```bash
+flatpak remote-add --if-not-exists gsbs \
+  https://dlommm.github.io/gsbs-flatpak/repo/gsbs.flatpakrepo
+flatpak install gsbs io.github.dlommm.GSBS
+flatpak run io.github.dlommm.GSBS
+```
+
+Updates come from `flatpak update` (or your software center / Bazaar). See
+[FLATPAK.md](FLATPAK.md) for the Steam Deck Desktop-Mode walkthrough, sandbox
+permissions, and granting access to extra game folders with Flatseal.
+
 ### Linux — Debian/Ubuntu (.deb)
 
 ```bash

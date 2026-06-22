@@ -42,6 +42,8 @@ func StartSetupServer() string {
 	mux.HandleFunc("/status", handleSetupStatus)
 	mux.HandleFunc("/dashboard", handleDashboardPage)
 	mux.HandleFunc("/quick-actions", handleQuickActionsPage)
+	mux.HandleFunc("/settings", handleSettingsPage)
+	mux.HandleFunc("/settings/save", handleSettingsSave)
 	mux.HandleFunc("/help", handleHelpPage)
 	mux.HandleFunc("/logs", handleLogsPage)
 	mux.HandleFunc("/partial/logs", handleLogsPartial)
@@ -90,17 +92,21 @@ func GetSetupURL() string {
 }
 
 func resolveClientLogoPath() string {
+	// Prefer the professional master assets in assets/images/; fall back to
+	// the legacy locations for backward compatibility.
 	candidates := []string{
+		filepath.Join("assets", "images", "primary-logo.png"),
+		filepath.Join("assets", "images", "Logo-Icon-Only.png"),
 		filepath.Join("assets", "client-logo.png"),
-		filepath.Join("assets", "client-logo.jpg"),
 		filepath.Join("assets", "logo.png"),
 		filepath.Join("docs", "images", "gsbs-icon.png"),
 	}
 	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
 		candidates = append(candidates,
+			filepath.Join(exeDir, "assets", "images", "primary-logo.png"),
+			filepath.Join(exeDir, "assets", "images", "Logo-Icon-Only.png"),
 			filepath.Join(exeDir, "assets", "client-logo.png"),
-			filepath.Join(exeDir, "assets", "client-logo.jpg"),
 			filepath.Join(exeDir, "assets", "logo.png"),
 		)
 	}
@@ -393,6 +399,8 @@ func handleAboutPage(w http.ResponseWriter, r *http.Request) {
 		NavActive: "about",
 		Title:     "About",
 		Version:   Version,
+		BuildDate: BuildDate,
+		Commit:    Commit,
 		GOOS:      runtime.GOOS,
 		GOARCH:    runtime.GOARCH,
 	})

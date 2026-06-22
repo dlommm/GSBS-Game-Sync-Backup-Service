@@ -193,6 +193,9 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, installRoots)
 	effectiveWatchPaths := mergeWatchPaths(manifestWP, cfg.WatchPaths)
 	log.Printf("sync: %d active watch paths (mode=%s)", len(effectiveWatchPaths), watchMode)
+	// One-time notice if any resolved save folder is blocked (e.g. Flatpak
+	// sandbox not granted). Runs on a snapshot off the startup path.
+	go warnInaccessibleWatchPaths(effectiveWatchPaths)
 
 	// Detect a path_key scheme change (e.g. server upgraded to SlotLabel-based keys).
 	// Build the set of known composite slot keys from the current watch paths and evict

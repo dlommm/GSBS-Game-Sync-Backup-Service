@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.dlommm.GSBS</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>GSBS</name>
+  <summary>Sync, back up, and protect your game saves</summary>
+
+  <developer id="io.github.dlommm">
+    <name>GSBS Contributors</name>
+  </developer>
+
+  <description>
+    <p>
+      GSBS (Game Sync &amp; Backup Service) keeps your game saves synchronized
+      and safely backed up across your devices. A lightweight system-tray app
+      watches your save folders and syncs them to your own self-hosted GSBS
+      server — sync, backup, protect.
+    </p>
+    <p>Supported save locations include:</p>
+    <ul>
+      <li>Steam and Proton (native and Flatpak)</li>
+      <li>Heroic Games Launcher, Lutris, and Bottles</li>
+      <li>Native Linux game installs and custom folders</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.dlommm.GSBS.desktop</launchable>
+
+  <categories>
+    <category>Game</category>
+    <category>Utility</category>
+  </categories>
+
+  <keywords>
+    <keyword>game</keyword>
+    <keyword>save</keyword>
+    <keyword>backup</keyword>
+    <keyword>sync</keyword>
+    <keyword>cloud</keyword>
+    <keyword>steam</keyword>
+    <keyword>proton</keyword>
+  </keywords>
+
+  <url type="homepage">https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-</url>
+  <url type="bugtracker">https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/issues</url>
+  <url type="vcs-browser">https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>The GSBS web dashboard</caption>
+      <image>https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/dashboard.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The system-tray menu</caption>
+      <image>https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/tray-menu.png</image>
+    </screenshot>
+  </screenshots>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="3.1.0" date="2026-06-22"/>
+  </releases>
+</component>

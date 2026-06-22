@@ -8,6 +8,7 @@
 #
 # Env:
 #   BUILD_WEBUI=0     skip WebUI CSS build
+#   REGEN_ICONS=1     regenerate branding assets from assets/images/ first
 #   BUILD_DARWIN=1    include darwin targets when PLATFORMS unset
 #   COMMIT            override git commit (default: short HEAD)
 #   BUILD_DATE        override build date (default: UTC now)
@@ -31,9 +32,20 @@ COMMIT="${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 HOST_GOOS="$(go env GOOS)"
 LDFLAGS="-s -w -X main.Version=${VERSION_VALUE} -X main.BuildDate=${BUILD_DATE} -X main.Commit=${COMMIT}"
 
+# Numeric major.minor.patch for the Windows exe resource (FixedFileInfo).
+SEMVER="$(printf '%s' "$VERSION_VALUE" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+SEMVER="${SEMVER:-0.0.0}"
+VER_MAJOR="${SEMVER%%.*}"; VER_REST="${SEMVER#*.}"
+VER_MINOR="${VER_REST%%.*}"; VER_PATCH="${VER_REST##*.}"
+
 mkdir -p "$OUT_DIR"
 
 echo "Building GSBS version=${VERSION_VALUE} commit=${COMMIT} out=${OUT_DIR}"
+
+if [ "${REGEN_ICONS:-0}" = "1" ]; then
+  echo "Regenerating branding assets from assets/images/ ..."
+  go run ./cmd/gen-branding
+fi
 
 if [ "${BUILD_WEBUI:-1}" != "0" ] && [ -f script/build-webui.sh ]; then
   ./script/build-webui.sh
@@ -58,14 +70,38 @@ want_platform() {
   [[ ",${PLATFORMS}," == *",${name},"* ]]
 }
 
+# gen_windows_resource embeds the app icon + version info into the client exe
+# via a generated client/resource_windows.syso (linked automatically by the
+# _windows filename). No-op with a warning if goversioninfo isn't installed.
+gen_windows_resource() {
+  if ! command -v goversioninfo >/dev/null 2>&1; then
+    echo "WARNING: goversioninfo not found — client exe will have no embedded icon/version." >&2
+    echo "  install: go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest" >&2
+    return 0
+  fi
+  goversioninfo -64 \
+    -icon "client/icon.ico" \
+    -company "GSBS" \
+    -product-name "GSBS Client" \
+    -description "GSBS game-save sync client" \
+    -file-version "$VERSION_VALUE" \
+    -product-version "$VERSION_VALUE" \
+    -ver-major "$VER_MAJOR" -ver-minor "$VER_MINOR" -ver-patch "$VER_PATCH" \
+    -o "client/resource_windows.syso" \
+    "client/versioninfo.json"
+  echo "Generated client/resource_windows.syso (v${VERSION_VALUE})"
+}
+
 build_windows() {
   export GOOS=windows GOARCH=amd64 CGO_ENABLED=1
   # go-sqlite3 requires CGO for the server binary on Windows.
   go build -trimpath -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-server-windows-amd64.exe" ./server
   echo "Built gsbs-server-windows-amd64.exe"
   export CGO_ENABLED=0
+  gen_windows_resource
   go build -trimpath -ldflags "-H windowsgui ${LDFLAGS}" -o "${OUT_DIR}/gsbs-client-windows-amd64.exe" ./client
   echo "Built gsbs-client-windows-amd64.exe"
+  rm -f client/resource_windows.syso
 }
 
 build_linux() {

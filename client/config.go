@@ -123,7 +123,35 @@ func loadConfig() (*config, error) {
 		c.ServerURL = "http://localhost:8080"
 	}
 	c.Token = strings.TrimSpace(c.Token)
+	reconcileSecrets(&c)
 	return &c, nil
+}
+
+// reconcileSecrets moves any on-disk secrets into the OS keyring (one-time
+// migration for upgrades) and loads keyring-stored secrets into c. When the
+// keyring is unavailable, secrets simply stay in the config file (0600) — a
+// graceful fallback for headless or sandboxed setups.
+func reconcileSecrets(c *config) {
+	migrated := false
+	if c.Token != "" {
+		if err := secretSet(secretToken, c.Token); err == nil {
+			migrated = true
+		}
+	} else if v, ok := secretGet(secretToken); ok {
+		c.Token = v
+	}
+	if c.EncryptionPassphrase != "" {
+		if err := secretSet(secretPassphrase, c.EncryptionPassphrase); err == nil {
+			migrated = true
+		}
+	} else if v, ok := secretGet(secretPassphrase); ok {
+		c.EncryptionPassphrase = v
+	}
+	// If secrets were just migrated into the keyring, rewrite the file without
+	// them. saveConfig re-stores to the keyring (idempotent) and strips them.
+	if migrated {
+		_ = saveConfig(c)
+	}
 }
 
 // blankConfig is used when no config file exists (first launch). Empty server and token so user must login.
@@ -154,7 +182,28 @@ func saveConfig(c *config) error {
 		return err
 	}
 	path := filepath.Join(gsbsDir, "config.json")
-	data, err := json.MarshalIndent(c, "", "  ")
+
+	// Persist secrets to the OS keyring when available and keep them out of the
+	// on-disk JSON. If the keyring is unavailable, secretSet returns an error
+	// and the secret stays in the file (still 0600). A shallow copy keeps the
+	// caller's in-memory config (with the live token) intact.
+	toWrite := *c
+	if c.Token != "" {
+		if err := secretSet(secretToken, c.Token); err == nil {
+			toWrite.Token = ""
+		}
+	} else {
+		secretDelete(secretToken)
+	}
+	if c.EncryptionPassphrase != "" {
+		if err := secretSet(secretPassphrase, c.EncryptionPassphrase); err == nil {
+			toWrite.EncryptionPassphrase = ""
+		}
+	} else {
+		secretDelete(secretPassphrase)
+	}
+
+	data, err := json.MarshalIndent(&toWrite, "", "  ")
 	if err != nil {
 		return err
 	}

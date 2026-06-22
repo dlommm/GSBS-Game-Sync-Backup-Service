@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=GSBS
+GenericName=Game Save Sync
+Comment=Sync, back up, and protect your game saves
+Exec=gsbs-client --minimized
+Icon=io.github.dlommm.GSBS
+Terminal=false
+Categories=Game;Utility;
+Keywords=game;save;backup;sync;cloud;steam;proton;
+StartupNotify=false
+StartupWMClass=gsbs-client
+X-GNOME-Autostart-enabled=true

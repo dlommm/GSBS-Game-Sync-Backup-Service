@@ -140,6 +140,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
+      - name: Install goversioninfo (embeds exe icon + version)
+        shell: bash
+        run: |
+          go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Build binaries
         shell: bash
         env:
@@ -189,6 +194,58 @@ jobs:
             dist/gsbs-server-setup-*.exe
             dist/SHA256SUMS
             dist/latest-client.json
+
+  build-flatpak:
+    needs: [version, test, lint]
+    runs-on: ubuntu-latest
+    env:
+      HAS_GPG: ${{ secrets.GSBS_GPG_PRIVATE != '' }}
+      HAS_DEPLOY: ${{ secrets.GSBS_FLATPAK_DEPLOY_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Install Flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder appstream desktop-file-utils
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub \
+            org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08 \
+            org.freedesktop.Sdk.Extension.golang//24.08
+      - name: Validate AppStream + desktop file
+        run: |
+          appstreamcli validate --no-net flatpak/io.github.dlommm.GSBS.metainfo.xml
+          desktop-file-validate flatpak/io.github.dlommm.GSBS.desktop
+      - name: Build Flatpak
+        run: flatpak/build-flatpak.sh "${{ needs.version.outputs.tag }}"
+      - name: Import GPG signing key
+        if: env.HAS_GPG == 'true'
+        run: echo "${{ secrets.GSBS_GPG_PRIVATE }}" | gpg --batch --import
+      - name: Sign and assemble static repo
+        if: env.HAS_GPG == 'true'
+        env:
+          GSBS_GPG_KEY: ${{ secrets.GSBS_GPG_KEY_ID }}
+          GSBS_REPO_URL: https://dlommm.github.io/gsbs-flatpak/repo
+        run: flatpak/update-repo.sh
+      - name: Publish to GitHub Pages repo (dlommm/gsbs-flatpak)
+        if: env.HAS_GPG == 'true' && env.HAS_DEPLOY == 'true'
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.GSBS_FLATPAK_DEPLOY_KEY }}" > ~/.ssh/flatpak_deploy
+          chmod 600 ~/.ssh/flatpak_deploy
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/flatpak_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          git clone --depth 1 --branch gh-pages git@github.com:dlommm/gsbs-flatpak.git pages
+          rm -rf pages/repo
+          cp -r flatpak/repo pages/repo
+          cd pages
+          git config user.name "gsbs-ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add -A
+          git commit -m "Update Flatpak repo for ${{ needs.version.outputs.tag }}" || echo "no changes"
+          git push origin HEAD:gh-pages
 
   docker:
     needs: [version, resolve-runner, test, lint, build-linux, build-windows]

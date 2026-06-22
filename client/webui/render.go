@@ -15,6 +15,8 @@ type PageData struct {
 	Title           string
 	ServerURL       string
 	Version         string
+	BuildDate       string
+	Commit          string
 	GOOS            string
 	GOARCH          string
 	Error           string
@@ -23,6 +25,18 @@ type PageData struct {
 	SetupClientName string
 	SetupDone       bool
 	LogPath         string
+}
+
+// SettingsPageData holds the editable client settings shown on the Settings page.
+type SettingsPageData struct {
+	PageData
+	SyncInterval        string
+	ConflictPolicy      string
+	ManifestInclude     string
+	MaxSyncKbps         int
+	BackupOnPull        bool
+	UseCompression      bool
+	SkipSyncWhenMetered bool
 }
 
 // LogsPageData holds data for the client logs viewer.
@@ -113,6 +127,14 @@ func RenderPage(w http.ResponseWriter, name string, data PageData) {
 func RenderLogsPage(w http.ResponseWriter, data LogsPageData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.ExecuteTemplate(w, "logs", data); err != nil {
+		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// RenderSettingsPage renders the full client settings page.
+func RenderSettingsPage(w http.ResponseWriter, data SettingsPageData) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := tmpl.ExecuteTemplate(w, "settings", data); err != nil {
 		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
 	}
 }
