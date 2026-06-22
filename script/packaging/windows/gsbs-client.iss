@@ -26,19 +26,36 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
+; --- Branding (assets generated from assets/images/ by cmd/gen-branding) ---
+SetupIconFile=..\..\..\client\icon.ico
+WizardImageFile=branding\wizard-large.bmp
+WizardSmallImageFile=branding\wizard-small.bmp
+WizardImageStretch=yes
+DisableWelcomePage=no
+
+; --- Installer version metadata + Programs & Features entry ---
+VersionInfoVersion={#MyAppVersion}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoProductName={#MyAppName}
+VersionInfoProductVersion={#MyAppVersion}
+VersionInfoDescription=GSBS game-save sync client setup
+UninstallDisplayName={#MyAppName}
+UninstallDisplayIcon={app}\{#MyAppExeName}
+
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
+Name: "startmenuicon"; Description: "Create a Start Menu shortcut"; GroupDescription: "Shortcuts:"
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
-Name: "autostart"; Description: "Run GSBS Client at Windows startup"; GroupDescription: "Startup:"; Flags: unchecked
+Name: "autostart"; Description: "Run GSBS Client at Windows startup"; GroupDescription: "Startup:"
 
 [Files]
 Source: "{#SourceDir}\gsbs-client-windows-amd64.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--minimized"
-Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--minimized"; Tasks: startmenuicon
+Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--minimized"; Tasks: desktopicon
 
 [Registry]

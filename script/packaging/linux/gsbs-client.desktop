@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=GSBS Client
-Comment=Sync game saves with GSBS
-Exec=gsbs-client --minimized
-Icon=gsbs-client
-Terminal=false
-Categories=Utility;Game;
-StartupNotify=false

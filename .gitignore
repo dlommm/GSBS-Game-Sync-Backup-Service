@@ -9,8 +9,11 @@ gsbs-server-linux-amd64
 /pcgw-fetch
 /pcgw-sync
 dist/
-# Windows exe icon resource (generate with: rsrc -ico server/icon.ico -o server/rsrc.syso when building for Windows)
+# Windows exe icon/version resources (generated at build time)
+# server: rsrc -ico server/icon.ico -o server/rsrc.syso
+# client: goversioninfo (see script/build.sh gen_windows_resource)
 server/rsrc.syso
+client/resource_windows.syso
 
 # Database
 gsbs.db

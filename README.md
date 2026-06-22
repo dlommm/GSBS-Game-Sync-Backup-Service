@@ -6,7 +6,9 @@
 [![Docker Hub](https://img.shields.io/badge/Docker-dendlomm%2Fgsbs--server-blue)](https://hub.docker.com/r/dendlomm/gsbs-server)
 [![Latest release](https://img.shields.io/github/v/release/dlommm/GSBS--Game-Sync---Backup-Service-)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest)
 
-![GSBS logo](docs/images/gsbs-logo-sm.png)
+![GSBS — Game Sync & Backup Service](assets/images/readme-cover-image.png)
+
+<p align="center"><strong>SYNC. BACKUP. PROTECT.</strong> — keep your game saves synced and safe across every device.</p>
 
 <table align="center">
   <tr>

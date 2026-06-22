@@ -46,7 +46,7 @@ func EncodeImages(imgs ...image.Image) []byte {
 		if w <= 0 || h <= 0 || w > 256 || h > 256 {
 			continue
 		}
-		parts = append(parts, part{w: w, h: h, dib: encodeDIB(img)})
+		parts = append(parts, part{w: w, h: h, dib: encodeEntry(img, w, h)})
 	}
 	if len(parts) == 0 {
 		return nil
@@ -89,6 +89,24 @@ func EncodeSolid(size int, r, g, b byte) []byte {
 		}
 	}
 	return EncodeImages(img)
+}
+
+// pngThreshold is the size at or above which an icon entry is stored as a
+// PNG (Vista+ compressed icon) rather than a raw BMP DIB. This keeps large
+// entries (128/256 px) small and conformant — a raw 256×256 DIB is ~262 KiB.
+const pngThreshold = 128
+
+// encodeEntry returns the per-image payload for an ICO directory entry: a raw
+// BMP DIB for small icons (max compatibility) or a PNG for large ones.
+func encodeEntry(img image.Image, w, h int) []byte {
+	if w >= pngThreshold || h >= pngThreshold {
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img); err == nil {
+			return buf.Bytes()
+		}
+		// Fall back to a raw DIB if PNG encoding somehow fails.
+	}
+	return encodeDIB(img)
 }
 
 func encodeDIB(img image.Image) []byte {

@@ -8,7 +8,7 @@ import (
 	"github.com/gsbs/gsbs/pkg/logview"
 )
 
-var pageNames = []string{"setup", "dashboard", "games", "quick_actions", "help", "about", "open_log", "logs"}
+var pageNames = []string{"setup", "dashboard", "games", "quick_actions", "help", "about", "open_log", "logs", "settings"}
 
 func TestParseTemplates(t *testing.T) {
 	_, err := clientwebui.ParseTemplates()
@@ -28,6 +28,13 @@ func TestRenderPages(t *testing.T) {
 						Title:     "Test",
 					},
 					Query: logview.Query{Level: "all", Limit: 200, Component: "all"},
+				})
+			} else if name == "settings" {
+				clientwebui.RenderSettingsPage(rec, clientwebui.SettingsPageData{
+					PageData:        clientwebui.PageData{NavActive: "settings", Title: "Test"},
+					SyncInterval:    "5m",
+					ConflictPolicy:  "last_write_wins",
+					ManifestInclude: "both",
 				})
 			} else {
 				clientwebui.RenderPage(rec, name, clientwebui.PageData{

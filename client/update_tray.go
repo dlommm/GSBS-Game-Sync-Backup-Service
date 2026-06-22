@@ -28,6 +28,15 @@ func (c *TrayController) wireUpdateMenu(parent *systray.MenuItem) {
 	}
 	c.mVersion = addItem(versionMenuTitle(), "Installed client version")
 	c.mVersion.Disable()
+	if isFlatpak() {
+		// The store / `flatpak update` owns updates in the sandbox.
+		c.mCheckUpdate = addItem("Updates managed by your software center", "Run 'flatpak update' or use your app store")
+		c.mCheckUpdate.Disable()
+		c.mApplyUpdate = addItem("", "")
+		c.mApplyUpdate.Hide()
+		c.mApplyUpdate.Disable()
+		return
+	}
 	c.mCheckUpdate = addItem("Check for updates...", "Check GitHub for a newer client")
 	c.mApplyUpdate = addItem("", "Download and install update")
 	c.mApplyUpdate.Hide()
@@ -57,6 +66,9 @@ func (c *TrayController) startUpdateHandlers() {
 }
 
 func (c *TrayController) startUpdateLoop() {
+	if isFlatpak() {
+		return // updates are managed by the software center
+	}
 	time.Sleep(30 * time.Second)
 	c.runUpdateCheck(false)
 	ticker := time.NewTicker(updateCheckPeriod)
@@ -135,6 +147,11 @@ func (c *TrayController) runUpdateCheck(manual bool) {
 		c.setUpdateMenuVisible(nil)
 		if manual {
 			_ = beeep.Notify("GSBS", "Update check skipped on metered connection.", "")
+		}
+	case "flatpak":
+		c.setUpdateMenuVisible(nil)
+		if manual {
+			_ = beeep.Notify("GSBS", "Updates are managed by your software center (flatpak update).", "")
 		}
 	case "network_error", "api_error":
 		c.setUpdateMenuVisible(nil)

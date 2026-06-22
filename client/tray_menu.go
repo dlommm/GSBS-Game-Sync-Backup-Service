@@ -75,6 +75,8 @@ type TrayController struct {
 	mViewLog      *systray.MenuItem
 	mDataFolder   *systray.MenuItem
 	mLocalStatus  *systray.MenuItem
+	mAbout        *systray.MenuItem
+	mDiagnostics  *systray.MenuItem
 	mVersion      *systray.MenuItem
 	mCheckUpdate  *systray.MenuItem
 	mApplyUpdate  *systray.MenuItem
@@ -195,6 +197,8 @@ func (c *TrayController) buildMenu(cfg *config) {
 	c.mViewLog = c.mAdvancedMenu.AddSubMenuItem("View log", "Open client log file")
 	c.mDataFolder = c.mAdvancedMenu.AddSubMenuItem("Open data folder", "Open GSBS data folder")
 	c.mLocalStatus = c.mAdvancedMenu.AddSubMenuItem("Local status page", "Open local sync status in browser")
+	c.mAbout = c.mAdvancedMenu.AddSubMenuItem("About GSBS", "Version, links, and credits")
+	c.mDiagnostics = c.mAdvancedMenu.AddSubMenuItem("Copy diagnostics", "Save logs + sanitized config to a zip for bug reports")
 	c.mAutostart = c.mAdvancedMenu.AddSubMenuItemCheckbox("Run at startup", "Start GSBS when the system starts", RunAtStartupEnabled())
 	c.wireUpdateMenu(c.mAdvancedMenu)
 
@@ -365,7 +369,9 @@ func (c *TrayController) applyIcon(snap TraySnapshot) {
 	switch snap.Status {
 	case TrayStatusSyncing:
 		systray.SetIcon(IconSyncing())
-	case TrayStatusIdle, TrayStatusPaused, TrayStatusOffline:
+	case TrayStatusPaused:
+		systray.SetIcon(IconPaused())
+	case TrayStatusIdle, TrayStatusOffline:
 		if !snap.WatcherHealthy {
 			systray.SetIcon(IconRecovering())
 			return
@@ -612,6 +618,32 @@ func (c *TrayController) startClickHandlers() {
 			for range c.mLocalStatus.ClickedCh {
 				if url := GetSetupURL(); url != "" {
 					_ = openURL(url + "/dashboard")
+				}
+			}
+		}()
+	}
+	if c.mAbout != nil {
+		go func() {
+			for range c.mAbout.ClickedCh {
+				if url := GetSetupURL(); url != "" {
+					_ = openURL(url + "/about")
+				} else {
+					_ = openURL(projectURL)
+				}
+			}
+		}()
+	}
+	if c.mDiagnostics != nil {
+		go func() {
+			for range c.mDiagnostics.ClickedCh {
+				path, err := ExportDiagnostics()
+				if err != nil {
+					notifyDiagnosticsError(err)
+					continue
+				}
+				notifyDiagnosticsSaved(path)
+				if c.platform.OpenDataFolder != nil {
+					c.platform.OpenDataFolder()
 				}
 			}
 		}()
