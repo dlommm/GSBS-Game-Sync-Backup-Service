@@ -27,7 +27,7 @@ After changing templates or `server/webui/static/src/input.css`, rebuild assets:
 
 ```bash
 ./script/build-webui.sh
-go run ./cmd/resize-icon   # regenerates favicon.png and logo.png from docs/images/
+go run ./cmd/gen-branding   # regenerates all icons/branding from assets/images/
 ```
 
 `script/release.sh` runs `build-webui.sh` automatically before building server binaries.
