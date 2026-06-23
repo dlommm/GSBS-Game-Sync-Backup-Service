@@ -216,7 +216,7 @@ jobs:
           sudo apt-get install -y flatpak flatpak-builder appstream desktop-file-utils
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y flathub \
-            org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08 \
+            org.gnome.Platform//47 org.gnome.Sdk//47 \
             org.freedesktop.Sdk.Extension.golang//24.08
       - name: Validate AppStream + desktop file
         run: |

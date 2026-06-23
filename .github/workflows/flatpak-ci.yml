@@ -1,0 +1,39 @@
+name: Flatpak Build Check
+
+# Build-only validation of the Flatpak manifest (no signing or publishing).
+# Runs on manifest changes for fast iteration; the real signed publish happens
+# in the release workflow's build-flatpak job.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'flatpak/**'
+      - '.github/workflows/flatpak-ci.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+          cache: true
+      - name: Install Flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder appstream desktop-file-utils
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub \
+            org.gnome.Platform//47 org.gnome.Sdk//47 \
+            org.freedesktop.Sdk.Extension.golang//24.08
+      - name: Validate metadata
+        run: |
+          appstreamcli validate --no-net flatpak/io.github.dlommm.GSBS.metainfo.xml
+          desktop-file-validate flatpak/io.github.dlommm.GSBS.desktop
+      - name: Vendor Go dependencies
+        run: go mod vendor
+      - name: Build Flatpak (no publish)
+        run: |
+          flatpak-builder --user --force-clean --install-deps-from=flathub \
+            --disable-rofiles-fuse build-dir flatpak/io.github.dlommm.GSBS.yaml
