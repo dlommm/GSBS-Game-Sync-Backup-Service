@@ -63,6 +63,7 @@ modules:
     build-options:
       cflags: -Wno-error -Wno-incompatible-pointer-types -Wno-deprecated-declarations
     config-opts:
+      - --disable-maintainer-mode
       - --with-gtk=3
       - --disable-dumper
       - --disable-static
