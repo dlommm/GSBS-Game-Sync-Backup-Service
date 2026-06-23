@@ -92,6 +92,7 @@ modules:
     buildsystem: cmake-ninja
     config-opts:
       - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_LIBDIR=lib
       - -DENABLE_TESTS=OFF
     cleanup:
       - /include
@@ -106,6 +107,7 @@ modules:
     buildsystem: cmake-ninja
     config-opts:
       - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_LIBDIR=lib
       - -DENABLE_TESTS=OFF
     cleanup:
       - /include
@@ -121,6 +123,7 @@ modules:
     buildsystem: cmake-ninja
     config-opts:
       - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_LIBDIR=lib
       - -DENABLE_TESTS=OFF
       - -DENABLE_BINDINGS_MONO=OFF
       - -DENABLE_BINDINGS_VALA=OFF
