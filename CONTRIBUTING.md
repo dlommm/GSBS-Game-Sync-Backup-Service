@@ -18,8 +18,8 @@ go build -o gsbs-client ./client
 The server embeds compiled CSS and static JS. After changing templates or `server/webui/static/src/input.css`, rebuild assets:
 
 ```bash
-./script/build-webui.sh   # requires Node.js (npx tailwindcss)
-go run ./cmd/resize-icon  # regenerates favicon.png and logo.png from docs/images/
+./script/build-webui.sh    # requires Node.js (npx tailwindcss)
+go run ./cmd/gen-branding  # regenerates all icons/branding from assets/images/
 ```
 
 `script/release.sh` runs `build-webui.sh` automatically before building server binaries.

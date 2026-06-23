@@ -8,7 +8,7 @@ gsbs.db
 client/
 cmd/pcgw-fetch/
 cmd/pcgw-sync/
-cmd/write-ico/
+cmd/gen-branding/
 pcgw-fetch
 pcgw-sync
 gsbs-client
