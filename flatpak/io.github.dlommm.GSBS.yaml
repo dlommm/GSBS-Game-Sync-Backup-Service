@@ -62,6 +62,12 @@ modules:
     buildsystem: autotools
     build-options:
       cflags: -Wno-error -Wno-incompatible-pointer-types -Wno-deprecated-declarations
+      env:
+        # libdbusmenu 16.04 only defines this automake conditional when valgrind
+        # is present; pre-set it (to "false") so configure's consistency check
+        # passes in the SDK where valgrind is absent.
+        HAVE_VALGRIND_TRUE: '#'
+        HAVE_VALGRIND_FALSE: ''
     config-opts:
       - --disable-maintainer-mode
       - --with-gtk=3
@@ -81,13 +87,6 @@ modules:
       - type: archive
         url: https://launchpad.net/libdbusmenu/16.04/16.04.0/+download/libdbusmenu-16.04.0.tar.gz
         sha256: b9cc4a2acd74509435892823607d966d424bd9ad5d0b00938f27240a1bfa878a
-      - type: shell
-        commands:
-          # libdbusmenu 16.04's tests reference a HAVE_VALGRIND automake
-          # conditional that configure leaves undefined when valgrind is absent
-          # (it isn't in the SDK), which aborts configure via config.status.
-          # Tests are disabled anyway, so strip the references from the templates.
-          - find . -name 'Makefile.in' -exec sed -i '/HAVE_VALGRIND/d' {} +
 
   - name: ayatana-ido
     buildsystem: cmake-ninja
