@@ -16,11 +16,13 @@ command: gsbs-client
 build-options:
   append-path: /usr/lib/sdk/golang/bin
   # Link against libraries installed into /app/lib by the modules below.
+  # LIBRARY_PATH is read by gcc/ld for -l resolution (cmake ignores LDFLAGS).
   ldflags: -L/app/lib
   env:
     GOFLAGS: -mod=vendor
     GOTOOLCHAIN: local
     CGO_ENABLED: '1'
+    LIBRARY_PATH: /app/lib
     GSBS_VERSION: 0.0.0-dev
     GSBS_BUILD_DATE: ''
     GSBS_COMMIT: ''
