@@ -735,6 +735,14 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 	pageName := gameTitle
 	now := time.Now().UTC().Format(time.RFC3339)
 
+	// PCGW's Cargo Steam_AppID is sometimes empty even when the infobox carries
+	// the ID; fall back to the infobox so Steam App IDs (needed for Linux/Proton
+	// save-path resolution) are persisted and projected into the manifest.
+	steamAppIDs := b.PageInfo.SteamAppIDs
+	if len(steamAppIDs) == 0 {
+		steamAppIDs = pcgw.SteamAppIDsFromInfobox(b.Infobox)
+	}
+
 	platforms := []string{}
 	gameDataOK := false
 
@@ -743,7 +751,7 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 		PageID:           b.PageID,
 		PageName:         pageName,
 		Title:            gameTitle,
-		SteamAppIDs:      b.PageInfo.SteamAppIDs,
+		SteamAppIDs:      steamAppIDs,
 		GOGID:            b.PageInfo.GOGID,
 		EpicID:           b.PageInfo.EpicID,
 		UbisoftID:        b.PageInfo.UbisoftID,
@@ -849,7 +857,7 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 						SaveRules:   []types.SaveRule{rule},
 						Source:      "pcgw",
 						Notes:       "https://www.pcgamingwiki.com/wiki/?curid=" + gameID,
-						SteamAppIDs: b.PageInfo.SteamAppIDs, GOGID: b.PageInfo.GOGID,
+						SteamAppIDs: steamAppIDs, GOGID: b.PageInfo.GOGID,
 						EpicID: b.PageInfo.EpicID, UbisoftID: b.PageInfo.UbisoftID,
 						UpdatedAt: now,
 					})

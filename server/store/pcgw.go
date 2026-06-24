@@ -951,6 +951,14 @@ func (s *sqliteStore) buildManifestV2Game(ctx context.Context, gameID, title, pl
 			mg.Title = g.Title
 		}
 		mg.SteamAppIDs = g.SteamAppIDs
+		if len(mg.SteamAppIDs) == 0 {
+			// PCGW's Cargo Steam_AppID is sometimes empty even when the infobox
+			// carries the ID (e.g. Ori and the Will of the Wisps). Fall back to
+			// the infobox so Linux clients can resolve Proton/compatdata save
+			// paths for Steam games. Serve-time so existing (bundle-imported)
+			// data is fixed without a re-sync.
+			mg.SteamAppIDs = pcgw.SteamAppIDsFromInfoboxAny(g.Infobox)
+		}
 		mg.OtherIDs = g.OtherIDs
 		mg.PlatformsPresent = g.PlatformsPresent
 		mg.Platforms = g.PlatformsPresent
