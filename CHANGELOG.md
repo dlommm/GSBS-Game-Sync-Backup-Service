@@ -4,6 +4,16 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-06-24
+
+### Added
+
+- **Dashboard "Synced Saves" redesign**: the flat one-row-per-file table is now a collapsible **Game → category (Saves/Config) → files** tree. Files show their real name and folder (from the stored relative path) instead of a path hash, with per-group counts, total size, last-synced time, and an encrypted badge. Games with many files collapse to a single row; search matches filenames and expands matches.
+
+### Fixed
+
+- **Steam/Proton save paths on Linux**: Steam App IDs are now read from the PCGW infobox (`steam appid`) when the Cargo `Steam_AppID` field is empty (e.g. *Ori and the Will of the Wisps*). Without the App ID, Linux clients could not translate a Windows save template (e.g. `%LOCALAPPDATA%\…`) into the Proton `steamapps/compatdata/<appid>/pfx/drive_c/…` location, so only the raw Windows path was shown. Applied at manifest serve-time (fixes existing/bundle-imported data with no re-sync) and at projection-time (correct at rest for future syncs).
+
 ## [3.0.3] - 2026-06-18
 
 ### Fixed
