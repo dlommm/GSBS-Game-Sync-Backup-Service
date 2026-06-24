@@ -1184,6 +1184,7 @@ func (s *sqliteStore) ListSaveSummaries(ctx context.Context, userID string) ([]S
 		SELECT s.game_id, s.path_key, COALESCE(s.content_size, LENGTH(s.content), 0) AS size_bytes, s.updated_at,
 		       COALESCE(g.game_title, s.game_id) AS game_title,
 		       COALESCE(s.content_hash, '') AS content_hash,
+		       COALESCE(s.relative_path, '') AS relative_path,
 		       COALESCE(s.encrypted, 0) AS encrypted
 		FROM saves s
 		LEFT JOIN (SELECT DISTINCT game_id, game_title FROM game_save_locations) g
@@ -1198,7 +1199,7 @@ func (s *sqliteStore) ListSaveSummaries(ctx context.Context, userID string) ([]S
 	for rows.Next() {
 		var ss SaveSummary
 		var enc int
-		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle, &ss.ContentHash, &enc); err != nil {
+		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle, &ss.ContentHash, &ss.RelativePath, &enc); err != nil {
 			return nil, err
 		}
 		ss.Encrypted = enc != 0
@@ -1226,6 +1227,7 @@ func (s *sqliteStore) ListSaveSummariesPaginated(ctx context.Context, userID str
 		SELECT s.game_id, s.path_key, COALESCE(s.content_size, LENGTH(s.content), 0) AS size_bytes, s.updated_at,
 		       COALESCE(g.game_title, s.game_id) AS game_title,
 		       COALESCE(s.content_hash, '') AS content_hash,
+		       COALESCE(s.relative_path, '') AS relative_path,
 		       COALESCE(s.encrypted, 0) AS encrypted
 		FROM saves s
 		LEFT JOIN (SELECT DISTINCT game_id, game_title FROM game_save_locations) g ON s.game_id = g.game_id
@@ -1239,7 +1241,7 @@ func (s *sqliteStore) ListSaveSummariesPaginated(ctx context.Context, userID str
 	for rows.Next() {
 		var ss SaveSummary
 		var enc int
-		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle, &ss.ContentHash, &enc); err != nil {
+		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle, &ss.ContentHash, &ss.RelativePath, &enc); err != nil {
 			return nil, 0, err
 		}
 		ss.Encrypted = enc != 0
@@ -1258,13 +1260,15 @@ func (s *sqliteStore) ListSaveSummariesFiltered(ctx context.Context, userID, que
 		SELECT s.game_id, s.path_key, COALESCE(s.content_size, LENGTH(s.content), 0) AS size_bytes, s.updated_at,
 		       COALESCE(g.game_title, s.game_id) AS game_title,
 		       COALESCE(s.content_hash, '') AS content_hash,
+		       COALESCE(s.relative_path, '') AS relative_path,
 		       COALESCE(s.encrypted, 0) AS encrypted
 		FROM saves s
 		LEFT JOIN (SELECT DISTINCT game_id, game_title FROM game_save_locations) g
 		  ON s.game_id = g.game_id
 		WHERE s.user_id = ?
-		  AND (s.game_id LIKE ? OR s.path_key LIKE ? OR COALESCE(g.game_title, s.game_id) LIKE ?)
-		ORDER BY s.updated_at DESC`, userID, pattern, pattern, pattern)
+		  AND (s.game_id LIKE ? OR s.path_key LIKE ? OR COALESCE(g.game_title, s.game_id) LIKE ?
+		       OR COALESCE(s.relative_path, '') LIKE ?)
+		ORDER BY s.updated_at DESC`, userID, pattern, pattern, pattern, pattern)
 	if err != nil {
 		return nil, err
 	}
@@ -1273,7 +1277,7 @@ func (s *sqliteStore) ListSaveSummariesFiltered(ctx context.Context, userID, que
 	for rows.Next() {
 		var ss SaveSummary
 		var enc int
-		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle, &ss.ContentHash, &enc); err != nil {
+		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle, &ss.ContentHash, &ss.RelativePath, &enc); err != nil {
 			return nil, err
 		}
 		ss.Encrypted = enc != 0

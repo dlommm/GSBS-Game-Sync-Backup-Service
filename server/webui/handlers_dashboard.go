@@ -159,7 +159,13 @@ func (h *WebHandler) serveDashboardSavesPartial(w http.ResponseWriter, r *http.R
 	}
 	csrfToken := SetCSRFToken(w, r, h.secret)
 	h.renderPartial(w, "partials/dashboard_saves.html", map[string]interface{}{
-		"Saves": saves, "CSRFToken": csrfToken, "Query": query, "ReadOnly": h.readOnly,
+		"Games":          groupSaves(saves),
+		"TotalFiles":     len(saves),
+		"CSRFToken":      csrfToken,
+		"Query":          query,
+		"ReadOnly":       h.readOnly,
+		"Expanded":       query != "", // expand groups so search hits are visible
+		"SmallThreshold": smallGameThreshold,
 	})
 }
 

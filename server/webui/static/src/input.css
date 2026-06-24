@@ -723,3 +723,41 @@
   .admin-activity .timeline { padding-left: 1rem; }
   .pcgw-controls-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Synced saves tree (Game → category → files) ── */
+.saves-tree-caption { margin: 0 0 0.75rem; font-size: 0.8125rem; color: var(--text-muted); }
+.saves-tree { display: flex; flex-direction: column; gap: 0.5rem; }
+.tree-game { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); overflow: hidden; }
+.saves-tree summary { list-style: none; cursor: pointer; }
+.saves-tree summary::-webkit-details-marker { display: none; }
+.tree-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.9rem; transition: background var(--transition); }
+.tree-row:hover { background: var(--surface-hover); }
+.saves-tree summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tree-twisty { flex: none; width: 0; height: 0; border-left: 5px solid var(--text-muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform var(--transition); }
+details[open] > summary .tree-twisty { transform: rotate(90deg); }
+.tree-title { font-weight: 600; color: var(--text-primary, #fafafa); font-size: 0.9375rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tree-meta { margin-left: auto; display: flex; align-items: center; gap: 0.85rem; flex: none; }
+.tree-pill { font-size: 0.6875rem; font-weight: 600; line-height: 1; padding: 0.25rem 0.45rem; border-radius: 999px; background: var(--accent-muted); color: var(--accent-hover); }
+.tree-size { font-size: 0.8125rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.tree-when { font-size: 0.8125rem; color: var(--text-muted); white-space: nowrap; }
+.tree-children { border-top: 1px solid var(--border); padding: 0.25rem 0.25rem 0.4rem; }
+.tree-cat { border-radius: var(--radius-xs); }
+.tree-cat-row { padding: 0.45rem 0.65rem; }
+.tree-cat-name { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-secondary); }
+.tree-cat-name.cat-Saves { color: var(--accent-hover); }
+.tree-cat-name.cat-Config { color: #38bdf8; }
+.tree-cat-name.cat-Other { color: var(--text-muted); }
+.file-list { list-style: none; margin: 0.1rem 0 0.4rem; padding: 0 0.35rem 0 1.5rem; display: flex; flex-direction: column; }
+.file-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.4rem 0.55rem; border-radius: var(--radius-xs); border-top: 1px solid transparent; transition: background var(--transition); }
+.file-row:hover { background: var(--bg-raised); }
+.file-name { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 0.4rem; overflow: hidden; }
+.file-base { color: var(--text-secondary); font-size: 0.8125rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-folder { color: var(--text-muted); font-size: 0.6875rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
+.file-badge { font-size: 0.6875rem; flex: none; }
+.file-size { flex: none; width: 5rem; text-align: right; font-size: 0.75rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.file-when { flex: none; width: 6.5rem; text-align: right; font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
+.file-actions { flex: none; display: flex; align-items: center; gap: 0.4rem; }
+@media (max-width: 640px) {
+  .file-when, .tree-when { display: none; }
+  .file-size { width: auto; }
+}

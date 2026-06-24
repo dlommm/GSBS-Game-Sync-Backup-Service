@@ -280,13 +280,14 @@ type ClientInfo struct {
 
 // SaveSummary is a lightweight save entry for dashboard display (no content blob).
 type SaveSummary struct {
-	GameID      string
-	PathKey     string
-	GameTitle   string // from game_save_locations join; falls back to game_id
-	SizeBytes   int64
-	UpdatedAt   string
-	ContentHash string
-	Encrypted   bool
+	GameID       string
+	PathKey      string
+	GameTitle    string // from game_save_locations join; falls back to game_id
+	RelativePath string // original save-relative path (for filename + save/config grouping); may be empty
+	SizeBytes    int64
+	UpdatedAt    string
+	ContentHash  string
+	Encrypted    bool
 }
 
 // UserInfo is a user row for admin listing.
