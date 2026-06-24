@@ -37,15 +37,17 @@ else
   echo "WARNING: no GSBS_GPG_KEY set — building an UNSIGNED repo (not recommended for public use)" >&2
 fi
 
-if [ ${#SIGN_ARGS[@]} -gt 0 ]; then
+if [ -n "${GSBS_GPG_KEY:-}" ]; then
   # build-update-repo only signs the summary, NOT the individual commits, so a
   # client with GPGKey= set would fail to pull with "no signatures found".
   # Sign every ref's commit here (writes the .commitmeta detached signatures).
+  # ostree gpg-sign takes the full ref (app/ and runtime/ alike, e.g. the
+  # .Debug extension) — flatpak build-sign assumes app/ and can't sign runtime
+  # refs.
   echo "==> Signing commits"
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
-    IFS=/ read -r _kind id arch branch <<<"$ref"
-    flatpak build-sign "$REPO_DIR" "$id" "$branch" --arch="$arch" "${SIGN_ARGS[@]}"
+    ostree gpg-sign --repo="$REPO_DIR" --gpg-homedir="$GPG_HOME" "$ref" "$GSBS_GPG_KEY"
   done < <(cd "$REPO_DIR/refs/heads" && find . -type f | sed 's|^\./||')
 fi
 
