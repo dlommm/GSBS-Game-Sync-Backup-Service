@@ -704,15 +704,16 @@ type WatchPathBuildStats struct {
 	SkippedPlatform   int
 	SkippedMissingDir int
 	SkippedMalformed  int
+	SkippedUnsafe     int // resolved to a home/system root — too broad to watch
 }
 
 // LogZeroWatchPathsSummary logs skip-reason counts when no watch paths were built.
 func LogZeroWatchPathsSummary(stats WatchPathBuildStats) {
 	clientlogx.Event("watch_paths_zero", "skipped_discovered", stats.SkippedDiscovered,
 		"skipped_platform", stats.SkippedPlatform, "skipped_missing_dir", stats.SkippedMissingDir,
-		"skipped_malformed", stats.SkippedMalformed)
-	log.Printf("sync: no watch paths — skipped discovered=%d platform=%d missing_dir=%d malformed=%d",
-		stats.SkippedDiscovered, stats.SkippedPlatform, stats.SkippedMissingDir, stats.SkippedMalformed)
+		"skipped_malformed", stats.SkippedMalformed, "skipped_unsafe", stats.SkippedUnsafe)
+	log.Printf("sync: no watch paths — skipped discovered=%d platform=%d missing_dir=%d malformed=%d unsafe=%d",
+		stats.SkippedDiscovered, stats.SkippedPlatform, stats.SkippedMissingDir, stats.SkippedMalformed, stats.SkippedUnsafe)
 }
 
 // InstallRootsByGame maps manifest game_id to PCGW install folder hints (for <game-install-folder>).
@@ -867,6 +868,13 @@ func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Reso
 			}
 			for _, abs := range resolved {
 				if abs == "" {
+					continue
+				}
+				if resolver.UnsafeWatchDir(abs) {
+					// A save folder must be game-specific. Refuse home/XDG/system
+					// roots so we never recursively sync dotfiles, caches, etc.
+					stats.SkippedUnsafe++
+					clientlogx.EventWarn("watch_path_unsafe", "game_id", e.GameID, "dir", abs, "template", rule.Directory)
 					continue
 				}
 				if !paths.WatchDirExists(abs) {

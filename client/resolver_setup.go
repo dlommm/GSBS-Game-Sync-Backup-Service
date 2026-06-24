@@ -1,9 +1,24 @@
 package main
 
 import (
+	"sync"
+
 	"github.com/gsbs/gsbs/pkg/launchers"
 	"github.com/gsbs/gsbs/pkg/paths"
 )
+
+var (
+	baseResolverOnce sync.Once
+	baseResolver     *paths.Resolver
+)
+
+// unsafeWatchDirAbs reports whether an absolute watch directory is too broad to
+// sync (a home/XDG/system root). Uses an env-based resolver, so it does not
+// depend on per-config launcher overrides.
+func unsafeWatchDirAbs(dir string) bool {
+	baseResolverOnce.Do(func() { baseResolver = paths.NewResolver() })
+	return baseResolver.UnsafeWatchDir(dir)
+}
 
 // applyLauncherDetection merges auto-detected launcher paths into resolver and config (empty fields only).
 func applyLauncherDetection(cfg *config, resolver *paths.Resolver) {

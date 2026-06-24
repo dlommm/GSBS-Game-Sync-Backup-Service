@@ -76,10 +76,20 @@
       ul.innerHTML = '';
       (d.results || []).forEach(function(g) {
         var li = document.createElement('li');
-        var badgeStyle = g.exists
-          ? 'background:var(--success-muted);color:var(--success);border:1px solid rgba(34,197,94,.2);'
-          : 'background:var(--surface-hover);color:var(--text-muted);border:1px solid var(--border);';
-        var badgeText = g.exists ? 'folder found' : 'folder missing';
+        var badgeStyle, badgeText;
+        if (g.unsafe) {
+          badgeStyle = 'background:var(--error-muted);color:var(--error);border:1px solid rgba(239,68,68,.2);';
+          badgeText = 'too broad';
+        } else if (g.exists) {
+          badgeStyle = 'background:var(--success-muted);color:var(--success);border:1px solid rgba(34,197,94,.2);';
+          badgeText = 'folder found';
+        } else {
+          badgeStyle = 'background:var(--surface-hover);color:var(--text-muted);border:1px solid var(--border);';
+          badgeText = 'folder missing';
+        }
+        var actionHTML = g.unsafe
+          ? '<span style="flex-shrink:0;max-width:12rem;text-align:right;font-size:0.7rem;color:var(--error);">Resolves to your home folder — add the game’s specific save folder manually below</span>'
+          : '<button type="button" class="use btn-ghost-sm" style="flex-shrink:0;">Use this</button>';
         li.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);padding:0.625rem 0.875rem;';
         li.innerHTML =
           '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.5rem;">' +
@@ -90,9 +100,10 @@
               '</div>' +
               '<div style="margin-top:0.2rem;font-size:0.75rem;color:var(--text-muted);">' + esc(g.game_id) + (g.directory ? ' · ' + esc(g.directory) : ' · (no path resolved)') + '</div>' +
             '</div>' +
-            '<button type="button" class="use btn-ghost-sm" style="flex-shrink:0;">Use this</button>' +
+            actionHTML +
           '</div>';
-        li.querySelector('.use').addEventListener('click', function() {
+        var useBtn = li.querySelector('.use');
+        if (useBtn) useBtn.addEventListener('click', function() {
           document.getElementById('game_id').value = g.game_id;
           document.getElementById('title').value = g.title;
           document.getElementById('directory').value = g.directory || '';

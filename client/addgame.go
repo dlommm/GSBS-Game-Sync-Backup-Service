@@ -19,6 +19,7 @@ type manualGameResult struct {
 	Directory string `json:"directory"` // resolved for current OS (best candidate); may be empty
 	Template  string `json:"template"`  // raw path template from manifest
 	Exists    bool   `json:"exists"`    // whether the resolved directory exists locally
+	Unsafe    bool   `json:"unsafe"`    // resolved to a home/system root — too broad to watch
 }
 
 // searchManifestGames returns manifest games for the current OS whose title or
@@ -55,6 +56,11 @@ func searchManifestGames(q string, maxResults int) []manualGameResult {
 			}
 			seen[key] = true
 			dir, exists := bestResolvedDir(resolver, rule.Directory, currentOS, e.GameID, installRoots)
+			unsafe := dir != "" && resolver.UnsafeWatchDir(dir)
+			if unsafe {
+				// Don't present a too-broad folder as an addable "folder found".
+				exists = false
+			}
 			out = append(out, manualGameResult{
 				GameID:    e.GameID,
 				Title:     title,
@@ -62,6 +68,7 @@ func searchManifestGames(q string, maxResults int) []manualGameResult {
 				Directory: dir,
 				Template:  rule.Directory,
 				Exists:    exists,
+				Unsafe:    unsafe,
 			})
 		}
 	}
@@ -119,6 +126,10 @@ func addManualWatchPath(gameID, title, directory string, syncAll bool, patterns 
 	}
 	if cfg == nil {
 		cfg = blankConfig()
+	}
+
+	if configureResolverFromConfig(cfg).UnsafeWatchDir(directory) {
+		return fmt.Errorf("refusing to watch %q — that folder is too broad and would sync unrelated files (dotfiles, caches, other apps). Pick the game's specific save folder", directory)
 	}
 
 	patterns = trimPatterns(patterns)
