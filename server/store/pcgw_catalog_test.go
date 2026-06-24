@@ -462,6 +462,7 @@ func TestGetLastSuccessfulPhase1Stats(t *testing.T) {
 	}
 	if stats == nil {
 		t.Fatal("expected non-nil stats after successful run")
+		return
 	}
 	if stats.RemoteTotalIDs != want.RemoteTotalIDs {
 		t.Errorf("RemoteTotalIDs: got %d, want %d", stats.RemoteTotalIDs, want.RemoteTotalIDs)
