@@ -4,6 +4,12 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.1.5] - 2026-06-24
+
+### Fixed
+
+- **Linux/Proton: Steam games now show up and resolve.** On Linux, Windows-platform PCGW games (e.g. *Ori and the Will of the Wisps*, *The Witcher 3*) didn't appear in the add-game search and showed "no saves for this OS" in the tray. Root cause: the manifest entries served to the client had empty `steam_app_ids` (PCGW's Cargo field is often empty and bundle-imported catalogs store null), so the client never treated them as Proton candidates. The server now fills `steam_app_ids` from the game's PCGW infobox **at serve time for the v1 manifest too** (v2 already did) — robust against manifest-bundle re-imports — and the client's add-game search now includes Proton-eligible Windows games on Linux (resolving to the `compatdata` save path).
+
 ## [3.1.4] - 2026-06-24
 
 ### Added

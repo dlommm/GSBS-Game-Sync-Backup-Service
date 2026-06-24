@@ -39,7 +39,10 @@ func searchManifestGames(q string, maxResults int) []manualGameResult {
 	var out []manualGameResult
 	seen := make(map[string]bool)
 	for _, e := range entries {
-		if e.Platform != string(currentOS) {
+		// On Linux, a Windows-platform rule for a Steam game is a Proton candidate
+		// (resolved via the compatdata prefix), so include those too.
+		protonCandidate := currentOS == paths.Linux && e.Platform == string(paths.Windows) && len(e.SteamAppIDs) > 0
+		if e.Platform != string(currentOS) && !protonCandidate {
 			continue
 		}
 		title := strings.TrimSpace(e.GameTitle)
@@ -55,7 +58,13 @@ func searchManifestGames(q string, maxResults int) []manualGameResult {
 				continue
 			}
 			seen[key] = true
-			dir, exists := bestResolvedDir(resolver, rule.Directory, currentOS, e.GameID, installRoots)
+			var dir string
+			var exists bool
+			if protonCandidate {
+				dir, exists = bestResolvedProtonDir(resolver, rule, e.SteamAppIDs)
+			} else {
+				dir, exists = bestResolvedDir(resolver, rule.Directory, currentOS, e.GameID, installRoots)
+			}
 			unsafe := dir != "" && resolver.UnsafeWatchTarget(dir, rule.SyncAll, rule.Recursive, rule.IncludePatterns)
 			if unsafe {
 				// Don't present a too-broad folder as an addable "folder found".
@@ -90,6 +99,25 @@ func searchManifestGames(q string, maxResults int) []manualGameResult {
 func bestResolvedDir(resolver *paths.Resolver, template string, currentOS paths.OS, gameID string, installRoots map[string][]string) (string, bool) {
 	first := ""
 	for _, abs := range resolveManifestTemplate(resolver, template, currentOS, gameID, installRoots) {
+		if abs == "" {
+			continue
+		}
+		if first == "" {
+			first = abs
+		}
+		if paths.WatchDirExists(abs) {
+			return abs, true
+		}
+	}
+	return first, false
+}
+
+// bestResolvedProtonDir resolves a Windows-style rule to its Proton compatdata
+// path(s) for the given Steam App IDs, returning the first existing candidate
+// (preferred) or the first resolved candidate otherwise.
+func bestResolvedProtonDir(resolver *paths.Resolver, rule types.SaveRule, appIDs []string) (string, bool) {
+	first := ""
+	for _, abs := range resolveProtonPaths(resolver, rule, appIDs) {
 		if abs == "" {
 			continue
 		}

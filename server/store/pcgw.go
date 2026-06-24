@@ -16,6 +16,55 @@ import (
 	"github.com/gsbs/gsbs/server/logx"
 )
 
+// enrichSteamAppIDsFromInfobox fills empty SteamAppIDs on manifest entries from
+// the game's PCGW infobox ("steam appid"). PCGW's Cargo Steam_AppID — and
+// therefore game_save_locations.steam_app_ids for bundle-imported catalogs — is
+// often empty even when the infobox has the ID, which would stop Linux/Proton
+// clients from resolving Windows save paths. Doing this at serve time means it
+// works for both v1 and v2 and survives manifest-bundle re-imports.
+func (s *sqliteStore) enrichSteamAppIDsFromInfobox(ctx context.Context, entries []types.GameSaveLocation) {
+	need := make(map[string]bool)
+	for _, e := range entries {
+		if len(e.SteamAppIDs) == 0 {
+			need[e.GameID] = true
+		}
+	}
+	if len(need) == 0 {
+		return
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT page_id, COALESCE(infobox, '') FROM pcgw_games`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	byGame := make(map[string][]string)
+	for rows.Next() {
+		var pageID int64
+		var ib string
+		if err := rows.Scan(&pageID, &ib); err != nil {
+			continue
+		}
+		gid := strconv.FormatInt(pageID, 10)
+		if !need[gid] || ib == "" {
+			continue
+		}
+		var infobox map[string]interface{}
+		if json.Unmarshal([]byte(ib), &infobox) != nil {
+			continue
+		}
+		if ids := pcgw.SteamAppIDsFromInfoboxAny(infobox); len(ids) > 0 {
+			byGame[gid] = ids
+		}
+	}
+	for i := range entries {
+		if len(entries[i].SteamAppIDs) == 0 {
+			if ids, ok := byGame[entries[i].GameID]; ok {
+				entries[i].SteamAppIDs = ids
+			}
+		}
+	}
+}
+
 func pcgwJSON(v interface{}) string {
 	if v == nil {
 		return "{}"

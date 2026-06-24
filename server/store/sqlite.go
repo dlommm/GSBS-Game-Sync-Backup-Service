@@ -1050,7 +1050,11 @@ func (s *sqliteStore) ListGameSaveLocations(ctx context.Context) ([]types.GameSa
 		}
 		out = append(out, e)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	s.enrichSteamAppIDsFromInfobox(ctx, out)
+	return out, nil
 }
 
 func (s *sqliteStore) ListGameSaveLocationsPaginated(ctx context.Context, limit, offset int) ([]types.GameSaveLocation, error) {
@@ -1150,7 +1154,11 @@ func (s *sqliteStore) GetManifestSince(ctx context.Context, since string) ([]typ
 		}
 		out = append(out, e)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	s.enrichSteamAppIDsFromInfobox(ctx, out)
+	return out, nil
 }
 
 // CountUsers returns the total number of registered users (admin stats).
