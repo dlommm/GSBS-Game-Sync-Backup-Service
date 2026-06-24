@@ -13,6 +13,8 @@
 //   - flatpak/icons/<size>x<size>/io.github.dlommm.GSBS.png (hicolor set)
 //   - script/packaging/windows/branding/wizard-large.bmp, wizard-small.bmp
 //   - client/webui/static/{favicon,logo}.png, server/webui/static/{favicon,logo}.png
+//   - docs/images/gsbs-{icon,logo,logo-sm}.png  (README/docs/wiki/DockerHub)
+//   - assets/client-logo.png, client/icon.png
 package main
 
 import (
@@ -91,6 +93,20 @@ func main() {
 	writePNG("server/webui/static/favicon.png", fit(logoIcon, 64))
 	writePNG("client/webui/static/logo.png", fitWidth(wordmark, 320))
 	writePNG("server/webui/static/logo.png", fitWidth(wordmark, 320))
+
+	// --- Docs / wiki / DockerHub marketing logos ---
+	// Referenced by README, docs/ARCHITECTURE.md, docs/DOCKERHUB.md and the
+	// wiki via stable filenames, so refreshing them in place updates every
+	// reference to the current brand without editing each document.
+	writePNG("docs/images/gsbs-icon.png", fit(logoIcon, 512))
+	writePNG("docs/images/gsbs-logo.png", fitWidth(wordmark, 1024))
+	writePNG("docs/images/gsbs-logo-sm.png", fitWidth(wordmark, 640))
+
+	// --- Misc app logos pulled from the masters ---
+	// assets/client-logo.png is the setup server's on-disk logo fallback;
+	// client/icon.png is a stray full-size PNG of the app icon.
+	writePNG("assets/client-logo.png", fitWidth(wordmark, 512))
+	writePNG("client/icon.png", fit(linuxMaster, 512))
 
 	fmt.Println("branding assets regenerated from assets/images/")
 }

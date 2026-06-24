@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-">
-    <img src="https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/gsbs-logo-sm.png" alt="GSBS — Game Sync & Backup Service" width="640" />
+    <img src="https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/assets/images/dockerhub-banner.png" alt="GSBS — Game Sync & Backup Service" width="640" />
   </a>
 </p>
 
