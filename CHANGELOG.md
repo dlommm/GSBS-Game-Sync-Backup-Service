@@ -4,6 +4,17 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.1.2] - 2026-06-24
+
+### Changed
+
+- **Flatpak tray icon now renders in the sandbox**: switched the system tray from `getlantern/systray` to `fyne.io/systray`, whose Linux backend is a pure-Go StatusNotifierItem implementation that sends the icon as a D-Bus pixmap. The old library wrote the icon to the sandbox's `/tmp` and asked the host panel to load it by that path — invisible outside the sandbox, so the Flatpak tray showed no icon. As a result the client is now pure Go on Linux/Windows (no CGO), and the Flatpak no longer builds the libayatana-appindicator/libdbusmenu stack.
+- **Flatpak runtime**: moved from the end-of-life GNOME 47 runtime to the Freedesktop 24.08 runtime (GTK is no longer needed). Clears the software center's "stopped receiving core updates" warning.
+
+### Fixed
+
+- **Flatpak store listing**: app-stream screenshots pointed at old-branding placeholder images; they now reference real client screenshots.
+
 ## [3.1.1] - 2026-06-24
 
 ### Added
