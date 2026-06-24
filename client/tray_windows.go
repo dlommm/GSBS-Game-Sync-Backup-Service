@@ -11,7 +11,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/getlantern/systray"
+	"fyne.io/systray"
 	"github.com/skratchdot/open-golang/open"
 )
 

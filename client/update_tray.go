@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gen2brain/beeep"
-	"github.com/getlantern/systray"
+	"fyne.io/systray"
 )
 
 var (

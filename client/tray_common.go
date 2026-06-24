@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getlantern/systray"
+	"fyne.io/systray"
 )
 
 var (

@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/getlantern/systray"
+	"fyne.io/systray"
 )
 
 var trayCtrl *TrayController
