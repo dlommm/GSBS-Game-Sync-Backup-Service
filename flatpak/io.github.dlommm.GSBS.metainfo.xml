@@ -48,18 +48,24 @@
 
   <screenshots>
     <screenshot type="default">
-      <caption>The GSBS web dashboard</caption>
-      <image>https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/dashboard.png</image>
+      <caption>Local sync status for this machine</caption>
+      <image>https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-local-dashboard-status.png</image>
     </screenshot>
     <screenshot>
-      <caption>The system-tray menu</caption>
-      <image>https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/tray-menu.png</image>
+      <caption>Browse and add games to sync</caption>
+      <image>https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-add-game-page.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Quick actions and sync controls</caption>
+      <image>https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-quick-actions-page.png</image>
     </screenshot>
   </screenshots>
 
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="3.1.2" date="2026-06-24"/>
+    <release version="3.1.1" date="2026-06-24"/>
     <release version="3.1.0" date="2026-06-22"/>
   </releases>
 </component>

@@ -2,27 +2,26 @@
 # Build with: flatpak/build-flatpak.sh [VERSION]
 # The committed env values below are dev defaults; build-flatpak.sh injects the
 # real version/date/commit into a generated sibling manifest at release time.
-# The GNOME runtime provides GTK 3, which the system-tray library (and the
-# ayatana-appindicator stack built below) needs. It is based on Freedesktop
-# 24.08, matching the golang SDK extension version.
+#
+# The tray uses fyne.io/systray, whose Linux backend is a pure-Go
+# StatusNotifierItem implementation over D-Bus (icon sent as a pixmap, which
+# works inside the sandbox). That means NO GTK / libappindicator / CGO are
+# needed, so we use the lean Freedesktop runtime (matching the golang SDK
+# extension's 24.08 base) instead of the GNOME runtime.
 app-id: io.github.dlommm.GSBS
-runtime: org.gnome.Platform
-runtime-version: '47'
-sdk: org.gnome.Sdk
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.golang
 command: gsbs-client
 
 build-options:
   append-path: /usr/lib/sdk/golang/bin
-  # Link against libraries installed into /app/lib by the modules below.
-  # LIBRARY_PATH is read by gcc/ld for -l resolution (cmake ignores LDFLAGS).
-  ldflags: -L/app/lib
   env:
     GOFLAGS: -mod=vendor
     GOTOOLCHAIN: local
-    CGO_ENABLED: '1'
-    LIBRARY_PATH: /app/lib
+    CGO_ENABLED: '0'
     GSBS_VERSION: 0.0.0-dev
     GSBS_BUILD_DATE: ''
     GSBS_COMMIT: ''
@@ -30,14 +29,13 @@ build-options:
 finish-args:
   # Network access to reach the GSBS server.
   - --share=network
-  # Display + GPU (the tray runs under X11 or Wayland).
+  # Display + GPU (harmless; the tray itself is D-Bus only and has no window).
   - --socket=fallback-x11
   - --socket=wayland
   - --device=dri
-  # Tray icon (StatusNotifier/AppIndicator) and desktop notifications.
+  # Tray icon (StatusNotifierItem) and desktop notifications.
   - --talk-name=org.kde.StatusNotifierWatcher
   - --talk-name=org.freedesktop.Notifications
-  - --talk-name=com.canonical.AppMenu.Registrar
   # Autostart / run-in-background via the XDG portal.
   - --talk-name=org.freedesktop.portal.Background
   - --talk-name=org.freedesktop.portal.Flatpak
@@ -54,93 +52,7 @@ finish-args:
   - --filesystem=/run/media
 
 modules:
-  # --- System-tray dependency stack (libdbusmenu + ayatana-appindicator) ---
-  - name: intltool
-    cleanup: ['*']
-    sources:
-      - type: archive
-        url: https://launchpad.net/intltool/trunk/0.51.0/+download/intltool-0.51.0.tar.gz
-        sha256: 67c74d94196b153b774ab9f89b2fa6c6ba79352407037c8c14d5aeb334e959cd
-
-  - name: libdbusmenu
-    buildsystem: autotools
-    build-options:
-      cflags: -Wno-error -Wno-incompatible-pointer-types -Wno-deprecated-declarations
-      env:
-        # libdbusmenu 16.04 only defines this automake conditional when valgrind
-        # is present; pre-set it (to "false") so configure's consistency check
-        # passes in the SDK where valgrind is absent.
-        HAVE_VALGRIND_TRUE: '#'
-        HAVE_VALGRIND_FALSE: ''
-    config-opts:
-      - --disable-maintainer-mode
-      - --with-gtk=3
-      - --disable-dumper
-      - --disable-static
-      - --disable-tests
-      - --disable-gtk-doc
-      - --disable-vala
-      - --enable-introspection=no
-    cleanup:
-      - '*.la'
-      - /include
-      - /libexec
-      - /share/doc
-      - /share/gtk-doc
-    sources:
-      - type: archive
-        url: https://launchpad.net/libdbusmenu/16.04/16.04.0/+download/libdbusmenu-16.04.0.tar.gz
-        sha256: b9cc4a2acd74509435892823607d966d424bd9ad5d0b00938f27240a1bfa878a
-
-  - name: ayatana-ido
-    buildsystem: cmake-ninja
-    config-opts:
-      - -DCMAKE_BUILD_TYPE=Release
-      - -DCMAKE_INSTALL_LIBDIR=lib
-      - -DENABLE_TESTS=OFF
-    cleanup:
-      - /include
-      - '*.la'
-    sources:
-      - type: git
-        url: https://github.com/AyatanaIndicators/ayatana-ido.git
-        tag: '0.10.4'
-        commit: f98c526da8c6f27ee0edf62b38d9d673f5b97c02
-
-  - name: libayatana-indicator
-    buildsystem: cmake-ninja
-    config-opts:
-      - -DCMAKE_BUILD_TYPE=Release
-      - -DCMAKE_INSTALL_LIBDIR=lib
-      - -DENABLE_TESTS=OFF
-    cleanup:
-      - /include
-      - /libexec
-      - '*.la'
-    sources:
-      - type: git
-        url: https://github.com/AyatanaIndicators/libayatana-indicator.git
-        tag: '0.9.5'
-        commit: 0c3c88afa653fec682223bf159b3afad3b572852
-
-  - name: libayatana-appindicator
-    buildsystem: cmake-ninja
-    config-opts:
-      - -DCMAKE_BUILD_TYPE=Release
-      - -DCMAKE_INSTALL_LIBDIR=lib
-      - -DENABLE_TESTS=OFF
-      - -DENABLE_BINDINGS_MONO=OFF
-      - -DENABLE_BINDINGS_VALA=OFF
-    cleanup:
-      - /include
-      - '*.la'
-    sources:
-      - type: git
-        url: https://github.com/AyatanaIndicators/libayatana-appindicator.git
-        tag: '0.6.0'
-        commit: 95ef64b7ba9570b58dd23d5d8cc9d2f069c2eacd
-
-  # --- GSBS client ---
+  # --- GSBS client (pure Go; no system libraries required) ---
   - name: gsbs-client
     buildsystem: simple
     build-commands:
