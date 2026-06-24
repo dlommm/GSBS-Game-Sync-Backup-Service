@@ -4,6 +4,16 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.1.3] - 2026-06-24
+
+### Fixed
+
+- **Critical — never watch your whole home folder.** A save rule that resolved to the home directory or a top-level root (e.g. a game whose Linux save path resolved to `$HOME` with no game-specific subfolder) made the client recursively watch and upload *everything* under it — dotfiles, shell history, caches, other apps' data. The client now refuses any watch directory that is the home dir or a top-level XDG/system root (`~/.config`, `~/.local/share`, `~/.cache`, `~/.var/app`, `~/Documents`, `%APPDATA%`, etc.). This applies to discovered games, manually-added folders, and any previously-saved watch path. Only game-specific subfolders are watched.
+
+### Added
+
+- **Dashboard: "Delete all" per game.** Removes every synced save (and its versions) for a game in one action — useful for purging files uploaded before the fix above. Per-file Delete is unchanged.
+
 ## [3.1.2] - 2026-06-24
 
 ### Changed
