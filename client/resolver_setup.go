@@ -12,12 +12,13 @@ var (
 	baseResolver     *paths.Resolver
 )
 
-// unsafeWatchDirAbs reports whether an absolute watch directory is too broad to
-// sync (a home/XDG/system root). Uses an env-based resolver, so it does not
+// unsafeWatchTargetAbs reports whether an absolute, already-saved watch path is
+// too broad to sync given its rule shape (a home/XDG/system root watched
+// recursively or with sync-all). Uses an env-based resolver, so it does not
 // depend on per-config launcher overrides.
-func unsafeWatchDirAbs(dir string) bool {
+func unsafeWatchTargetAbs(dir string, syncAll, recursive bool, patterns []string) bool {
 	baseResolverOnce.Do(func() { baseResolver = paths.NewResolver() })
-	return baseResolver.UnsafeWatchDir(dir)
+	return baseResolver.UnsafeWatchTarget(dir, syncAll, recursive, patterns)
 }
 
 // applyLauncherDetection merges auto-detected launcher paths into resolver and config (empty fields only).

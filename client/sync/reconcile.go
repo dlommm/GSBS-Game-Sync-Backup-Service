@@ -32,7 +32,17 @@ func ReconcileLocalToServer(ctx context.Context, watchPaths []WatchPath, client 
 			continue
 		}
 		err = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
-			if walkErr != nil || d.IsDir() {
+			if walkErr != nil {
+				return nil
+			}
+			if d.IsDir() {
+				// Honor non-recursive rules: only scan the top level of dir.
+				// Without this, a rule anchored at a broad root (e.g. a game that
+				// saves a named file directly in $HOME) would still walk the
+				// entire tree reading every file.
+				if !wp.Recursive && path != dir {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			select {

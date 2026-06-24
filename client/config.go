@@ -219,10 +219,10 @@ func mergeWatchPaths(manifestPaths, configPaths []watchPath) []watchPath {
 		if seen[key] {
 			continue
 		}
-		// Drop any previously-saved watch path that points at a home/system root
+		// Drop any previously-saved watch path that would sync a home/system root
 		// (e.g. added before the safety guard existed) so it can never sync the
-		// whole home directory.
-		if filepath.IsAbs(wp.Directory) && unsafeWatchDirAbs(wp.Directory) {
+		// whole home directory. Specific named-file rules in such roots are kept.
+		if filepath.IsAbs(wp.Directory) && unsafeWatchTargetAbs(wp.Directory, wp.SyncAll, wp.Recursive, wp.IncludePatterns) {
 			seen[key] = true
 			continue
 		}

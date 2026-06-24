@@ -870,9 +870,10 @@ func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Reso
 				if abs == "" {
 					continue
 				}
-				if resolver.UnsafeWatchDir(abs) {
+				if resolver.UnsafeWatchTarget(abs, rule.SyncAll, rule.Recursive, rule.IncludePatterns) {
 					// A save folder must be game-specific. Refuse home/XDG/system
-					// roots so we never recursively sync dotfiles, caches, etc.
+					// roots unless the rule targets specific named files there, so
+					// we never recursively sync dotfiles, caches, etc.
 					stats.SkippedUnsafe++
 					clientlogx.EventWarn("watch_path_unsafe", "game_id", e.GameID, "dir", abs, "template", rule.Directory)
 					continue

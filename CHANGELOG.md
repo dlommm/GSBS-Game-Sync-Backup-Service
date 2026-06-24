@@ -4,6 +4,17 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.1.4] - 2026-06-24
+
+### Added
+
+- **Sync games that save directly in the home/user folder.** A top-level root (home, `%USERPROFILE%`, `~/.config`, etc.) may now be watched for **specific named files, non-recursively** — so a game that drops a known save file straight in `$HOME` syncs cleanly, while broad/wildcard/recursive rules on such roots stay blocked. Applies to manifest entries and manual adds (which are watched non-recursively when anchored at a root).
+
+### Fixed
+
+- **Reconcile honors non-recursive rules.** The initial scan previously walked the *entire* directory tree regardless of a rule's recursive flag (only filtering which files to upload). It now skips subdirectories for non-recursive rules, so a named-file-in-home rule no longer traverses all of home.
+- The home/root safety guard is confirmed to cover **Windows and macOS** as well as Linux (it's derived from the resolver's `%USERPROFILE%`/`%APPDATA%`/`%LOCALAPPDATA%`/`Documents` etc.), exercised by the cross-platform test on the Windows CI runner.
+
 ## [3.1.3] - 2026-06-24
 
 ### Fixed

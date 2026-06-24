@@ -47,3 +47,39 @@ func TestUnsafeWatchDir(t *testing.T) {
 		}
 	}
 }
+
+func TestUnsafeWatchTarget(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home", "user")
+	r := &Resolver{
+		Home:         home,
+		LocalAppData: filepath.Join(home, ".local", "share"),
+		AppData:      filepath.Join(home, ".config"),
+		XDGCacheHome: filepath.Join(home, ".cache"),
+	}
+	gameDir := filepath.Join(home, ".local", "share", "MyGame")
+
+	cases := []struct {
+		name      string
+		dir       string
+		syncAll   bool
+		recursive bool
+		patterns  []string
+		want      bool
+	}{
+		{"specific subfolder syncAll", gameDir, true, true, nil, false},
+		{"home syncAll", home, true, false, nil, true},
+		{"home recursive", home, false, true, nil, true},
+		{"home no patterns", home, false, false, nil, true},
+		{"home named file", home, false, false, []string{"savegame.dat"}, false},
+		{"home two named files", home, false, false, []string{".gamerc", "profile.sav"}, false},
+		{"home star", home, false, false, []string{"*"}, true},
+		{"home star-dot-star", home, false, false, []string{"*.*"}, true},
+		{"home recursive glob", home, false, false, []string{"**/*.sav"}, true},
+		{"home path pattern", home, false, false, []string{"sub/file.sav"}, true},
+	}
+	for _, c := range cases {
+		if got := r.UnsafeWatchTarget(c.dir, c.syncAll, c.recursive, c.patterns); got != c.want {
+			t.Errorf("%s: UnsafeWatchTarget=%v want %v", c.name, got, c.want)
+		}
+	}
+}

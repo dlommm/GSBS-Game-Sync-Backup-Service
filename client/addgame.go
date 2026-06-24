@@ -56,7 +56,7 @@ func searchManifestGames(q string, maxResults int) []manualGameResult {
 			}
 			seen[key] = true
 			dir, exists := bestResolvedDir(resolver, rule.Directory, currentOS, e.GameID, installRoots)
-			unsafe := dir != "" && resolver.UnsafeWatchDir(dir)
+			unsafe := dir != "" && resolver.UnsafeWatchTarget(dir, rule.SyncAll, rule.Recursive, rule.IncludePatterns)
 			if unsafe {
 				// Don't present a too-broad folder as an addable "folder found".
 				exists = false
@@ -128,13 +128,19 @@ func addManualWatchPath(gameID, title, directory string, syncAll bool, patterns 
 		cfg = blankConfig()
 	}
 
-	if configureResolverFromConfig(cfg).UnsafeWatchDir(directory) {
-		return fmt.Errorf("refusing to watch %q — that folder is too broad and would sync unrelated files (dotfiles, caches, other apps). Pick the game's specific save folder", directory)
-	}
-
 	patterns = trimPatterns(patterns)
 	if len(patterns) > 0 {
 		syncAll = false
+	}
+	// A top-level root (home/XDG/system) may only be watched non-recursively for
+	// specific named files — never recursively, so we never sweep unrelated files.
+	resolver := configureResolverFromConfig(cfg)
+	recursive := true
+	if resolver.UnsafeWatchDir(directory) {
+		recursive = false
+	}
+	if resolver.UnsafeWatchTarget(directory, syncAll, recursive, patterns) {
+		return fmt.Errorf("refusing to watch %q — it's a top-level folder. Pick the game's specific save folder, or list the exact file name(s) to sync from it (no wildcards like *)", directory)
 	}
 	rule := types.SaveRule{Directory: directory, SyncAll: syncAll, IncludePatterns: patterns}
 	ruleKey := saverule.RuleKey(gameID, rule)
@@ -144,7 +150,7 @@ func addManualWatchPath(gameID, title, directory string, syncAll bool, patterns 
 		RuleKey:         ruleKey,
 		Directory:       directory,
 		IncludePatterns: patterns,
-		Recursive:       true,
+		Recursive:       recursive,
 		SyncAll:         syncAll,
 	}
 	for _, existing := range cfg.WatchPaths {
