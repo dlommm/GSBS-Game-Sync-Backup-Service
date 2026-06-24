@@ -62,7 +62,10 @@ func DiagnoseGameSync(gameID string, entries []types.GameSaveLocation, resolver 
 			continue
 		}
 		hasAny = true
-		if e.Platform != string(currentOS) {
+		// Mirror ManifestToWatchPaths: on Linux a Windows-platform rule for a
+		// Steam game is a Proton candidate (resolved via compatdata).
+		protonCandidate := currentOS == paths.Linux && e.Platform == string(paths.Windows) && len(e.SteamAppIDs) > 0
+		if e.Platform != string(currentOS) && !protonCandidate {
 			continue
 		}
 		hasPlatform = true
@@ -75,8 +78,14 @@ func DiagnoseGameSync(gameID string, entries []types.GameSaveLocation, resolver 
 		}
 		hasValidRules = true
 		for _, rule := range rules {
-			for _, abs := range resolveManifestTemplate(resolver, rule.Directory, currentOS, gameID, installRootsByGame) {
-				if abs == "" {
+			var resolved []string
+			if protonCandidate {
+				resolved = resolveProtonPaths(resolver, rule, e.SteamAppIDs)
+			} else {
+				resolved = resolveManifestTemplate(resolver, rule.Directory, currentOS, gameID, installRootsByGame)
+			}
+			for _, abs := range resolved {
+				if abs == "" || resolver.UnsafeWatchTarget(abs, rule.SyncAll, rule.Recursive, rule.IncludePatterns) {
 					continue
 				}
 				res.ResolvedDirs = append(res.ResolvedDirs, abs)

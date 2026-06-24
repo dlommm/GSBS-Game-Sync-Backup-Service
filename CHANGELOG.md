@@ -4,6 +4,13 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.1.6] - 2026-06-24
+
+### Fixed
+
+- **Nested save files now upload (reconcile regression from 3.1.4).** Making the initial scan honor non-recursive rules was too broad: plain game-folder rules default to non-recursive, so the scan stopped descending into subfolders and nested saves weren't pushed to the server. The scan now recurses for normal game folders and only restricts to the top level for named-file rules anchored at a broad root (the home-folder safety case).
+- **Accurate Linux/Proton readiness.** The tray "Discovered games" status (and `debug-sync`) didn't account for Proton candidates, so Steam Windows games on Linux always showed "no saves for this OS" even when they resolve via the compatdata prefix. `DiagnoseGameSync` now mirrors the real watch logic (Proton-aware) and reports the true reason (ready to sync / save folder not found).
+
 ## [3.1.5] - 2026-06-24
 
 ### Fixed

@@ -36,11 +36,13 @@ func ReconcileLocalToServer(ctx context.Context, watchPaths []WatchPath, client 
 				return nil
 			}
 			if d.IsDir() {
-				// Honor non-recursive rules: only scan the top level of dir.
-				// Without this, a rule anchored at a broad root (e.g. a game that
-				// saves a named file directly in $HOME) would still walk the
-				// entire tree reading every file.
-				if !wp.Recursive && path != dir {
+				// Only restrict to the top level for named-file rules (the safety
+				// case: a game that saves a known file directly in a broad root
+				// like $HOME — we must not walk the whole tree). Plain folder
+				// rules recurse so nested save files still upload. Broad-root
+				// rules only ever reach here as non-recursive named-file rules
+				// (UnsafeWatchTarget blocks sync-all/recursive roots upstream).
+				if !wp.Recursive && len(wp.IncludePatterns) > 0 && path != dir {
 					return filepath.SkipDir
 				}
 				return nil
