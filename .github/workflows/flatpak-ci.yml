@@ -1,20 +1,34 @@
 name: Flatpak Build Check
 
-# Build-only validation of the Flatpak manifest (no signing or publishing).
-# Runs on manifest changes for fast iteration; the real signed publish happens
-# in the release workflow's build-flatpak job.
+# On manifest changes: build-only validation (no signing/publishing).
+# On manual (workflow_dispatch) runs: build, sign, and publish the static repo
+# to the GitHub Pages repo — a lightweight way to (re)publish the Flatpak
+# without re-running the full release workflow (Docker, GitHub release, etc.).
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. v3.1.0). Blank = latest tag."
+        required: false
+        type: string
   push:
     paths:
       - 'flatpak/**'
       - '.github/workflows/flatpak-ci.yml'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      HAS_GPG: ${{ secrets.GSBS_GPG_PRIVATE != '' }}
+      HAS_DEPLOY: ${{ secrets.GSBS_FLATPAK_DEPLOY_KEY != '' }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # tags needed to resolve the version
       - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
@@ -31,9 +45,37 @@ jobs:
         run: |
           appstreamcli validate --no-net flatpak/io.github.dlommm.GSBS.metainfo.xml
           desktop-file-validate flatpak/io.github.dlommm.GSBS.desktop
-      - name: Vendor Go dependencies
-        run: go mod vendor
-      - name: Build Flatpak (no publish)
+      - name: Resolve version
+        id: ver
         run: |
-          flatpak-builder --user --force-clean --install-deps-from=flathub \
-            --disable-rofiles-fuse build-dir flatpak/io.github.dlommm.GSBS.yaml
+          V="${{ github.event.inputs.version }}"
+          [ -n "$V" ] || V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0-dev)"
+          echo "tag=$V" >> "$GITHUB_OUTPUT"
+      - name: Build Flatpak
+        run: flatpak/build-flatpak.sh "${{ steps.ver.outputs.tag }}"
+      # --- signed publish: manual runs only ---
+      - name: Import GPG signing key
+        if: github.event_name == 'workflow_dispatch' && env.HAS_GPG == 'true'
+        run: echo "${{ secrets.GSBS_GPG_PRIVATE }}" | gpg --batch --import
+      - name: Sign and assemble static repo
+        if: github.event_name == 'workflow_dispatch' && env.HAS_GPG == 'true'
+        env:
+          GSBS_GPG_KEY: ${{ secrets.GSBS_GPG_KEY_ID }}
+          GSBS_REPO_URL: https://dlommm.github.io/gsbs-flatpak/repo
+        run: flatpak/update-repo.sh
+      - name: Publish to GitHub Pages repo (dlommm/gsbs-flatpak)
+        if: github.event_name == 'workflow_dispatch' && env.HAS_GPG == 'true' && env.HAS_DEPLOY == 'true'
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.GSBS_FLATPAK_DEPLOY_KEY }}" > ~/.ssh/flatpak_deploy
+          chmod 600 ~/.ssh/flatpak_deploy
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/flatpak_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          git clone --depth 1 --branch gh-pages git@github.com:dlommm/gsbs-flatpak.git pages
+          rm -rf pages/repo
+          cp -r flatpak/repo pages/repo
+          cd pages
+          git config user.name "gsbs-ci"
+          git config user.email "ci@users.noreply.github.com"
+          git add -A
+          git commit -m "Republish signed Flatpak repo for ${{ steps.ver.outputs.tag }}" || echo "no changes"
+          git push origin HEAD:gh-pages
