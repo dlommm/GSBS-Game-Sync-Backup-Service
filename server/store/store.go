@@ -92,6 +92,7 @@ type Store interface {
 	// GetSaveContentSize returns stored bytes for an existing save slot, or 0 if none.
 	GetSaveContentSize(ctx context.Context, userID, gameID, pathKey string) (int64, error)
 	DeleteSave(ctx context.Context, userID, gameID, pathKey string) error
+	DeleteSavesForGame(ctx context.Context, userID, gameID string) (int, error)
 	// Save versioning (last N versions per slot; retention policy applied on upsert)
 	ListSaveVersions(ctx context.Context, userID, gameID, pathKey string, limit int) ([]SaveVersionInfo, error)
 	GetSaveVersion(ctx context.Context, userID, gameID, pathKey string, version int) (*types.SaveBlob, error)

@@ -207,6 +207,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveSaveVersionDownload(w, r)
 	case path == "/dashboard/save/delete" && r.Method == http.MethodPost:
 		h.handleDeleteSave(w, r)
+	case path == "/dashboard/game/delete" && r.Method == http.MethodPost:
+		h.handleDeleteGameSaves(w, r)
 	case path == "/dashboard/settings" && r.Method == http.MethodGet:
 		h.serveSettings(w, r)
 	case path == "/dashboard/settings" && r.Method == http.MethodPost:

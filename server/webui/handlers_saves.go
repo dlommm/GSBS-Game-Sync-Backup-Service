@@ -125,6 +125,35 @@ func (h *WebHandler) serveSaveVersionDownload(w http.ResponseWriter, r *http.Req
 	w.Write(blob.Content)
 }
 
+func (h *WebHandler) handleDeleteGameSaves(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	if h.readOnly {
+		Redirect(w, r, "/dashboard?error=read_only")
+		return
+	}
+	userID, username, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+	gameID := strings.TrimSpace(r.FormValue("game_id"))
+	if gameID == "" {
+		Redirect(w, r, "/dashboard?error=delete_missing_params")
+		return
+	}
+	n, err := h.store.DeleteSavesForGame(r.Context(), userID, gameID)
+	if err != nil {
+		logx.Logger().Error().Err(err).Str("user_id", userID).Str("game_id", gameID).Msg("webui delete game saves failed")
+		Redirect(w, r, "/dashboard?error=delete_failed")
+		return
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "delete_game_saves", "", fmt.Sprintf("game_id=%s deleted=%d", gameID, n))
+	logx.Logger().Info().Str("user_id", userID).Str("game_id", gameID).Int("deleted", n).Msg("webui delete game saves ok")
+	Redirect(w, r, "/dashboard?deleted=1")
+}
+
 func (h *WebHandler) handleDeleteSave(w http.ResponseWriter, r *http.Request) {
 	if !ValidateCSRF(r, h.secret) {
 		http.Error(w, "Invalid security token.", http.StatusBadRequest)

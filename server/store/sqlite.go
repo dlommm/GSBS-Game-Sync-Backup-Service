@@ -822,6 +822,37 @@ func (s *sqliteStore) DeleteSave(ctx context.Context, userID, gameID, pathKey st
 	return nil
 }
 
+// DeleteSavesForGame removes every save (and its versions and filesystem blobs)
+// for one game belonging to a user. Returns the number of save rows deleted.
+func (s *sqliteStore) DeleteSavesForGame(ctx context.Context, userID, gameID string) (int, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT storage_path FROM saves WHERE user_id = ? AND game_id = ? AND storage_path IS NOT NULL AND storage_path != ''`,
+		userID, gameID,
+	)
+	if err == nil {
+		var paths []string
+		for rows.Next() {
+			var p sql.NullString
+			if rows.Scan(&p) == nil && p.Valid && p.String != "" {
+				paths = append(paths, p.String)
+			}
+		}
+		rows.Close()
+		for _, p := range paths {
+			removeSaveFile(p)
+		}
+	}
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM saves WHERE user_id = ? AND game_id = ?`, userID, gameID)
+	if err != nil {
+		return 0, err
+	}
+	_, _ = s.db.ExecContext(ctx,
+		`DELETE FROM save_versions WHERE user_id = ? AND game_id = ?`, userID, gameID)
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
 func (s *sqliteStore) ListSaveVersions(ctx context.Context, userID, gameID, pathKey string, limit int) ([]SaveVersionInfo, error) {
 	if limit <= 0 {
 		limit = 10
