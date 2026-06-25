@@ -267,8 +267,3 @@ func looksTextual(b []byte) bool {
 	}
 	return control*100 <= len(b) // <=1% control bytes
 }
-
-func htmlEscape(s string) string {
-	r := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
-	return r.Replace(s)
-}
