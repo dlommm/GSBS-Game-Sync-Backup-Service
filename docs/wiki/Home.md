@@ -32,7 +32,7 @@ GSBS is a self-hosted game save sync service. A lightweight server stores one co
 
 ## Screenshots
 
-| Server dashboard | Client tray |
+| Server dashboard | Client status |
 |---|---|
 | ![Dashboard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-webui-dashboard.png) | ![Client status](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-local-dashboard-status.png) |
 

@@ -1,4 +1,7 @@
-# GSBS — Game Sync & Backup Service
+<p align="center">
+  <img src="assets/images/Logo-Icon-Only.png" alt="GSBS logo" width="72" /><br />
+  <span style="font-size:2em"><strong>GSBS — Game Sync & Backup Service</strong></span>
+</p>
 
 [![CI](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml)
 [![Release](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml/badge.svg)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml)
@@ -6,7 +9,9 @@
 [![Docker Hub](https://img.shields.io/badge/Docker-dendlomm%2Fgsbs--server-blue)](https://hub.docker.com/r/dendlomm/gsbs-server)
 [![Latest release](https://img.shields.io/github/v/release/dlommm/GSBS--Game-Sync---Backup-Service-)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest)
 
-![GSBS — Game Sync & Backup Service](assets/images/readme-cover-image.png)
+<p align="center">
+  <img src="assets/images/readme-cover-image.png" alt="GSBS-readme-cover" width="72" />
+</p>
 
 <p align="center"><strong>SYNC. BACKUP. PROTECT.</strong> — keep your game saves synced and safe across every device.</p>
 
@@ -23,7 +28,7 @@
 
 | Dashboard | System tray |
 |-----------|-------------|
-| ![Dashboard](docs/images/screenshots/example-webui-dashboard.png) | ![Client status](docs/images/screenshots/example-client-local-dashboard-status.png) |
+| ![Dashboard](docs/images/screenshots/example-webui-dashboard.png) | ![Client status](/assets/images/system-tray-icons-32x32.png) |
 
 ## Quick install
 
