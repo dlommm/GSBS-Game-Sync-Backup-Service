@@ -1,7 +1,7 @@
-<p align="center">
-  <img src="assets/images/Logo-Icon-Only.png" alt="GSBS logo" width="72" /><br />
-  <span style="font-size:2em"><strong>GSBS — Game Sync & Backup Service</strong></span>
-</p>
+<h1 align="center">
+  <img src="assets/images/Logo-Icon-Only.png" alt="GSBS logo" height="56" align="middle" />
+  &nbsp;GSBS — Game Sync &amp; Backup Service
+</h1>
 
 [![CI](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml)
 [![Release](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml/badge.svg)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml)
@@ -10,7 +10,7 @@
 [![Latest release](https://img.shields.io/github/v/release/dlommm/GSBS--Game-Sync---Backup-Service-)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest)
 
 <p align="center">
-  <img src="assets/images/readme-cover-image.png" alt="GSBS-readme-cover" width="72" />
+  <img src="assets/images/readme-cover-image.png" alt="GSBS — Game Sync & Backup Service" width="100%" />
 </p>
 
 <p align="center"><strong>SYNC. BACKUP. PROTECT.</strong> — keep your game saves synced and safe across every device.</p>
