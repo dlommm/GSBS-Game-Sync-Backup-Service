@@ -311,6 +311,7 @@
       <input type="hidden" name="tab" value="sync">
       <select name="mode" class="filter-select" onchange="this.form.submit()">
         <option value="">All modes</option>
+        <option value="bundle" {{if eq .SyncFilterMode "bundle"}}selected{{end}}>bundle (S3)</option>
         <option value="incremental" {{if eq .SyncFilterMode "incremental"}}selected{{end}}>incremental</option>
         <option value="full" {{if eq .SyncFilterMode "full"}}selected{{end}}>full</option>
       </select>

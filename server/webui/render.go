@@ -154,6 +154,7 @@ type adminOverviewData struct {
 	// First-run onboarding: prompt the admin to choose a save-location source
 	// (prebuilt bundle vs live PCGW API) when none has been explicitly chosen.
 	ShowSourcePrompt bool
+	Version          string
 }
 
 type adminUsersData struct {
@@ -254,6 +255,7 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 		"gaugeSVG":        gaugeSVG,
 		"gameSyncStatus":  gameSyncStatus,
 		"auditTone":       auditTone,
+		"auditCategory":   auditCategory,
 		"barsSVG":         barsSVG,
 		"signedBytes":     signedBytes,
 		"dict":            dict,
@@ -308,6 +310,20 @@ func barsSVG(counts []store.DayCount, width, height int) template.HTML {
 	return template.HTML(fmt.Sprintf(
 		`<svg class="bars-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="Sync volume by day">%s</svg>`,
 		width, height, b.String()))
+}
+
+// auditCategory groups an audit action for the dashboard activity tabs.
+func auditCategory(action string) string {
+	switch action {
+	case "restore_version", "delete_save", "delete_game_saves":
+		return "saves"
+	case "revoke_client", "rename_client":
+		return "devices"
+	case "enable_2fa", "disable_2fa", "encryption_setting", "revoke_session":
+		return "security"
+	default:
+		return "other"
+	}
 }
 
 // auditTone maps an audit action to a semantic colour tone for its timeline dot.

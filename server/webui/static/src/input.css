@@ -900,6 +900,25 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 .rename-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 .rename-dialog .text-input { width: 100%; margin-top: 0.75rem; }
 
+/* ── Tabs (activity feed, etc.) ── */
+.tabs { display: inline-flex; gap: 0.15rem; padding: 0.2rem; background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.tab { padding: 0.3rem 0.7rem; background: transparent; color: var(--text-muted); border: none; border-radius: var(--radius-xs); font-family: inherit; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: color var(--transition), background var(--transition); }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); background: var(--accent-muted); }
+.tab-empty { padding: 1.5rem 1.25rem; }
+
+/* ── Admin About / branding card ── */
+.about-card { display: flex; align-items: center; gap: 1.25rem; margin-bottom: 1.5rem; padding: 1.25rem 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); background-image: radial-gradient(ellipse 60% 120% at 0% 0%, var(--accent-muted) 0%, transparent 70%); }
+.about-logo { width: 64px; height: 64px; flex: none; object-fit: contain; }
+.about-body { min-width: 0; }
+.about-title { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.02em; }
+.about-tagline { margin: 0.25rem 0 0.6rem; color: var(--text-secondary); font-size: 0.875rem; }
+.about-meta { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; font-size: 0.8125rem; }
+.about-pill { padding: 0.1rem 0.5rem; font-family: var(--mono); font-size: 0.6875rem; font-weight: 600; background: var(--accent-muted); color: var(--accent-hover); border-radius: var(--radius-xs); }
+.about-link { color: var(--accent); text-decoration: none; font-weight: 500; }
+.about-link:hover { text-decoration: underline; }
+@media (max-width: 640px) { .about-card { flex-direction: column; text-align: center; align-items: center; } }
+
 /* ── Save version change deltas ── */
 .change-up { color: var(--success); }
 .change-down { color: var(--text-muted); }

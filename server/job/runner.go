@@ -551,6 +551,15 @@ func (r *Runner) runPCGWBundleFetch(parentCtx context.Context, jobName string, o
 		r.mu.Unlock()
 	}
 
+	// Record the bundle fetch in the PCGW sync history too (the "Sync History"
+	// view shows pcgw_sync_runs, not job_runs) so S3-bundle servers still get a
+	// per-sync record of successes, failures, and change counts.
+	syncRunID, srErr := r.store.StartPCGWSyncRun(jobCtx, "bundle")
+	if srErr != nil {
+		logx.Logger().Warn().Str("component", "job").Str("job", jobName).Err(srErr).Msg("bundle fetch: start sync run")
+		syncRunID = ""
+	}
+
 	fetchResult, fetchErr := PCGWBundleFetch(jobCtx, r.store, opts)
 
 	status := JobSuccess
@@ -597,6 +606,24 @@ func (r *Runner) runPCGWBundleFetch(parentCtx context.Context, jobName string, o
 		if err := r.store.LogJobFinish(jobCtx, runID, status, errMsg, entries); err != nil {
 			logx.Logger().Error().Str("component", "job").Str("job", jobName).Err(err).Msg("job runner: log finish")
 		}
+	}
+
+	if syncRunID != "" {
+		// games_ok carries the change count (rows added/updated this sync), which
+		// the Sync History view surfaces as the per-sync delta vs the last run.
+		stats := store.PCGWSyncRunStats{}
+		if fetchErr == nil && !fetchResult.NotModified {
+			stats.GamesTotal = fetchResult.ImportResult.GameSaveLocations
+			stats.GamesOK = fetchResult.ImportResult.RowsChanged
+			stats.GamesSkipped = fetchResult.ImportResult.SkippedUnchanged
+		}
+		// Finalize on a detached context so a canceled/timed-out job still records
+		// a terminal status instead of leaving the run stuck "running".
+		finCtx, finCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := r.store.FinishPCGWSyncRun(finCtx, syncRunID, status, errMsg, stats); err != nil {
+			logx.Logger().Warn().Str("component", "job").Str("job", jobName).Err(err).Msg("bundle fetch: finish sync run")
+		}
+		finCancel()
 	}
 
 	if r.hub != nil {

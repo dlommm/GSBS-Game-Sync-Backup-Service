@@ -4,6 +4,18 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-06-25
+
+### Changed
+
+- **Dashboard:** the Recent Activity feed is now a tabbed section (All / Saves / Devices / Security), and the redundant Synced Saves panel at the bottom was removed — synced saves now live on the dedicated My Games page.
+- **Admin overview** now opens with a branded About card (logo, version, and quick links).
+
+### Fixed
+
+- **Admin Users:** the row "Actions" dropdown was being painted underneath the next row's sticky cell, making it hard to read. The open row's cell is now raised above its siblings.
+- **S3 sync history:** S3 bundle syncs are now recorded in the PCGW Sync History (mode `bundle`) with success/failure status and the per-sync change count, and the "Latest sync run" timestamp reflects them. Previously the Sync History was empty when using the S3 bundle source.
+
 ## [3.2.0] - 2026-06-25
 
 ### Added

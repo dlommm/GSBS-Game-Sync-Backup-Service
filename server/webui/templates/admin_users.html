@@ -186,12 +186,18 @@ function positionActionMenu(menu) {
 }
 document.querySelectorAll('details.action-menu').forEach(function(menu) {
   menu.addEventListener('toggle', function() {
+    var cell = menu.closest('.cell-action');
     if (menu.open) {
       document.querySelectorAll('details.action-menu').forEach(function(other) {
         if (other !== menu && other.open) other.open = false;
       });
+      // The actions column is position:sticky with z-index:1, so each row's cell
+      // is its own stacking context. Raise the open row's cell above the others
+      // so its (fixed) dropdown isn't painted under the next row's cell.
+      if (cell) cell.style.zIndex = '40';
       positionActionMenu(menu);
     } else {
+      if (cell) cell.style.zIndex = '';
       var panel = menu.querySelector('.action-menu-panel');
       if (panel) resetActionMenuPanel(panel);
     }

@@ -1,6 +1,19 @@
 {{template "layout" .}}
 {{define "admin_overview_title"}}Admin Overview — GSBS{{end}}
 {{define "admin_overview_content"}}
+<section class="about-card" aria-label="About GSBS">
+  <img src="/static/primary-logo.png" alt="GSBS" class="about-logo">
+  <div class="about-body">
+    <div class="about-title">GSBS — Game Sync &amp; Backup Service</div>
+    <p class="about-tagline">Self-hosted save syncing &amp; versioned backups. Sync. Backup. Protect.</p>
+    <div class="about-meta">
+      {{if .Version}}<span class="about-pill">v{{.Version}}</span>{{end}}
+      <a class="about-link" href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="about-link" href="/admin/settings">Settings</a>
+    </div>
+  </div>
+</section>
+
 <section class="stats-row stats-row-6" aria-label="Global statistics">
   <div class="stat-card"><div class="stat-value">{{.Stats.UserCount}}</div><div class="stat-label">Users</div></div>
   <div class="stat-card"><div class="stat-value">{{.Stats.ClientCount}}</div><div class="stat-label">Clients</div></div>

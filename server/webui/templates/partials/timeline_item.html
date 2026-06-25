@@ -1,5 +1,5 @@
 {{define "partials/timeline_item.html"}}
-<li class="timeline-item">
+<li class="timeline-item" data-cat="{{auditCategory .Action}}">
   <span class="timeline-dot tone-{{auditTone .Action}}" aria-hidden="true"></span>
   <div class="timeline-time">{{formatTime .At}}</div>
   <div class="timeline-action">{{auditLabel .Action}}</div>

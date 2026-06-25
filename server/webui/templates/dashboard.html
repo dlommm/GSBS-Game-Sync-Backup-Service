@@ -37,35 +37,55 @@
 </section>
 
 <section class="panel" aria-labelledby="activity-heading">
-  <div class="panel-header"><h2 id="activity-heading">Recent Activity</h2></div>
+  <div class="panel-header-actions">
+    <h2 id="activity-heading">Recent Activity</h2>
+    <div class="tabs" role="tablist" id="activity-tabs" aria-label="Filter activity">
+      <button type="button" class="tab active" data-cat="all" role="tab" aria-selected="true">All</button>
+      <button type="button" class="tab" data-cat="saves" role="tab" aria-selected="false">Saves</button>
+      <button type="button" class="tab" data-cat="devices" role="tab" aria-selected="false">Devices</button>
+      <button type="button" class="tab" data-cat="security" role="tab" aria-selected="false">Security</button>
+    </div>
+  </div>
   <div id="activity-feed"
        hx-get="/dashboard/partial/activity"
        hx-trigger="load, save-updated from:body"
        hx-swap="innerHTML">
     <p class="panel-empty">Loading activity…</p>
   </div>
-</section>
-
-<section class="panel" aria-labelledby="saves-heading">
-  <div class="panel-header-actions">
-    <h2 id="saves-heading">Synced Saves</h2>
-    <a class="btn-ghost-sm" href="/dashboard/games">Open My Games →</a>
-    <div class="search-wrap" style="padding:0;">
-      <input type="search" class="search-input" name="q" placeholder="Search saves…"
-             hx-get="/dashboard/partial/saves"
-             hx-trigger="keyup changed delay:300ms, search"
-             hx-target="#saves-table"
-             hx-include="this">
-    </div>
-  </div>
-  <div id="saves-table"
-       hx-get="/dashboard/partial/saves"
-       hx-trigger="load, save-updated from:body"
-       hx-swap="innerHTML">
-    <p class="panel-empty">Loading saves…</p>
-  </div>
+  <p class="panel-empty tab-empty" id="activity-tab-empty" hidden>No recent activity in this category.</p>
 </section>
 {{end}}
 {{define "dashboard_scripts"}}
 <div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>
+<script>
+(function () {
+  var tabs = document.getElementById('activity-tabs');
+  var feed = document.getElementById('activity-feed');
+  var empty = document.getElementById('activity-tab-empty');
+  if (!tabs || !feed) return;
+  var cur = 'all';
+  function apply() {
+    var items = feed.querySelectorAll('.timeline-item');
+    var shown = 0;
+    items.forEach(function (li) {
+      var match = cur === 'all' || li.getAttribute('data-cat') === cur;
+      li.style.display = match ? '' : 'none';
+      if (match) shown++;
+    });
+    if (empty) empty.hidden = !(items.length > 0 && shown === 0);
+  }
+  tabs.addEventListener('click', function (e) {
+    var b = e.target.closest('.tab');
+    if (!b) return;
+    cur = b.getAttribute('data-cat');
+    tabs.querySelectorAll('.tab').forEach(function (t) {
+      var on = t === b;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    apply();
+  });
+  feed.addEventListener('htmx:afterSwap', apply);
+})();
+</script>
 {{end}}

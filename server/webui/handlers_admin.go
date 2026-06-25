@@ -309,6 +309,7 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 		IdleRunsNeeded:        jobsData.IdleRunsNeeded,
 		IdleTotalETASec:       jobsData.IdleTotalETASec,
 		IdlePerRunETASec:      jobsData.IdlePerRunETASec,
+		Version:               h.gsbsVersion,
 	})
 }
 
