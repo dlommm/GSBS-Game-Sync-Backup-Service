@@ -4,12 +4,17 @@ Wiki and README screenshots live in this folder.
 
 ## Core screenshots (used in wiki home/README)
 
-| File | Capture |
-|------|---------|
-| `dashboard.png` | Server WebUI dashboard (`/dashboard`) |
-| `admin-overview.png` | Server admin overview (`/admin`) |
-| `setup-wizard.png` | Client setup wizard (`http://127.0.0.1:41234/`) |
-| `tray-menu.png` | Windows/Linux systray menu (manual capture) |
+These point at the real `example-*` captures below:
+
+| Caption | File |
+|---------|------|
+| Dashboard | `example-webui-dashboard.png` |
+| Admin overview | `example-webui-admin-overview.png` |
+| Setup wizard | `example-setup-wizard.png` |
+| Client status | `example-client-local-dashboard-status.png` |
+
+> Note: these captures predate the brand refresh, so their in-app logo is the
+> old emblem. Re-capture them from the rebranded app to fully update the docs.
 
 ## Server WebUI pages
 

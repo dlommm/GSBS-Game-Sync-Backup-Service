@@ -34,11 +34,11 @@ GSBS is a self-hosted game save sync service. A lightweight server stores one co
 
 | Server dashboard | Client tray |
 |---|---|
-| ![Dashboard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/dashboard.png) | ![Tray menu](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/tray-menu.png) |
+| ![Dashboard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-webui-dashboard.png) | ![Client status](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-local-dashboard-status.png) |
 
 | Client setup wizard | Admin overview |
 |---|---|
-| ![Setup wizard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/setup-wizard.png) | ![Admin overview](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/admin-overview.png) |
+| ![Setup wizard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-setup-wizard.png) | ![Admin overview](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-webui-admin-overview.png) |
 
 ---
 

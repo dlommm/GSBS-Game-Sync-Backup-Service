@@ -32,7 +32,7 @@ Files inside:
 
 If the client is not logged in, it opens a browser setup page at `http://127.0.0.1:41234` automatically.
 
-![Setup wizard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/setup-wizard.png)
+![Setup wizard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-setup-wizard.png)
 
 1. Enter your **Server URL** (e.g. `https://gsbs.yourdomain.com`).
 2. Enter your **username and password** (or register on the server WebUI first).
@@ -45,7 +45,7 @@ On Windows, the tray **Login…** item opens this browser page by default. A nat
 
 ## System tray
 
-![Tray menu](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/tray-menu.png)
+![Client status](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-local-dashboard-status.png)
 
 ### Tray menu structure
 

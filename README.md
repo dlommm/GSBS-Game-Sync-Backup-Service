@@ -23,7 +23,7 @@
 
 | Dashboard | System tray |
 |-----------|-------------|
-| ![Dashboard](docs/images/screenshots/dashboard.png) | ![Tray menu](docs/images/screenshots/tray-menu.png) |
+| ![Dashboard](docs/images/screenshots/example-webui-dashboard.png) | ![Client status](docs/images/screenshots/example-client-local-dashboard-status.png) |
 
 ## Quick install
 

@@ -194,7 +194,7 @@ The admin interface is available at `/admin` (session required + must match `GSB
 | `/admin/analytics` | Storage, active clients, sync volume, PCGW coverage |
 | `/admin/pcgw` | PCGW catalog search, sync controls, per-game detail, export/import |
 
-![Admin overview](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/admin-overview.png)
+![Admin overview](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-webui-admin-overview.png)
 
 | Users management | PCGW management |
 |---|---|

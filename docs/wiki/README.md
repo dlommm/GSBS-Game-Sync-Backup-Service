@@ -130,7 +130,7 @@ Do not embed links to `docs/*.md` repo files in wiki pages — convert them to w
 Images are referenced by GitHub URL (the sync script inserts the base URL):
 
 ```markdown
-![Dashboard screenshot](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/dashboard.png)
+![Dashboard screenshot](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-webui-dashboard.png)
 ```
 
 Available screenshots in `docs/images/screenshots/`:
