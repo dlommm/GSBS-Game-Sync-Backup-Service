@@ -888,11 +888,19 @@ func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Reso
 				}
 				seen[key] = true
 				addedRule = true
+				// For Proton candidates the Windows template (rule.Directory)
+				// can't be re-derived later (the watcher/reconcile resolver isn't
+				// Proton-aware), so store the already-resolved compatdata path.
+				// Native rules keep the template so it re-resolves per sync.
+				dir := rule.Directory
+				if protonCandidate {
+					dir = abs
+				}
 				out = append(out, watchPath{
 					GameID:          e.GameID,
 					PathKey:         ruleKey,
 					RuleKey:         ruleKey,
-					Directory:       rule.Directory,
+					Directory:       dir,
 					IncludePatterns: append([]string(nil), rule.IncludePatterns...),
 					Recursive:       rule.Recursive,
 					SyncAll:         rule.SyncAll,

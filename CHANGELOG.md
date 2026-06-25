@@ -4,6 +4,12 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.1.7] - 2026-06-25
+
+### Fixed
+
+- **Linux/Proton: saves now actually upload.** Discovered Steam games resolved their Proton `compatdata` save path for the readiness check, but the watch path then stored the raw *Windows* template (e.g. `%LOCALAPPDATA%\\...`) instead of the resolved path. The watcher and reconcile re-resolve that template with a non-Proton resolver — on Linux `%LOCALAPPDATA%` maps to `~/.local/share/...`, which doesn't exist — so the watcher registered `0` paths and nothing synced ("3 active watch paths" but `watcher_paths count=0`). The watch path now stores the resolved compatdata path for Proton candidates, so both the watcher and reconcile use the real save folder.
+
 ## [3.1.6] - 2026-06-24
 
 ### Fixed
