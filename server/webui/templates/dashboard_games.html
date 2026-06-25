@@ -1,0 +1,106 @@
+{{template "layout" .}}
+{{define "dashboard_games_title"}}My Games — GSBS{{end}}
+{{define "dashboard_games_content"}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">My Games</h1>
+    <p class="page-sub">Every game you sync, at a glance.</p>
+  </div>
+  <div class="page-head-actions">
+    <a class="btn-ghost-sm" href="/dashboard/export/saves.csv" download>Export CSV</a>
+    <a class="btn-ghost-sm" href="/dashboard/export/saves.json" download>Export JSON</a>
+  </div>
+</div>
+
+<form id="games-filter" class="games-toolbar" onsubmit="return false;" role="search" aria-label="Filter games">
+  <div class="search-wrap games-search">
+    <input type="search" class="search-input" name="q" placeholder="Search games…" value="{{.Query}}"
+           aria-label="Search games"
+           hx-get="/dashboard/partial/games" hx-target="#games-grid" hx-include="#games-filter" hx-swap="innerHTML"
+           hx-trigger="keyup changed delay:300ms, search">
+  </div>
+  <label class="sr-only" for="games-status">Status</label>
+  <select id="games-status" class="select-input" name="status"
+          hx-get="/dashboard/partial/games" hx-target="#games-grid" hx-include="#games-filter" hx-swap="innerHTML">
+    <option value="all"{{if eq .Status "all"}} selected{{end}}>All statuses</option>
+    <option value="healthy"{{if eq .Status "healthy"}} selected{{end}}>Healthy</option>
+    <option value="stale"{{if eq .Status "stale"}} selected{{end}}>Stale</option>
+  </select>
+  <label class="sr-only" for="games-sort">Sort</label>
+  <select id="games-sort" class="select-input" name="sort"
+          hx-get="/dashboard/partial/games" hx-target="#games-grid" hx-include="#games-filter" hx-swap="innerHTML">
+    <option value="recent"{{if eq .Sort "recent"}} selected{{end}}>Recently synced</option>
+    <option value="name"{{if eq .Sort "name"}} selected{{end}}>Name (A–Z)</option>
+    <option value="size"{{if eq .Sort "size"}} selected{{end}}>Largest</option>
+    <option value="files"{{if eq .Sort "files"}} selected{{end}}>Most files</option>
+  </select>
+  <div class="view-toggle" role="group" aria-label="View mode">
+    <button type="button" class="view-btn{{if ne .View "list"}} active{{end}}"
+            hx-get="/dashboard/partial/games" hx-target="#games-grid" hx-include="#games-filter" hx-swap="innerHTML"
+            hx-vals='{"view":"grid"}'
+            onclick="document.getElementById('games-view').value='grid';this.parentNode.querySelectorAll('.view-btn').forEach(function(b){b.classList.remove('active')});this.classList.add('active');"
+            aria-label="Grid view">▦ Grid</button>
+    <button type="button" class="view-btn{{if eq .View "list"}} active{{end}}"
+            hx-get="/dashboard/partial/games" hx-target="#games-grid" hx-include="#games-filter" hx-swap="innerHTML"
+            hx-vals='{"view":"list"}'
+            onclick="document.getElementById('games-view').value='list';this.parentNode.querySelectorAll('.view-btn').forEach(function(b){b.classList.remove('active')});this.classList.add('active');"
+            aria-label="List view">☰ List</button>
+  </div>
+  <input type="hidden" id="games-view" name="view" value="{{.View}}">
+</form>
+
+<form id="bulk-form" method="post" action="/dashboard/games/bulk-delete">
+  <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+  <div id="bulk-bar" class="bulk-bar" hidden>
+    <span class="bulk-count" id="bulk-count">0 selected</span>
+    <div class="bulk-bar-actions">
+      <button type="button" class="btn-ghost-sm" data-bulk-clear>Clear</button>
+      <button type="submit" class="btn-danger-sm" data-bulk-submit>Delete selected</button>
+    </div>
+  </div>
+  <div id="games-grid"
+       hx-get="/dashboard/partial/games" hx-include="#games-filter"
+       hx-trigger="load, save-updated from:body" hx-swap="innerHTML"
+       aria-live="polite">
+    {{template "partials/loading_skeleton.html" .}}
+  </div>
+</form>
+{{end}}
+{{define "dashboard_games_scripts"}}
+<div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>
+<script>
+(function () {
+  var form = document.getElementById('bulk-form');
+  var bar = document.getElementById('bulk-bar');
+  var count = document.getElementById('bulk-count');
+  var grid = document.getElementById('games-grid');
+  if (!form || !bar) return;
+  function checks() { return Array.prototype.slice.call(form.querySelectorAll('.bulk-check')); }
+  function refresh() {
+    var n = checks().filter(function (c) { return c.checked; }).length;
+    count.textContent = n + ' selected';
+    bar.hidden = n === 0;
+  }
+  form.addEventListener('change', function (e) {
+    if (e.target.classList.contains('bulk-select-all')) {
+      var on = e.target.checked;
+      checks().forEach(function (c) { c.checked = on; });
+    }
+    if (e.target.classList.contains('bulk-check') || e.target.classList.contains('bulk-select-all')) refresh();
+  });
+  form.addEventListener('click', function (e) {
+    if (e.target.matches('[data-bulk-clear]')) {
+      checks().forEach(function (c) { c.checked = false; });
+      var all = form.querySelector('.bulk-select-all'); if (all) all.checked = false;
+      refresh();
+    }
+  });
+  form.addEventListener('submit', function (e) {
+    var n = checks().filter(function (c) { return c.checked; }).length;
+    if (n === 0) { e.preventDefault(); return; }
+    if (!confirm('Delete ALL saves for ' + n + ' game' + (n === 1 ? '' : 's') + '? This cannot be undone.')) e.preventDefault();
+  });
+  if (grid) grid.addEventListener('htmx:afterSwap', refresh);
+})();
+</script>
+{{end}}

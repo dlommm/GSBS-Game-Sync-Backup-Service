@@ -4,6 +4,28 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-06-25
+
+### Added
+
+- **Dedicated "My Games" page** (`/dashboard/games`) — a grid/list browser of your synced games with generated cover-tile icons, per-game health status (healthy/stale), search, status filtering, and sorting (recent/name/size/files). Includes CSV/JSON export of save metadata and bulk-delete of multiple games from the list view.
+- **Game detail page** (`/dashboard/games/{id}`) — sticky header, metric cards (files, total size, last sync, encryption), a per-category save-file explorer with inline text preview, and an insights sidebar that highlights the largest recorded change and the device that made it.
+- **Insights page** (`/dashboard/analytics`) — a per-day sync-volume chart, top games by storage, connected-device list, and backup-health alerts (e.g. "device X hasn't synced in N days").
+- **Devices page** (`/dashboard/clients`) — manage connected devices with live online/offline status, rename, and revoke.
+- **Command palette** (`Ctrl`/`⌘`+`K`) — global search across pages and games with full keyboard navigation.
+- **Admin per-user drill-down** — a read-only view of any user's insights, linked from the Users page.
+- **Dashboard refresh** — a storage-usage gauge, quick-access tiles, and an activity feed with status-coloured events.
+
+### Changed
+
+- Refreshed the admin sidebar with icons and collapsible sections (persisted per browser).
+- Save version history now records and displays the per-version byte change and the device that wrote each version.
+
+### Backend
+
+- Schema migration (v21): `save_versions` now stores `client_id` and `change_bytes` per version.
+- Added per-user sync-volume and largest-change aggregation queries, a per-user device rename, and a `client-activity` SSE event broadcast on push.
+
 ## [3.1.7] - 2026-06-25
 
 ### Fixed

@@ -72,6 +72,94 @@ func TestSQLite_RegisterClient_ClientByToken_ListClientsByUserID(t *testing.T) {
 	}
 }
 
+func TestSQLite_RenameClient(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	userID, _ := st.CreateUser(ctx, "u", "h")
+	otherID, _ := st.CreateUser(ctx, "other", "h")
+	if _, err := st.RegisterClient(ctx, userID, "old-name", "windows"); err != nil {
+		t.Fatal(err)
+	}
+	clients, _ := st.ListClientsByUserID(ctx, userID)
+	if len(clients) != 1 {
+		t.Fatalf("expected 1 client, got %d", len(clients))
+	}
+	clientID := clients[0].ID
+
+	if err := st.RenameClient(ctx, userID, clientID, "new-name"); err != nil {
+		t.Fatalf("RenameClient: %v", err)
+	}
+	clients, _ = st.ListClientsByUserID(ctx, userID)
+	if clients[0].Name != "new-name" {
+		t.Errorf("expected renamed client, got %q", clients[0].Name)
+	}
+
+	// A different user must not be able to rename someone else's device.
+	if err := st.RenameClient(ctx, otherID, clientID, "hijacked"); err == nil {
+		t.Error("expected error renaming another user's client")
+	}
+	clients, _ = st.ListClientsByUserID(ctx, userID)
+	if clients[0].Name != "new-name" {
+		t.Errorf("cross-user rename leaked: %q", clients[0].Name)
+	}
+}
+
+func TestSQLite_SyncVolumeByDay(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	userID, _ := st.CreateUser(ctx, "u", "h")
+
+	// Empty store: a zero-filled window of the requested length.
+	days, err := st.SyncVolumeByDay(ctx, userID, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(days) != 7 {
+		t.Fatalf("expected 7 days, got %d", len(days))
+	}
+	for _, d := range days {
+		if d.Count != 0 {
+			t.Errorf("expected 0 for %s, got %d", d.Day, d.Count)
+		}
+	}
+
+	// Two distinct pushes today create two save versions.
+	if err := st.UpsertSave(ctx, userID, "g", "p", []byte("v1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpsertSave(ctx, userID, "g", "p", []byte("v2")); err != nil {
+		t.Fatal(err)
+	}
+
+	days, err = st.SyncVolumeByDay(ctx, userID, 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	today := time.Now().UTC().Format("2006-01-02")
+	total, todayCount := 0, 0
+	for _, d := range days {
+		total += d.Count
+		if d.Day == today {
+			todayCount = d.Count
+		}
+	}
+	if total != 2 {
+		t.Errorf("expected total 2, got %d", total)
+	}
+	if todayCount != 2 {
+		t.Errorf("expected today=2, got %d", todayCount)
+	}
+}
+
 func TestSQLite_UpsertSave_ListSaves_GetSave(t *testing.T) {
 	st, err := NewSQLite(":memory:")
 	if err != nil {

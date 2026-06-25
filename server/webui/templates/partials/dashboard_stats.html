@@ -11,15 +11,16 @@
   <div class="stat-card"><div class="stat-value">{{formatBytes .Stats.TotalBytes}}</div><div class="stat-label">Storage used</div></div>
 </section>
 {{if gt .QuotaBytes 0}}
-<div class="quota-bar-wrap" aria-label="Storage quota">
-  <div class="quota-bar-header">
-    <span>Storage quota</span>
-    <span>{{formatBytes .Stats.TotalBytes}} / {{formatBytes .QuotaBytes}}</span>
+<section class="storage-hero" aria-label="Storage overview">
+  <div class="storage-hero-gauge" aria-hidden="true">{{gaugeSVG .Stats.TotalBytes .QuotaBytes 168 104}}</div>
+  <div class="storage-hero-info">
+    <div class="storage-hero-label">Storage used</div>
+    <div class="storage-hero-value">{{formatBytes .Stats.TotalBytes}} <span>/ {{formatBytes .QuotaBytes}}</span></div>
+    <div class="quota-bar-track storage-hero-bar">
+      <div class="quota-bar-fill {{quotaBarClass .Stats.TotalBytes .QuotaBytes}}" style="width:{{printf "%.1f" (percent .Stats.TotalBytes .QuotaBytes)}}%;"></div>
+    </div>
   </div>
-  <div class="quota-bar-track">
-    <div class="quota-bar-fill {{quotaBarClass .Stats.TotalBytes .QuotaBytes}}" style="width:{{printf "%.1f" (percent .Stats.TotalBytes .QuotaBytes)}}%;"></div>
-  </div>
-</div>
+</section>
 {{end}}
 {{end}}
 {{end}}

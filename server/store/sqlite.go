@@ -467,6 +467,20 @@ func (s *sqliteStore) RevokeClient(ctx context.Context, clientID string) error {
 	return nil
 }
 
+// RenameClient updates a client's display name, scoped to its owning user so a
+// user can only rename their own devices.
+func (s *sqliteStore) RenameClient(ctx context.Context, userID, clientID, name string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE clients SET name = ? WHERE id = ? AND user_id = ?`, name, clientID, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("client not found")
+	}
+	return nil
+}
+
 // RevokeAllClientTokens rotates the API token for every client owned by userID,
 // forcing those clients to re-authenticate (e.g. after a password or 2FA change).
 func (s *sqliteStore) RevokeAllClientTokens(ctx context.Context, userID string) error {
@@ -650,10 +664,24 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 		_ = tx.Rollback()
 		return false, err
 	}
+	// change_bytes is the size delta versus the immediately-previous version
+	// (the full size for the first version), measured the same way ListSaveVersions
+	// reports SizeBytes (LENGTH(content)).
+	changeBytes := int64(len(content))
+	if nextVer > 1 {
+		var prevSize sql.NullInt64
+		_ = tx.QueryRowContext(ctx,
+			`SELECT LENGTH(content) FROM save_versions WHERE user_id = ? AND game_id = ? AND path_key = ? AND version = ?`,
+			userID, gameID, pathKey, nextVer-1,
+		).Scan(&prevSize)
+		if prevSize.Valid {
+			changeBytes = int64(len(content)) - prevSize.Int64
+		}
+	}
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO save_versions (user_id, game_id, path_key, version, content, updated_at, content_hash)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		userID, gameID, pathKey, nextVer, content, now, contentHash,
+		`INSERT INTO save_versions (user_id, game_id, path_key, version, content, updated_at, content_hash, client_id, change_bytes)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		userID, gameID, pathKey, nextVer, content, now, contentHash, nullIfEmpty(clientID), changeBytes,
 	)
 	if err != nil {
 		_ = tx.Rollback()
@@ -858,7 +886,12 @@ func (s *sqliteStore) ListSaveVersions(ctx context.Context, userID, gameID, path
 		limit = 10
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT version, updated_at, LENGTH(content) FROM save_versions WHERE user_id = ? AND game_id = ? AND path_key = ? ORDER BY version DESC LIMIT ?`,
+		`SELECT sv.version, sv.updated_at, LENGTH(sv.content), COALESCE(sv.change_bytes, 0),
+		        COALESCE(sv.client_id, ''), COALESCE(c.name, '')
+		 FROM save_versions sv
+		 LEFT JOIN clients c ON c.id = sv.client_id
+		 WHERE sv.user_id = ? AND sv.game_id = ? AND sv.path_key = ?
+		 ORDER BY sv.version DESC LIMIT ?`,
 		userID, gameID, pathKey, limit,
 	)
 	if err != nil {
@@ -868,12 +901,36 @@ func (s *sqliteStore) ListSaveVersions(ctx context.Context, userID, gameID, path
 	var out []SaveVersionInfo
 	for rows.Next() {
 		var v SaveVersionInfo
-		if err := rows.Scan(&v.Version, &v.UpdatedAt, &v.SizeBytes); err != nil {
+		if err := rows.Scan(&v.Version, &v.UpdatedAt, &v.SizeBytes, &v.ChangeBytes, &v.ClientID, &v.ClientName); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
 	}
 	return out, rows.Err()
+}
+
+// LargestChangeForGame returns the biggest positive byte delta across all of a
+// user's save versions for a game (with the device that produced it).
+func (s *sqliteStore) LargestChangeForGame(ctx context.Context, userID, gameID string) (SaveChangeRow, bool, error) {
+	var row SaveChangeRow
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(sv.change_bytes, 0), COALESCE(c.name, ''), sv.path_key, sv.updated_at
+		 FROM save_versions sv
+		 LEFT JOIN clients c ON c.id = sv.client_id
+		 WHERE sv.user_id = ? AND sv.game_id = ?
+		 ORDER BY sv.change_bytes DESC LIMIT 1`,
+		userID, gameID,
+	).Scan(&row.ChangeBytes, &row.ClientName, &row.PathKey, &row.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return SaveChangeRow{}, false, nil
+	}
+	if err != nil {
+		return SaveChangeRow{}, false, err
+	}
+	if row.ChangeBytes <= 0 {
+		return SaveChangeRow{}, false, nil
+	}
+	return row, true, nil
 }
 
 func (s *sqliteStore) GetSaveVersion(ctx context.Context, userID, gameID, pathKey string, version int) (*types.SaveBlob, error) {

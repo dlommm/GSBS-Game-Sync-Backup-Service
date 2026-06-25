@@ -8,13 +8,31 @@
   <p class="cell-muted">Loading stats…</p>
 </section>
 
+<nav class="quick-tiles" aria-label="Quick access">
+  <a class="quick-tile" href="/dashboard/games">
+    <span class="quick-tile-icon" aria-hidden="true">🎮</span>
+    <span class="quick-tile-text"><span class="quick-tile-title">My Games</span><span class="quick-tile-sub">Browse synced saves</span></span>
+  </a>
+  <a class="quick-tile" href="/dashboard/clients">
+    <span class="quick-tile-icon" aria-hidden="true">🖥️</span>
+    <span class="quick-tile-text"><span class="quick-tile-title">Devices</span><span class="quick-tile-sub">Manage connected devices</span></span>
+  </a>
+  <a class="quick-tile" href="/dashboard/settings">
+    <span class="quick-tile-icon" aria-hidden="true">⚙️</span>
+    <span class="quick-tile-text"><span class="quick-tile-title">Settings</span><span class="quick-tile-sub">Security &amp; account</span></span>
+  </a>
+</nav>
+
 <section class="panel" aria-labelledby="clients-heading">
-  <div class="panel-header"><h2 id="clients-heading">Your Clients</h2></div>
+  <div class="panel-header-actions">
+    <h2 id="clients-heading">Your Devices</h2>
+    <a class="btn-ghost-sm" href="/dashboard/clients">Manage →</a>
+  </div>
   <div id="clients-table"
        hx-get="/dashboard/partial/clients"
        hx-trigger="load, save-updated from:body"
        hx-swap="innerHTML">
-    <p class="panel-empty">Loading clients…</p>
+    <p class="panel-empty">Loading devices…</p>
   </div>
 </section>
 
@@ -31,6 +49,7 @@
 <section class="panel" aria-labelledby="saves-heading">
   <div class="panel-header-actions">
     <h2 id="saves-heading">Synced Saves</h2>
+    <a class="btn-ghost-sm" href="/dashboard/games">Open My Games →</a>
     <div class="search-wrap" style="padding:0;">
       <input type="search" class="search-input" name="q" placeholder="Search saves…"
              hx-get="/dashboard/partial/saves"

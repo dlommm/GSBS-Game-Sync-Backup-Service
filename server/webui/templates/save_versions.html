@@ -10,7 +10,7 @@
   {{if .Versions}}
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th scope="col">Version</th><th scope="col">Updated</th><th scope="col">Size</th><th scope="col" class="th-action">Actions</th></tr></thead>
+      <thead><tr><th scope="col">Version</th><th scope="col">Updated</th><th scope="col">Size</th><th scope="col">Change</th><th scope="col">Device</th><th scope="col" class="th-action">Actions</th></tr></thead>
       <tbody>
         {{range .Versions}}
         <tr{{if eq .Version $.CurrentVersion}} class="current-version"{{end}}>
@@ -20,6 +20,8 @@
           </td>
           <td class="cell-muted">{{formatTime .UpdatedAt}}</td>
           <td class="cell-size">{{formatBytes .SizeBytes}}</td>
+          <td class="cell-size {{if gt .ChangeBytes 0}}change-up{{else if lt .ChangeBytes 0}}change-down{{end}}">{{signedBytes .ChangeBytes}}</td>
+          <td class="cell-muted">{{if .ClientName}}{{.ClientName}}{{else}}—{{end}}</td>
           <td class="cell-action">
             <div class="actions-stack">
               <a href="/dashboard/save/versions/download?game_id={{urlquery $.GameID}}&path_key={{urlquery $.PathKey}}&version={{.Version}}" class="btn-ghost-sm">Download</a>

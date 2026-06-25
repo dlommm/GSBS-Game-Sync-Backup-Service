@@ -7,11 +7,18 @@
   <nav class="topbar-nav" role="navigation" aria-label="Main">
     <div class="topbar-nav-scroll">
       <a href="/dashboard" {{if eq .NavActive "dashboard"}}class="active" aria-current="page"{{end}}>Dashboard</a>
+      <a href="/dashboard/games" {{if eq .NavActive "games"}}class="active" aria-current="page"{{end}}>My Games</a>
+      <a href="/dashboard/analytics" {{if eq .NavActive "analytics"}}class="active" aria-current="page"{{end}}>Insights</a>
       {{if .IsAdmin}}<a href="/admin" {{if eq .NavActive "admin"}}class="active" aria-current="page"{{end}}>Admin</a>{{end}}
       <a href="/dashboard/settings" {{if eq .NavActive "settings"}}class="active" aria-current="page"{{end}}>Settings</a>
     </div>
   </nav>
   <div class="topbar-right">
+    <button type="button" class="cmdk-trigger" data-cmdk-open aria-label="Search (Ctrl+K)">
+      <span class="cmdk-trigger-icon" aria-hidden="true">⌕</span>
+      <span class="cmdk-trigger-text">Search</span>
+      <kbd class="cmdk-trigger-kbd">⌘K</kbd>
+    </button>
     <span class="topbar-user">{{.Username}}</span>
     <form method="post" action="/logout" class="inline-form">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">

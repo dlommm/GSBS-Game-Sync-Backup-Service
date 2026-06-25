@@ -1,0 +1,44 @@
+{{define "partials/clients_list.html"}}
+{{if .Clients}}
+<p class="clients-summary">{{.Online}} online · {{.Total}} device{{if ne .Total 1}}s{{end}}</p>
+<div class="clients-grid">
+  {{range .Clients}}
+  <div class="client-card">
+    <div class="client-card-head">
+      <span class="client-status {{if .Online}}online{{else}}offline{{end}}" title="{{if .Online}}Online{{else}}Offline{{end}}" aria-hidden="true"></span>
+      <span class="client-name">{{.Name}}</span>
+      <span class="os-badge os-{{.OS}}">{{.OS}}</span>
+    </div>
+    <div class="client-card-meta">{{if .Online}}Online now{{else}}Last seen {{formatTime .LastSeen}}{{end}}</div>
+    {{if not $.ReadOnly}}
+    <div class="client-card-actions">
+      <button type="button" class="btn-ghost-sm" onclick="document.getElementById('rename-{{.ID}}').showModal()">Rename</button>
+      <form method="post" action="/dashboard/clients/revoke" class="inline-form"
+            onsubmit="return confirm('Revoke this device? You must run gsbs-client login again to reconnect it.');">
+        <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+        <input type="hidden" name="client_id" value="{{.ID}}">
+        <button type="submit" class="btn-danger-sm">Revoke</button>
+      </form>
+    </div>
+    <dialog id="rename-{{.ID}}" class="rename-dialog">
+      <form method="post" action="/dashboard/clients/rename" class="dialog-body">
+        <div class="dialog-head"><h3 style="margin:0;">Rename device</h3></div>
+        <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+        <input type="hidden" name="client_id" value="{{.ID}}">
+        <label class="sr-only" for="rename-input-{{.ID}}">Device name</label>
+        <input id="rename-input-{{.ID}}" class="text-input" type="text" name="name"
+               value="{{.Name}}" maxlength="64" required autocomplete="off">
+        <div class="dialog-actions">
+          <button type="button" class="btn-ghost-sm" onclick="this.closest('dialog').close()">Cancel</button>
+          <button type="submit" class="btn-primary-sm">Save</button>
+        </div>
+      </form>
+    </dialog>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{else}}
+{{template "partials/empty-state.html" (dict "Icon" "🖥️" "Title" "No devices connected" "Sub" "Run gsbs-client login on your PC to connect it and start syncing your saves.")}}
+{{end}}
+{{end}}

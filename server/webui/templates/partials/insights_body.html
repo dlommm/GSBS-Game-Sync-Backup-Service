@@ -1,0 +1,73 @@
+{{define "partials/insights_body.html"}}
+<section class="metric-row" aria-label="Summary">
+  {{template "partials/metric-card.html" (dict "Label" "Games" "Value" .GameCount)}}
+  {{template "partials/metric-card.html" (dict "Label" "Saves" "Value" .SaveCount)}}
+  {{template "partials/metric-card.html" (dict "Label" "Storage" "Value" (formatBytes .TotalBytes))}}
+  {{template "partials/metric-card.html" (dict "Label" "Devices" "Value" .DeviceCount "Sub" (printf "%d online" .OnlineCount))}}
+</section>
+
+<div class="analytics-cols">
+  <section class="panel" aria-labelledby="volume-heading">
+    <div class="panel-header-actions">
+      <h2 id="volume-heading">Sync volume</h2>
+      <span class="cell-muted">{{.SyncTotal}} sync{{if ne .SyncTotal 1}}s{{end}} · last {{len .SyncByDay}} days</span>
+    </div>
+    <div class="panel-body">
+      <div class="bars-chart">{{barsSVG .SyncByDay 480 120}}</div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="health-heading">
+    <div class="panel-header"><h2 id="health-heading">Backup health</h2></div>
+    <ul class="health-list">
+      {{range .Alerts}}
+      <li class="health-item tone-{{.Tone}}">
+        <span class="health-dot" aria-hidden="true"></span>
+        <span>{{.Text}}</span>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+</div>
+
+<div class="analytics-cols">
+  <section class="panel" aria-labelledby="topgames-heading">
+    <div class="panel-header"><h2 id="topgames-heading">Top games by storage</h2></div>
+    {{if .TopGames}}
+    <div class="topgames-list">
+      {{$link := .LinkGames}}
+      {{range .TopGames}}
+      {{if $link}}<a class="topgame-row" href="/dashboard/games/{{urlquery .GameID}}">{{else}}<div class="topgame-row">{{end}}
+        <span class="topgame-icon">{{gameIconSVG .Title 28}}</span>
+        <span class="topgame-info">
+          <span class="topgame-title">{{.Title}}</span>
+          <span class="topgame-bar-track"><span class="topgame-bar-fill" style="width:{{.Pct}}%;"></span></span>
+        </span>
+        <span class="topgame-size">{{formatBytes .TotalBytes}}</span>
+      {{if $link}}</a>{{else}}</div>{{end}}
+      {{end}}
+    </div>
+    {{else}}
+    <div class="panel-empty"><p>No games to rank yet.</p></div>
+    {{end}}
+  </section>
+
+  <section class="panel" aria-labelledby="devices-heading">
+    <div class="panel-header"><h2 id="devices-heading">Devices</h2></div>
+    {{if .Devices}}
+    <ul class="device-mini-list">
+      {{range .Devices}}
+      <li class="device-mini">
+        <span class="client-status {{if .Online}}online{{else}}offline{{end}}" aria-hidden="true"></span>
+        <span class="device-mini-name">{{.Name}}</span>
+        <span class="os-badge os-{{.OS}}">{{.OS}}</span>
+        <span class="device-mini-when">{{if .Online}}online{{else}}{{formatTime .LastSeen}}{{end}}</span>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <div class="panel-empty"><p>No devices connected.</p></div>
+    {{end}}
+  </section>
+</div>
+{{end}}

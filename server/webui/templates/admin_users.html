@@ -41,6 +41,7 @@
             <details class="action-menu">
               <summary class="btn-ghost-sm">Actions</summary>
               <div class="action-menu-panel">
+                <a href="/admin/users/view?id={{urlquery .ID}}" class="btn-ghost-sm">View insights</a>
                 {{if ne .ID $.CurrentUserID}}
                 {{if .Disabled}}
                 <form method="post" action="/admin/user/enable" class="inline-form"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-ghost-sm">Enable</button></form>

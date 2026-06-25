@@ -69,6 +69,8 @@ type Store interface {
 	RevokeClient(ctx context.Context, clientID string) error
 	// ClientUserID returns the owning user ID for a client, or error if not found.
 	ClientUserID(ctx context.Context, clientID string) (string, error)
+	// RenameClient sets a new display name for a client owned by userID.
+	RenameClient(ctx context.Context, userID, clientID, name string) error
 	// RefreshClientToken rotates token for the authenticated client; old token stops working.
 	RefreshClientToken(ctx context.Context, currentToken string) (newToken string, err error)
 	// RevokeAllClientTokens regenerates tokens for every client owned by the user,
@@ -249,6 +251,12 @@ type Store interface {
 	CountTotalSaves(ctx context.Context) (int, error)
 	ListTopSaveGames(ctx context.Context, limit int) ([]SaveGameStatRow, error)
 	ListRecentPCGWParseFailures(ctx context.Context, limit int) ([]PCGWParseFailureRow, error)
+	// SyncVolumeByDay returns the per-user count of save versions written per day
+	// over the trailing `days` days (oldest first, gaps zero-filled).
+	SyncVolumeByDay(ctx context.Context, userID string, days int) ([]DayCount, error)
+	// LargestChangeForGame returns the biggest positive byte change recorded across
+	// all of a user's save versions for a game. ok is false when there is none.
+	LargestChangeForGame(ctx context.Context, userID, gameID string) (row SaveChangeRow, ok bool, err error)
 
 	// Close releases resources (e.g. DB connection).
 	Close() error
@@ -333,9 +341,20 @@ type JobRun struct {
 
 // SaveVersionInfo is a versioned save entry (no content).
 type SaveVersionInfo struct {
-	Version   int    `json:"version"`
-	UpdatedAt string `json:"updated_at"`
-	SizeBytes int64  `json:"size_bytes"`
+	Version     int    `json:"version"`
+	UpdatedAt   string `json:"updated_at"`
+	SizeBytes   int64  `json:"size_bytes"`
+	ChangeBytes int64  `json:"change_bytes"` // delta vs previous version (full size for v1)
+	ClientID    string `json:"client_id,omitempty"`
+	ClientName  string `json:"client_name,omitempty"` // device name, joined from clients
+}
+
+// SaveChangeRow describes the largest single change recorded for a game.
+type SaveChangeRow struct {
+	ChangeBytes int64
+	ClientName  string
+	PathKey     string
+	UpdatedAt   string
 }
 
 // ManifestFetchRow records a single manifest download by a client.

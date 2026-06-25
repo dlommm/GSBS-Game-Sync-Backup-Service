@@ -1,0 +1,101 @@
+{{template "layout" .}}
+{{define "game_detail_title"}}{{.Title}} — GSBS{{end}}
+{{define "game_detail_content"}}
+<p class="breadcrumb">
+  <a href="/dashboard">Dashboard</a> →
+  <a href="/dashboard/games">My Games</a> →
+  <span aria-current="page">{{.Title}}</span>
+</p>
+
+<header class="game-detail-head">
+  <div class="game-detail-cover">{{gameIconSVG .Title 72}}</div>
+  <div class="game-detail-heading">
+    <h1 class="game-detail-title">{{.Title}}</h1>
+    <div class="game-detail-tags">
+      <span class="status-pill status-{{.Status}}">{{.Status}}</span>
+      <span class="cell-muted">Last synced {{formatTime .LastSynced}}</span>
+    </div>
+  </div>
+  {{if not .ReadOnly}}
+  <form class="game-detail-actions" method="post" action="/dashboard/game/delete"
+        onsubmit="return confirm('Delete ALL {{.FileCount}} saved file(s) for {{.Title}} from the server? This cannot be undone.');">
+    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+    <input type="hidden" name="game_id" value="{{.GameID}}">
+    <button type="submit" class="btn-danger-sm">Delete all saves</button>
+  </form>
+  {{end}}
+</header>
+
+<section class="metric-row" aria-label="Game metrics">
+  {{template "partials/metric-card.html" (dict "Label" "Save files" "Value" .FileCount)}}
+  {{template "partials/metric-card.html" (dict "Label" "Total size" "Value" (formatBytes .TotalBytes))}}
+  {{template "partials/metric-card.html" (dict "Label" "Last sync" "Value" (formatTime .LastSynced))}}
+  {{template "partials/metric-card.html" (dict "Label" "Encryption" "Value" .EncryptionLabel)}}
+</section>
+
+<div class="game-detail-grid">
+  <section class="panel" aria-labelledby="files-heading">
+    <div class="panel-header"><h2 id="files-heading">Save files</h2></div>
+    <div class="saves-tree" style="padding:0 1.25rem 1rem;">
+      {{range .Categories}}
+      <details class="tree-cat" open>
+        <summary class="tree-row tree-cat-row">
+          <span class="tree-twisty" aria-hidden="true"></span>
+          <span class="tree-cat-name cat-{{.Name}}">{{.Name}}</span>
+          <span class="tree-meta">
+            <span class="tree-pill">{{len .Files}}</span>
+            <span class="tree-size">{{formatBytes .TotalBytes}}</span>
+          </span>
+        </summary>
+        <ul class="file-list">
+          {{range .Files}}
+          <li class="file-row">
+            <span class="file-name" title="{{if .Folder}}{{.Folder}}/{{end}}{{.Name}}">
+              <span class="file-base">{{.Name}}</span>
+              {{if .Folder}}<span class="file-folder">{{.Folder}}/</span>{{end}}
+              {{if .Encrypted}}<span class="file-badge" title="Encrypted">🔒</span>{{end}}
+            </span>
+            <span class="file-size">{{formatBytes .SizeBytes}}</span>
+            <span class="file-when">{{formatTime .UpdatedAt}}</span>
+            <span class="file-actions">
+              {{if not .Encrypted}}
+              <button type="button" class="btn-ghost-sm"
+                      hx-get="/dashboard/save/versions/preview?game_id={{urlquery .GameID}}&path_key={{urlquery .PathKey}}"
+                      hx-target="#preview-body" hx-swap="innerHTML"
+                      onclick="document.getElementById('preview-title').textContent='{{.Name}}';document.getElementById('preview-dialog').showModal();">Preview</button>
+              {{end}}
+              <a href="/dashboard/save/versions?game_id={{urlquery .GameID}}&path_key={{urlquery .PathKey}}" class="btn-ghost-sm">Versions</a>
+            </span>
+          </li>
+          {{end}}
+        </ul>
+      </details>
+      {{end}}
+    </div>
+  </section>
+
+  <aside class="panel insights-panel" aria-labelledby="insights-heading">
+    <div class="panel-header"><h2 id="insights-heading">Insights</h2></div>
+    <ul class="insights-list">
+      <li><span class="insight-dot" aria-hidden="true"></span>Most recent sync was {{formatTime .LastSynced}}.</li>
+      {{if .LargestFile.Name}}<li><span class="insight-dot" aria-hidden="true"></span>Largest file: <strong>{{.LargestFile.Name}}</strong> ({{formatBytes .LargestFile.SizeBytes}}).</li>{{end}}
+      {{if .HasLargestChange}}<li><span class="insight-dot" aria-hidden="true"></span>Largest change: <strong>+{{formatBytes .LargestChange.ChangeBytes}}</strong>{{if .LargestChange.ClientName}} from {{.LargestChange.ClientName}}{{end}}.</li>{{end}}
+      <li><span class="insight-dot" aria-hidden="true"></span>{{.FileCount}} file{{if ne .FileCount 1}}s{{end}} across {{.CategoryCount}} categor{{if ne .CategoryCount 1}}ies{{else}}y{{end}}.</li>
+      <li><span class="insight-dot" aria-hidden="true"></span>{{if .Encrypted}}Protected with end-to-end encryption 🔒.{{else}}Stored without end-to-end encryption.{{end}}</li>
+    </ul>
+  </aside>
+</div>
+
+<dialog id="preview-dialog" class="preview-dialog">
+  <div class="dialog-body">
+    <div class="dialog-head">
+      <h3 id="preview-title" style="margin:0;">Preview</h3>
+      <button type="button" class="btn-ghost-sm" onclick="this.closest('dialog').close()">Close</button>
+    </div>
+    <div id="preview-body"><p class="cell-muted">Loading…</p></div>
+  </div>
+</dialog>
+{{end}}
+{{define "game_detail_scripts"}}
+<div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>
+{{end}}

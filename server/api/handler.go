@@ -873,6 +873,12 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			Type: "save-updated",
 			Data: fmt.Sprintf(`{"game_id":%q,"path_key":%q}`, gameID, pathKey),
 		})
+		if clientID != "" {
+			h.hub.BroadcastToUser(userID, sse.Event{
+				Type: "client-activity",
+				Data: fmt.Sprintf(`{"client_id":%q}`, clientID),
+			})
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

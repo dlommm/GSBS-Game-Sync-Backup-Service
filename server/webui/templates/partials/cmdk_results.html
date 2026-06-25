@@ -1,0 +1,23 @@
+{{define "partials/cmdk_results.html"}}
+{{if .Commands}}
+<div class="cmdk-group-label">Go to</div>
+{{range .Commands}}
+<a class="cmdk-item" href="{{.Href}}">
+  <span class="cmdk-item-icon">{{.Icon}}</span>
+  <span class="cmdk-item-text"><span class="cmdk-item-title">{{.Label}}</span><span class="cmdk-item-sub">{{.Sub}}</span></span>
+</a>
+{{end}}
+{{end}}
+{{if .Games}}
+<div class="cmdk-group-label">Games</div>
+{{range .Games}}
+<a class="cmdk-item" href="/dashboard/games/{{urlquery .GameID}}">
+  <span class="cmdk-item-icon cmdk-item-cover">{{gameIconSVG .Title 22}}</span>
+  <span class="cmdk-item-text"><span class="cmdk-item-title">{{.Title}}</span><span class="cmdk-item-sub">{{.Meta}}</span></span>
+</a>
+{{end}}
+{{end}}
+{{if and (not .Commands) (not .Games)}}
+<div class="cmdk-empty">No results{{if .Query}} for “{{.Query}}”{{end}}.</div>
+{{end}}
+{{end}}

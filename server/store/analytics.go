@@ -6,6 +6,50 @@ import (
 	"time"
 )
 
+// DayCount is a per-day aggregate; Day is formatted "YYYY-MM-DD".
+type DayCount struct {
+	Day   string
+	Count int
+}
+
+// SyncVolumeByDay returns the number of save versions written per day for a user
+// over the trailing `days` days, oldest first, with gaps zero-filled. Each save
+// version corresponds to one accepted push, so this is a true sync-volume series.
+func (s *sqliteStore) SyncVolumeByDay(ctx context.Context, userID string, days int) ([]DayCount, error) {
+	if days <= 0 {
+		days = 30
+	}
+	start := time.Now().UTC().AddDate(0, 0, -(days - 1))
+	since := start.Format("2006-01-02")
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT substr(updated_at, 1, 10) AS day, COUNT(*) AS n
+		FROM save_versions
+		WHERE user_id = ? AND substr(updated_at, 1, 10) >= ?
+		GROUP BY day`, userID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	counts := make(map[string]int)
+	for rows.Next() {
+		var day string
+		var n int
+		if err := rows.Scan(&day, &n); err != nil {
+			return nil, err
+		}
+		counts[day] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]DayCount, 0, days)
+	for i := 0; i < days; i++ {
+		d := start.AddDate(0, 0, i).Format("2006-01-02")
+		out = append(out, DayCount{Day: d, Count: counts[d]})
+	}
+	return out, nil
+}
+
 func (s *sqliteStore) CountActiveClientsSince(ctx context.Context, since time.Time) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx,

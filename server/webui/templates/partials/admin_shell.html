@@ -12,14 +12,43 @@
 </nav>
 <aside class="admin-sidebar" aria-label="Admin navigation">
   <div class="topbar-brand admin-sidebar-brand">GSBS Admin</div>
-  <a href="/admin" {{if eq .AdminNav "overview"}}class="active" aria-current="page"{{end}}>Overview</a>
-  <a href="/admin/users" {{if eq .AdminNav "users"}}class="active" aria-current="page"{{end}}>Users &amp; Clients</a>
-  <a href="/admin/manifest" {{if eq .AdminNav "manifest"}}class="active" aria-current="page"{{end}}>Manifest</a>
-  <a href="/admin/pcgw" {{if eq .AdminNav "pcgw"}}class="active" aria-current="page"{{end}}>PCGW</a>
-  <a href="/admin/settings" {{if eq .AdminNav "settings"}}class="active" aria-current="page"{{end}}>Settings</a>
-  <a href="/admin/analytics" {{if eq .AdminNav "analytics"}}class="active" aria-current="page"{{end}}>Analytics</a>
-  <a href="/admin/activity" {{if eq .AdminNav "activity"}}class="active" aria-current="page"{{end}}>Activity &amp; Jobs</a>
-  <a href="/admin/logs" {{if eq .AdminNav "logs"}}class="active" aria-current="page"{{end}}>Server Logs</a>
+  <a href="/admin" {{if eq .AdminNav "overview"}}class="active" aria-current="page"{{end}}>
+    <span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.5" y="1.5" width="5" height="5" rx="1"/><rect x="9.5" y="1.5" width="5" height="5" rx="1"/><rect x="1.5" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/></svg></span>Overview
+  </a>
+
+  <div class="admin-nav-group" data-group="manage">
+    <button type="button" class="admin-group-toggle" aria-expanded="true">Manage<span class="admin-group-chevron" aria-hidden="true">▾</span></button>
+    <div class="admin-group-items">
+      <a href="/admin/users" {{if eq .AdminNav "users"}}class="active" aria-current="page"{{end}}>
+        <span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="5" r="2.6"/><path d="M2.5 14c0-3 2.5-4.5 5.5-4.5s5.5 1.5 5.5 4.5"/></svg></span>Users &amp; Clients
+      </a>
+      <a href="/admin/manifest" {{if eq .AdminNav "manifest"}}class="active" aria-current="page"{{end}}>
+        <span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 4h9M5 8h9M5 12h9"/><circle cx="2" cy="4" r="0.9" fill="currentColor" stroke="none"/><circle cx="2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="2" cy="12" r="0.9" fill="currentColor" stroke="none"/></svg></span>Manifest
+      </a>
+      <a href="/admin/pcgw" {{if eq .AdminNav "pcgw"}}class="active" aria-current="page"{{end}}>
+        <span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><ellipse cx="8" cy="3.5" rx="5.5" ry="2"/><path d="M2.5 3.5v9c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2v-9"/><path d="M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2"/></svg></span>PCGW
+      </a>
+    </div>
+  </div>
+
+  <div class="admin-nav-group" data-group="insights">
+    <button type="button" class="admin-group-toggle" aria-expanded="true">Insights<span class="admin-group-chevron" aria-hidden="true">▾</span></button>
+    <div class="admin-group-items">
+      <a href="/admin/analytics" {{if eq .AdminNav "analytics"}}class="active" aria-current="page"{{end}}>
+        <span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 14V2"/><path d="M2 14h12"/><rect x="4" y="8" width="2.2" height="4" fill="currentColor" stroke="none"/><rect x="7.5" y="5" width="2.2" height="7" fill="currentColor" stroke="none"/><rect x="11" y="9" width="2.2" height="3" fill="currentColor" stroke="none"/></svg></span>Analytics
+      </a>
+      <a href="/admin/activity" {{if eq .AdminNav "activity"}}class="active" aria-current="page"{{end}}>
+        <span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 8h3l1.5-4 3 9 1.5-5h4"/></svg></span>Activity &amp; Jobs
+      </a>
+      <a href="/admin/logs" {{if eq .AdminNav "logs"}}class="active" aria-current="page"{{end}}>
+        <span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3"/><path d="M5.5 8h5M5.5 11h5"/></svg></span>Server Logs
+      </a>
+    </div>
+  </div>
+
+  <a href="/admin/settings" {{if eq .AdminNav "settings"}}class="active" aria-current="page"{{end}}>
+    <span class="admin-nav-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/></svg></span>Settings
+  </a>
   <hr class="admin-sidebar-divider">
   <a href="/dashboard" class="admin-sidebar-back">← Dashboard</a>
 </aside>
@@ -29,4 +58,23 @@
     {{renderPageBlock .PageName "content" .}}
   </main>
 </div>
+<script>
+(function () {
+  var KEY = 'gsbs.admin.nav.';
+  document.querySelectorAll('.admin-nav-group').forEach(function (group) {
+    var name = group.getAttribute('data-group');
+    var btn = group.querySelector('.admin-group-toggle');
+    if (!btn) return;
+    if (localStorage.getItem(KEY + name) === '0') {
+      group.classList.add('collapsed');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+    btn.addEventListener('click', function () {
+      var collapsed = group.classList.toggle('collapsed');
+      btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      localStorage.setItem(KEY + name, collapsed ? '0' : '1');
+    });
+  });
+})();
+</script>
 {{end}}

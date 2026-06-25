@@ -1,0 +1,66 @@
+{{define "partials/game_cards.html"}}
+{{if .Games}}
+<p class="games-caption">
+  {{.TotalGames}} game{{if ne .TotalGames 1}}s{{end}} · {{.TotalFiles}} file{{if ne .TotalFiles 1}}s{{end}} · {{formatBytes .TotalBytes}}
+  {{if .Query}}matching “{{.Query}}”{{end}}
+</p>
+{{if eq .View "list"}}
+<div class="table-wrap">
+  <table class="data-table game-list-table">
+    <thead>
+      <tr>
+        <th scope="col" class="th-check"><input type="checkbox" class="bulk-select-all" aria-label="Select all games"></th>
+        <th scope="col">Game</th>
+        <th scope="col">Files</th>
+        <th scope="col">Size</th>
+        <th scope="col">Last sync</th>
+        <th scope="col">Status</th>
+        <th scope="col" class="th-action">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Games}}
+      <tr>
+        <td class="cell-check"><input type="checkbox" class="bulk-check" name="game_id" value="{{.GameID}}" aria-label="Select {{.Title}}"></td>
+        <td class="cell-primary">
+          <a class="game-list-name" href="/dashboard/games/{{urlquery .GameID}}">
+            <span class="game-list-icon">{{gameIconSVG .Title 28}}</span>
+            <span>{{.Title}}</span>
+          </a>
+        </td>
+        <td>{{.FileCount}}</td>
+        <td class="cell-size">{{formatBytes .TotalBytes}}</td>
+        <td class="cell-muted">{{formatTime .LastSynced}}</td>
+        <td><span class="status-pill status-{{.Status}}">{{.Status}}</span></td>
+        <td class="cell-action"><a class="btn-ghost-sm" href="/dashboard/games/{{urlquery .GameID}}">Open</a></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="game-grid">
+  {{range .Games}}
+  <a class="game-card" href="/dashboard/games/{{urlquery .GameID}}" aria-label="{{.Title}}">
+    <div class="game-card-cover">
+      {{gameIconSVG .Title 96}}
+      <span class="status-dot status-{{.Status}}" title="{{.Status}}" aria-hidden="true"></span>
+    </div>
+    <div class="game-card-body">
+      <div class="game-card-title">{{.Title}}</div>
+      <div class="game-card-meta">{{.FileCount}} file{{if ne .FileCount 1}}s{{end}} · {{formatBytes .TotalBytes}}</div>
+      <div class="game-card-when">{{formatTime .LastSynced}}</div>
+    </div>
+    <div class="game-card-ring" aria-hidden="true">{{progressRingSVG .FileCount $.MaxFiles 52}}</div>
+  </a>
+  {{end}}
+</div>
+{{end}}
+{{else}}
+{{if .Query}}
+{{template "partials/empty-state.html" (dict "Icon" "🔍" "Title" "No games match your search" "Sub" "Try a different name or clear the search box.")}}
+{{else}}
+{{template "partials/empty-state.html" (dict "Title" "No games synced yet" "Sub" "Connect a device with the GSBS client and your game saves will appear here automatically." "CTAHref" "/dashboard/settings" "CTALabel" "Manage devices")}}
+{{end}}
+{{end}}
+{{end}}

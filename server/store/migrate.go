@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 20
+const schemaVersion = 21
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -120,6 +120,7 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{18, s.stepPCGWIncrementalSpeed},
 		{19, s.stepPCGWBundleSettings},
 		{20, s.stepPCGWSyncSourceS3},
+		{21, stepSaveVersionChangeMeta},
 	}
 }
 
@@ -199,6 +200,20 @@ func stepCoreTables(tx *sql.Tx) error {
 		CREATE INDEX IF NOT EXISTS idx_manifest_fetches_at ON manifest_fetches(fetched_at);
 	`)
 	return err
+}
+
+// stepSaveVersionChangeMeta records, per save version, which client wrote it and
+// the byte delta vs the previous version — powering change-size insights.
+func stepSaveVersionChangeMeta(tx *sql.Tx) error {
+	for _, stmt := range []string{
+		`ALTER TABLE save_versions ADD COLUMN client_id TEXT`,
+		`ALTER TABLE save_versions ADD COLUMN change_bytes INTEGER`,
+	} {
+		if _, err := tx.Exec(stmt); err != nil && !strings.Contains(err.Error(), "duplicate") {
+			return err
+		}
+	}
+	return nil
 }
 
 func stepNotesColumn(tx *sql.Tx) error {

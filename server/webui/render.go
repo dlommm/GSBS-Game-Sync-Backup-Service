@@ -64,6 +64,50 @@ type settingsData struct {
 	EncryptionEnabled bool
 }
 
+// gameCard is one tile/row on the My Games page.
+type gameCard struct {
+	GameID     string
+	Title      string
+	FileCount  int
+	TotalBytes int64
+	LastSynced string
+	Status     string // healthy, stale, unknown
+}
+
+// dashboardGamesData drives both the My Games page and its HTMX cards partial.
+type dashboardGamesData struct {
+	PageData
+	Games      []gameCard
+	TotalGames int
+	TotalFiles int
+	TotalBytes int64
+	MaxFiles   int    // largest FileCount among games, for the progress ring scale
+	Query      string // active search
+	Status     string // active status filter: all, healthy, stale
+	Sort       string // recent, name, size, files
+	View       string // grid, list
+	ReadOnly   bool
+}
+
+// gameDetailData drives the individual game detail page.
+type gameDetailData struct {
+	PageData
+	GameID          string
+	Title           string
+	FileCount       int
+	TotalBytes      int64
+	LastSynced      string
+	Status          string
+	Encrypted       bool   // any of the game's saves are E2E-encrypted
+	EncryptionLabel string // "Encrypted" / "Standard"
+	CategoryCount    int
+	Categories       []saveCategory // reused from saves_group.go
+	LargestFile      saveFileRow
+	HasLargestChange bool
+	LargestChange    store.SaveChangeRow
+	ReadOnly         bool
+}
+
 type adminStats struct {
 	UserCount     int
 	ClientCount   int
@@ -205,7 +249,97 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 		"mod":             func(a, b int) int { if b == 0 { return 0 }; return a % b },
 		"join":            strings.Join,
 		"formatETASec":    formatETASec,
+		"gameIconSVG":     gameIconSVG,
+		"progressRingSVG": progressRingSVG,
+		"gaugeSVG":        gaugeSVG,
+		"gameSyncStatus":  gameSyncStatus,
+		"auditTone":       auditTone,
+		"barsSVG":         barsSVG,
+		"signedBytes":     signedBytes,
+		"dict":            dict,
 	}
+}
+
+// signedBytes formats a byte delta with an explicit sign: "+1.2 KB", "−500 B",
+// or "—" for no change.
+func signedBytes(n int64) string {
+	if n == 0 {
+		return "—"
+	}
+	if n > 0 {
+		return "+" + formatBytes(n)
+	}
+	return "−" + formatBytes(-n)
+}
+
+// barsSVG renders a vertical bar chart from a per-day count series (oldest
+// first). Each bar carries a <title> for hover tooltips. The viewBox is
+// stretched to fill its container (preserveAspectRatio=none).
+func barsSVG(counts []store.DayCount, width, height int) template.HTML {
+	if len(counts) == 0 {
+		return template.HTML(`<p class="cell-muted">No activity yet.</p>`)
+	}
+	maxV := 1
+	for _, c := range counts {
+		if c.Count > maxV {
+			maxV = c.Count
+		}
+	}
+	n := len(counts)
+	gap := 1.0
+	bw := (float64(width) - gap*float64(n-1)) / float64(n)
+	var b bytes.Buffer
+	for i, c := range counts {
+		bh := float64(height) * float64(c.Count) / float64(maxV)
+		if c.Count > 0 && bh < 2 {
+			bh = 2
+		}
+		x := float64(i) * (bw + gap)
+		y := float64(height) - bh
+		fill := "var(--accent)"
+		if c.Count == 0 {
+			fill = "var(--border)"
+			bh = 2
+			y = float64(height) - bh
+		}
+		fmt.Fprintf(&b, `<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s"><title>%s: %d</title></rect>`,
+			x, y, bw, bh, fill, c.Day, c.Count)
+	}
+	return template.HTML(fmt.Sprintf(
+		`<svg class="bars-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="Sync volume by day">%s</svg>`,
+		width, height, b.String()))
+}
+
+// auditTone maps an audit action to a semantic colour tone for its timeline dot.
+func auditTone(action string) string {
+	switch action {
+	case "delete_save", "delete_game_saves", "revoke_client", "delete_user", "disable_user", "disable_2fa":
+		return "danger"
+	case "restore_version", "rename_client", "enable_2fa", "enable_user", "set_quota":
+		return "success"
+	case "run_job", "push_manifest":
+		return "info"
+	default:
+		return ""
+	}
+}
+
+// dict builds a map from alternating key/value arguments. It lets parameterised
+// partials (e.g. metric-card, empty-state) be invoked with named fields, since
+// html/template has no map literal syntax.
+func dict(values ...interface{}) (map[string]interface{}, error) {
+	if len(values)%2 != 0 {
+		return nil, fmt.Errorf("dict: expected an even number of arguments, got %d", len(values))
+	}
+	m := make(map[string]interface{}, len(values)/2)
+	for i := 0; i < len(values); i += 2 {
+		key, ok := values[i].(string)
+		if !ok {
+			return nil, fmt.Errorf("dict: key %d is not a string", i)
+		}
+		m[key] = values[i+1]
+	}
+	return m, nil
 }
 
 func renderPageBlock(t *template.Template) func(pageName, block string, data interface{}) (template.HTML, error) {
@@ -243,7 +377,9 @@ func auditLabel(action string) string {
 	labels := map[string]string{
 		"restore_version": "Restored save version",
 		"delete_save":     "Deleted save",
+		"delete_game_saves": "Deleted all saves for a game",
 		"revoke_client":   "Revoked client token",
+		"rename_client":   "Renamed a device",
 		"push_manifest":   "Pushed manifest update",
 		"run_job":         "Started PCGW sync job",
 		"disable_user":    "Disabled user",
@@ -325,6 +461,148 @@ func chartLineSVG(snapshots []store.StatsSnapshotRow, field string, width, heigh
 	svg := fmt.Sprintf(`<svg class="chart-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" aria-hidden="true"><path d="%s" fill="none" stroke="#6366f1" stroke-width="2"/></svg>`,
 		width, height, path.String())
 	return template.HTML(svg)
+}
+
+// gameInitials returns up to two uppercase letters representing a title: the
+// first letters of the first two words, or the first two runes of a single word.
+func gameInitials(title string) string {
+	fields := strings.Fields(title)
+	if len(fields) == 0 {
+		return "?"
+	}
+	if len(fields) >= 2 {
+		a := []rune(fields[0])
+		b := []rune(fields[1])
+		return strings.ToUpper(string(a[0]) + string(b[0]))
+	}
+	r := []rune(fields[0])
+	if len(r) == 1 {
+		return strings.ToUpper(string(r[0]))
+	}
+	return strings.ToUpper(string(r[0:2]))
+}
+
+// gameIconSVG renders a deterministic cover-art stand-in: a rounded tile whose
+// gradient hue is derived from the title plus the game's initials. It is the
+// single source of truth for "cover art" until the real cover pipeline lands
+// (see backlog). The title is HTML-escaped for both the label and the text.
+func gameIconSVG(title string, size int) template.HTML {
+	t := strings.TrimSpace(title)
+	if t == "" {
+		t = "?"
+	}
+	var hash uint32 = 2166136261
+	for _, r := range t {
+		hash ^= uint32(r)
+		hash *= 16777619
+	}
+	hue := int(hash % 360)
+	id := fmt.Sprintf("gi%d", hash%1000000)
+	initials := template.HTMLEscapeString(gameInitials(t))
+	label := template.HTMLEscapeString(t)
+	fontSize := size * 36 / 100
+	radius := size * 20 / 100
+	svg := fmt.Sprintf(`<svg class="game-icon" width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label="%s" xmlns="http://www.w3.org/2000/svg">`+
+		`<defs><linearGradient id="%s" x1="0" y1="0" x2="1" y2="1">`+
+		`<stop offset="0" stop-color="hsl(%d,52%%,44%%)"/><stop offset="1" stop-color="hsl(%d,58%%,26%%)"/></linearGradient></defs>`+
+		`<rect width="%d" height="%d" rx="%d" fill="url(#%s)"/>`+
+		`<text x="50%%" y="50%%" text-anchor="middle" dominant-baseline="central" `+
+		`font-family="DM Sans, system-ui, sans-serif" font-weight="700" font-size="%d" fill="rgba(255,255,255,0.94)">%s</text></svg>`,
+		size, size, size, size, label,
+		id, hue, (hue+22)%360,
+		size, size, radius, id,
+		fontSize, initials)
+	return template.HTML(svg)
+}
+
+// progressRingSVG renders a circular progress indicator with the value at its
+// centre. max<=0 is treated as 1; the fraction is clamped to [0,1].
+func progressRingSVG(value, max, size int) template.HTML {
+	if max <= 0 {
+		max = 1
+	}
+	frac := float64(value) / float64(max)
+	if frac < 0 {
+		frac = 0
+	}
+	if frac > 1 {
+		frac = 1
+	}
+	sw := float64(size) * 0.1
+	r := (float64(size) - sw) / 2
+	c := float64(size) / 2
+	circ := 2 * math.Pi * r
+	off := circ * (1 - frac)
+	fontSize := size * 30 / 100
+	svg := fmt.Sprintf(`<svg class="progress-ring" width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label="%d of %d">`+
+		`<circle cx="%.1f" cy="%.1f" r="%.1f" fill="none" stroke="var(--border)" stroke-width="%.1f"/>`+
+		`<circle cx="%.1f" cy="%.1f" r="%.1f" fill="none" stroke="var(--accent)" stroke-width="%.1f" stroke-linecap="round" `+
+		`stroke-dasharray="%.2f" stroke-dashoffset="%.2f" transform="rotate(-90 %.1f %.1f)"/>`+
+		`<text x="50%%" y="50%%" text-anchor="middle" dominant-baseline="central" font-family="var(--font)" font-weight="700" font-size="%d" fill="var(--text)">%d</text></svg>`,
+		size, size, size, size, value, max,
+		c, c, r, sw,
+		c, c, r, sw, circ, off, c, c,
+		fontSize, value)
+	return template.HTML(svg)
+}
+
+// gaugeSVG renders a semicircular storage gauge (a half-donut) with the used
+// percentage at its centre. The arc colour shifts to warning/error as usage
+// approaches the total. total<=0 renders an empty gauge.
+func gaugeSVG(used, total int64, w, h int) template.HTML {
+	frac := 0.0
+	if total > 0 {
+		frac = float64(used) / float64(total)
+	}
+	if frac < 0 {
+		frac = 0
+	}
+	if frac > 1 {
+		frac = 1
+	}
+	pad := float64(w) * 0.1
+	r := float64(w)/2 - pad
+	cx := float64(w) / 2
+	cy := float64(w) / 2
+	sw := r * 0.22
+	ang := math.Pi * (1 - frac)
+	vEndX := cx + r*math.Cos(ang)
+	vEndY := cy - r*math.Sin(ang)
+	pct := int(frac*100 + 0.5)
+	col := "var(--accent)"
+	if frac >= 0.95 {
+		col = "var(--error)"
+	} else if frac >= 0.8 {
+		col = "var(--warning)"
+	}
+	vh := int(cy + sw)
+	fontSize := w * 15 / 100
+	svg := fmt.Sprintf(`<svg class="gauge" width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label="%d%% of storage used">`+
+		`<path d="M%.1f %.1f A%.1f %.1f 0 0 1 %.1f %.1f" fill="none" stroke="var(--border)" stroke-width="%.1f" stroke-linecap="round"/>`+
+		`<path d="M%.1f %.1f A%.1f %.1f 0 0 1 %.1f %.1f" fill="none" stroke="%s" stroke-width="%.1f" stroke-linecap="round"/>`+
+		`<text x="%.1f" y="%.1f" text-anchor="middle" font-family="var(--font)" font-weight="700" font-size="%d" fill="var(--text)">%d%%</text></svg>`,
+		w, vh, w, vh, pct,
+		cx-r, cy, r, r, cx+r, cy, sw,
+		cx-r, cy, r, r, vEndX, vEndY, col, sw,
+		cx, cy-r*0.12, fontSize, pct)
+	return template.HTML(svg)
+}
+
+// gameSyncStatus derives a coarse health label from a game's most-recent sync
+// time: "healthy" when synced within 30 days, "stale" when older, "unknown"
+// when no/invalid timestamp.
+func gameSyncStatus(lastSynced string) string {
+	if lastSynced == "" {
+		return "unknown"
+	}
+	t, err := time.Parse(time.RFC3339, lastSynced)
+	if err != nil {
+		return "unknown"
+	}
+	if time.Since(t) > 30*24*time.Hour {
+		return "stale"
+	}
+	return "healthy"
 }
 
 // formatTime formats an RFC3339 timestamp for display.

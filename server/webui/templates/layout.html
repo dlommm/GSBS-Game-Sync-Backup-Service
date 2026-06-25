@@ -20,9 +20,20 @@
       {{renderPageBlock .PageName "content" .}}
     </main>
   {{end}}
+  <dialog id="cmdk-dialog" class="cmdk-dialog" aria-label="Search and navigate">
+    <div class="cmdk-box">
+      <input id="cmdk-input" class="cmdk-input" type="search" name="q"
+             placeholder="Search games, jump to a page…" autocomplete="off" aria-label="Search"
+             hx-get="/dashboard/partial/search" hx-trigger="keyup changed delay:150ms, cmdk-open"
+             hx-target="#cmdk-results" hx-swap="innerHTML">
+      <div id="cmdk-results" class="cmdk-results" role="listbox" aria-label="Results"></div>
+      <div class="cmdk-footer"><kbd>↑</kbd><kbd>↓</kbd> navigate · <kbd>↵</kbd> open · <kbd>esc</kbd> close</div>
+    </div>
+  </dialog>
   <script src="/static/htmx.min.js"></script>
   <script src="/static/ext/sse.js"></script>
   <script src="/static/toast.js"></script>
+  <script src="/static/cmdk.js"></script>
   <script>
   document.body.addEventListener('htmx:configRequest', function(evt) {
     evt.detail.credentials = 'same-origin';

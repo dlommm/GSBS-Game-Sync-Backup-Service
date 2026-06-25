@@ -43,6 +43,38 @@ func TestSQLite_SaveVersionsListRestore(t *testing.T) {
 	assert.Equal(t, 4, versions[0].Version)
 }
 
+func TestSQLite_SaveVersionChangeMeta(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	require.NoError(t, err)
+	defer st.Close()
+	ctx := context.Background()
+
+	userID, _ := st.CreateUser(ctx, "u", "h")
+	token, err := st.RegisterClient(ctx, userID, "Gaming PC", "windows")
+	require.NoError(t, err)
+	_, clientID, _, _, err := st.ClientByToken(ctx, token)
+	require.NoError(t, err)
+
+	_, err = st.UpsertSaveWithMeta(ctx, userID, "g1", "pk1", []byte("12345"), &SaveMeta{ClientID: clientID}) // v1: 5 bytes
+	require.NoError(t, err)
+	_, err = st.UpsertSaveWithMeta(ctx, userID, "g1", "pk1", []byte("123456789012"), &SaveMeta{ClientID: clientID}) // v2: 12 bytes (+7)
+	require.NoError(t, err)
+
+	versions, err := st.ListSaveVersions(ctx, userID, "g1", "pk1", 10)
+	require.NoError(t, err)
+	require.Len(t, versions, 2)
+	// newest first
+	assert.Equal(t, int64(7), versions[0].ChangeBytes)
+	assert.Equal(t, "Gaming PC", versions[0].ClientName)
+	assert.Equal(t, int64(5), versions[1].ChangeBytes) // first version: full size
+
+	row, ok, err := st.LargestChangeForGame(ctx, userID, "g1")
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, int64(7), row.ChangeBytes)
+	assert.Equal(t, "Gaming PC", row.ClientName)
+}
+
 func TestSQLite_SaveVersionRetention(t *testing.T) {
 	t.Setenv("GSBS_SAVE_VERSION_RETENTION", "5")
 	st, err := NewSQLite(":memory:")

@@ -329,6 +329,48 @@ func (h *WebHandler) serveAdminUsers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type adminUserDetailData struct {
+	PageData
+	userInsights
+	TargetUsername string
+	TargetUserID   string
+	QuotaBytes     int64
+	TargetRole     string
+}
+
+// serveAdminUserDetail renders a read-only per-user insights drill-down for
+// admins (the safe alternative to session-swapping impersonation). It reuses the
+// same per-user analytics the user sees on their own Insights page.
+func (h *WebHandler) serveAdminUserDetail(w http.ResponseWriter, r *http.Request) {
+	adminID, adminName, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	targetID := strings.TrimSpace(r.URL.Query().Get("id"))
+	if targetID == "" {
+		Redirect(w, r, "/admin/users")
+		return
+	}
+	uname, err := h.store.UsernameByID(ctx, targetID)
+	if err != nil || uname == "" {
+		Redirect(w, r, "/admin/users")
+		return
+	}
+	quota, _ := h.store.UserQuotaBytes(ctx, targetID)
+	role, _ := h.store.UserRole(ctx, targetID)
+	insights := h.buildUserInsights(ctx, targetID)
+	insights.LinkGames = false // admin context: don't link to the admin's own game pages
+	h.render(w, "admin_user_detail.html", adminUserDetailData{
+		PageData:       h.adminPageData(w, r, adminID, adminName, "users", "admin_user_detail"),
+		userInsights:   insights,
+		TargetUsername: uname,
+		TargetUserID:   targetID,
+		QuotaBytes:     quota,
+		TargetRole:     role,
+	})
+}
+
 func parseManifestPagination(r *http.Request) (page, perPage int) {
 	perPage = 20
 	if n := r.URL.Query().Get("count"); n != "" {

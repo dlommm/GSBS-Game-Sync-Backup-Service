@@ -1,0 +1,7 @@
+{{define "partials/metric-card.html"}}
+<div class="metric-card">
+  <div class="metric-label">{{.Label}}</div>
+  <div class="metric-value">{{.Value}}</div>
+  {{if .Sub}}<div class="metric-sub">{{.Sub}}</div>{{end}}
+</div>
+{{end}}

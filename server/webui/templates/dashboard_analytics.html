@@ -1,0 +1,14 @@
+{{template "layout" .}}
+{{define "dashboard_analytics_title"}}Insights — GSBS{{end}}
+{{define "dashboard_analytics_content"}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Insights</h1>
+    <p class="page-sub">Your backup activity and health at a glance.</p>
+  </div>
+</div>
+{{template "partials/insights_body.html" .}}
+{{end}}
+{{define "dashboard_analytics_scripts"}}
+<div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>
+{{end}}

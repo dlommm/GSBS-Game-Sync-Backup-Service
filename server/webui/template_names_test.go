@@ -20,6 +20,14 @@ var handlerTemplates = []string{
 	"settings.html",
 	"enable_2fa.html",
 	"save_versions.html",
+	"dashboard_games.html",
+	"game_detail.html",
+	"partials/game_cards.html",
+	"dashboard_clients.html",
+	"partials/clients_list.html",
+	"partials/cmdk_results.html",
+	"dashboard_analytics.html",
+	"admin_user_detail.html",
 	"admin_overview.html",
 	"admin_users.html",
 	"admin_manifest.html",
@@ -50,6 +58,10 @@ var nestedTemplateRefs = []string{
 	"partials/job_status_badge.html",
 	"partials/timeline_item.html",
 	"partials/loading_skeleton.html",
+	"partials/game-icon.html",
+	"partials/metric-card.html",
+	"partials/empty-state.html",
+	"partials/insights_body.html",
 }
 
 // Page-specific layout blocks referenced via {{template (printf "%s_*" .PageName) .}}.
@@ -58,6 +70,11 @@ var pageBlockTemplates = []string{
 	"settings_title", "settings_content",
 	"enable_2fa_title", "enable_2fa_content",
 	"save_versions_title", "save_versions_content",
+	"dashboard_games_title", "dashboard_games_content", "dashboard_games_scripts",
+	"game_detail_title", "game_detail_content", "game_detail_scripts",
+	"dashboard_clients_title", "dashboard_clients_content", "dashboard_clients_scripts",
+	"dashboard_analytics_title", "dashboard_analytics_content", "dashboard_analytics_scripts",
+	"admin_user_detail_title", "admin_user_detail_content",
 	"admin_overview_title", "admin_overview_content", "admin_overview_scripts",
 	"admin_users_title", "admin_users_content", "admin_users_scripts",
 	"admin_settings_title", "admin_settings_content", "admin_settings_scripts",
@@ -195,6 +212,28 @@ func TestNestedPartialsExecute(t *testing.T) {
 	}
 }
 
+func sampleInsights(now string) userInsights {
+	return userInsights{
+		GameCount: 2, SaveCount: 4, TotalBytes: 2048, DeviceCount: 2, OnlineCount: 1,
+		SyncByDay: []store.DayCount{
+			{Day: "2026-06-23", Count: 1}, {Day: "2026-06-24", Count: 0}, {Day: "2026-06-25", Count: 3},
+		},
+		SyncTotal: 4,
+		TopGames: []topGame{
+			{GameID: "730", Title: "Counter-Strike 2", TotalBytes: 1536, FileCount: 3, Pct: 100},
+			{GameID: "570", Title: "Dota 2", TotalBytes: 512, FileCount: 1, Pct: 33},
+		},
+		Devices: []clientRow{
+			{ClientInfo: store.ClientInfo{ID: "c1", Name: "Gaming PC", OS: "windows", LastSeen: now}, Online: true},
+		},
+		Alerts: []healthAlert{
+			{Tone: "ok", Text: "All devices have synced recently."},
+			{Tone: "danger", Text: "Steam Deck hasn't synced in 9 days."},
+		},
+		LinkGames: true,
+	}
+}
+
 func templateTestData(name string) interface{} {
 	now := time.Now().UTC().Format(time.RFC3339)
 	pd := PageData{
@@ -258,10 +297,85 @@ func templateTestData(name string) interface{} {
 			PathKey:   "save/main",
 			GameTitle: "Test Game",
 			Versions: []store.SaveVersionInfo{
-				{Version: 1, UpdatedAt: now, SizeBytes: 512},
-				{Version: 2, UpdatedAt: now, SizeBytes: 768},
+				{Version: 1, UpdatedAt: now, SizeBytes: 512, ChangeBytes: 512, ClientName: "Gaming PC"},
+				{Version: 2, UpdatedAt: now, SizeBytes: 768, ChangeBytes: 256, ClientID: "c1", ClientName: "Steam Deck"},
 			},
 			CurrentVersion: 2,
+		}
+	case "dashboard_games.html", "partials/game_cards.html":
+		return dashboardGamesData{
+			PageData: PageData{
+				PageName: "dashboard_games", Username: pd.Username, IsAdmin: pd.IsAdmin,
+				CSRFToken: pd.CSRFToken, NavActive: "games",
+			},
+			Games: []gameCard{
+				{GameID: "730", Title: "Counter-Strike 2", FileCount: 3, TotalBytes: 1536, LastSynced: now, Status: "healthy"},
+				{GameID: "570", Title: "Dota 2", FileCount: 1, TotalBytes: 512, LastSynced: now, Status: "stale"},
+			},
+			TotalGames: 2, TotalFiles: 4, TotalBytes: 2048, MaxFiles: 3,
+			Query: "", Status: "all", Sort: "recent", View: "grid",
+		}
+	case "game_detail.html":
+		return gameDetailData{
+			PageData: PageData{
+				PageName: "game_detail", Username: pd.Username, IsAdmin: pd.IsAdmin,
+				CSRFToken: pd.CSRFToken, NavActive: "games",
+			},
+			GameID: "730", Title: "Counter-Strike 2",
+			FileCount: 2, TotalBytes: 1536, LastSynced: now, Status: "healthy",
+			Encrypted: false, EncryptionLabel: "Standard", CategoryCount: 1,
+			Categories: []saveCategory{{
+				Name: "Saves", TotalBytes: 1536,
+				Files: []saveFileRow{
+					{SaveSummary: store.SaveSummary{GameID: "730", PathKey: "save/main", SizeBytes: 1024, UpdatedAt: now}, Name: "main.dat"},
+					{SaveSummary: store.SaveSummary{GameID: "730", PathKey: "save/alt", SizeBytes: 512, UpdatedAt: now}, Name: "alt.dat"},
+				},
+			}},
+			LargestFile:      saveFileRow{SaveSummary: store.SaveSummary{GameID: "730", PathKey: "save/main", SizeBytes: 1024}, Name: "main.dat"},
+			HasLargestChange: true,
+			LargestChange:    store.SaveChangeRow{ChangeBytes: 256, ClientName: "Gaming PC", PathKey: "save/main", UpdatedAt: now},
+		}
+	case "dashboard_clients.html", "partials/clients_list.html":
+		return dashboardClientsData{
+			PageData: PageData{
+				PageName: "dashboard_clients", Username: pd.Username, IsAdmin: pd.IsAdmin,
+				CSRFToken: pd.CSRFToken, NavActive: "clients",
+			},
+			Clients: []clientRow{
+				{ClientInfo: store.ClientInfo{ID: "c1", Name: "Gaming PC", OS: "windows", LastSeen: now}, Online: true},
+				{ClientInfo: store.ClientInfo{ID: "c2", Name: "Steam Deck", OS: "linux", LastSeen: now}, Online: false},
+			},
+			Online: 1, Total: 2,
+		}
+	case "partials/cmdk_results.html":
+		return cmdkResults{
+			Query: "cs",
+			Commands: []cmdkCommand{
+				{Label: "My Games", Sub: "Browse synced saves", Href: "/dashboard/games", Icon: "🎮"},
+			},
+			Games: []cmdkGameResult{
+				{GameID: "730", Title: "Counter-Strike 2", Meta: "3 files · 1.5 KB"},
+			},
+		}
+	case "dashboard_analytics.html", "partials/insights_body.html":
+		return analyticsData{
+			PageData: PageData{
+				PageName: "dashboard_analytics", Username: pd.Username, IsAdmin: pd.IsAdmin,
+				CSRFToken: pd.CSRFToken, NavActive: "analytics",
+			},
+			userInsights: sampleInsights(now),
+		}
+	case "admin_user_detail.html":
+		return adminUserDetailData{
+			PageData: PageData{
+				PageName: "admin_user_detail", Username: "admin", IsAdmin: true,
+				CSRFToken: "csrf-test", AdminNav: "users",
+			},
+			userInsights:   sampleInsights(now),
+			TargetUsername: "alice",
+			TargetUserID:   "user-1",
+			QuotaBytes:     10737418240,
+			TargetRole:     "user",
 		}
 	case "admin_overview.html":
 		return adminOverviewData{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"html/template"
 	"net/http"
+	"strings"
 
 	"github.com/gsbs/gsbs/server/api"
 	"github.com/gsbs/gsbs/server/auth"
@@ -137,6 +138,26 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveDashboardSavesPartial(w, r)
 	case path == "/dashboard/partial/activity" && r.Method == http.MethodGet:
 		h.serveDashboardActivityPartial(w, r)
+	case path == "/dashboard/games" && r.Method == http.MethodGet:
+		h.serveDashboardGames(w, r)
+	case path == "/dashboard/partial/games" && r.Method == http.MethodGet:
+		h.serveDashboardGamesPartial(w, r)
+	case path == "/dashboard/analytics" && r.Method == http.MethodGet:
+		h.serveDashboardAnalytics(w, r)
+	case path == "/dashboard/partial/search" && r.Method == http.MethodGet:
+		h.serveGlobalSearch(w, r)
+	case path == "/dashboard/export/saves.csv" && r.Method == http.MethodGet:
+		h.handleExportSaves(w, r, "csv")
+	case path == "/dashboard/export/saves.json" && r.Method == http.MethodGet:
+		h.handleExportSaves(w, r, "json")
+	case path == "/dashboard/games/bulk-delete" && r.Method == http.MethodPost:
+		h.handleBulkDeleteGames(w, r)
+	case path == "/dashboard/clients" && r.Method == http.MethodGet:
+		h.serveDashboardClientsPage(w, r)
+	case path == "/dashboard/partial/clients-list" && r.Method == http.MethodGet:
+		h.serveDashboardClientsListPartial(w, r)
+	case path == "/dashboard/clients/rename" && r.Method == http.MethodPost:
+		h.handleDashboardRenameClient(w, r)
 	case path == "/dashboard/clients/revoke" && r.Method == http.MethodPost:
 		h.handleDashboardRevokeClient(w, r)
 	case path == "/logout":
@@ -157,6 +178,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveAdminOverview(w, r)
 	case path == "/admin/users" && r.Method == http.MethodGet:
 		h.serveAdminUsers(w, r)
+	case path == "/admin/users/view" && r.Method == http.MethodGet:
+		h.serveAdminUserDetail(w, r)
 	case path == "/admin/manifest" && r.Method == http.MethodGet:
 		h.serveAdminManifest(w, r)
 	case path == "/admin/activity" && r.Method == http.MethodGet:
@@ -205,6 +228,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleRestoreVersion(w, r)
 	case path == "/dashboard/save/versions/download" && r.Method == http.MethodGet:
 		h.serveSaveVersionDownload(w, r)
+	case path == "/dashboard/save/versions/preview" && r.Method == http.MethodGet:
+		h.serveSaveVersionPreview(w, r)
 	case path == "/dashboard/save/delete" && r.Method == http.MethodPost:
 		h.handleDeleteSave(w, r)
 	case path == "/dashboard/game/delete" && r.Method == http.MethodPost:
@@ -227,6 +252,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleEncryptionSettings(w, r)
 	case path == "/admin/manifest.csv" && r.Method == http.MethodGet:
 		h.serveManifestCSV(w, r)
+	case strings.HasPrefix(r.URL.EscapedPath(), "/dashboard/games/") && r.Method == http.MethodGet:
+		h.serveGameDetail(w, r)
 	default:
 		if h.routeAdminPCGW(w, r) {
 			return

@@ -1,0 +1,25 @@
+{{template "layout" .}}
+{{define "dashboard_clients_title"}}Devices — GSBS{{end}}
+{{define "dashboard_clients_content"}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Connected Devices</h1>
+    <p class="page-sub">Manage the devices syncing your game saves.</p>
+  </div>
+</div>
+
+<section class="panel" aria-labelledby="devices-heading">
+  <div class="panel-header"><h2 id="devices-heading">Devices</h2></div>
+  <div id="clients-list"
+       hx-get="/dashboard/partial/clients-list"
+       hx-trigger="load, save-updated from:body, client-activity from:body, every 30s"
+       hx-swap="innerHTML"
+       aria-live="polite">
+    {{template "partials/loading_skeleton.html" .}}
+  </div>
+</section>
+{{end}}
+{{define "dashboard_clients_scripts"}}
+<div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>
+<div sse-swap="client-activity" hx-trigger="client-activity from:body" hidden></div>
+{{end}}
