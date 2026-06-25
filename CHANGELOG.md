@@ -15,6 +15,7 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 - **Admin Users:** the row "Actions" dropdown was being painted underneath the next row's sticky cell, making it hard to read. The open row's cell is now raised above its siblings.
 - **S3 sync history:** S3 bundle syncs are now recorded in the PCGW Sync History (mode `bundle`) with success/failure status and the per-sync change count, and the "Latest sync run" timestamp reflects them. Previously the Sync History was empty when using the S3 bundle source.
+- Steam App IDs extracted from a PCGW infobox are now returned in a stable order (main edition before the "side" alternate edition) instead of relying on map iteration order.
 
 ## [3.2.0] - 2026-06-25
 

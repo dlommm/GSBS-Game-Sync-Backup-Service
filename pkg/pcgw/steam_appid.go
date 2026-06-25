@@ -39,7 +39,10 @@ func isAllDigits(s string) bool {
 // infoboxSteamKeys are the PCGW infobox parameters that carry Steam App IDs,
 // matched case-insensitively ("steam appid" plus the "side" variant for
 // alternate editions).
-var infoboxSteamKeys = map[string]bool{"steam appid": true, "steam appid side": true}
+// infoboxSteamKeyOrder lists the recognised infobox Steam-ID keys in a fixed
+// order (main edition before the "side" alternate edition) so the extracted IDs
+// are deterministic regardless of map iteration order.
+var infoboxSteamKeyOrder = []string{"steam appid", "steam appid side"}
 
 // SteamAppIDsFromInfobox extracts Steam App IDs from a parsed infobox map
 // (raw wikitext keys, e.g. "steam appid"). PCGW's Cargo "Steam_AppID" field is
@@ -49,9 +52,13 @@ func SteamAppIDsFromInfobox(infobox map[string]string) []string {
 	if len(infobox) == 0 {
 		return nil
 	}
-	var vals []string
+	norm := make(map[string]string, len(infobox))
 	for k, v := range infobox {
-		if infoboxSteamKeys[strings.ToLower(strings.TrimSpace(k))] {
+		norm[strings.ToLower(strings.TrimSpace(k))] = v
+	}
+	var vals []string
+	for _, key := range infoboxSteamKeyOrder {
+		if v, ok := norm[key]; ok {
 			vals = append(vals, v)
 		}
 	}
@@ -64,10 +71,16 @@ func SteamAppIDsFromInfoboxAny(infobox map[string]interface{}) []string {
 	if len(infobox) == 0 {
 		return nil
 	}
-	var vals []string
+	norm := make(map[string]string, len(infobox))
 	for k, v := range infobox {
-		if s, ok := v.(string); ok && infoboxSteamKeys[strings.ToLower(strings.TrimSpace(k))] {
-			vals = append(vals, s)
+		if s, ok := v.(string); ok {
+			norm[strings.ToLower(strings.TrimSpace(k))] = s
+		}
+	}
+	var vals []string
+	for _, key := range infoboxSteamKeyOrder {
+		if v, ok := norm[key]; ok {
+			vals = append(vals, v)
 		}
 	}
 	return ParseSteamAppIDList(vals...)
