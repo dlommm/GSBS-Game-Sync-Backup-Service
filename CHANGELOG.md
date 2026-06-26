@@ -4,6 +4,13 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.2.3] - 2026-06-26
+
+### Fixed
+
+- **Cover art now resolves for games whose Steam App ID lives only in the PCGW infobox** (e.g. *The Witcher 3*). The cover proxy read only the Cargo `steam_appids` column, which PCGW frequently leaves empty even for Steam games; it now falls back to the infobox-derived ID the same way the save-path manifest does.
+- Cover "no art" results are no longer cached permanently — the negative-cache marker now expires after 7 days and is removed on a successful fetch, so covers self-heal once a manifest sync supplies a missing Steam App ID. (To refresh immediately, use **Settings → Cover Art Cache → Clear cover cache**.)
+
 ## [3.2.2] - 2026-06-26
 
 ### Added

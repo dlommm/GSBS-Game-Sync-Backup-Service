@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gsbs/gsbs/pkg/pcgw"
 	"github.com/gsbs/gsbs/server/logx"
 )
 
@@ -22,6 +23,10 @@ const (
 	coverMaxBytes    = 8 << 20                  // 8 MiB cap per cover
 	coverCacheCtl    = "public, max-age=604800" // 7-day browser cache
 	defaultCoverRoot = "/app/data/covers"
+	// coverMissTTL bounds how long a negative ("no cover") result is trusted, so
+	// covers self-heal after a manifest sync adds a missing Steam App ID rather
+	// than staying stuck on the generated icon forever.
+	coverMissTTL = 7 * 24 * time.Hour
 )
 
 // coverHTTPClient fetches cover art from Steam's CDN with a short timeout.
@@ -79,7 +84,7 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 		h.serveCoverFile(w, r, jpgPath)
 		return
 	}
-	if isFile(missPath) {
+	if missFresh(missPath) {
 		http.NotFound(w, r)
 		return
 	}
@@ -93,7 +98,7 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 		h.serveCoverFile(w, r, jpgPath)
 		return
 	}
-	if isFile(missPath) {
+	if missFresh(missPath) {
 		http.NotFound(w, r)
 		return
 	}
@@ -118,6 +123,7 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(data)
 		return
 	}
+	_ = os.Remove(missPath) // a stale negative marker may exist; the jpg now wins
 	h.serveCoverFile(w, r, jpgPath)
 }
 
@@ -132,14 +138,22 @@ func (h *WebHandler) steamAppIDForGame(ctx context.Context, id string) string {
 		return ""
 	}
 	g, err := h.store.GetPCGWGame(ctx, pageID)
-	if err != nil || g == nil || len(g.SteamAppIDs) == 0 {
+	if err != nil || g == nil {
 		return ""
 	}
-	appID := strings.TrimSpace(g.SteamAppIDs[0])
-	if !isNumericGameID(appID) {
-		return ""
+	ids := g.SteamAppIDs
+	if len(ids) == 0 {
+		// PCGW's Cargo Steam_AppID field is frequently empty even when the game
+		// is on Steam; the real ID lives in the infobox. Derive it the same way
+		// the manifest enrichment does (pcgw.SteamAppIDsFromInfoboxAny).
+		ids = pcgw.SteamAppIDsFromInfoboxAny(g.Infobox)
 	}
-	return appID
+	for _, a := range ids {
+		if a = strings.TrimSpace(a); isNumericGameID(a) {
+			return a
+		}
+	}
+	return ""
 }
 
 func fetchSteamCover(ctx context.Context, appID string) ([]byte, error) {
@@ -175,6 +189,16 @@ func writeCoverMiss(missPath string) {
 func isFile(path string) bool {
 	fi, err := os.Stat(path)
 	return err == nil && !fi.IsDir()
+}
+
+// missFresh reports whether a negative-cache marker exists and is still within
+// its TTL. A stale marker is treated as a miss so the cover is retried.
+func missFresh(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil || fi.IsDir() {
+		return false
+	}
+	return time.Since(fi.ModTime()) < coverMissTTL
 }
 
 // atomicWriteCover writes data to path via a temp file + rename so a partial
