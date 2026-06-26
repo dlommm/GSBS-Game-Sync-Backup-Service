@@ -32,6 +32,7 @@ type WebHandler struct {
 	maxStorageBytes int64
 	readOnly        bool
 	loginLimiter    *ratelimit.Limiter
+	coverRoot       string
 }
 
 // NewWebHandler creates a WebHandler. loginLimiter may be nil (no rate limit on WebUI login).
@@ -42,6 +43,7 @@ func NewWebHandler(st store.Store, authSvc *auth.Service, secret, adminUsername 
 		apiHandler: apiHandler, jobRunner: jobRunner, pcgwCron: pcgwCron, gsbsVersion: gsbsVersion,
 		maxStorageBytes: maxStorageBytes,
 		readOnly:        readOnly, loginLimiter: loginLimiter,
+		coverRoot: coverRootFromEnv(),
 	}
 }
 
@@ -126,6 +128,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			http.NotFound(w, r)
 		}
+	case strings.HasPrefix(path, "/covers/") && r.Method == http.MethodGet:
+		h.serveCover(w, r) // public: shared cover-art cache, no session
 	case path == "/dashboard" && r.Method == http.MethodGet:
 		h.serveDashboard(w, r)
 	case path == "/dashboard/events" && r.Method == http.MethodGet:
@@ -190,6 +194,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveAdminSettings(w, r)
 	case path == "/admin/settings/save" && r.Method == http.MethodPost:
 		h.handleAdminSettingsSave(w, r)
+	case path == "/admin/covers/clear" && r.Method == http.MethodPost:
+		h.handleClearCoverCache(w, r)
 	case path == "/admin/pcgw/source" && r.Method == http.MethodPost:
 		h.handleAdminChooseSource(w, r)
 	case path == "/admin/analytics" && r.Method == http.MethodGet:

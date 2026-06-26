@@ -4,6 +4,17 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [3.2.2] - 2026-06-26
+
+### Added
+
+- **Game cover art on My Games.** Game cards and the game detail header now show real Steam cover art. The server fetches a game's `library_600x900.jpg` from Steam's public CDN on demand (using the Steam App ID already in the manifest), caches it to disk, and serves it locally at `/covers/{game_id}` — so browsers never call Steam directly. Games without Steam art fall back to the existing generated icon tile.
+  - Cache directory is `GSBS_COVER_ROOT` (default `/app/data/covers`). Covers are cached effectively indefinitely; an admin **Settings → Cover Art Cache → Clear cover cache** control forces a re-fetch. Missing/absent covers are negatively cached so the server doesn't re-poll Steam on every view.
+
+### Notes
+
+- No new dependencies, no database schema changes, and no external image pipeline — covers are sourced directly from Steam's CDN per game on demand.
+
 ## [3.2.1] - 2026-06-25
 
 ### Changed

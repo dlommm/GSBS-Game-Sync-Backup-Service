@@ -396,6 +396,7 @@ func auditLabel(action string) string {
 		"delete_game_saves": "Deleted all saves for a game",
 		"revoke_client":   "Revoked client token",
 		"rename_client":   "Renamed a device",
+		"clear_cover_cache": "Cleared the cover-art cache",
 		"push_manifest":   "Pushed manifest update",
 		"run_job":         "Started PCGW sync job",
 		"disable_user":    "Disabled user",

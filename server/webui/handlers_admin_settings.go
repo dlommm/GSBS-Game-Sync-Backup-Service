@@ -29,6 +29,9 @@ type adminSettingsData struct {
 	PCGWSyncSourceEnvOverride  bool
 	PCGWBundleCronEnvOverride  bool
 	PCGWBundleCronNextRun      string
+	CoverCacheCount            int
+	CoverRoot                  string
+	CoversCleared              bool
 }
 
 func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +88,10 @@ func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) 
 			data.PCGWCronSource = "env"
 		}
 	}
+
+	data.CoverCacheCount = h.coverCacheCount()
+	data.CoverRoot = h.coverRoot
+	data.CoversCleared = r.URL.Query().Get("ok") == "covers_cleared"
 
 	h.render(w, "admin_settings.html", data)
 }

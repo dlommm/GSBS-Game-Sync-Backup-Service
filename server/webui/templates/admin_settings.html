@@ -108,5 +108,23 @@
     </div>
   </form>
 </section>
+
+<section class="panel">
+  <div class="panel-header"><h2>Cover Art Cache</h2></div>
+  <div class="panel-body">
+    <p class="cell-muted" style="margin:0 0 .75rem;">
+      Game covers are pulled from Steam's public CDN on demand and cached on disk, then served locally to My Games. Games without Steam art fall back to a generated icon. Clearing the cache forces covers to re-download on next view.
+    </p>
+    {{if .CoversCleared}}<p class="alert alert-success">Cover cache cleared.</p>{{end}}
+    <div class="config-grid" style="padding:0 0 .9rem;">
+      <div class="config-item"><span class="config-key">Cached covers</span><span class="config-val">{{.CoverCacheCount}}</span></div>
+      <div class="config-item"><span class="config-key">Cache directory</span><span class="config-val cell-muted"><code class="code-inline">{{.CoverRoot}}</code></span></div>
+    </div>
+    <form method="post" action="/admin/covers/clear" class="inline-form" onsubmit="return confirm('Clear all cached cover images? They will re-download as games are viewed.');">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <button type="submit" class="btn-danger-sm">Clear cover cache</button>
+    </form>
+  </div>
+</section>
 {{end}}
 {{define "admin_settings_scripts"}}{{end}}

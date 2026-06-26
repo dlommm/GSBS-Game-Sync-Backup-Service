@@ -803,6 +803,9 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 .game-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .game-card-cover { position: relative; }
 .game-card-cover .game-icon { width: 100%; height: auto; aspect-ratio: 1 / 1; }
+/* Real cover art (Steam library portrait) layered over the generated icon;
+   onerror removes it so the icon shows through when there's no cover. */
+.cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; border-radius: var(--radius-sm); }
 .game-card-body { min-width: 0; }
 .game-card-title { font-weight: 600; font-size: 0.9375rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .game-card-meta { margin-top: 0.15rem; font-size: 0.8125rem; color: var(--text-secondary); }
@@ -835,6 +838,7 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 
 /* ── Game detail header + layout ── */
 .game-detail-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.game-detail-cover { position: relative; width: 72px; height: 72px; flex: none; }
 .game-detail-cover .game-icon { width: 72px; height: 72px; }
 .game-detail-heading { min-width: 0; flex: 1 1 auto; }
 .game-detail-title { margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.03em; }

@@ -8,7 +8,7 @@
 </p>
 
 <header class="game-detail-head">
-  <div class="game-detail-cover">{{gameIconSVG .Title 72}}</div>
+  <div class="game-detail-cover">{{gameIconSVG .Title 72}}<img class="cover-img" src="/covers/{{urlquery .GameID}}" alt="" loading="lazy" onerror="this.remove()"></div>
   <div class="game-detail-heading">
     <h1 class="game-detail-title">{{.Title}}</h1>
     <div class="game-detail-tags">
