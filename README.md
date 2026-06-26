@@ -27,7 +27,7 @@
 **Sync game saves across Windows and Linux.** Run a central server, install clients on each PC, and GSBS keeps saves in sync — only writing pulled files where the game is actually installed.
 
 | Dashboard | System tray |
-|-----------|-------------|Wo
+|-----------|-------------|
 | ![Dashboard](docs/images/screenshots/example-webui-dashboard.png) | ![Client status](/assets/images/favicon-256x256.png) |
 
 ## Quick install
