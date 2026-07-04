@@ -99,17 +99,23 @@ chmod +x gsbs-client-linux-amd64     # or gsbs-client-linux-arm64 on ARM
 
 ### macOS
 
-```bash
-# Apple Silicon: gsbs-client-darwin-arm64.tar.gz — Intel: gsbs-client-darwin-amd64.tar.gz
-tar -xzf gsbs-client-darwin-arm64.tar.gz
-xattr -d com.apple.quarantine gsbs-client-darwin-arm64   # clear the Gatekeeper flag (unsigned build)
-./gsbs-client-darwin-arm64 login
-./gsbs-client-darwin-arm64
-```
+The macOS client ships as a `.dmg` disk image. Grab the one for your Mac:
 
-The tray menu's **Run at startup** installs a per-user LaunchAgent (`~/Library/LaunchAgents/io.github.dlommm.GSBS.plist`). Updates are manual on macOS (download the newer tarball); the in-app self-updater is Windows/Linux only.
+- **Apple Silicon** (M1/M2/M3/…): `gsbs-client-<version>-darwin-arm64.dmg`
+- **Intel**: `gsbs-client-<version>-darwin-amd64.dmg`
 
-> **Gatekeeper:** macOS binaries are not notarized (that needs a paid Apple Developer account). If Gatekeeper blocks the app, run the `xattr -d com.apple.quarantine …` command above, or right-click the binary in Finder → **Open** the first time. Download only from the official [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest).
+1. Open the `.dmg` and drag **GSBS** into the **Applications** folder.
+2. Clear the Gatekeeper quarantine flag once (the build is unsigned — see below):
+
+   ```bash
+   xattr -cr /Applications/GSBS.app
+   ```
+
+3. Launch **GSBS** from Applications (or Spotlight). It runs as a menu-bar app — no Dock icon — so look for its icon in the top-right menu bar. On first launch, use the tray menu to **Log in** to your server.
+
+The tray menu's **Run at startup** installs a per-user LaunchAgent (`~/Library/LaunchAgents/io.github.dlommm.GSBS.plist`). Updates are manual on macOS (download the newer `.dmg` and drag it over the old app); the in-app self-updater is Windows/Linux only.
+
+> **Gatekeeper:** the macOS app is not code-signed or notarized (that needs a paid Apple Developer account). Without clearing the quarantine flag, macOS will say the app "is damaged" or "can't be opened because Apple cannot check it for malicious software." The `xattr -cr /Applications/GSBS.app` command above removes the quarantine attribute so it opens normally. Alternatively, right-click **GSBS.app** in Finder → **Open** → **Open** the first time. Download only from the official [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest), and verify the download against `SHA256SUMS` if you want to be sure it wasn't tampered with.
 
 ## First run
 

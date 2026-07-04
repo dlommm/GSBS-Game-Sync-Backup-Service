@@ -37,6 +37,8 @@ OPTIONAL_ASSETS=(
   "gsbs-client-setup-${VERSION_VALUE}-windows-amd64.exe"
   "gsbs-client_${VERSION_VALUE}_amd64.deb"
   "gsbs-client-${VERSION_VALUE}-x86_64.AppImage"
+  "gsbs-client-${VERSION_VALUE}-darwin-arm64.dmg"
+  "gsbs-client-${VERSION_VALUE}-darwin-amd64.dmg"
 )
 
 sha256_file() {

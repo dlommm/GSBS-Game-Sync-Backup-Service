@@ -164,19 +164,20 @@ jobs:
           VERSION: ${{ needs.version.outputs.tag }}
           COMMIT: ${{ github.sha }}
         run: ./script/build.sh "$VERSION" dist darwin-arm64,darwin-amd64
-      - name: Package tarballs
+      - name: Package client DMGs (unsigned .app) + server tarballs
+        env:
+          VERSION: ${{ needs.version.outputs.tag }}
         run: |
-          cd dist
           for arch in arm64 amd64; do
-            tar -czf "gsbs-client-darwin-${arch}.tar.gz" "gsbs-client-darwin-${arch}"
-            tar -czf "gsbs-server-darwin-${arch}.tar.gz" "gsbs-server-darwin-${arch}"
+            ./script/packaging/macos/build-dmg.sh dist "$VERSION" "$arch"
+            tar -czf "dist/gsbs-server-darwin-${arch}.tar.gz" -C dist "gsbs-server-darwin-${arch}"
           done
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v6
         with:
           name: release-macos
           path: |
-            dist/gsbs-client-darwin-*.tar.gz
+            dist/gsbs-client-*-darwin-*.dmg
             dist/gsbs-server-darwin-*.tar.gz
 
   build-windows:
@@ -386,8 +387,8 @@ jobs:
             dist/gsbs-server-linux-amd64
             dist/gsbs-client-linux-amd64
             dist/gsbs-client-linux-arm64
-            dist/gsbs-client-darwin-arm64.tar.gz
-            dist/gsbs-client-darwin-amd64.tar.gz
+            dist/gsbs-client-${{ needs.version.outputs.value }}-darwin-arm64.dmg
+            dist/gsbs-client-${{ needs.version.outputs.value }}-darwin-amd64.dmg
             dist/gsbs-server-darwin-arm64.tar.gz
             dist/gsbs-server-darwin-amd64.tar.gz
             dist/gsbs-client-setup-*.exe
