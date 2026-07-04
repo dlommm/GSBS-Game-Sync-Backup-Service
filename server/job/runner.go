@@ -520,7 +520,7 @@ func (r *Runner) tryRunPCGWBundleFetch(ctx context.Context, opts PCGWBundleFetch
 	r.mu.Unlock()
 
 	r.wg.Add(1)
-	go r.runPCGWBundleFetch(ctx, jobName, opts)
+	go r.runPCGWBundleFetch(ctx, jobName, opts) //nolint:gosec // G118: background job outlives the admin request by design
 	return true, nil
 }
 

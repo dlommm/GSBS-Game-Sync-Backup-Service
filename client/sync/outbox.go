@@ -66,7 +66,8 @@ func EnqueueOutbox(gameID, pathKey, filePath, relativePath string, content []byt
 	defer outboxMu.Unlock()
 
 	dir := outboxDir()
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	// 0700: the outbox holds queued save payloads — private to the user.
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 

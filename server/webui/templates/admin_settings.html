@@ -90,6 +90,17 @@
     </div>
 
     <div class="settings-form-section">
+      <h3 class="settings-form-section-title">Sync Safety</h3>
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="legacy_push_protection" value="1" {{if .LegacyPushProtection}}checked{{end}}>
+          <span>Strict overwrite protection for older clients (pre-4.0)</span>
+        </label>
+        <p class="form-hint">Rejects a push that carries no safety precondition when the save was last written by a different device — the older client records it as a conflict instead of overwriting. Clients 4.0+ always send preconditions, so this only affects fleets still running 3.x. May surface conflicts on legitimate alternating play under last-write-wins; leave off unless you need it.</p>
+      </div>
+    </div>
+
+    <div class="settings-form-section">
       <h3 class="settings-form-section-title">PCGW Filters</h3>
       <p class="settings-form-section-desc">Substring excludes applied during API sync. Path excludes use defaults when empty.</p>
 

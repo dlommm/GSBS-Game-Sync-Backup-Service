@@ -71,8 +71,14 @@ func StartSetupServer() string {
 		setupURLMu.Lock()
 		setupURL = url
 		setupURLMu.Unlock()
+		srv := &http.Server{
+			Handler:           mux,
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       time.Minute,
+			IdleTimeout:       2 * time.Minute,
+		}
 		go func() {
-			_ = http.Serve(listener, mux)
+			_ = srv.Serve(listener)
 		}()
 		return url
 	}
@@ -297,11 +303,11 @@ func handleOpenLog(w http.ResponseWriter, r *http.Request) {
 	logPath := ClientLogPath()
 	// On Windows, try to open the log file in the default editor.
 	if runtime.GOOS == "windows" {
-		if err := exec.Command("cmd", "/c", "start", "", logPath).Start(); err != nil {
+		if err := exec.Command("cmd", "/c", "start", "", logPath).Start(); err != nil { //nolint:gosec // G204: opens the user-selected local folder/browser; path comes from our own config
 			log.Printf("setup: open log: %v", err)
 		}
 	} else {
-		if err := exec.Command("xdg-open", logPath).Start(); err != nil {
+		if err := exec.Command("xdg-open", logPath).Start(); err != nil { //nolint:gosec // G204: opens the user-selected local folder/browser; path comes from our own config
 			log.Printf("setup: open log: %v", err)
 		}
 	}

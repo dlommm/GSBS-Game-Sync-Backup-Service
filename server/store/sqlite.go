@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/types"
@@ -24,6 +25,11 @@ type sqliteStore struct {
 	versionRetention int
 	saveRoot         string // non-empty enables filesystem storage (GSBS_SAVE_ROOT)
 	dbPath           string // original path, used to skip migration sleep for :memory: DBs
+
+	// Lazily-loaded at-rest encryption key for the TOTP column (secretbox.go).
+	totpKeyOnce  sync.Once
+	totpKeyBytes []byte
+	totpKeyErr   error
 }
 
 // NewSQLite creates a SQLite-backed store.
@@ -296,14 +302,32 @@ func (s *sqliteStore) IsTOTPEnabled(ctx context.Context, userID string) (bool, e
 func (s *sqliteStore) GetTOTPSecret(ctx context.Context, userID string) (string, error) {
 	var secret sql.NullString
 	err := s.db.QueryRowContext(ctx, `SELECT totp_secret FROM users WHERE id = ?`, userID).Scan(&secret)
-	if err != nil || !secret.Valid {
+	if err != nil || !secret.Valid || secret.String == "" {
 		return "", err
 	}
-	return secret.String, nil
+	key, err := s.totpKey()
+	if err != nil {
+		return "", fmt.Errorf("totp key: %w", err)
+	}
+	// Sealed values decrypt; legacy plaintext passes through (fails closed on
+	// a wrong/missing key file — 2FA login is blocked rather than bypassed).
+	return openColumn(key, secret.String)
 }
 
 func (s *sqliteStore) SetTOTPSecret(ctx context.Context, userID string, secret string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE users SET totp_secret = ? WHERE id = ?`, secret, userID)
+	stored := secret
+	if secret != "" {
+		key, err := s.totpKey()
+		if err != nil {
+			return fmt.Errorf("totp key: %w", err)
+		}
+		sealed, err := sealColumn(key, secret)
+		if err != nil {
+			return err
+		}
+		stored = sealed
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET totp_secret = ? WHERE id = ?`, stored, userID)
 	return err
 }
 
@@ -433,7 +457,7 @@ func (s *sqliteStore) ClientByToken(ctx context.Context, token string) (userID, 
 
 func (s *sqliteStore) ListClientsByUserID(ctx context.Context, userID string) ([]ClientInfo, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, os, COALESCE(last_seen, created_at) FROM clients WHERE user_id = ? ORDER BY name`, userID)
+		`SELECT id, name, os, COALESCE(last_seen, created_at), COALESCE(app_version, '') FROM clients WHERE user_id = ? ORDER BY name`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +465,7 @@ func (s *sqliteStore) ListClientsByUserID(ctx context.Context, userID string) ([
 	var out []ClientInfo
 	for rows.Next() {
 		var c ClientInfo
-		if err := rows.Scan(&c.ID, &c.Name, &c.OS, &c.LastSeen); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.OS, &c.LastSeen, &c.AppVersion); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -491,6 +515,13 @@ func (s *sqliteStore) RenameClient(ctx context.Context, userID, clientID, name s
 // RevokeAllClientTokens rotates the API token for every client owned by userID,
 // forcing those clients to re-authenticate (e.g. after a password or 2FA change).
 func (s *sqliteStore) RevokeAllClientTokens(ctx context.Context, userID string) error {
+	return s.RevokeAllClientTokensExcept(ctx, userID, "")
+}
+
+// RevokeAllClientTokensExcept rotates tokens for every client owned by userID
+// except keepClientID (empty = all), so the device that initiated a password
+// change stays logged in while every other device must re-authenticate.
+func (s *sqliteStore) RevokeAllClientTokensExcept(ctx context.Context, userID, keepClientID string) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT id FROM clients WHERE user_id = ?`, userID)
 	if err != nil {
 		return err
@@ -502,7 +533,9 @@ func (s *sqliteStore) RevokeAllClientTokens(ctx context.Context, userID string) 
 			rows.Close()
 			return scanErr
 		}
-		ids = append(ids, id)
+		if id != keepClientID {
+			ids = append(ids, id)
+		}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -514,6 +547,13 @@ func (s *sqliteStore) RevokeAllClientTokens(ctx context.Context, userID string) 
 		}
 	}
 	return nil
+}
+
+// DeleteSessionsByUserExcept removes all browser sessions for a user except
+// keepSessionID (empty = all): a password change logs out every other browser.
+func (s *sqliteStore) DeleteSessionsByUserExcept(ctx context.Context, userID, keepSessionID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ? AND id != ?`, userID, keepSessionID)
+	return err
 }
 
 func (s *sqliteStore) ClientUserID(ctx context.Context, clientID string) (string, error) {
@@ -847,6 +887,20 @@ func (s *sqliteStore) ListSavesPaginated(ctx context.Context, userID string, lim
 		out = append(out, b)
 	}
 	return out, total, rows.Err()
+}
+
+// GetSaveClientID returns the client that last wrote a save slot ("" when the
+// slot doesn't exist or predates client tracking).
+func (s *sqliteStore) GetSaveClientID(ctx context.Context, userID, gameID, pathKey string) (string, error) {
+	var clientID sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT client_id FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+		userID, gameID, pathKey,
+	).Scan(&clientID)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return clientID.String, err
 }
 
 func (s *sqliteStore) GetSaveContentSize(ctx context.Context, userID, gameID, pathKey string) (int64, error) {
@@ -1331,13 +1385,63 @@ func (s *sqliteStore) ListUsers(ctx context.Context) ([]UserInfo, error) {
 	return out, rows.Err()
 }
 
-// UpdateClientLastSeen updates the last_seen timestamp for a client (called on push/pull API).
-func (s *sqliteStore) UpdateClientLastSeen(ctx context.Context, clientID string) error {
+// UpdateClientLastSeen updates the last_seen timestamp for a client (called on
+// every authenticated API request) and records the client's reported app
+// version when present (empty preserves the previous value).
+func (s *sqliteStore) UpdateClientLastSeen(ctx context.Context, clientID, appVersion string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE clients SET last_seen = ? WHERE id = ?`,
-		time.Now().UTC().Format(time.RFC3339), clientID,
+		`UPDATE clients SET last_seen = ?, app_version = COALESCE(NULLIF(?, ''), app_version) WHERE id = ?`,
+		time.Now().UTC().Format(time.RFC3339), strings.TrimSpace(appVersion), clientID,
 	)
 	return err
+}
+
+// cryptoV2MinMajor is the first client major version whose crypto layer reads
+// the gsbs2: (Argon2id) save-encryption format.
+const cryptoV2MinMajor = 4
+
+// CryptoV2Ready reports whether every one of the user's recently-seen clients
+// (last 30 days) reports an app version that can read the v2 save-encryption
+// format. Stale or revoked devices don't hold the fleet back; a device with
+// no reported version counts as legacy. The caller is always among the recent
+// clients (its version was just recorded), so a lone up-to-date device is
+// ready immediately.
+func (s *sqliteStore) CryptoV2Ready(ctx context.Context, userID string) (bool, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT COALESCE(app_version, ''), COALESCE(last_seen, '') FROM clients WHERE user_id = ?`, userID)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	cutoff := time.Now().UTC().AddDate(0, 0, -30)
+	for rows.Next() {
+		var version, lastSeen string
+		if err := rows.Scan(&version, &lastSeen); err != nil {
+			return false, err
+		}
+		seen, perr := time.Parse(time.RFC3339, lastSeen)
+		if perr != nil || seen.Before(cutoff) {
+			continue // never-seen or stale device: doesn't hold the fleet back
+		}
+		if versionMajor(version) < cryptoV2MinMajor {
+			return false, nil
+		}
+	}
+	return true, rows.Err()
+}
+
+// versionMajor parses the leading major number from "4.0.0", "v4.1.2", or
+// "4.0.0-dev"; anything unparsable is 0 (legacy).
+func versionMajor(v string) int {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	if i := strings.IndexAny(v, ".-+"); i >= 0 {
+		v = v[:i]
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // ListSaveSummaries returns lightweight save info (no content blob) with game title from manifest.

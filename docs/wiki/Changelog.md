@@ -19,6 +19,11 @@ Major release: security & reliability audit fixes plus new flagship features.
 
 ### Security
 
+- **2FA secrets encrypted at rest** (key file `gsbs-keys/totp.key` beside the database — back it up together with the DB; see [Upgrading](Upgrading)).
+- **Save encryption upgrades to Argon2id automatically** once every device on an account runs ≥ 4.0.0 (mixed fleets keep the legacy format; `crypto_v2` config pins either way).
+- **Password changes log out all other devices and browsers**; enabling 2FA revokes client tokens; TOTP codes are single-use.
+- HTTP timeouts + write deadlines (Slowloris protection), server-verified content hashes, capped gzip bodies, optional strict overwrite protection for pre-4.0 clients.
+- Supply chain: signed build-provenance attestations + SPDX SBOM on releases, CodeQL, Dependabot, `errcheck`/`gosec` linting, Go 1.26.
 - **Storage quotas are now real limits**: enforced atomically inside the write transaction and counting version history. Over-quota users are grandfathered (shrink/replace allowed, growth blocked). Dashboards show the new usage figure with 80%/over warnings. See [Upgrading](Upgrading).
 - WebUI two-factor (TOTP) verification and registration are now rate-limited like password login.
 - `GSBS_SESSION_SECRET` must be at least 32 characters and not a placeholder — the server refuses to start otherwise (`GSBS_INSECURE_DEV_SECRET=1` bypasses for local development). See [Upgrading](Upgrading).

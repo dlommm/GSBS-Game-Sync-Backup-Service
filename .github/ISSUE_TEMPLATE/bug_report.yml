@@ -1,0 +1,50 @@
+name: Bug report
+description: Something broke — a sync problem, crash, or wrong behavior
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Check the [Troubleshooting guide](../../wiki/Troubleshooting) first — many tray/sync issues have documented fixes.
+  - type: input
+    id: version
+    attributes:
+      label: GSBS version
+      description: Server and client versions (About page, `gsbs-client --version`, or the Devices page).
+      placeholder: "server 4.0.0 / client 4.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Client platform
+      multiple: true
+      options:
+        - Windows
+        - Linux (native)
+        - Linux (Flatpak / Steam Deck / Bazzite)
+        - macOS
+        - Server only (no client involved)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Client: tray → Advanced → Copy diagnostics (secrets are stripped automatically). Server: relevant lines from the server log or `docker logs`.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for this problem
+          required: true

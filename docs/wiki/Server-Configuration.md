@@ -30,6 +30,7 @@
 | `GSBS_LOG_FILE` | (unset) | Legacy/compatibility file path for server logs when `GSBS_SERVICE_LOG_PATH` is not set |
 | `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token lifetime (default 90 days) |
 | `GSBS_TRUST_PROXY` | (unset) | Trust `X-Forwarded-For` / `X-Real-IP` from reverse proxy |
+| `GSBS_TOTP_KEY_FILE` | `<db dir>/gsbs-keys/totp.key` | At-rest encryption key file for 2FA secrets (auto-created 0600). **Back it up with the database** |
 | `GSBS_METRICS_TOKEN` | (unset) | Bearer token required to access `/metrics` |
 
 ### Rate limiting

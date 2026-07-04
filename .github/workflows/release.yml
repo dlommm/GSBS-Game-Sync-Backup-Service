@@ -17,7 +17,7 @@ permissions:
 
 env:
   DOCKERHUB_IMAGE: dendlomm/gsbs-server
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.26"
   # systray uses a pure-Go D-Bus tray (no appindicator/GTK linkage); gcc is for
   # the cgo go-sqlite3 server build, file(1) for the AppImage tooling.
   LINUX_CLIENT_DEPS: gcc file
@@ -282,6 +282,10 @@ jobs:
   release:
     needs: [version, build-linux, build-windows, docker]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write # build-provenance attestation (Sigstore keyless signing)
+      attestations: write
     steps:
       - uses: actions/checkout@v5
       - name: Download linux artifacts
@@ -299,6 +303,23 @@ jobs:
           VERSION: ${{ needs.version.outputs.tag }}
           REQUIRE_COMPLETE_MANIFEST: "1"
         run: bash script/release-assets.sh "$VERSION" dist
+      - name: Attest build provenance
+        # Signed, verifiable statements that these exact artifacts were built
+        # by this workflow from this commit (verify: gh attestation verify).
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: |
+            dist/gsbs-server-*
+            dist/gsbs-client-*
+            dist/gsbs-client_*.deb
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/gsbs-${{ needs.version.outputs.value }}.sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -316,5 +337,6 @@ jobs:
             dist/gsbs-client-${{ needs.version.outputs.value }}-x86_64.AppImage
             dist/SHA256SUMS
             dist/latest-client.json
+            dist/gsbs-*.sbom.spdx.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

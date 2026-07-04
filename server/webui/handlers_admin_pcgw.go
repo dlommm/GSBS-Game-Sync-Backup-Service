@@ -276,7 +276,7 @@ func (h *WebHandler) handleAdminPCGWRefresh(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	go func() {
+	go func() { //nolint:gosec // G118: background page refresh outlives the admin request by design
 		client := pcgw.NewClient()
 		_, _ = job.PCGWSyncPage(context.Background(), h.store, client, pageID)
 	}()
@@ -374,7 +374,10 @@ func (h *WebHandler) handleAdminPCGWImport(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	if err := r.ParseMultipartForm(256 << 20); err != nil {
+	// Cap the request body before parsing; the form-parse arg only bounds the
+	// in-memory portion, not how much the client may send.
+	r.Body = http.MaxBytesReader(w, r.Body, 512<<20)
+	if err := r.ParseMultipartForm(256 << 20); err != nil { //nolint:gosec // G120: request body is capped with MaxBytesReader just above
 		Redirect(w, r, "/admin/activity?error=import_parse_failed")
 		return
 	}

@@ -9,8 +9,69 @@ linters:
     - govet
     - staticcheck
     - ineffassign
+    - errcheck
+    - gosec
+  settings:
+    errcheck:
+      # Idiomatic best-effort calls whose errors carry no actionable signal
+      # (defer-close/rollback patterns; Rollback after Commit returns ErrTxDone
+      # by design).
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - (*database/sql.Stmt).Close
+        - (*database/sql.DB).Close
+        - (*compress/gzip.Reader).Close
+        - (*archive/zip.Writer).Close
+        - (github.com/gsbs/gsbs/server/store.Store).Close
+        - (net/http.ResponseWriter).Write
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
   exclusions:
     rules:
       # QF* codes are cosmetic refactoring suggestions, not bugs
       - linters: [staticcheck]
         text: "^QF"
+      # G104 duplicates errcheck
+      - linters: [gosec]
+        text: "G104"
+      # G304: file paths are validated by pkg/savepath before any read/write
+      - linters: [gosec]
+        text: "G304"
+      # G115: int conversion width warnings are noise at this codebase's scale
+      - linters: [gosec]
+        text: "G115"
+      # G301/G302/G306: file and directory modes are deliberate per artifact —
+      # game-accessible save dirs are 0755, admin-readable logs 0644, while key
+      # material and queued payloads already use 0600/0700 explicitly.
+      - linters: [gosec]
+        text: "G30[126]"
+      # G703-G706 (experimental taint analysis) report non-deterministically
+      # and every hit here is a validated flow: paths go through pkg/savepath,
+      # the covers proxy pins a fixed CDN host with numeric IDs, downloads are
+      # attachment/octet-stream, and "log injection" values come from our own
+      # server. Real injection surfaces are covered by CodeQL in CI.
+      - linters: [gosec]
+        text: "G70[3456]"
+      # G124: every cookie in session.go sets HttpOnly/SameSite; Secure is
+      # conditional on TLS / X-Forwarded-Proto because reverse-proxy plain-HTTP
+      # LAN deployments are supported (documented in SECURITY.md).
+      - linters: [gosec]
+        path: server/webui/session\.go
+        text: "G124"
+      # G203: render.go's template.HTML helpers emit SVG/markup assembled from
+      # server-computed numbers only — no user input reaches them.
+      - linters: [gosec]
+        path: server/webui/render\.go
+        text: "G203"
+      # G201/G202: bundle import/export SQL is assembled from internal constant
+      # column lists, never request data.
+      - linters: [gosec]
+        path: server/store/pcgw_(bundle|catalog)\.go
+        text: "G20[12]"
+      # Tests may take shortcuts (fixed creds, ignored errors)
+      - linters: [gosec, errcheck]
+        path: _test\.go

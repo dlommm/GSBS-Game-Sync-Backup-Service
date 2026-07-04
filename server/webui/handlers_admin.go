@@ -415,7 +415,7 @@ func parseManifestPagination(r *http.Request) (page, perPage int) {
 	if n := r.URL.Query().Get("count"); n != "" {
 		switch n {
 		case "10", "20", "40", "60", "100":
-			fmt.Sscanf(n, "%d", &perPage)
+			_, _ = fmt.Sscanf(n, "%d", &perPage)
 		}
 	}
 	page = 1

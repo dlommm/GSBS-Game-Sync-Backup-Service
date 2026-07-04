@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache: true
       - uses: actions/setup-node@v5
         with:
@@ -37,6 +37,12 @@ jobs:
           name: coverage
           path: coverage.out
           if-no-files-found: error
+      - name: Upload coverage to Codecov
+        # Tokenless upload works for public repos; failures don't block CI.
+        uses: codecov/codecov-action@v5
+        continue-on-error: true
+        with:
+          files: coverage.out
       - name: Build WebUI CSS
         run: ./script/build-webui.sh
       - name: Build server
@@ -62,7 +68,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache: true
       - name: Test
         # windows-latest ships mingw gcc, so the race detector works here too.
@@ -75,7 +81,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache: true
       - uses: actions/setup-node@v5
         with:
@@ -96,7 +102,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache: true
       - uses: actions/setup-node@v5
         with:
@@ -120,7 +126,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache: true
       - name: Install build deps (cgo for go-sqlite3 typechecking)
         run: sudo apt-get update && sudo apt-get install -y gcc

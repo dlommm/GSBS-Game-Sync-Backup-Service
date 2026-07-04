@@ -85,11 +85,22 @@ type Store interface {
 	RenameClient(ctx context.Context, userID, clientID, name string) error
 	// RefreshClientToken rotates token for the authenticated client; old token stops working.
 	RefreshClientToken(ctx context.Context, currentToken string) (newToken string, err error)
+	// RevokeAllClientTokensExcept rotates tokens for every client owned by the
+	// user except keepClientID (empty = all).
+	RevokeAllClientTokensExcept(ctx context.Context, userID, keepClientID string) error
+	// DeleteSessionsByUserExcept removes all browser sessions for a user
+	// except keepSessionID (empty = all).
+	DeleteSessionsByUserExcept(ctx context.Context, userID, keepSessionID string) error
 	// RevokeAllClientTokens regenerates tokens for every client owned by the user,
 	// invalidating all existing tokens (used after password or 2FA changes).
 	RevokeAllClientTokens(ctx context.Context, userID string) error
-	// UpdateClientLastSeen updates the last_seen timestamp for a client (called on push/pull).
-	UpdateClientLastSeen(ctx context.Context, clientID string) error
+	// UpdateClientLastSeen updates the last_seen timestamp for a client (called
+	// on every authenticated API request); appVersion, when non-empty, records
+	// the device's reported app version (X-GSBS-Client-Version).
+	UpdateClientLastSeen(ctx context.Context, clientID, appVersion string) error
+	// CryptoV2Ready reports whether all of the user's recently-seen clients can
+	// read the v2 (Argon2id) save-encryption format.
+	CryptoV2Ready(ctx context.Context, userID string) (bool, error)
 
 	// Save
 	UpsertSave(ctx context.Context, userID, gameID, pathKey string, content []byte) error
@@ -105,6 +116,9 @@ type Store interface {
 	GetSave(ctx context.Context, userID, gameID, pathKey string) (*types.SaveBlob, error)
 	// GetSaveContentSize returns stored bytes for an existing save slot, or 0 if none.
 	GetSaveContentSize(ctx context.Context, userID, gameID, pathKey string) (int64, error)
+	// GetSaveClientID returns the client that last wrote a save slot ("" when
+	// unknown). Used by the opt-in legacy push protection.
+	GetSaveClientID(ctx context.Context, userID, gameID, pathKey string) (string, error)
 	DeleteSave(ctx context.Context, userID, gameID, pathKey string) error
 	DeleteSavesForGame(ctx context.Context, userID, gameID string) (int, error)
 	// Save versioning (last N versions per slot; retention policy applied on upsert)
@@ -334,10 +348,11 @@ type SaveMeta struct {
 }
 
 type ClientInfo struct {
-	ID       string
-	Name     string
-	OS       string
-	LastSeen string
+	ID         string
+	Name       string
+	OS         string
+	LastSeen   string
+	AppVersion string // reported via X-GSBS-Client-Version; empty for pre-4.0 clients
 }
 
 // SaveSummary is a lightweight save entry for dashboard display (no content blob).

@@ -13,7 +13,20 @@ const (
 	AdminSettingPCGWPathExcludes      = "pcgw_path_excludes"
 	AdminSettingPCGWAutoRunFirstStart = "pcgw_auto_run_on_first_start"
 	AdminSettingPCGWFirstRunDone      = "pcgw_first_run_done"
+	// AdminSettingLegacyPushProtection ("true"/"1" = on, default off): reject
+	// precondition-less pushes from pre-4.0 clients with 409 when the slot was
+	// last written by a different device. Strict multi-device safety for
+	// fleets that still run old clients; can surface conflicts on legitimate
+	// alternating last-write-wins use, hence opt-in.
+	AdminSettingLegacyPushProtection = "legacy_push_protection"
 )
+
+// LegacyPushProtectionFromSettings reports whether strict first-push
+// protection for legacy (pre-4.0) clients is enabled.
+func LegacyPushProtectionFromSettings(settings map[string]string) bool {
+	v := settings[AdminSettingLegacyPushProtection]
+	return v == "true" || v == "1"
+}
 
 const (
 	DefaultPCGWCron             = "0 3 * * 0"

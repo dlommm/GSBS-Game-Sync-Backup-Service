@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gsbs/gsbs/server/auth"
 	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/sse"
-	"github.com/pquerna/otp/totp"
 )
 
 func (h *WebHandler) serveLogin(w http.ResponseWriter, r *http.Request) {
@@ -144,7 +144,7 @@ func (h *WebHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		Redirect(w, r, "/login")
 		return
 	}
-	if !totp.Validate(code, secret) {
+	if !auth.ValidateTOTPOnce(userID, code, secret) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login_totp.html", map[string]interface{}{
 			"Error":     "Invalid code. Please try again.",

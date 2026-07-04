@@ -13,10 +13,12 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/crypto"
@@ -49,6 +51,57 @@ type Client struct {
 	authRetried       bool
 	guardFirstPush    bool          // send X-GSBS-If-Absent on first push of a slot (conflict-aware policies)
 	TokenReload       func() string // optional: reload token from config on 401
+
+	// Crypto-v2 fleet negotiation: the server reports crypto_v2_ready when
+	// every recently-seen device on the account can read the Argon2id format;
+	// only then do we write it. A config override can force either format.
+	cryptoV2Ready    atomic.Bool
+	cryptoV2Override *bool
+}
+
+// SetCryptoV2Override pins the save-encryption write format: true forces the
+// v2 (Argon2id) format, false pins legacy, nil (default) follows the server's
+// fleet-readiness signal. Reading always auto-detects both formats.
+func (c *Client) SetCryptoV2Override(v *bool) {
+	c.cryptoV2Override = v
+}
+
+func (c *Client) useCryptoV2() bool {
+	if c.cryptoV2Override != nil {
+		return *c.cryptoV2Override
+	}
+	return c.cryptoV2Ready.Load()
+}
+
+// clientAppVersion is stamped on every API request as X-GSBS-Client-Version;
+// the server uses it for the crypto-v2 fleet-readiness computation and shows
+// it on the Devices page. Set once at startup by the main package.
+var clientAppVersion atomic.Value // string
+
+// SetClientAppVersion records this build's version for API requests.
+func SetClientAppVersion(v string) {
+	clientAppVersion.Store(strings.TrimSpace(v))
+}
+
+func appVersionHeader() string {
+	if s, ok := clientAppVersion.Load().(string); ok {
+		return s
+	}
+	return ""
+}
+
+// versionHeaderTransport adds X-GSBS-Client-Version to every request without
+// touching the ~10 call sites that build requests individually.
+type versionHeaderTransport struct {
+	base http.RoundTripper
+}
+
+func (t *versionHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if v := appVersionHeader(); v != "" && req.Header.Get("X-GSBS-Client-Version") == "" {
+		req = req.Clone(req.Context())
+		req.Header.Set("X-GSBS-Client-Version", v)
+	}
+	return t.base.RoundTrip(req)
 }
 
 // SetConflictGuard enables the expect-new precondition on the first push of a
@@ -85,6 +138,7 @@ func NewClient(baseURL, token string, resolver *paths.Resolver, currentOS paths.
 			limiter: rate.NewLimiter(rate.Limit(maxKbps*1024), maxKbps*1024*2), // bytes per second, burst 2x
 		}
 	}
+	transport = &versionHeaderTransport{base: transport}
 	httpClient := &http.Client{Timeout: syncTimeout, Transport: transport}
 	c := &Client{
 		baseURL:        baseURL,
@@ -103,10 +157,17 @@ func NewClient(baseURL, token string, resolver *paths.Resolver, currentOS paths.
 			c.lastPushedHash[k] = v
 		}
 	}
-	// Preserve Authorization on redirect: Go's client strips it when following redirects to another host.
+	// Preserve Authorization on redirect: Go's client strips it when following
+	// redirects to another host. Re-add it ONLY when the redirect stays on the
+	// configured server's host — a redirect elsewhere must never receive the
+	// bearer token.
+	baseHost := ""
+	if u, err := url.Parse(baseURL); err == nil {
+		baseHost = u.Host
+	}
 	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if tok := c.getToken(); tok != "" {
-			req.Header.Set("Authorization", "Bearer "+tok)
+		if tok := c.getToken(); tok != "" && baseHost != "" && req.URL.Host == baseHost {
+			req.Header.Set("Authorization", "Bearer "+tok) //nolint:gosec // G119: re-added only when the redirect stays on the configured server host
 		}
 		return nil
 	}
@@ -169,6 +230,10 @@ type SummaryResponse struct {
 		ContentHash string `json:"content_hash"`
 		Encrypted   bool   `json:"encrypted,omitempty"`
 	} `json:"saves"`
+	// CryptoV2Ready is the server's fleet signal: every recently-seen device
+	// on the account can read the v2 save-encryption format. Absent on old
+	// servers (zero value keeps writing the legacy format).
+	CryptoV2Ready bool `json:"crypto_v2_ready,omitempty"`
 }
 
 // PullResponse is the decoded pull API response.
@@ -215,6 +280,7 @@ func (c *Client) pullSummaries(ctx context.Context) (*SummaryResponse, error) {
 		if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 			return err
 		}
+		c.cryptoV2Ready.Store(decoded.CryptoV2Ready)
 		out = &decoded
 		return nil
 	})
@@ -650,7 +716,13 @@ func (c *Client) getAuthRetried() bool {
 
 func (c *Client) encodeContent(plaintext []byte) (wire []byte, encrypted bool, err error) {
 	if c.encryptionEnabled && c.passphrase != "" {
-		enc, err := crypto.Encrypt(c.passphrase, plaintext)
+		var enc string
+		var err error
+		if c.useCryptoV2() {
+			enc, err = crypto.EncryptV2(c.passphrase, plaintext)
+		} else {
+			enc, err = crypto.Encrypt(c.passphrase, plaintext)
+		}
 		if err != nil {
 			return nil, false, err
 		}

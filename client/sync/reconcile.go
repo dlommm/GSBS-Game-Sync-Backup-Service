@@ -67,7 +67,7 @@ func ReconcileLocalToServer(ctx context.Context, watchPaths []WatchPath, client 
 			}
 			seen[slotKey] = true
 
-			content, err := os.ReadFile(path)
+			content, err := os.ReadFile(path) //nolint:gosec // G122: walk stays under configured watch roots; recursion is bounded by wp.Recursive
 			if err != nil || len(content) == 0 {
 				return nil
 			}

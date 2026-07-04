@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +16,13 @@ import (
 	"github.com/gsbs/gsbs/server/auth"
 	"github.com/gsbs/gsbs/server/store"
 )
+
+// sha256Hex mirrors what real clients send in X-Content-Hash: the server now
+// verifies the declared hash against the received bytes for unencrypted pushes.
+func sha256Hex(b []byte) string {
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
+}
 
 func TestPushGzipAndHashDedup(t *testing.T) {
 	st, err := store.NewSQLite(":memory:")
@@ -38,7 +47,7 @@ func TestPushGzipAndHashDedup(t *testing.T) {
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Header.Set("X-Game-ID", "game1")
 	req.Header.Set("X-Path-Key", "pk1")
-	req.Header.Set("X-Content-Hash", "abc")
+	req.Header.Set("X-Content-Hash", sha256Hex(body))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -49,7 +58,7 @@ func TestPushGzipAndHashDedup(t *testing.T) {
 	req2.Header.Set("Authorization", "Bearer "+token)
 	req2.Header.Set("X-Game-ID", "game1")
 	req2.Header.Set("X-Path-Key", "pk1")
-	req2.Header.Set("X-Content-Hash", "abc")
+	req2.Header.Set("X-Content-Hash", sha256Hex(body))
 	rec2 := httptest.NewRecorder()
 	h.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusOK {
@@ -75,12 +84,12 @@ func TestExpectAbsentPrecondition(t *testing.T) {
 	_, token, _ := svc.Login(ctx, "u1", "password123", "c", "linux")
 	h := NewHandler(st, svc, false, nil, nil, nil, nil, nil, nil, 0, false, "", "test")
 
-	push := func(body, hash string, ifAbsent bool) int {
+	push := func(body string, ifAbsent bool) int {
 		req := httptest.NewRequest(http.MethodPost, "/api/saves", strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("X-Game-ID", "game1")
 		req.Header.Set("X-Path-Key", "pk1")
-		req.Header.Set("X-Content-Hash", hash)
+		req.Header.Set("X-Content-Hash", sha256Hex([]byte(body)))
 		if ifAbsent {
 			req.Header.Set("X-GSBS-If-Absent", "1")
 		}
@@ -90,16 +99,16 @@ func TestExpectAbsentPrecondition(t *testing.T) {
 	}
 
 	// First push with expect-new on an empty slot: succeeds.
-	if code := push("machineA-save", "hashA", true); code != http.StatusOK {
+	if code := push("machineA-save", true); code != http.StatusOK {
 		t.Fatalf("first expect-new push: %d", code)
 	}
 	// A different machine that also thinks the slot is new must be rejected, not
 	// allowed to clobber machine A's save.
-	if code := push("machineB-save", "hashB", true); code != http.StatusConflict {
+	if code := push("machineB-save", true); code != http.StatusConflict {
 		t.Fatalf("conflicting expect-new push: got %d, want 409", code)
 	}
 	// Identical content with expect-new is allowed (no false conflict).
-	if code := push("machineA-save", "hashA", true); code != http.StatusOK {
+	if code := push("machineA-save", true); code != http.StatusOK {
 		t.Fatalf("identical expect-new push: got %d, want 200", code)
 	}
 	// A brand-new slot with expect-new succeeds.
@@ -108,13 +117,54 @@ func TestExpectAbsentPrecondition(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("X-Game-ID", "game1")
 		req.Header.Set("X-Path-Key", "pk-new")
-		req.Header.Set("X-Content-Hash", "hashNew")
+		req.Header.Set("X-Content-Hash", sha256Hex([]byte("x")))
 		req.Header.Set("X-GSBS-If-Absent", "1")
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("new-slot expect-new push: %d", rec.Code)
 		}
+	}
+}
+
+// TestPushHashMismatchRejected: the server verifies X-Content-Hash against the
+// received bytes for unencrypted pushes; encrypted pushes are exempt (the
+// declared hash is the plaintext hash by design).
+func TestPushHashMismatchRejected(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := auth.NewService(st)
+	ctx := context.Background()
+	_, _ = svc.RegisterUser(ctx, "u1", "password123")
+	_, token, _ := svc.Login(ctx, "u1", "password123", "c", "linux")
+	h := NewHandler(st, svc, false, nil, nil, nil, nil, nil, nil, 0, false, "", "test")
+
+	push := func(hash string, encrypted bool) int {
+		req := httptest.NewRequest(http.MethodPost, "/api/saves", strings.NewReader("payload"))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("X-Game-ID", "game1")
+		req.Header.Set("X-Path-Key", "pk1")
+		req.Header.Set("X-Content-Hash", hash)
+		if encrypted {
+			req.Header.Set("X-Encrypted", "1")
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if code := push(sha256Hex([]byte("DIFFERENT bytes")), false); code != http.StatusBadRequest {
+		t.Fatalf("tampered hash: got %d, want 400", code)
+	}
+	if code := push(sha256Hex([]byte("payload")), false); code != http.StatusOK {
+		t.Fatalf("correct hash: got %d, want 200", code)
+	}
+	// Encrypted: declared hash is the plaintext hash; server must not verify.
+	if code := push(sha256Hex([]byte("some plaintext the server never sees")), true); code != http.StatusOK {
+		t.Fatalf("encrypted push with plaintext hash: got %d, want 200", code)
 	}
 }
 

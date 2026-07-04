@@ -8,9 +8,15 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+
+	"github.com/gsbs/gsbs/client/sync"
 )
 
 func main() {
+	// Stamp every API request with this build's version (drives the server's
+	// crypto-v2 fleet negotiation and the Devices page version column).
+	sync.SetClientAppVersion(Version)
+
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "--version", "-version", "-v":

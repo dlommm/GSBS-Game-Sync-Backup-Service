@@ -221,3 +221,11 @@ curl https://your-server/api/health?ready=1
 - [Server Configuration](Server-Configuration)
 - [Upgrading](Upgrading)
 - [FAQ](FAQ)
+
+## 2FA fails after restoring a server backup
+
+Since 4.0.0, 2FA secrets are encrypted with a key file kept next to the database (`gsbs-keys/totp.key`). Restoring the DB **without** that file makes TOTP fail closed. Restore `gsbs-keys/` from the same backup, or disable 2FA for the user directly in SQLite and re-enroll:
+
+```bash
+sqlite3 /path/to/gsbs.db "UPDATE users SET totp_enabled = 0, totp_secret = '' WHERE username = 'NAME';"
+```

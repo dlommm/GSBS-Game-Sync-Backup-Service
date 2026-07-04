@@ -48,7 +48,7 @@ func checkSessionSecretStrength(secret string) error {
 		logx.Logger().Warn().Msg("GSBS_INSECURE_DEV_SECRET=1: skipping session secret strength check — never use this in production")
 		return nil
 	}
-	if len(secret) < 32 || secret == "dev-change-me-in-production" || strings.Contains(secret, "change-me") {
+	if len(secret) < 32 || secret == "dev-change-me-in-production" || strings.Contains(secret, "change-me") { //nolint:gosec // G101: this is the REJECTED placeholder value, not a credential
 		return fmt.Errorf("GSBS_SESSION_SECRET is too weak (need >= 32 characters, not a placeholder); generate with: openssl rand -base64 32 (or set GSBS_INSECURE_DEV_SECRET=1 for local development)")
 	}
 	return nil
@@ -242,12 +242,23 @@ func newServerApp() (*serverApp, error) {
 	}
 
 	return &serverApp{
-		st:          st,
-		hub:         hub,
-		runner:      runner,
-		cron:        c,
-		pcgwCron:    pcgwCronSched,
-		srv:         &http.Server{Addr: addr, Handler: handler},
+		st:       st,
+		hub:      hub,
+		runner:   runner,
+		cron:     c,
+		pcgwCron: pcgwCronSched,
+		srv: &http.Server{
+			Addr:    addr,
+			Handler: handler,
+			// Slowloris/slow-body protection. ReadTimeout is generous so a
+			// 50 MiB push still fits on a slow uplink. WriteTimeout stays 0
+			// because the SSE streams are long-lived — per-request write
+			// deadlines are applied in logRequests and the SSE handlers.
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       15 * time.Minute,
+			IdleTimeout:       2 * time.Minute,
+			MaxHeaderBytes:    64 << 10,
+		},
 		listenErrCh: make(chan error, 1),
 	}, nil
 }

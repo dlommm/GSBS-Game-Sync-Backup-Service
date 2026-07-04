@@ -136,3 +136,17 @@ In 2.0, when the server returns HTTP 401 (token revoked or expired), the outbox 
 - **Tray tooltip** — shows an auth-failure indicator next to the sync state.
 
 Re-login via tray **Login…** or `gsbs-client login` to resume. If you see repeated 401 errors on the server despite re-logging in, verify that your client token has not been revoked (WebUI **Settings → API tokens**). Note: in 2.0, password changes and 2FA disable automatically revoke all active client tokens — you will need to create a new token and log in again.
+
+## 2FA fails after restoring a server backup ("invalid code" for correct codes)
+
+Since 4.0.0, two-factor secrets are encrypted with a key file stored **outside** the database (`gsbs-keys/totp.key`, next to `gsbs.db`; `GSBS_TOTP_KEY_FILE` overrides). If you restore a database without that key file, TOTP validation fails **closed** — correct codes are rejected and affected users cannot complete login.
+
+**Fix (preferred):** restore the `gsbs-keys/` directory from the same backup and restart the server.
+
+**Recovery (key file lost):** disable 2FA for the affected user directly in the database, then re-enroll from Settings:
+
+```bash
+sqlite3 /path/to/gsbs.db "UPDATE users SET totp_enabled = 0, totp_secret = '' WHERE username = 'NAME';"
+```
+
+Always back up `gsbs-keys/` together with the database (the built-in backup job includes it automatically).

@@ -22,6 +22,7 @@ type adminSettingsData struct {
 	PCGWTitleExcludesJSON     string
 	PCGWPathExcludesJSON      string
 	AutoRunFirstStart         bool
+	LegacyPushProtection      bool
 	PCGWSyncSource            string
 	PCGWBundleCron            string
 	PCGWBundleURL             string
@@ -59,6 +60,7 @@ func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) 
 	}
 	auto := settings[store.AdminSettingPCGWAutoRunFirstStart]
 	data.AutoRunFirstStart = auto == "true" || auto == "1"
+	data.LegacyPushProtection = store.LegacyPushProtectionFromSettings(settings)
 
 	if _, ok := os.LookupEnv(store.EnvPCGWSyncSource); ok {
 		data.PCGWSyncSourceEnvOverride = true
@@ -255,6 +257,14 @@ func (h *WebHandler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Requ
 		autoVal = "true"
 	}
 	if err := h.store.SetAdminSetting(ctx, store.AdminSettingPCGWAutoRunFirstStart, autoVal); err != nil {
+		Redirect(w, r, "/admin/settings?error=save_failed")
+		return
+	}
+	legacyGuardVal := "false"
+	if r.FormValue("legacy_push_protection") == "1" {
+		legacyGuardVal = "true"
+	}
+	if err := h.store.SetAdminSetting(ctx, store.AdminSettingLegacyPushProtection, legacyGuardVal); err != nil {
 		Redirect(w, r, "/admin/settings?error=save_failed")
 		return
 	}

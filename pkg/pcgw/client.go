@@ -134,7 +134,7 @@ func (c *Client) getWith429Retry(ctx context.Context, req *http.Request) (*http.
 		switch {
 		case resp.StatusCode == http.StatusTooManyRequests:
 			if retries429 >= max429Retries {
-				io.Copy(io.Discard, resp.Body)
+				_, _ = io.Copy(io.Discard, resp.Body)
 				resp.Body.Close()
 				return nil, fmt.Errorf("rate limited (429) after %d retries", max429Retries)
 			}
@@ -144,7 +144,7 @@ func (c *Client) getWith429Retry(ctx context.Context, req *http.Request) (*http.
 					backoff = time.Duration(sec) * time.Second
 				}
 			}
-			io.Copy(io.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 			retries429++
 			if sleepErr := sleepCtx(ctx, backoff); sleepErr != nil {
@@ -154,7 +154,7 @@ func (c *Client) getWith429Retry(ctx context.Context, req *http.Request) (*http.
 			if retries5xx >= max5xxRetries {
 				return resp, nil
 			}
-			io.Copy(io.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 			if sleepErr := sleepCtx(ctx, c.calc5xxBackoff(retries5xx)); sleepErr != nil {
 				return nil, sleepErr

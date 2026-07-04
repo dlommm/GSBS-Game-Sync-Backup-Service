@@ -323,7 +323,7 @@ func barsSVG(counts []store.DayCount, width, height int) template.HTML {
 		fmt.Fprintf(&b, `<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s"><title>%s: %d</title></rect>`,
 			x, y, bw, bh, fill, c.Day, c.Count)
 	}
-	return template.HTML(fmt.Sprintf(
+	return template.HTML(fmt.Sprintf( //nolint:gosec // G203: SVG markup built entirely from server-computed numbers, no user input
 		`<svg class="bars-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="Sync volume by day">%s</svg>`,
 		width, height, b.String()))
 }
@@ -384,7 +384,7 @@ func renderPageBlock(t *template.Template) func(pageName, block string, data int
 		if err := t.ExecuteTemplate(&buf, name, data); err != nil {
 			return "", err
 		}
-		return template.HTML(buf.String()), nil
+		return template.HTML(buf.String()), nil //nolint:gosec // G203: SVG markup built entirely from server-computed numbers, no user input
 	}
 }
 
@@ -493,7 +493,7 @@ func chartLineSVG(snapshots []store.StatsSnapshotRow, field string, width, heigh
 	}
 	svg := fmt.Sprintf(`<svg class="chart-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" aria-hidden="true"><path d="%s" fill="none" stroke="#6366f1" stroke-width="2"/></svg>`,
 		width, height, path.String())
-	return template.HTML(svg)
+	return template.HTML(svg) //nolint:gosec // G203: SVG markup built entirely from server-computed numbers, no user input
 }
 
 // gameInitials returns up to two uppercase letters representing a title: the

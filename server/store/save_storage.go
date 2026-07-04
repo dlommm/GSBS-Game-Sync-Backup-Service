@@ -210,7 +210,7 @@ func (s *sqliteStore) sweepStagedTempFiles() {
 		}
 		name := d.Name()
 		if strings.HasPrefix(name, ".gsbs-") && strings.HasSuffix(name, ".tmp") {
-			if os.Remove(path) == nil {
+			if os.Remove(path) == nil { //nolint:gosec // G122: walk stays under the GSBS-owned save root; entries are unlinked, never followed
 				removed++
 			}
 		}

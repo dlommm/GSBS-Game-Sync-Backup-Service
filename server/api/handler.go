@@ -26,7 +26,6 @@ import (
 	"github.com/gsbs/gsbs/server/ratelimit"
 	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
-	"github.com/pquerna/otp/totp"
 )
 
 // MaxSaveSize is the maximum allowed body size for POST /api/saves (50 MiB).
@@ -75,6 +74,31 @@ type Handler struct {
 		entries []types.GameSaveLocation
 		at      time.Time
 	}
+
+	// legacyGuard caches the legacy_push_protection admin setting (60s TTL)
+	// so the push hot path doesn't read admin_settings on every request.
+	legacyGuard struct {
+		mu  sync.Mutex
+		val bool
+		at  time.Time
+	}
+}
+
+// legacyPushProtectionEnabled reports the (cached) admin setting; on read
+// errors the last known value is kept.
+func (h *Handler) legacyPushProtectionEnabled(ctx context.Context) bool {
+	h.legacyGuard.mu.Lock()
+	defer h.legacyGuard.mu.Unlock()
+	if time.Since(h.legacyGuard.at) < time.Minute {
+		return h.legacyGuard.val
+	}
+	settings, err := h.store.ListAdminSettings(ctx)
+	if err != nil {
+		return h.legacyGuard.val
+	}
+	h.legacyGuard.val = store.LegacyPushProtectionFromSettings(settings)
+	h.legacyGuard.at = time.Now()
+	return h.legacyGuard.val
 }
 
 const manifestCacheTTL = 10 * time.Minute
@@ -376,7 +400,7 @@ func (h *Handler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "2FA not enabled or invalid"})
 		return
 	}
-	if !totp.Validate(strings.TrimSpace(req.Code), secret) {
+	if !auth.ValidateTOTPOnce(userID, strings.TrimSpace(req.Code), secret) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid code"})
 		return
 	}
@@ -413,7 +437,8 @@ func (h *Handler) withAuth(fn func(http.ResponseWriter, *http.Request, string)) 
 			return
 		}
 		// Update last_seen inline (cheap single-row UPDATE; request context keeps it bounded).
-		if err := h.store.UpdateClientLastSeen(r.Context(), clientID); err != nil {
+		// The reported app version drives crypto-v2 fleet auto-negotiation.
+		if err := h.store.UpdateClientLastSeen(r.Context(), clientID, r.Header.Get("X-GSBS-Client-Version")); err != nil {
 			logx.Logger().Debug().Str("client_id", clientID).Err(err).Msg("update last_seen failed")
 		}
 		// Stash clientID so downstream handlers avoid a redundant ValidateToken call.
@@ -448,6 +473,16 @@ func (h *Handler) handleChangePassword(w http.ResponseWriter, r *http.Request, u
 		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api change-password failed")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
 		return
+	}
+	// Match the WebUI semantics: a password change invalidates every other
+	// device's token and all browser sessions. The calling device keeps its
+	// token so the user isn't logged out mid-action.
+	callerClientID, _ := r.Context().Value(contextClientID).(string)
+	if err := h.store.RevokeAllClientTokensExcept(r.Context(), userID, callerClientID); err != nil {
+		logx.Logger().Warn().Str("user_id", userID).Err(err).Msg("api change-password: revoke client tokens failed")
+	}
+	if err := h.store.DeleteSessionsByUser(r.Context(), userID); err != nil {
+		logx.Logger().Warn().Str("user_id", userID).Err(err).Msg("api change-password: delete sessions failed")
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -497,6 +532,11 @@ func (h *Handler) handleSaveSummaries(w http.ResponseWriter, r *http.Request, us
 	if limit > 0 || offset > 0 {
 		resp["total"] = total
 	}
+	// Fleet crypto negotiation: clients write the v2 (Argon2id) encryption
+	// format only when every recently-seen device on the account can read it.
+	if ready, err := h.store.CryptoV2Ready(r.Context(), userID); err == nil {
+		resp["crypto_v2_ready"] = ready
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -506,7 +546,11 @@ func (h *Handler) handleAccount(w http.ResponseWriter, r *http.Request, userID s
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "account lookup failed"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"encryption_enabled": enc})
+	resp := map[string]interface{}{"encryption_enabled": enc}
+	if ready, rerr := h.store.CryptoV2Ready(r.Context(), userID); rerr == nil {
+		resp["crypto_v2_ready"] = ready
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) handleListClients(w http.ResponseWriter, r *http.Request, userID string) {
@@ -733,6 +777,11 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 	}
 	var content []byte
 	if strings.EqualFold(r.Header.Get("Content-Encoding"), "gzip") {
+		// Cap the raw compressed stream too: legitimate gzip payloads are at
+		// most a little over the plaintext cap, so a huge compressed body is
+		// either abuse or corruption. The decompressed side keeps its own
+		// LimitReader below.
+		r.Body = http.MaxBytesReader(w, r.Body, MaxSaveSize+(64<<10))
 		gr, err := gzip.NewReader(r.Body)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid gzip body"})
@@ -742,6 +791,10 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		limited := io.LimitReader(gr, MaxSaveSize+1)
 		content, err = io.ReadAll(limited)
 		if err != nil {
+			if strings.Contains(err.Error(), "request body too large") {
+				writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "save too large (max 50 MiB)"})
+				return
+			}
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body failed"})
 			return
 		}
@@ -864,6 +917,31 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			})
 			return
 		}
+	} else if h.legacyPushProtectionEnabled(r.Context()) {
+		// Strict mode (admin opt-in, default off): a push with NO
+		// precondition header comes from a pre-4.0 client. If the slot was
+		// last written by a DIFFERENT device and the content differs, answer
+		// 409 — every 3.x client already records that as a conflict — instead
+		// of letting the legacy client silently clobber another machine's
+		// save. Same-device updates and identical content pass through.
+		incoming := strings.TrimSpace(r.Header.Get("X-Content-Hash"))
+		serverHash, serverVer, err := h.store.GetSaveHashAndVersion(r.Context(), userID, gameID, pathKey)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "hash check failed"})
+			return
+		}
+		if serverHash != "" && incoming != "" && serverHash != incoming {
+			lastWriter, _ := h.store.GetSaveClientID(r.Context(), userID, gameID, pathKey)
+			caller, _ := r.Context().Value(contextClientID).(string)
+			if lastWriter != "" && caller != "" && lastWriter != caller {
+				writeJSON(w, http.StatusConflict, map[string]interface{}{
+					"error":           "conflict",
+					"current_hash":    serverHash,
+					"current_version": serverVer,
+				})
+				return
+			}
+		}
 	}
 	logx.Logger().Debug().
 		Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).
@@ -871,6 +949,19 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 	contentHash := strings.TrimSpace(r.Header.Get("X-Content-Hash"))
 	contentSize, _ := strconv.ParseInt(r.Header.Get("X-Content-Size"), 10, 64)
 	encrypted := r.Header.Get("X-Encrypted") == "1"
+	// The stored hash feeds dedup and optimistic concurrency, so the server
+	// verifies it rather than trusting the client. For unencrypted pushes the
+	// wire bytes ARE the hashed plaintext — recompute and compare. Encrypted
+	// pushes declare the plaintext hash by design (the server only sees
+	// ciphertext and cannot verify; AES-GCM authenticates those bytes
+	// client-side on pull). Documented in docs/API.md.
+	if contentHash != "" && !encrypted {
+		sum := sha256.Sum256(content)
+		if !strings.EqualFold(contentHash, hex.EncodeToString(sum[:])) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "content hash mismatch"})
+			return
+		}
+	}
 	// clientID was stashed in context by withAuth; no need to re-validate the token.
 	clientID, _ := r.Context().Value(contextClientID).(string)
 	meta := &store.SaveMeta{
@@ -1004,13 +1095,17 @@ func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request) {
 		logx.Logger().Debug().Int("entries", len(entries)).Str("include", include).Msg("api manifest full")
 	}
 
-	// Log the fetch (best-effort). If auth token is present, resolve client info.
-	go func() {
-		ctx := context.Background()
+	// Log the fetch (best-effort). Values are captured BEFORE the goroutine:
+	// *http.Request must not be touched after the handler returns (the server
+	// reuses it), so only plain strings/ints cross the goroutine boundary.
+	fetchToken := getToken(r)
+	entriesCount := len(entries)
+	go func() { //nolint:gosec // G118: deliberately detached best-effort logging; request values captured before the goroutine
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		clientID, clientName, username := "", "", ""
-		token := getToken(r)
-		if token != "" {
-			if uid, cid, cname, _, authErr := h.store.ClientByToken(ctx, token); authErr == nil {
+		if fetchToken != "" {
+			if uid, cid, cname, _, authErr := h.store.ClientByToken(ctx, fetchToken); authErr == nil {
 				clientID = cid
 				clientName = cname
 				if uname, err := h.store.UsernameByID(ctx, uid); err == nil {
@@ -1018,7 +1113,7 @@ func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		_ = h.store.LogManifestFetch(ctx, clientID, clientName, username, len(entries))
+		_ = h.store.LogManifestFetch(ctx, clientID, clientName, username, entriesCount)
 	}()
 
 	total := len(entries)
@@ -1110,6 +1205,12 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request, userID strin
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	// Rolling write deadline: refreshed before every write so a healthy
+	// stream lives forever, while a dead peer is dropped after ~3 missed
+	// 30s heartbeats (the server-wide WriteTimeout is 0 for SSE).
+	rc := http.NewResponseController(w)
+	extend := func() { _ = rc.SetWriteDeadline(time.Now().Add(90 * time.Second)) }
+	extend()
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
@@ -1133,9 +1234,11 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request, userID strin
 			if !ok {
 				return
 			}
+			extend()
 			fmt.Fprint(w, evt.Format())
 			flusher.Flush()
 		case <-ticker.C:
+			extend()
 			if _, err := fmt.Fprint(w, ": heartbeat\n\n"); err != nil {
 				return
 			}
@@ -1147,10 +1250,10 @@ func (h *Handler) handleSSE(w http.ResponseWriter, r *http.Request, userID strin
 // parseLimitOffset parses limit and offset from query params. Returns 0,0 if not set or invalid.
 func parseLimitOffset(r *http.Request) (limit, offset int) {
 	if s := r.URL.Query().Get("limit"); s != "" {
-		fmt.Sscanf(s, "%d", &limit)
+		_, _ = fmt.Sscanf(s, "%d", &limit)
 	}
 	if s := r.URL.Query().Get("offset"); s != "" {
-		fmt.Sscanf(s, "%d", &offset)
+		_, _ = fmt.Sscanf(s, "%d", &offset)
 	}
 	if limit < 0 {
 		limit = 0

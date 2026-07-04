@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/store"
@@ -25,6 +26,11 @@ func (h *WebHandler) serveDashboardEvents(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	// Rolling write deadline, refreshed on every write: healthy streams live
+	// forever, dead peers are dropped after ~3 missed 30s heartbeats.
+	rc := http.NewResponseController(w)
+	extend := func() { _ = rc.SetWriteDeadline(time.Now().Add(90 * time.Second)) }
+	extend()
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
@@ -34,6 +40,11 @@ func (h *WebHandler) serveDashboardEvents(w http.ResponseWriter, r *http.Request
 	fmt.Fprint(w, ": heartbeat\n\n")
 	flusher.Flush()
 
+	// Heartbeat keeps the stream alive through proxies that drop idle SSE
+	// connections and gives the rolling deadline regular refresh points.
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-r.Context().Done():
@@ -42,7 +53,14 @@ func (h *WebHandler) serveDashboardEvents(w http.ResponseWriter, r *http.Request
 			if !ok {
 				return
 			}
+			extend()
 			fmt.Fprint(w, evt.Format())
+			flusher.Flush()
+		case <-ticker.C:
+			extend()
+			if _, err := fmt.Fprint(w, ": heartbeat\n\n"); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}

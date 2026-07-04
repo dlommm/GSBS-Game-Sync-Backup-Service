@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & setup help
+    url: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/discussions
+    about: Ask questions and share setups in Discussions — issues are for bugs and feature requests.
+  - name: Security vulnerabilities
+    url: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/SECURITY.md
+    about: Please report security issues privately as described in SECURITY.md, not in a public issue.

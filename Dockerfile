@@ -1,6 +1,6 @@
 # GSBS Server — Docker image
 # Multi-stage: build the Go binary (CGO for SQLite), then run in a minimal image.
-FROM golang:1.25-alpine3.23 AS builder
+FROM golang:1.26-alpine3.23 AS builder
 WORKDIR /app
 
 # SQLite driver needs CGO and Alpine build deps

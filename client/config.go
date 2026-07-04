@@ -88,6 +88,7 @@ type config struct {
 	AutoWatchMode               string            `json:"auto_watch_mode,omitempty"`       // "legacy" (default) or "discovered"
 	ConflictPolicy              string            `json:"conflict_policy,omitempty"`       // last_write_wins, keep_local, keep_server
 	EncryptionPassphrase        string            `json:"encryption_passphrase,omitempty"` // local E2E key; never sent to server
+	CryptoV2                    *bool             `json:"crypto_v2,omitempty"`             // nil=auto (server fleet signal), true=force Argon2id format, false=pin legacy
 	UpdateCheckEnabled          *bool             `json:"update_check_enabled,omitempty"`  // default true; set false to disable client update checks
 	UpdateRepo                  string            `json:"update_repo,omitempty"`           // GitHub owner/repo override for release checks
 	WatchPaths                  []watchPath       `json:"watch_paths"`

@@ -7,7 +7,7 @@
       {{range .Clients}}
       <tr>
         <td class="cell-primary">{{.Name}}</td>
-        <td><span class="os-badge os-{{.OS}}">{{.OS}}</span></td>
+        <td><span class="os-badge os-{{.OS}}">{{.OS}}</span>{{if .AppVersion}} <span class="cell-muted">v{{.AppVersion}}</span>{{end}}</td>
         <td class="cell-muted">{{formatTime .LastSeen}}</td>
         <td class="cell-action">
           <form method="post" action="/dashboard/clients/revoke" class="inline-form" onsubmit="return confirm('Revoke this client token? You must run gsbs-client login again.');">

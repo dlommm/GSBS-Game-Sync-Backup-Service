@@ -117,6 +117,10 @@ func (h *WebHandler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.RevokeAllClientTokens(r.Context(), userID); err != nil {
 		logx.Logger().Warn().Err(err).Str("username", username).Msg("webui password change: revoke client tokens failed")
 	}
+	// Log out every other browser; the session that changed the password stays.
+	if err := h.store.DeleteSessionsByUserExcept(r.Context(), userID, GetSessionID(r, h.secret)); err != nil {
+		logx.Logger().Warn().Err(err).Str("username", username).Msg("webui password change: revoke other sessions failed")
+	}
 	logx.Logger().Info().Str("username", username).Msg("webui password changed")
 	Redirect(w, r, "/dashboard/settings?updated=1")
 }
@@ -217,7 +221,7 @@ func (h *WebHandler) handleConfirm2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	code := strings.TrimSpace(r.FormValue("code"))
-	if code == "" || !totp.Validate(code, totpSecret) {
+	if code == "" || !auth.ValidateTOTPOnce(userID, code, totpSecret) {
 		ClearTOTPPendingCookie(w)
 		Redirect(w, r, "/dashboard/settings/2fa/enable?error=invalid_code")
 		return
@@ -233,6 +237,11 @@ func (h *WebHandler) handleConfirm2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ClearTOTPPendingCookie(w)
+	// Enabling 2FA revokes existing client tokens: devices that logged in
+	// before 2FA must prove the second factor to come back.
+	if err := h.store.RevokeAllClientTokens(r.Context(), userID); err != nil {
+		logx.Logger().Warn().Err(err).Str("user_id", userID).Msg("webui 2fa enable: revoke client tokens failed")
+	}
 	username, _ := h.store.UsernameByID(r.Context(), userID)
 	h.appendAuditBroadcast(r.Context(), userID, username, "enable_2fa", "", "")
 	logx.Logger().Info().Str("username", username).Msg("webui 2FA enabled")
@@ -264,7 +273,7 @@ func (h *WebHandler) handleDisable2FA(w http.ResponseWriter, r *http.Request) {
 		Redirect(w, r, "/dashboard/settings?error=2fa_not_enabled")
 		return
 	}
-	if !totp.Validate(code, secret) {
+	if !auth.ValidateTOTPOnce(userID, code, secret) {
 		Redirect(w, r, "/dashboard/settings?error=2fa_wrong_code")
 		return
 	}

@@ -37,6 +37,12 @@ func (r *responseRecorder) Flush() {
 	}
 }
 
+// Unwrap lets http.NewResponseController reach the underlying connection
+// (for per-request write deadlines) through this wrapper.
+func (r *responseRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
 // draining is set to 1 when the server is shutting down; new requests get 503.
 var draining int32
 
@@ -115,6 +121,13 @@ func logRequests(next http.Handler, mc *metrics.Collector) http.Handler {
 		rid := requestID(r)
 		w.Header().Set("X-Request-ID", rid)
 		start := time.Now()
+		// Per-request write deadline bounds slow-reader clients on every
+		// route except the SSE streams, which roll their own deadline
+		// forward on each event/heartbeat write. (http.Server.WriteTimeout
+		// must stay 0 for those long-lived streams.)
+		if r.URL.Path != "/api/events" && r.URL.Path != "/dashboard/events" {
+			_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(5 * time.Minute))
+		}
 		rec := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
 		if rec.status == 0 {

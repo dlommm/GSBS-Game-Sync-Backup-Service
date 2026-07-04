@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 22
+const schemaVersion = 24
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -122,10 +122,74 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{20, s.stepPCGWSyncSourceS3},
 		{21, stepSaveVersionChangeMeta},
 		{22, stepIntegrityFindings},
+		{23, s.stepEncryptTOTPSecrets},
+		{24, stepClientAppVersion},
 	}
 }
 
 // ── Step implementations ──────────────────────────────────────────────────────
+
+// stepClientAppVersion records each device's reported app version
+// (X-GSBS-Client-Version). Drives crypto-v2 fleet auto-negotiation: a user's
+// clients switch to the Argon2id save-encryption format only once every
+// recently-seen device reports a version that can read it.
+func stepClientAppVersion(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE clients ADD COLUMN app_version TEXT`)
+	return err
+}
+
+// stepEncryptTOTPSecrets seals existing plaintext TOTP secrets with the
+// server's local key file (see secretbox.go). Rows already sealed (enc:v1:
+// prefix) are left alone, so the step is idempotent and safe on restored
+// databases. After this step the database alone no longer contains usable
+// 2FA seeds — back up gsbs-keys/ together with the database.
+func (s *sqliteStore) stepEncryptTOTPSecrets(tx *sql.Tx) error {
+	rows, err := tx.Query(`SELECT id, totp_secret FROM users
+		WHERE totp_secret IS NOT NULL AND totp_secret != '' AND totp_secret NOT LIKE 'enc:v1:%'`)
+	if err != nil {
+		return err
+	}
+	type row struct{ id, secret string }
+	var pending []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.secret); err != nil {
+			rows.Close()
+			return err
+		}
+		pending = append(pending, r)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+
+	if os.Getenv("GSBS_DRY_RUN_MIGRATION") == "1" {
+		logx.Logger().Info().Str("component", "migration").Int("rows", len(pending)).
+			Msg("GSBS migrate step 23 (dry-run): would encrypt TOTP secret(s) at rest")
+		return errMigDryRun
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	key, err := s.totpKey()
+	if err != nil {
+		return fmt.Errorf("step 23: load totp key: %w", err)
+	}
+	for _, r := range pending {
+		sealed, err := sealColumn(key, r.secret)
+		if err != nil {
+			return fmt.Errorf("step 23: seal secret: %w", err)
+		}
+		if _, err := tx.Exec(`UPDATE users SET totp_secret = ? WHERE id = ?`, sealed, r.id); err != nil {
+			return fmt.Errorf("step 23: update user %s: %w", r.id, err)
+		}
+	}
+	logx.Logger().Info().Str("component", "migration").Int("rows", len(pending)).
+		Msg("GSBS migrate step 23: encrypted TOTP secret(s) at rest — back up the gsbs-keys directory with your database")
+	return nil
+}
 
 // stepIntegrityFindings records blob-corruption findings from the weekly
 // integrity_check job: one row per save slot with a problem, replaced on

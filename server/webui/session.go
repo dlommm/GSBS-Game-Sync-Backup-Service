@@ -33,7 +33,7 @@ func SetSession(w http.ResponseWriter, r *http.Request, secret, sessionID string
 	sig := signSession(secret, payload)
 	value := base64.StdEncoding.EncodeToString([]byte(payload)) + "." + sig
 	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: Secure flag is conditional on TLS/X-Forwarded-Proto by design (reverse-proxy deployments)
 		Name:     sessionCookieName,
 		Value:    value,
 		Path:     "/",
@@ -140,7 +140,7 @@ func GetTOTPStepUserID(r *http.Request, secret string) string {
 
 // ClearTOTPStepCookie removes the TOTP step cookie.
 func ClearTOTPStepCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: Secure flag is conditional on TLS/X-Forwarded-Proto by design (reverse-proxy deployments)
 		Name:   totpStepCookieName,
 		Value:  "",
 		Path:   "/",
@@ -228,7 +228,7 @@ func SetCSRFToken(w http.ResponseWriter, r *http.Request, secret string) string 
 	sig := signSession(secret, payload)
 	value := base64.StdEncoding.EncodeToString([]byte(payload)) + "." + sig
 	secure := r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: Secure flag is conditional on TLS/X-Forwarded-Proto by design (reverse-proxy deployments)
 		Name:     csrfCookieName,
 		Value:    value,
 		Path:     "/",

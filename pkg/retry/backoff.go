@@ -69,7 +69,7 @@ func (b *Backoff) Next() time.Duration {
 	d := b.current
 	if b.Jitter > 0 {
 		j := float64(d) * b.Jitter
-		d = time.Duration(float64(d) - j + rand.Float64()*2*j)
+		d = time.Duration(float64(d) - j + rand.Float64()*2*j) //nolint:gosec // G404: non-cryptographic retry jitter
 	}
 	return d
 }
