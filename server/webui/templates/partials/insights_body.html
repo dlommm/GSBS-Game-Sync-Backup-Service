@@ -41,7 +41,7 @@
         <span class="topgame-icon">{{gameIconSVG .Title 28}}</span>
         <span class="topgame-info">
           <span class="topgame-title">{{.Title}}</span>
-          <span class="topgame-bar-track"><span class="topgame-bar-fill" style="width:{{.Pct}}%;"></span></span>
+          <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
         </span>
         <span class="topgame-size">{{formatBytes .TotalBytes}}</span>
       {{if $link}}</a>{{else}}</div>{{end}}

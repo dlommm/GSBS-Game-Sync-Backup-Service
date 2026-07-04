@@ -8,8 +8,8 @@
 <section class="panel panel-compact">
   <div class="panel-header-actions">
     <div>
-      <h2 style="margin:0;">{{.Game.Title}}</h2>
-      <p class="cell-muted" style="margin:0.35rem 0 0;font-size:0.875rem;">
+      <h2 class="u-m0">{{.Game.Title}}</h2>
+      <p class="cell-muted u-hint">
         Page ID {{.Game.PageID}} ·
         {{if eq .Game.ParseStatus "ok"}}<span class="badge-success">ok</span>
         {{else if eq .Game.ParseStatus "partial"}}<span class="badge-warn">partial</span>
@@ -69,14 +69,14 @@ Config: {{printf "%#v" .ConfigLocations}}</pre></div>
 </section>
 
 <details class="panel panel-compact">
-  <summary class="panel-header" style="cursor:pointer;"><h2 style="display:inline;">Infobox / game row</h2></summary>
-  <pre class="detail-pre" style="margin:0 1.25rem 1rem;">{{printf "%#v" .Game}}</pre>
+  <summary class="panel-header u-cursor-pointer"><h2 class="u-inline">Infobox / game row</h2></summary>
+  <pre class="detail-pre u-section-msg-plain">{{printf "%#v" .Game}}</pre>
 </details>
 
 {{if .Metadata}}
 <section class="panel panel-compact">
   <div class="panel-header"><h2>Metadata</h2></div>
-  <p class="cell-muted" style="margin:0 1.25rem 1rem;font-size:0.875rem;">
+  <p class="cell-muted u-section-msg">
     Hash: <code class="code-inline">{{.Metadata.ContentHash}}</code> · Size: {{.Metadata.UncompressedSize}} bytes
   </p>
 </section>

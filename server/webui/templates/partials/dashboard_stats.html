@@ -1,6 +1,6 @@
 {{define "partials/dashboard_stats.html"}}
 {{if .Stats.StoreError}}
-<p class="panel-empty" role="alert" style="color:var(--color-warn,#c0392b);">Stats could not be loaded.
+<p class="panel-empty u-warn" role="alert">Stats could not be loaded.
   <a href="" hx-get="/dashboard/partial/stats" hx-target="closest section" hx-swap="innerHTML">Retry</a>
 </p>
 {{else}}
@@ -17,7 +17,7 @@
     <div class="storage-hero-label">Storage used (including version history)</div>
     <div class="storage-hero-value">{{formatBytes .Stats.UsageBytes}} <span>/ {{formatBytes .QuotaBytes}}</span></div>
     <div class="quota-bar-track storage-hero-bar">
-      <div class="quota-bar-fill {{quotaBarClass .Stats.UsageBytes .QuotaBytes}}" style="width:{{printf "%.1f" (percent .Stats.UsageBytes .QuotaBytes)}}%;"></div>
+      <div class="quota-bar-fill {{quotaBarClass .Stats.UsageBytes .QuotaBytes}} has-bar-width" data-width-pct="{{printf "%.1f" (percent .Stats.UsageBytes .QuotaBytes)}}"></div>
     </div>
   </div>
 </section>

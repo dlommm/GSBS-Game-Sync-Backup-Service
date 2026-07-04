@@ -10,7 +10,7 @@
         <td><span class="os-badge os-{{.OS}}">{{.OS}}</span>{{if .AppVersion}} <span class="cell-muted">v{{.AppVersion}}</span>{{end}}</td>
         <td class="cell-muted">{{formatTime .LastSeen}}</td>
         <td class="cell-action">
-          <form method="post" action="/dashboard/clients/revoke" class="inline-form" onsubmit="return confirm('Revoke this client token? You must run gsbs-client login again.');">
+          <form method="post" action="/dashboard/clients/revoke" class="inline-form" data-confirm="Revoke this client token? You must run gsbs-client login again.">
             <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
             <input type="hidden" name="client_id" value="{{.ID}}">
             <button type="submit" class="btn-danger-sm">Revoke</button>

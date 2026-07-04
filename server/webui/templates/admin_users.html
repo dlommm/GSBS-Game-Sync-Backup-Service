@@ -4,7 +4,7 @@
 <section class="panel panel-users">
   <div class="panel-header-actions">
     <h2>Users</h2>
-    <button type="button" class="btn-primary-sm" onclick="document.getElementById('create-user-dialog').showModal()">Create user</button>
+    <button type="button" class="btn-primary-sm" data-open-dialog="create-user-dialog">Create user</button>
   </div>
   {{if .Users}}
   <div class="table-wrap users-table-wrap">
@@ -18,21 +18,21 @@
           <td class="quota-cell">
             {{if eq .QuotaBytes 0}}
             <span class="cell-muted">Unlimited</span>
-            <div class="quota-bar-track quota-bar-compact"><div class="quota-bar-fill" style="width:{{if gt .StorageBytes 0}}100{{else}}0{{end}}%;opacity:0.35;"></div></div>
+            <div class="quota-bar-track quota-bar-compact"><div data-width-pct="{{if gt .StorageBytes 0}}100{{else}}0{{end}}" class="quota-bar-fill has-bar-width bar-dim"></div></div>
             {{else}}
             <div class="quota-bar-header quota-bar-header-compact">
               <span>{{formatBytes .StorageBytes}} / {{formatBytes .QuotaBytes}}</span>
               <span>{{printf "%.0f" (percent .StorageBytes .QuotaBytes)}}%</span>
             </div>
             <div class="quota-bar-track quota-bar-compact">
-              <div class="quota-bar-fill {{quotaBarClass .StorageBytes .QuotaBytes}}" style="width:{{printf "%.1f" (percent .StorageBytes .QuotaBytes)}}%;"></div>
+              <div class="quota-bar-fill {{quotaBarClass .StorageBytes .QuotaBytes}} has-bar-width" data-width-pct="{{printf "%.1f" (percent .StorageBytes .QuotaBytes)}}"></div>
             </div>
             {{end}}
           </td>
           <td class="col-clients">
             <div class="client-bar-wrap">
               {{.ClientCount}}
-              <div class="client-bar-track"><div class="client-bar-fill" style="width:{{clientBarWidth .ClientCount $.MaxClientCount}}%;"></div></div>
+              <div class="client-bar-track"><div data-width-pct="{{clientBarWidth .ClientCount $.MaxClientCount}}" class="client-bar-fill has-bar-width"></div></div>
             </div>
           </td>
           <td class="col-saves">{{.SaveCount}}</td>
@@ -46,11 +46,11 @@
                 {{if .Disabled}}
                 <form method="post" action="/admin/user/enable" class="inline-form"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-ghost-sm">Enable</button></form>
                 {{else}}
-                <form method="post" action="/admin/user/disable" class="inline-form" onsubmit="return confirm('Disable this user?');"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-ghost-sm">Disable</button></form>
+                <form method="post" action="/admin/user/disable" class="inline-form" data-confirm="Disable this user?"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-ghost-sm">Disable</button></form>
                 {{end}}
-                <form method="post" action="/admin/user/delete" class="inline-form" onsubmit="return confirm('Delete user permanently?');"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-danger-sm">Delete</button></form>
+                <form method="post" action="/admin/user/delete" class="inline-form" data-confirm="Delete user permanently?"><input type="hidden" name="csrf" value="{{$.CSRFToken}}"><input type="hidden" name="user_id" value="{{.ID}}"><button type="submit" class="btn-danger-sm">Delete</button></form>
                 {{end}}
-                <button type="button" class="btn-ghost-sm" onclick="openQuotaDialog('{{.ID}}', '{{.Username}}', {{.QuotaBytes}})">Set quota</button>
+                <button type="button" class="btn-ghost-sm" data-quota-open data-user-id="{{.ID}}" data-username="{{.Username}}" data-quota="{{.QuotaBytes}}">Set quota</button>
               </div>
             </details>
           </td>
@@ -76,7 +76,7 @@
           <td><span class="os-badge os-{{.OS}}">{{.OS}}</span></td>
           <td class="cell-muted">{{formatTime .LastSeen}}</td>
           <td class="cell-action">
-            <form method="post" action="/admin/revoke" class="inline-form" onsubmit="return confirm('Revoke client token?');">
+            <form method="post" action="/admin/revoke" class="inline-form" data-confirm="Revoke client token?">
               <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
               <input type="hidden" name="client_id" value="{{.ID}}">
               <button type="submit" class="btn-danger-sm">Revoke</button>
@@ -111,7 +111,7 @@
       </div>
     </div>
     <div class="dialog-actions">
-      <button type="button" class="btn-ghost-sm" onclick="this.closest('dialog').close()">Cancel</button>
+      <button type="button" class="btn-ghost-sm" data-close-dialog>Cancel</button>
       <button type="submit" class="btn-primary-sm">Create</button>
     </div>
   </form>
@@ -126,10 +126,10 @@
       <input type="hidden" name="user_id" id="quota-user-id">
       <div class="dialog-form-fields">
         <div class="quota-presets">
-          <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(5368709120)">5 GB</button>
-          <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(21474836480)">20 GB</button>
-          <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(53687091200)">50 GB</button>
-          <button type="button" class="btn-ghost-sm" onclick="setQuotaPreset(0)">Unlimited</button>
+          <button type="button" class="btn-ghost-sm" data-quota-preset="5368709120">5 GB</button>
+          <button type="button" class="btn-ghost-sm" data-quota-preset="21474836480">20 GB</button>
+          <button type="button" class="btn-ghost-sm" data-quota-preset="53687091200">50 GB</button>
+          <button type="button" class="btn-ghost-sm" data-quota-preset="0">Unlimited</button>
         </div>
         <div class="form-group">
           <label for="quota_bytes">Custom quota (bytes, 0 = unlimited)</label>
@@ -138,79 +138,11 @@
       </div>
     </div>
     <div class="dialog-actions">
-      <button type="button" class="btn-ghost-sm" onclick="this.closest('dialog').close()">Cancel</button>
+      <button type="button" class="btn-ghost-sm" data-close-dialog>Cancel</button>
       <button type="submit" class="btn-primary-sm">Save quota</button>
     </div>
   </form>
 </dialog>
 {{end}}
 {{define "admin_users_scripts"}}
-<script>
-function openQuotaDialog(userId, username, quotaBytes) {
-  document.getElementById('quota-user-id').value = userId;
-  document.getElementById('quota-dialog-user').textContent = username;
-  document.getElementById('quota_bytes').value = quotaBytes;
-  document.getElementById('quota-dialog').showModal();
-}
-function setQuotaPreset(bytes) {
-  document.getElementById('quota_bytes').value = bytes;
-}
-function resetActionMenuPanel(panel) {
-  panel.classList.remove('is-fixed');
-  panel.style.top = '';
-  panel.style.left = '';
-  panel.style.right = '';
-  panel.style.bottom = '';
-}
-function positionActionMenu(menu) {
-  var panel = menu.querySelector('.action-menu-panel');
-  var summary = menu.querySelector('summary');
-  if (!panel || !summary) return;
-  resetActionMenuPanel(panel);
-  if (!menu.open) return;
-  panel.classList.add('is-fixed');
-  var rect = summary.getBoundingClientRect();
-  var gap = 4;
-  var left = rect.right - panel.offsetWidth;
-  if (left < 8) left = 8;
-  if (left + panel.offsetWidth > window.innerWidth - 8) {
-    left = window.innerWidth - panel.offsetWidth - 8;
-  }
-  var top = rect.bottom + gap;
-  if (top + panel.offsetHeight > window.innerHeight - 8) {
-    top = rect.top - panel.offsetHeight - gap;
-  }
-  if (top < 8) top = 8;
-  panel.style.left = left + 'px';
-  panel.style.top = top + 'px';
-}
-document.querySelectorAll('details.action-menu').forEach(function(menu) {
-  menu.addEventListener('toggle', function() {
-    var cell = menu.closest('.cell-action');
-    if (menu.open) {
-      document.querySelectorAll('details.action-menu').forEach(function(other) {
-        if (other !== menu && other.open) other.open = false;
-      });
-      // The actions column is position:sticky with z-index:1, so each row's cell
-      // is its own stacking context. Raise the open row's cell above the others
-      // so its (fixed) dropdown isn't painted under the next row's cell.
-      if (cell) cell.style.zIndex = '40';
-      positionActionMenu(menu);
-    } else {
-      if (cell) cell.style.zIndex = '';
-      var panel = menu.querySelector('.action-menu-panel');
-      if (panel) resetActionMenuPanel(panel);
-    }
-  });
-});
-window.addEventListener('resize', function() {
-  document.querySelectorAll('details.action-menu[open]').forEach(positionActionMenu);
-});
-document.addEventListener('click', function(evt) {
-  if (evt.target.closest('details.action-menu')) return;
-  document.querySelectorAll('details.action-menu[open]').forEach(function(menu) {
-    menu.open = false;
-  });
-});
-</script>
 {{end}}

@@ -11,17 +11,16 @@
     <a class="btn-ghost-sm" href="/dashboard/export/saves.json" download>Export JSON</a>
     <a class="btn-ghost-sm" href="/dashboard/export/archive.zip" title="Download every save file as a zip archive (importable on any GSBS server)">Export saves (.zip)</a>
     {{if not .ReadOnly}}
-    <form method="post" action="/dashboard/games/import" enctype="multipart/form-data" class="inline-form"
-          onsubmit="return this.archive.files.length > 0 || (alert('Choose a GSBS export .zip first.'), false);">
+    <form method="post" action="/dashboard/games/import" enctype="multipart/form-data" class="inline-form">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <label class="btn-ghost-sm import-label">Import archive…<input type="file" name="archive" accept=".zip" class="sr-only" onchange="if(this.files.length){this.form.submit()}"></label>
+      <label class="btn-ghost-sm import-label">Import archive…<input type="file" name="archive" accept=".zip" class="sr-only" data-submit-on-change></label>
     </form>
     {{end}}
   </div>
 </div>
 {{if .ImportedMsg}}<div class="notice">{{.ImportedMsg}}</div>{{end}}
 
-<form id="games-filter" class="games-toolbar" onsubmit="return false;" role="search" aria-label="Filter games">
+<form id="games-filter" class="games-toolbar" data-prevent-submit role="search" aria-label="Filter games">
   <div class="search-wrap games-search">
     <input type="search" class="search-input" name="q" placeholder="Search games…" value="{{.Query}}"
            aria-label="Search games"
@@ -47,12 +46,12 @@
     <button type="button" class="view-btn{{if ne .View "list"}} active{{end}}"
             hx-get="/dashboard/partial/games" hx-target="#games-grid" hx-include="#games-filter" hx-swap="innerHTML"
             hx-vals='{"view":"grid"}'
-            onclick="document.getElementById('games-view').value='grid';this.parentNode.querySelectorAll('.view-btn').forEach(function(b){b.classList.remove('active')});this.classList.add('active');"
+            data-view-value="grid"
             aria-label="Grid view">▦ Grid</button>
     <button type="button" class="view-btn{{if eq .View "list"}} active{{end}}"
             hx-get="/dashboard/partial/games" hx-target="#games-grid" hx-include="#games-filter" hx-swap="innerHTML"
             hx-vals='{"view":"list"}'
-            onclick="document.getElementById('games-view').value='list';this.parentNode.querySelectorAll('.view-btn').forEach(function(b){b.classList.remove('active')});this.classList.add('active');"
+            data-view-value="list"
             aria-label="List view">☰ List</button>
   </div>
   <input type="hidden" id="games-view" name="view" value="{{.View}}">
@@ -77,39 +76,4 @@
 {{end}}
 {{define "dashboard_games_scripts"}}
 <div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>
-<script>
-(function () {
-  var form = document.getElementById('bulk-form');
-  var bar = document.getElementById('bulk-bar');
-  var count = document.getElementById('bulk-count');
-  var grid = document.getElementById('games-grid');
-  if (!form || !bar) return;
-  function checks() { return Array.prototype.slice.call(form.querySelectorAll('.bulk-check')); }
-  function refresh() {
-    var n = checks().filter(function (c) { return c.checked; }).length;
-    count.textContent = n + ' selected';
-    bar.hidden = n === 0;
-  }
-  form.addEventListener('change', function (e) {
-    if (e.target.classList.contains('bulk-select-all')) {
-      var on = e.target.checked;
-      checks().forEach(function (c) { c.checked = on; });
-    }
-    if (e.target.classList.contains('bulk-check') || e.target.classList.contains('bulk-select-all')) refresh();
-  });
-  form.addEventListener('click', function (e) {
-    if (e.target.matches('[data-bulk-clear]')) {
-      checks().forEach(function (c) { c.checked = false; });
-      var all = form.querySelector('.bulk-select-all'); if (all) all.checked = false;
-      refresh();
-    }
-  });
-  form.addEventListener('submit', function (e) {
-    var n = checks().filter(function (c) { return c.checked; }).length;
-    if (n === 0) { e.preventDefault(); return; }
-    if (!confirm('Delete ALL saves for ' + n + ' game' + (n === 1 ? '' : 's') + '? This cannot be undone.')) e.preventDefault();
-  });
-  if (grid) grid.addEventListener('htmx:afterSwap', refresh);
-})();
-</script>
 {{end}}

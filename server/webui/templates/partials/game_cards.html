@@ -44,7 +44,7 @@
   <a class="game-card" href="/dashboard/games/{{urlquery .GameID}}" aria-label="{{.Title}}">
     <div class="game-card-cover">
       {{gameIconSVG .Title 96}}
-      <img class="cover-img" src="/covers/{{urlquery .GameID}}" alt="" loading="lazy" onerror="this.remove()">
+      <img class="cover-img" src="/covers/{{urlquery .GameID}}" alt="" loading="lazy">
       <span class="status-dot status-{{.Status}}" title="{{.Status}}" aria-hidden="true"></span>
     </div>
     <div class="game-card-body">

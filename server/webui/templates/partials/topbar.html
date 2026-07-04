@@ -19,6 +19,10 @@
       <span class="cmdk-trigger-text">Search</span>
       <kbd class="cmdk-trigger-kbd">⌘K</kbd>
     </button>
+    <button type="button" class="btn-ghost theme-toggle" data-action="toggle-theme" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
+      <span class="theme-toggle-dark" aria-hidden="true">🌙</span>
+      <span class="theme-toggle-light" aria-hidden="true">☀️</span>
+    </button>
     <span class="topbar-user">{{.Username}}</span>
     <form method="post" action="/logout" class="inline-form">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">

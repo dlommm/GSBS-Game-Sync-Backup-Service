@@ -6,7 +6,7 @@
     <h2>Manifest<span class="table-count">({{.Stats.ManifestCount}} entries)</span></h2>
     <div class="panel-actions">
       <form method="get" action="/admin/manifest" class="inline-form manifest-count-form">
-        <select name="count" onchange="this.form.submit()" style="padding:0.25rem;">
+        <select class="u-pad-sm" name="count" data-submit-on-change>
           <option value="10" {{if eq .ManifestPerPage 10}}selected{{end}}>10</option>
           <option value="20" {{if eq .ManifestPerPage 20}}selected{{end}}>20</option>
           <option value="40" {{if eq .ManifestPerPage 40}}selected{{end}}>40</option>

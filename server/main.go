@@ -94,11 +94,15 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "SAMEORIGIN")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		// Google Fonts (googleapis.com + gstatic.com) are loaded in templates; allow them explicitly.
+		// No 'unsafe-inline': all scripts are external (/static/*.js) and all
+		// styling is in app.css or applied via the CSSOM by app.js — inline
+		// scripts, on*= handlers, and style="" attributes were removed in
+		// 4.0.0 (guarded by template_csp_test.go). Google Fonts on the
+		// pre-auth login/register pages are the only external hosts.
 		h.Set("Content-Security-Policy",
 			"default-src 'self'; "+
-				"script-src 'self' 'unsafe-inline'; "+
-				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
+				"script-src 'self'; "+
+				"style-src 'self' https://fonts.googleapis.com; "+
 				"font-src 'self' https://fonts.gstatic.com; "+
 				"img-src 'self' data:; "+
 				"connect-src 'self'")

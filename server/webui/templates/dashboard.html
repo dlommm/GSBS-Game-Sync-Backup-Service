@@ -1,6 +1,7 @@
 {{template "layout" .}}
 {{define "dashboard_title"}}Dashboard — GSBS{{end}}
 {{define "dashboard_content"}}
+<div id="gsbs-tour"></div>
 <section id="dashboard-stats"
          hx-get="/dashboard/partial/stats"
          hx-trigger="load, save-updated from:body"
@@ -57,35 +58,4 @@
 {{end}}
 {{define "dashboard_scripts"}}
 <div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>
-<script>
-(function () {
-  var tabs = document.getElementById('activity-tabs');
-  var feed = document.getElementById('activity-feed');
-  var empty = document.getElementById('activity-tab-empty');
-  if (!tabs || !feed) return;
-  var cur = 'all';
-  function apply() {
-    var items = feed.querySelectorAll('.timeline-item');
-    var shown = 0;
-    items.forEach(function (li) {
-      var match = cur === 'all' || li.getAttribute('data-cat') === cur;
-      li.style.display = match ? '' : 'none';
-      if (match) shown++;
-    });
-    if (empty) empty.hidden = !(items.length > 0 && shown === 0);
-  }
-  tabs.addEventListener('click', function (e) {
-    var b = e.target.closest('.tab');
-    if (!b) return;
-    cur = b.getAttribute('data-cat');
-    tabs.querySelectorAll('.tab').forEach(function (t) {
-      var on = t === b;
-      t.classList.toggle('active', on);
-      t.setAttribute('aria-selected', on ? 'true' : 'false');
-    });
-    apply();
-  });
-  feed.addEventListener('htmx:afterSwap', apply);
-})();
-</script>
 {{end}}

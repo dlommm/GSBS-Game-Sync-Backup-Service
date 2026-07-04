@@ -63,9 +63,9 @@
       </div>
       {{if gt .JobProgressTotal 0}}
       <div class="quota-bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="{{.JobProgressTotal}}" aria-valuenow="{{.JobProgressPages}}">
-        <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}%;"></div>
+        <div class="quota-bar-fill has-bar-width" data-width-pct="{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}"></div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:0.25rem;">
+      <div class="u-flex-between">
         <span class="cell-muted">{{.JobProgressPages}} / {{.JobProgressTotal}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
         {{if ge .JobETASec 0}}
         <span class="cell-muted">{{formatETASec .JobETASec}}</span>
@@ -73,12 +73,12 @@
       </div>
       {{else}}
       <div class="quota-bar-track">
-        <div class="quota-bar-fill" style="width:100%;opacity:0.35;animation:pulse 1.5s ease-in-out infinite;"></div>
+        <div class="quota-bar-fill bar-skeleton"></div>
       </div>
       <span class="cell-muted">Listing game catalog…</span>
       {{end}}
       {{if .JobElapsedSec}}
-      <span class="cell-muted" style="font-size:0.75rem;">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
+      <span class="cell-muted u-fs-xs">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
       {{end}}
     </div>
     {{end}}
@@ -129,12 +129,12 @@
       <p class="pcgw-card-subtitle">Targeted operations for specific recovery and maintenance scenarios. Use these when standard sync options are insufficient.</p>
       <div class="pcgw-actions-stack">
         {{if and (not .JobRunning) (gt .CatalogStats.DeadLetter 0)}}
-        <div class="pcgw-action-row" style="padding:0.5rem 0.75rem;background:var(--warning-muted);border-radius:var(--radius-sm);margin-bottom:0.5rem;">
-          <form method="post" action="/admin/pcgw/reset-dead-letter" class="inline-form" onsubmit="return confirm('Reset all {{.CatalogStats.DeadLetter}} dead-lettered page(s) so they can be retried? Run Auto Catch-Up afterwards.');">
+        <div class="pcgw-action-row u-callout">
+          <form method="post" action="/admin/pcgw/reset-dead-letter" class="inline-form" data-confirm="Reset all {{.CatalogStats.DeadLetter}} dead-lettered page(s) so they can be retried? Run Auto Catch-Up afterwards.">
             <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
             <button type="submit" class="btn-primary-sm" aria-describedby="help-reset-dead-letter">Reset Dead Letter ({{.CatalogStats.DeadLetter}} blocked)</button>
           </form>
-          <span id="help-reset-dead-letter" class="pcgw-action-help" style="color:var(--warning);">{{.CatalogStats.DeadLetter}} page(s) have exhausted retries and are blocked. Reset them so the next Auto Catch-Up can retry. This is required when Local count is stuck despite a full catalog.</span>
+          <span id="help-reset-dead-letter" class="pcgw-action-help u-warn-strong">{{.CatalogStats.DeadLetter}} page(s) have exhausted retries and are blocked. Reset them so the next Auto Catch-Up can retry. This is required when Local count is stuck despite a full catalog.</span>
         </div>
         {{end}}
         <div class="pcgw-action-row">
@@ -152,7 +152,7 @@
           <span id="help-retry-failed" class="pcgw-action-help">Retries only pages that previously failed or parsed partially. Does not refresh the catalog.</span>
         </div>
         <div class="pcgw-action-row">
-          <form method="post" action="/admin/pcgw/reset-dead-letter" class="inline-form" onsubmit="return confirm('Reset dead-lettered pages so they can be retried? Run Auto Catch-Up afterwards.');">
+          <form method="post" action="/admin/pcgw/reset-dead-letter" class="inline-form" data-confirm="Reset dead-lettered pages so they can be retried? Run Auto Catch-Up afterwards.">
             <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
             <button type="submit" class="btn-ghost-sm" aria-describedby="help-reset-dead-letter-adv">Reset Dead Letter</button>
           </form>
@@ -173,7 +173,7 @@
           <span id="help-catalog-only" class="pcgw-action-help">Updates the list of known game IDs from PCGamingWiki without parsing any page content.</span>
         </div>
         <div class="pcgw-action-row">
-          <form method="post" action="/admin/pcgw/sync" class="inline-form" onsubmit="return confirm('Force a full PCGW reparse? This bypasses resume and may take many hours.');">
+          <form method="post" action="/admin/pcgw/sync" class="inline-form" data-confirm="Force a full PCGW reparse? This bypasses resume and may take many hours.">
             <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
             <input type="hidden" name="full" value="1">
             <button type="submit" class="btn-ghost-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-full-reparse">Full Reparse</button>
@@ -241,7 +241,7 @@
           <input type="hidden" name="mode" value="merge">
           <label class="btn-ghost-sm pcgw-upload-btn" aria-describedby="help-import-merge">
             Import (merge)
-            <input type="file" name="file" accept=".json,.gz,application/gzip,application/json" class="pcgw-upload-input" onchange="this.form.submit()">
+            <input type="file" name="file" accept=".json,.gz,application/gzip,application/json" class="pcgw-upload-input" data-submit-on-change>
           </label>
         </form>
         <span id="help-import-merge" class="pcgw-action-help">Merge a previously exported bundle into the current data — existing records are kept.</span>
@@ -256,7 +256,7 @@
     <div class="pcgw-actions-stack">
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/wipe" class="inline-form"
-              onsubmit="return confirm('Permanently wipe all PCGW mirror data? The catalog ID list is kept but all parsed page data will be deleted. This cannot be undone.');">
+              data-confirm="Permanently wipe all PCGW mirror data? The catalog ID list is kept but all parsed page data will be deleted. This cannot be undone.">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
           <input type="hidden" name="mode" value="mirror_only">
           <button type="submit" class="btn-danger-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-wipe-mirror">Wipe Mirror Data</button>
@@ -265,7 +265,7 @@
       </div>
       <div class="pcgw-action-row">
         <form method="post" action="/admin/pcgw/wipe" class="inline-form"
-              onsubmit="return confirm('Permanently wipe ALL PCGW data including the save location manifest? All clients will lose PCGW-based save paths. This cannot be undone.');">
+              data-confirm="Permanently wipe ALL PCGW data including the save location manifest? All clients will lose PCGW-based save paths. This cannot be undone.">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
           <input type="hidden" name="mode" value="mirror_and_manifest">
           <button type="submit" class="btn-danger-sm" {{if .JobRunning}}disabled aria-disabled="true" title="Sync already running"{{end}} aria-describedby="help-wipe-all">Wipe Mirror + Manifest</button>

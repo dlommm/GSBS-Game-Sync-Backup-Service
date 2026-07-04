@@ -30,7 +30,7 @@
       {{if gt .ManifestGames 0}}
       <div class="analytics-bar-wrap" aria-label="Save coverage">
         <div class="analytics-bar-track">
-          <div class="analytics-bar-fill analytics-bar-fill-accent" style="width:{{printf "%.1f" .PCGWCoveragePct}}%;"></div>
+          <div class="analytics-bar-fill analytics-bar-fill-accent has-bar-width" data-width-pct="{{printf "%.1f" .PCGWCoveragePct}}"></div>
         </div>
         <p class="form-hint">{{.SaveGames}} of {{.ManifestGames}} catalog games have at least one synced save.</p>
       </div>
@@ -50,10 +50,10 @@
         <span><span class="analytics-dot analytics-dot-pending"></span> Pending {{.PCGWStats.Pending}}</span>
       </div>
       <div class="analytics-bar-track analytics-bar-stacked" aria-label="Parse status breakdown">
-        <div class="analytics-bar-segment analytics-bar-fill-ok" style="width:{{printf "%.2f" (percentInt .PCGWStats.OK .PCGWStats.TotalGames)}}%;"></div>
-        <div class="analytics-bar-segment analytics-bar-fill-partial" style="width:{{printf "%.2f" (percentInt .PCGWStats.Partial .PCGWStats.TotalGames)}}%;"></div>
-        <div class="analytics-bar-segment analytics-bar-fill-failed" style="width:{{printf "%.2f" (percentInt .PCGWStats.Failed .PCGWStats.TotalGames)}}%;"></div>
-        <div class="analytics-bar-segment analytics-bar-fill-pending" style="width:{{printf "%.2f" (percentInt .PCGWStats.Pending .PCGWStats.TotalGames)}}%;"></div>
+        <div class="analytics-bar-segment analytics-bar-fill-ok has-bar-width" data-width-pct="{{printf "%.2f" (percentInt .PCGWStats.OK .PCGWStats.TotalGames)}}"></div>
+        <div class="analytics-bar-segment analytics-bar-fill-partial has-bar-width" data-width-pct="{{printf "%.2f" (percentInt .PCGWStats.Partial .PCGWStats.TotalGames)}}"></div>
+        <div class="analytics-bar-segment analytics-bar-fill-failed has-bar-width" data-width-pct="{{printf "%.2f" (percentInt .PCGWStats.Failed .PCGWStats.TotalGames)}}"></div>
+        <div class="analytics-bar-segment analytics-bar-fill-pending has-bar-width" data-width-pct="{{printf "%.2f" (percentInt .PCGWStats.Pending .PCGWStats.TotalGames)}}"></div>
       </div>
       <div class="config-grid">
         <div class="config-item"><span class="config-key">Catalog games</span><span class="config-val">{{.PCGWStats.TotalGames}}</span></div>
@@ -172,10 +172,10 @@
       <span><span class="analytics-dot analytics-dot-pending"></span> Pending ({{printf "%.1f" (percentInt .PCGWStats.Pending .PCGWStats.TotalGames)}}%)</span>
     </div>
     <div class="analytics-bar-track analytics-bar-stacked">
-      <div class="analytics-bar-segment analytics-bar-fill-ok" style="width:{{printf "%.2f" (percentInt .PCGWStats.OK .PCGWStats.TotalGames)}}%;"></div>
-      <div class="analytics-bar-segment analytics-bar-fill-partial" style="width:{{printf "%.2f" (percentInt .PCGWStats.Partial .PCGWStats.TotalGames)}}%;"></div>
-      <div class="analytics-bar-segment analytics-bar-fill-failed" style="width:{{printf "%.2f" (percentInt .PCGWStats.Failed .PCGWStats.TotalGames)}}%;"></div>
-      <div class="analytics-bar-segment analytics-bar-fill-pending" style="width:{{printf "%.2f" (percentInt .PCGWStats.Pending .PCGWStats.TotalGames)}}%;"></div>
+      <div class="analytics-bar-segment analytics-bar-fill-ok has-bar-width" data-width-pct="{{printf "%.2f" (percentInt .PCGWStats.OK .PCGWStats.TotalGames)}}"></div>
+      <div class="analytics-bar-segment analytics-bar-fill-partial has-bar-width" data-width-pct="{{printf "%.2f" (percentInt .PCGWStats.Partial .PCGWStats.TotalGames)}}"></div>
+      <div class="analytics-bar-segment analytics-bar-fill-failed has-bar-width" data-width-pct="{{printf "%.2f" (percentInt .PCGWStats.Failed .PCGWStats.TotalGames)}}"></div>
+      <div class="analytics-bar-segment analytics-bar-fill-pending has-bar-width" data-width-pct="{{printf "%.2f" (percentInt .PCGWStats.Pending .PCGWStats.TotalGames)}}"></div>
     </div>
   </section>
   {{end}}
@@ -217,7 +217,7 @@
         <option value="mac" {{if eq .FilterPlatform "mac"}}selected{{end}}>mac</option>
       </select>
     </form>
-    <div id="analytics-pcgw-skeleton" class="loading-skeleton-wrap"><div class="loading-skeleton" style="height:8rem;"></div></div>
+    <div id="analytics-pcgw-skeleton" class="loading-skeleton-wrap"><div class="loading-skeleton u-h-32"></div></div>
     <div id="analytics-pcgw-table"
          hx-get="/admin/partial/analytics-pcgw?tab=pcgw&amp;q={{urlquery .Query}}&amp;status={{urlquery .FilterStatus}}&amp;platform={{urlquery .FilterPlatform}}&amp;page={{.Page}}"
          hx-trigger="load"
@@ -309,13 +309,13 @@
     <div class="panel-header"><h2>Recent PCGW sync runs</h2></div>
     <form method="get" action="/admin/analytics" class="filter-toolbar">
       <input type="hidden" name="tab" value="sync">
-      <select name="mode" class="filter-select" onchange="this.form.submit()">
+      <select name="mode" class="filter-select" data-submit-on-change>
         <option value="">All modes</option>
         <option value="bundle" {{if eq .SyncFilterMode "bundle"}}selected{{end}}>bundle (S3)</option>
         <option value="incremental" {{if eq .SyncFilterMode "incremental"}}selected{{end}}>incremental</option>
         <option value="full" {{if eq .SyncFilterMode "full"}}selected{{end}}>full</option>
       </select>
-      <select name="status" class="filter-select" onchange="this.form.submit()">
+      <select name="status" class="filter-select" data-submit-on-change>
         <option value="">All statuses</option>
         <option value="success" {{if eq .SyncFilterStatus "success"}}selected{{end}}>success</option>
         <option value="running" {{if eq .SyncFilterStatus "running"}}selected{{end}}>running</option>

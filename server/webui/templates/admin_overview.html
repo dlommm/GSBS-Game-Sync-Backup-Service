@@ -27,21 +27,21 @@
 <section class="panel panel-compact" aria-label="Choose save-location source">
   <div class="panel-header"><h2>Choose your game save-location source</h2></div>
   <div class="panel-body">
-    <p class="cell-muted" style="margin:0 0 .75rem;">
+    <p class="cell-muted u-mb-sm">
       GSBS needs PCGamingWiki save-location data to know where each game stores its saves. Pick how this server gets it — you can change this later in <a href="/admin/settings">Settings</a>.
     </p>
-    <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
+    <div class="u-flex-row">
       <form method="post" action="/admin/pcgw/source" class="inline-form">
         <input type="hidden" name="csrf" value="{{.CSRFToken}}">
         <input type="hidden" name="source" value="s3">
         <button type="submit" class="btn-primary">Use prebuilt S3 bundle <span class="badge-success">Recommended</span></button>
-        <span class="cell-muted" style="display:block;margin-top:.25rem;font-size:.85em;">Fast, low-maintenance. Avoids PCGamingWiki API limits. Falls back to the API automatically if no bundle is available yet.</span>
+        <span class="cell-muted u-sub-line">Fast, low-maintenance. Avoids PCGamingWiki API limits. Falls back to the API automatically if no bundle is available yet.</span>
       </form>
       <form method="post" action="/admin/pcgw/source" class="inline-form">
         <input type="hidden" name="csrf" value="{{.CSRFToken}}">
         <input type="hidden" name="source" value="api">
         <button type="submit" class="btn-ghost">Manual (sync live from PCGamingWiki API)</button>
-        <span class="cell-muted" style="display:block;margin-top:.25rem;font-size:.85em;">Seeds once from the S3 bundle, then syncs on demand. Always current, but slower and subject to API rate limits.</span>
+        <span class="cell-muted u-sub-line">Seeds once from the S3 bundle, then syncs on demand. Always current, but slower and subject to API rate limits.</span>
       </form>
     </div>
   </div>
@@ -52,7 +52,7 @@
 <section class="panel panel-compact">
   <div class="panel-header"><h2>Getting Started</h2></div>
   <div class="panel-body">
-    <p class="cell-muted" style="margin:0 0 .75rem;">Fresh setup checklist for your first sync.</p>
+    <p class="cell-muted u-mb-sm">Fresh setup checklist for your first sync.</p>
     <ol class="setup-checklist">
       <li>Review server options in <a href="/admin/settings">Settings</a> (cron and first-start sync behavior).</li>
       <li>Open <a href="/admin/pcgw">PCGW</a> and run <strong>Phase 1+2: Refresh IDs and Parse/Store Backlog</strong> to populate catalog and manifest entries.</li>
@@ -93,12 +93,12 @@
     </form>
   </div>
   <div class="panel-body">
-    <p class="cell-muted" style="margin:0;">
+    <p class="cell-muted u-m0">
       Weekly job that re-hashes every stored save against its recorded checksum (client-encrypted saves are skipped — the server cannot read them).
       {{if .IntegrityLastRun}}Last run: {{.IntegrityLastRun.StartedAt}} ({{.IntegrityLastRun.Status}}).{{else}}Not run yet.{{end}}
     </p>
     {{if .IntegrityFindings}}
-    <div class="table-wrap" style="margin-top:.75rem;">
+    <div class="table-wrap u-mt-sm">
       <table class="data-table">
         <thead><tr><th>Found</th><th>User</th><th>Game</th><th>File</th><th>Problem</th></tr></thead>
         <tbody>
@@ -114,7 +114,7 @@
         </tbody>
       </table>
     </div>
-    <p class="cell-muted" style="margin:.5rem 0 0;">Restore an affected save from its version history, or delete the slot and let the client push a fresh copy.</p>
+    <p class="cell-muted u-mt-xs">Restore an affected save from its version history, or delete the slot and let the client push a fresh copy.</p>
     {{end}}
   </div>
 </section>
@@ -129,11 +129,11 @@
 {{if .StatsSnapshots}}
 <section class="panel">
   <div class="panel-header"><h2>Stats over time</h2></div>
-  <div class="chart-wrap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem;">
-    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Users</h3>{{chartLineSVG .StatsSnapshots "users" 400 120}}</div>
-    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Clients</h3>{{chartLineSVG .StatsSnapshots "clients" 400 120}}</div>
-    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Saves</h3>{{chartLineSVG .StatsSnapshots "saves" 400 120}}</div>
-    <div><h3 class="cell-muted" style="font-size:0.75rem;margin:0 0 0.5rem;">Storage</h3>{{chartLineSVG .StatsSnapshots "storage" 400 120}}</div>
+  <div class="chart-wrap u-chart-grid">
+    <div><h3 class="cell-muted u-title-sm">Users</h3>{{chartLineSVG .StatsSnapshots "users" 400 120}}</div>
+    <div><h3 class="cell-muted u-title-sm">Clients</h3>{{chartLineSVG .StatsSnapshots "clients" 400 120}}</div>
+    <div><h3 class="cell-muted u-title-sm">Saves</h3>{{chartLineSVG .StatsSnapshots "saves" 400 120}}</div>
+    <div><h3 class="cell-muted u-title-sm">Storage</h3>{{chartLineSVG .StatsSnapshots "storage" 400 120}}</div>
   </div>
 </section>
 {{end}}

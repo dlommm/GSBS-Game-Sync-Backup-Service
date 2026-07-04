@@ -116,8 +116,8 @@
       </tbody>
     </table>
   </div>
-  <div style="padding:0 1.25rem 1.25rem;">
-    <form method="post" action="/dashboard/settings/sessions/revoke-all" class="inline-form" onsubmit="return confirm('Revoke all sessions including this one?');">
+  <div class="u-pad-foot">
+    <form method="post" action="/dashboard/settings/sessions/revoke-all" class="inline-form" data-confirm="Revoke all sessions including this one?">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <button type="submit" class="btn-danger-sm">Revoke all sessions</button>
     </form>

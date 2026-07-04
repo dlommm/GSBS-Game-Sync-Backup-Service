@@ -27,14 +27,19 @@
               <a href="/dashboard/save/versions/download?game_id={{urlquery $.GameID}}&path_key={{urlquery $.PathKey}}&version={{.Version}}" class="btn-ghost-sm">Download</a>
               {{if ne .Version $.CurrentVersion}}
               <button type="button" class="btn-primary-sm"
-                      onclick="document.getElementById('restore-dialog-{{.Version}}').showModal()">Restore</button>
+                      data-open-dialog="restore-dialog-{{.Version}}">Restore</button>
               <dialog id="restore-dialog-{{.Version}}">
                 <div class="dialog-body">
-                  <h3 style="margin-top:0;">Restore version {{.Version}}?</h3>
-                  <p class="cell-muted">This will replace the current save with this older version.</p>
+                  <h3 class="u-mt0">Restore version {{.Version}}?</h3>
+                  <p class="cell-muted">The server rolls back to this version; your devices pull it on their next sync (or “Sync now”).</p>
+                  <ul class="restore-review-list">
+                    <li><span>Saved</span><strong>{{formatTime .UpdatedAt}}</strong></li>
+                    <li><span>Size</span><strong>{{formatBytes .SizeBytes}}</strong></li>
+                    <li><span>Written by</span><strong>{{if .ClientName}}{{.ClientName}}{{else}}unknown device{{end}}</strong></li>
+                  </ul>
                 </div>
                 <div class="dialog-actions">
-                  <button type="button" class="btn-ghost-sm" onclick="this.closest('dialog').close()">Cancel</button>
+                  <button type="button" class="btn-ghost-sm" data-close-dialog>Cancel</button>
                   <form method="post" action="/dashboard/save/versions/restore" class="inline-form">
                     <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
                     <input type="hidden" name="game_id" value="{{$.GameID}}">

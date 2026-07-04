@@ -9,7 +9,7 @@
         <td class="cell-primary">{{.GameTitle}}</td>
         <td class="cell-muted">{{.GameID}}</td>
         <td><span class="os-badge os-{{.Platform}}">{{.Platform}}</span></td>
-        <td class="cell-muted" style="max-width:20rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{.PathTemplate}}">{{.PathTemplate}}</td>
+        <td class="cell-muted u-truncate" title="{{.PathTemplate}}">{{.PathTemplate}}</td>
         <td>{{if .IsConfig}}<span class="pill-yes">config</span>{{else}}<span class="pill-no">save</span>{{end}}</td>
         <td class="cell-muted">{{.Source}}</td>
         <td class="cell-muted">{{formatTime .UpdatedAt}}</td>

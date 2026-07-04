@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -103,15 +104,28 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var data []byte
 	appID := h.steamAppIDForGame(r.Context(), id)
-	if appID == "" {
-		writeCoverMiss(missPath)
-		http.NotFound(w, r)
-		return
+	if appID != "" {
+		var err error
+		if data, err = fetchSteamCover(r.Context(), appID); err != nil {
+			logx.Logger().Debug().Str("game_id", id).Str("appid", appID).Err(err).Msg("steam cover fetch failed")
+			data = nil
+		}
 	}
-	data, err := fetchSteamCover(r.Context(), appID)
-	if err != nil {
-		logx.Logger().Debug().Str("game_id", id).Str("appid", appID).Err(err).Msg("cover fetch failed")
+	// Non-Steam games (GOG/Epic/…): fall back to the PCGW-hosted cover image
+	// when the game record carries one. Same proxy + permanent-cache pattern,
+	// so PCGW is hit at most once per game.
+	if data == nil {
+		if url := h.pcgwCoverURL(r.Context(), id); url != "" {
+			var err error
+			if data, err = fetchAllowlistedCover(r.Context(), url); err != nil {
+				logx.Logger().Debug().Str("game_id", id).Str("url", url).Err(err).Msg("pcgw cover fetch failed")
+				data = nil
+			}
+		}
+	}
+	if data == nil {
 		writeCoverMiss(missPath)
 		http.NotFound(w, r)
 		return
@@ -154,6 +168,61 @@ func (h *WebHandler) steamAppIDForGame(ctx context.Context, id string) string {
 		}
 	}
 	return ""
+}
+
+// pcgwCoverURL returns the game's PCGW-hosted cover URL, if any.
+func (h *WebHandler) pcgwCoverURL(ctx context.Context, id string) string {
+	pageID, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return ""
+	}
+	g, err := h.store.GetPCGWGame(ctx, pageID)
+	if err != nil || g == nil {
+		return ""
+	}
+	return strings.TrimSpace(g.CoverURL)
+}
+
+// coverAllowedHosts is the fixed set of hosts the cover proxy will fetch from
+// beyond the Steam CDN — PCGamingWiki's own image hosts. This keeps the proxy
+// from being an open SSRF relay even though cover_url comes from the DB.
+var coverAllowedHosts = map[string]bool{
+	"pcgamingwiki.com":        true,
+	"www.pcgamingwiki.com":    true,
+	"images.pcgamingwiki.com": true,
+}
+
+func fetchAllowlistedCover(ctx context.Context, rawURL string) ([]byte, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme != "https" || !coverAllowedHosts[strings.ToLower(u.Host)] {
+		return nil, fmt.Errorf("cover host not allowed: %q", u.Host)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := coverHTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("cover HTTP %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "image/") {
+		return nil, fmt.Errorf("cover unexpected content-type %q", ct)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, coverMaxBytes))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, errors.New("empty cover body")
+	}
+	return data, nil
 }
 
 func fetchSteamCover(ctx context.Context, appID string) ([]byte, error) {

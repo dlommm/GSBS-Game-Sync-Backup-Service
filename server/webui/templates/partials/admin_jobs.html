@@ -9,7 +9,7 @@
     {{end}}
     <p class="cell-muted jobs-meta">{{.CapStatusText}}</p>
     {{if .CapReached}}
-    <p class="notice notice-warn" style="margin:0.5rem 0 0;">Run another Phase 2 parse/store action to continue the remaining queue.</p>
+    <p class="notice notice-warn u-mt-xs">Run another Phase 2 parse/store action to continue the remaining queue.</p>
     {{end}}
   </div>
   {{if .ShowPCGWControls}}{{else}}
@@ -25,7 +25,7 @@
       <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
       <button type="submit" class="btn-primary-sm">Phase 1+2: Refresh IDs and Parse/Store Backlog</button>
     </form>
-    <form method="post" action="/admin/run-job" class="inline-form" onsubmit="return confirm('Force a full PCGW resync? This bypasses resume and may take a long time.');">
+    <form method="post" action="/admin/run-job" class="inline-form" data-confirm="Force a full PCGW resync? This bypasses resume and may take a long time.">
       <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
       <input type="hidden" name="full" value="1">
       <button type="submit" class="btn-ghost-sm">Phase 1+2 Full Reparse (No Resume)</button>
@@ -41,21 +41,21 @@
     <span>{{.JobProgressPages}}{{if gt .JobProgressTotal 0}} / {{.JobProgressTotal}}{{end}} pages{{if gt .JobGamesSkipped 0}} · {{.JobGamesSkipped}} skipped{{end}}</span>
   </div>
   {{if .JobAutoCatchUp}}
-  <p class="cell-muted jobs-meta" style="margin:0 0 0.4rem;">Mode: <strong>Auto catch-up</strong> (repeating Phase 2 until backlog is cleared).</p>
+  <p class="cell-muted jobs-meta u-mt-xs">Mode: <strong>Auto catch-up</strong> (repeating Phase 2 until backlog is cleared).</p>
   {{end}}
   <div class="quota-bar-track">
     {{if gt .JobProgressTotal 0}}
-    <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}%;"></div>
+    <div class="quota-bar-fill has-bar-width" data-width-pct="{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}"></div>
     {{else}}
-    <div class="quota-bar-fill" style="width:100%;opacity:0.35;animation:pulse 1.5s ease-in-out infinite;"></div>
+    <div class="quota-bar-fill bar-skeleton"></div>
     {{end}}
   </div>
-  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:0.25rem;flex-wrap:wrap;gap:0.25rem;">
+  <div class="u-flex-between-wrap">
     {{if .JobElapsedSec}}
-    <span class="cell-muted" style="font-size:0.75rem;">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
+    <span class="cell-muted u-fs-xs">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
     {{else}}<span></span>{{end}}
     {{if ge .JobETASec 0}}
-    <span class="cell-muted" style="font-size:0.75rem;">{{formatETASec .JobETASec}}</span>
+    <span class="cell-muted u-fs-xs">{{formatETASec .JobETASec}}</span>
     {{end}}
   </div>
 </div>
@@ -67,17 +67,17 @@
   </div>
   <div class="quota-bar-track">
     {{if .CatalogStats.RemoteTotal}}
-    <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .CatalogStats.LocalTotal .CatalogStats.RemoteTotal)}}%;opacity:0.6;"></div>
+    <div class="quota-bar-fill has-bar-width bar-dim-6" data-width-pct="{{printf "%.1f" (percentInt .CatalogStats.LocalTotal .CatalogStats.RemoteTotal)}}"></div>
     {{else}}
-    <div class="quota-bar-fill" style="width:0%;"></div>
+    <div data-width-pct="0" class="quota-bar-fill has-bar-width"></div>
     {{end}}
   </div>
-  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:0.25rem;flex-wrap:wrap;gap:0.25rem;">
-    <span class="cell-muted" style="font-size:0.75rem;">{{.CatalogStats.LocalTotal}} / {{.CatalogStats.RemoteTotal}} ingested ({{printf "%.0f" (percentInt .CatalogStats.LocalTotal .CatalogStats.RemoteTotal)}}%)</span>
+  <div class="u-flex-between-wrap">
+    <span class="cell-muted u-fs-xs">{{.CatalogStats.LocalTotal}} / {{.CatalogStats.RemoteTotal}} ingested ({{printf "%.0f" (percentInt .CatalogStats.LocalTotal .CatalogStats.RemoteTotal)}}%)</span>
     {{if .IdleTotalETASec}}
-    <span class="cell-muted" style="font-size:0.75rem;">Est. total: {{formatETASec .IdleTotalETASec}} · {{.IdleRunsNeeded}} run(s) · ~{{formatETASec .IdlePerRunETASec}}/run</span>
+    <span class="cell-muted u-fs-xs">Est. total: {{formatETASec .IdleTotalETASec}} · {{.IdleRunsNeeded}} run(s) · ~{{formatETASec .IdlePerRunETASec}}/run</span>
     {{else}}
-    <span class="cell-muted" style="font-size:0.75rem;">{{.IdleRunsNeeded}} run(s) needed · start a run to build speed estimate</span>
+    <span class="cell-muted u-fs-xs">{{.IdleRunsNeeded}} run(s) needed · start a run to build speed estimate</span>
     {{end}}
   </div>
 </div>

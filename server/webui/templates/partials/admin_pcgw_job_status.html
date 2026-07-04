@@ -9,17 +9,17 @@
   </div>
   <div class="quota-bar-track">
     {{if gt .JobProgressTotal 0}}
-    <div class="quota-bar-fill" style="width:{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}%;"></div>
+    <div class="quota-bar-fill has-bar-width" data-width-pct="{{printf "%.1f" (percentInt .JobProgressPages .JobProgressTotal)}}"></div>
     {{else}}
-    <div class="quota-bar-fill" style="width:100%;opacity:0.35;"></div>
+    <div data-width-pct="100" class="quota-bar-fill has-bar-width bar-dim"></div>
     {{end}}
   </div>
-  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:0.25rem;">
+  <div class="u-flex-between">
     {{if .JobElapsedSec}}
-    <span class="cell-muted" style="font-size:0.75rem;">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
+    <span class="cell-muted u-fs-xs">Running for {{if lt .JobElapsedSec 60}}{{.JobElapsedSec}}s{{else if lt .JobElapsedSec 3600}}{{div .JobElapsedSec 60}}m{{else}}{{div .JobElapsedSec 3600}}h {{div (mod .JobElapsedSec 3600) 60}}m{{end}}</span>
     {{else}}<span></span>{{end}}
     {{if ge .JobETASec 0}}
-    <span class="cell-muted" style="font-size:0.75rem;">{{formatETASec .JobETASec}}</span>
+    <span class="cell-muted u-fs-xs">{{formatETASec .JobETASec}}</span>
     {{end}}
   </div>
 </div>

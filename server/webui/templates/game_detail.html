@@ -8,7 +8,7 @@
 </p>
 
 <header class="game-detail-head">
-  <div class="game-detail-cover">{{gameIconSVG .Title 72}}<img class="cover-img" src="/covers/{{urlquery .GameID}}" alt="" loading="lazy" onerror="this.remove()"></div>
+  <div class="game-detail-cover">{{gameIconSVG .Title 72}}<img class="cover-img" src="/covers/{{urlquery .GameID}}" alt="" loading="lazy"></div>
   <div class="game-detail-heading">
     <h1 class="game-detail-title">{{.Title}}</h1>
     <div class="game-detail-tags">
@@ -21,7 +21,7 @@
     <a class="btn-ghost-sm" href="/dashboard/export/archive.zip?game_id={{urlquery .GameID}}&versions=all" title="Includes retained version history">Export + history</a>
     {{if not .ReadOnly}}
     <form method="post" action="/dashboard/game/delete"
-          onsubmit="return confirm('Delete ALL {{.FileCount}} saved file(s) for {{.Title}} from the server? This cannot be undone.');">
+          data-confirm="Delete ALL {{.FileCount}} saved file(s) for {{.Title}} from the server? This cannot be undone.">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <input type="hidden" name="game_id" value="{{.GameID}}">
       <button type="submit" class="btn-danger-sm">Delete all saves</button>
@@ -40,7 +40,7 @@
 <div class="game-detail-grid">
   <section class="panel" aria-labelledby="files-heading">
     <div class="panel-header"><h2 id="files-heading">Save files</h2></div>
-    <div class="saves-tree" style="padding:0 1.25rem 1rem;">
+    <div class="saves-tree u-pad-cat">
       {{range .Categories}}
       <details class="tree-cat" open>
         <summary class="tree-row tree-cat-row">
@@ -66,7 +66,7 @@
               <button type="button" class="btn-ghost-sm"
                       hx-get="/dashboard/save/versions/preview?game_id={{urlquery .GameID}}&path_key={{urlquery .PathKey}}"
                       hx-target="#preview-body" hx-swap="innerHTML"
-                      onclick="document.getElementById('preview-title').textContent='{{.Name}}';document.getElementById('preview-dialog').showModal();">Preview</button>
+                      data-open-dialog="preview-dialog" data-preview-title="{{.Name}}">Preview</button>
               {{end}}
               <a href="/dashboard/save/versions?game_id={{urlquery .GameID}}&path_key={{urlquery .PathKey}}" class="btn-ghost-sm">Versions</a>
             </span>
@@ -93,8 +93,8 @@
 <dialog id="preview-dialog" class="preview-dialog">
   <div class="dialog-body">
     <div class="dialog-head">
-      <h3 id="preview-title" style="margin:0;">Preview</h3>
-      <button type="button" class="btn-ghost-sm" onclick="this.closest('dialog').close()">Close</button>
+      <h3 class="u-m0" id="preview-title">Preview</h3>
+      <button type="button" class="btn-ghost-sm" data-close-dialog>Close</button>
     </div>
     <div id="preview-body"><p class="cell-muted">Loading…</p></div>
   </div>

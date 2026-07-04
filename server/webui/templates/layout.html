@@ -7,6 +7,7 @@
   <title>{{renderPageBlock .PageName "title" .}}</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/theme-boot.js"></script>
 </head>
 <body class="{{if .BodyClass}}{{.BodyClass}}{{else if .AdminNav}}admin-shell{{else}}app-shell{{end}}"
       {{if not .AdminNav}}hx-ext="sse" sse-connect="/dashboard/events"{{end}}>
@@ -34,17 +35,7 @@
   <script src="/static/ext/sse.js"></script>
   <script src="/static/toast.js"></script>
   <script src="/static/cmdk.js"></script>
-  <script>
-  document.body.addEventListener('htmx:configRequest', function(evt) {
-    evt.detail.credentials = 'same-origin';
-  });
-  document.body.addEventListener('audit-updated', function(evt) {
-    if (window.gsbs && window.gsbs.toast) {
-      var msg = (evt.detail && evt.detail.data) ? evt.detail.data : 'Activity log updated';
-      window.gsbs.toast(msg, 'info', 3000);
-    }
-  });
-  </script>
+  <script src="/static/app.js" defer></script>
   {{renderPageBlock .PageName "scripts" .}}
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 </body>

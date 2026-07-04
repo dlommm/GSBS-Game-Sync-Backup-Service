@@ -16,8 +16,8 @@
         <span class="tree-size">{{formatBytes .TotalBytes}}</span>
         <span class="tree-when">{{formatTime .LastSynced}}</span>
         {{if not $.ReadOnly}}
-        <form method="post" action="/dashboard/game/delete" class="inline-form" onclick="event.stopPropagation()"
-              onsubmit="return confirm('Delete ALL {{.FileCount}} saved file(s) for {{.Title}} from the server? This cannot be undone.');">
+        <form method="post" action="/dashboard/game/delete" class="inline-form" data-stop-propagation
+              data-confirm="Delete ALL {{.FileCount}} saved file(s) for {{.Title}} from the server? This cannot be undone.">
           <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
           <input type="hidden" name="game_id" value="{{.GameID}}">
           <button type="submit" class="btn-danger-sm">Delete all</button>
@@ -49,7 +49,7 @@
             <span class="file-actions">
               <a href="/dashboard/save/versions?game_id={{urlquery .GameID}}&path_key={{urlquery .PathKey}}" class="btn-ghost-sm">Versions</a>
               {{if not $.ReadOnly}}
-              <form method="post" action="/dashboard/save/delete" class="inline-form" onsubmit="return confirm('Delete this save from the server?');">
+              <form method="post" action="/dashboard/save/delete" class="inline-form" data-confirm="Delete this save from the server?">
                 <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
                 <input type="hidden" name="game_id" value="{{.GameID}}">
                 <input type="hidden" name="path_key" value="{{.PathKey}}">
