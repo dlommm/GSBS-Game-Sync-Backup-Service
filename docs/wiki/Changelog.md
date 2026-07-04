@@ -6,6 +6,26 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [4.1.0] — 2026-07-04
+
+WebUI re-polish across server and client, an analytics deep-dive, 2FA recovery codes, and macOS DMG packaging.
+
+### Added
+
+- **Analytics deep-dive**: the Insights page gained a 7/30/90-day window, data-synced and play-rhythm charts, per-device attribution, most-active games, version-history depth, and a "Protection at a glance" row. Admin analytics gained a **Fleet Activity** tab (fleet-wide sync/data/active-user/audit charts), adoption panels (client versions, OS split, 2FA/encryption uptake, signups, job reliability), and a 30/90/365-day trends selector.
+- **Client "Sync insights" page**: persisted sync-cycle history, success rate, per-game state with "Reveal folder", full conflict details, and the offline upload queue.
+- **2FA recovery codes**: 10 one-time codes issued on enable (shown once, hashed at rest), accepted at login, regenerable from Settings.
+- **Client 2FA logins**: `gsbs-client login`, the tray, and the setup page now complete the TOTP step (previously impossible).
+- Branded error pages, keyboard shortcuts (`g` chords + `?` help), password strength/show-hide, sortable admin tables, a real multi-step setup wizard, and a `script/ui-smoke.sh` release gate.
+
+### Changed
+
+- **Client WebUI rebuilt to server quality**: shared layout, light/dark theme, sync-status hero with re-login button, honest "Sync now" completion feedback, next-sync countdown, persisted log filters, real quick actions — and the loopback UI now ships the same strict Content-Security-Policy as the server.
+- **Fixed in the server WebUI**: the admin "Verify now" / "Backup now" / "Send test notification" buttons (broken by a CSRF field mismatch in 4.0.0), unstyled admin buttons/radios, toast positioning, GB-denominated quotas, readable PCGW game detail, consistent empty/loading states, SVG icons everywhere, and a fully self-contained CSP (Google Fonts CDN removed).
+- **macOS client now ships as a drag-to-Applications `.dmg`** (unsigned — clear quarantine once with `xattr -cr /Applications/GSBS.app`; see [Installation](Installation)). macOS devices now report `darwin` and "open log/folder" uses the native `open`.
+
+---
+
 ## [4.0.0] — 2026-07-04
 
 Major release: security & reliability audit fixes plus new flagship features.

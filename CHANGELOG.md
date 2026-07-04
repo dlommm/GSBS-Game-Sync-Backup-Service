@@ -4,6 +4,24 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-07-04
+
+### Added
+
+- **Analytics deep-dive across both UIs.** The server Insights page grew from 5 panels to a full picture: 7/30/90-day window selector, data-synced-per-day chart, per-device activity attribution, play-rhythm charts (weekday/hour), most-active games, version-history depth, a save-vs-config storage split, and a "Protection at a glance" row (backups, 2FA, encryption coverage, devices online) — with live refresh on sync events. Admin analytics gained a **Fleet Activity** tab (fleet-wide sync volume, data synced, active users/day, manifest downloads, audit-action charts — the first admin view of real save-sync activity), adoption panels (client version + OS distribution, 2FA/encryption adoption, signups-over-time, job reliability), and a 30/90/365-day trends selector over the full two years of retained snapshots. New indexes (migration 29) keep the fleet-wide aggregations fast.
+- **Client "Sync insights" page.** The tray client's local UI now has an Insights page: persisted sync-cycle history (survives restarts — previously this data evaporated), success rate, per-day activity, a per-game state table with one-click "Reveal folder", a full conflicts panel (what happened, which policy won), and the offline upload queue with retry ages. Plus tray menu shortcuts for Settings and Insights.
+- **2FA recovery codes.** Enabling two-factor authentication now issues 10 one-time recovery codes (shown once, with copy/download; stored only as hashes). The login page accepts them when your authenticator is lost, Settings shows how many remain and can regenerate a fresh set, and a notification warns when you're running low.
+- **Client 2FA logins.** `gsbs-client login`, the tray login, and the setup page now support accounts with two-factor authentication (previously the client could not complete the TOTP step at all).
+- **Branded error pages** (404/403) replace the plain-text ones, keyboard shortcuts (`g` chords + `?` help overlay), a command-palette "Recent pages" section, client-side sortable admin tables, password show/hide toggles with a strength meter on every password form, and a real multi-step setup wizard (Account → Access → Storage → Extras → Review).
+
+### Changed
+
+- **Client WebUI rebuilt to server quality.** The tray client's local pages were rewritten on the server UI's foundation: shared layout, light/dark theme with a topbar toggle (follows your OS preference and the same saved choice as the server UI), a sync-status hero ("All synced / Attention needed / In game — sync deferred") with a re-login button when access expires, real "Sync now" completion feedback, a next-sync countdown, catalog search with result badges and keyboard-friendly rows, persisted log filters, and real quick actions (check for updates, reveal folders). All ~15 inline scripts and ~141 inline styles are gone; the loopback server now sends the same strict Content-Security-Policy as the server WebUI, locked by a new template test.
+- **WebUI polish pass.** Fixed the admin "Verify now", "Backup now", and "Send test notification" buttons (a CSRF field-name mismatch made all three fail with "Invalid security token"), un-styled admin buttons/radios, and the toast system (info styling, duration, positioning). Removed the Google Fonts CDN from login/register — the CSP now allows no external hosts at all. Auth pages honor the theme, the 2FA-code login page got branding and a recovery-code path, admin settings gained a section anchor nav and a sticky unsaved-changes save bar, quotas are entered in GB instead of raw bytes, the PCGW game detail page renders parsed save locations as readable tables instead of Go struct dumps, log tables tint error/warn rows, times show relative with exact-on-hover, empty states and loading skeletons are consistent everywhere, and every emoji icon was replaced with a crisp SVG set.
+- macOS fixes: devices now report `darwin` instead of `linux`, and "open log/folder" uses the native `open` command.
+- New `script/ui-smoke.sh` boots a throwaway server and sweeps every WebUI route (wizard → login → all pages, strict-CSP assertion) — run it before releases.
+- **macOS client now ships as a `.dmg`.** Instead of a raw binary tarball, the macOS client is delivered as a drag-to-Applications disk image containing a proper `GSBS.app` bundle (menu-bar app, custom icon). The app is still unsigned/un-notarized (no paid Apple Developer account), so first launch needs `xattr -cr /Applications/GSBS.app` — documented in INSTALL.md. Both DMGs (Apple Silicon + Intel) are checksummed in `SHA256SUMS`. The macOS **server** continues to ship as a tarball.
+
 ## [4.0.0] - 2026-07-04
 
 Major release: full-project security & reliability audit fixes plus new flagship features. One startup behavior change (see **Upgrade note** below).
