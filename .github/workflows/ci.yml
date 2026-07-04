@@ -19,12 +19,12 @@ jobs:
     needs: resolve-runner
     runs-on: ${{ needs.resolve-runner.outputs.linux }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
           cache: true
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
       - name: Install build deps (cgo for go-sqlite3 and -race)
@@ -32,14 +32,14 @@ jobs:
       - name: Test
         run: go test -race -coverprofile=coverage.out ./server/... ./pkg/... ./client/...
       - name: Upload coverage profile
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: coverage.out
           if-no-files-found: error
       - name: Upload coverage to Codecov
         # Tokenless upload works for public repos; failures don't block CI.
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         continue-on-error: true
         with:
           files: coverage.out
@@ -65,7 +65,7 @@ jobs:
     needs: resolve-runner
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
@@ -78,12 +78,12 @@ jobs:
     needs: resolve-runner
     runs-on: ${{ needs.resolve-runner.outputs.linux }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
           cache: true
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
       - name: Build WebUI CSS
@@ -99,7 +99,7 @@ jobs:
   build-macos:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
@@ -112,12 +112,12 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
           cache: true
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
       - name: Build WebUI CSS
@@ -136,7 +136,7 @@ jobs:
     needs: resolve-runner
     runs-on: ${{ needs.resolve-runner.outputs.linux }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
@@ -144,7 +144,7 @@ jobs:
       - name: Install build deps (cgo for go-sqlite3 typechecking)
         run: sudo apt-get update && sudo apt-get install -y gcc
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
           args: --timeout=5m
