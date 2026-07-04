@@ -6,7 +6,7 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
-## [4.0.0] — Unreleased
+## [4.0.0] — 2026-07-04
 
 Major release: security & reliability audit fixes plus new flagship features.
 
@@ -33,7 +33,7 @@ Major release: security & reliability audit fixes plus new flagship features.
 - Supply chain: signed build-provenance attestations + SPDX SBOM on releases, CodeQL, Dependabot, `errcheck`/`gosec` linting, Go 1.26.
 - **Storage quotas are now real limits**: enforced atomically inside the write transaction and counting version history. Over-quota users are grandfathered (shrink/replace allowed, growth blocked). Dashboards show the new usage figure with 80%/over warnings. See [Upgrading](Upgrading).
 - WebUI two-factor (TOTP) verification and registration are now rate-limited like password login.
-- `GSBS_SESSION_SECRET` must be at least 32 characters and not a placeholder — the server refuses to start otherwise (`GSBS_INSECURE_DEV_SECRET=1` bypasses for local development). See [Upgrading](Upgrading).
+- `GSBS_SESSION_SECRET` is now **optional** — auto-generated into `gsbs-keys/` if unset; a *set* value must still be 32+ characters and not a placeholder. See [Upgrading](Upgrading).
 - The auto-generated `/metrics` token is no longer logged in cleartext; compose files gained `no-new-privileges` and resource limits.
 
 ### Fixed

@@ -4,7 +4,7 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
-## [4.0.0] - Unreleased
+## [4.0.0] - 2026-07-04
 
 Major release: full-project security & reliability audit fixes plus new flagship features. One startup behavior change (see **Upgrade note** below).
 
