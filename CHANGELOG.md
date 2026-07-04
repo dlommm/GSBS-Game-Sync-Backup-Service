@@ -4,6 +4,20 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [4.1.1] - 2026-07-04
+
+Critical macOS fix plus tray polish.
+
+### Fixed
+
+- **macOS client now shows its menu-bar icon.** The tray was only started on Windows and Linux, so the 4.1.0 macOS `.app` launched as an invisible background process with no Dock icon and no menu-bar icon — there was no way to log in or interact with it. macOS now runs the same menu-bar tray as the other platforms (new `tray_darwin.go`; game-aware sync, autostart, and browser login all work). **macOS users on 4.1.0 should update.**
+- **Fixed a data race in the tray.** The synced/discovered game slot IDs were written by the refresh loop while the menu click handlers read them without synchronization; clicking a game row could occasionally open the wrong game's history. Refreshes are now serialized and the slot IDs are read under a lock.
+
+### Changed
+
+- **Cleaner system-tray menu.** Conflict controls no longer occupy three permanently greyed-out rows — they collapse into a single "⚠ Resolve N conflicts" submenu that appears only when a game changed on two devices (with clearer "overwrite server / overwrite local" labels and a new "Review each in browser…" option). The pending-uploads and error rows stay hidden until they apply, and a redundant separator was removed, so the healthy-state menu is compact.
+- **macOS DMG bundle is now ad-hoc code-signed.** A completely unsigned bundle triggered the dead-end "GSBS is damaged and can't be opened" dialog; ad-hoc signing (still free, no Apple Developer account) gives the softer "can't verify the developer → Open Anyway" flow instead. First launch still needs a one-time approval (right-click → Open, or `xattr -cr /Applications/GSBS.app`); full notarization remains out of scope.
+
 ## [4.1.0] - 2026-07-04
 
 ### Added

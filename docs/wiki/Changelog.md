@@ -6,6 +6,22 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [4.1.1] — 2026-07-04
+
+Critical macOS fix plus tray polish.
+
+### Fixed
+
+- **macOS menu-bar icon now appears.** The 4.1.0 macOS app started the tray only on Windows/Linux, so it launched invisibly with no way to log in. macOS now runs the same menu-bar tray as the other platforms. **macOS users on 4.1.0 should update.**
+- A tray data race that could open the wrong game's save history is fixed.
+
+### Changed
+
+- Cleaner tray menu: conflict controls collapse into a single submenu shown only when conflicts exist; pending-uploads/error rows stay hidden until relevant.
+- The macOS DMG is now ad-hoc code-signed, replacing the "GSBS is damaged" dead-end with the softer "Open Anyway" flow (first launch still needs a one-time approval; see [Installation](Installation)).
+
+---
+
 ## [4.1.0] — 2026-07-04
 
 WebUI re-polish across server and client, an analytics deep-dive, 2FA recovery codes, and macOS DMG packaging.
