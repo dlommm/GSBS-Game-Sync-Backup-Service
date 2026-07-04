@@ -84,8 +84,9 @@ func main() {
 		}
 	}
 
-	// On Windows or Linux, run tray when not in console mode (setup/login via browser or Login menu).
-	if (runtime.GOOS == "windows" || runtime.GOOS == "linux") && !consoleMode() {
+	// On Windows, Linux, and macOS, run the system-tray / menu-bar app when not
+	// in console mode (setup/login happens via the browser or the Login menu).
+	if (runtime.GOOS == "windows" || runtime.GOOS == "linux" || runtime.GOOS == "darwin") && !consoleMode() {
 		runTray()
 		return
 	}

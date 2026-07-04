@@ -33,6 +33,11 @@ type TrayController struct {
 	mu         sync.Mutex
 	currentCfg *config
 
+	// refreshMu serializes refreshFromSnapshot (called from the debounce loop,
+	// the 60s ticker, and OnSyncResult) and guards the slot-ID arrays below,
+	// which the per-slot click handlers read concurrently.
+	refreshMu sync.Mutex
+
 	// Status
 	mStatus    *systray.MenuItem
 	mProgress  *systray.MenuItem
@@ -53,12 +58,13 @@ type TrayController struct {
 	mAddGame        *systray.MenuItem
 	mRescan         *systray.MenuItem
 
-	// Issues
-	mConflicts      *systray.MenuItem
-	mConflictsLocal *systray.MenuItem
-	mConflictsSrv   *systray.MenuItem
-	mOutbox         *systray.MenuItem
-	mLastError      *systray.MenuItem
+	// Issues — the conflicts entry is a submenu shown only when conflicts exist.
+	mConflicts       *systray.MenuItem
+	mConflictsLocal  *systray.MenuItem
+	mConflictsSrv    *systray.MenuItem
+	mConflictsReview *systray.MenuItem
+	mOutbox          *systray.MenuItem
+	mLastError       *systray.MenuItem
 
 	// Settings
 	mAccountMenu  *systray.MenuItem
@@ -132,7 +138,6 @@ func (c *TrayController) buildMenu(cfg *config) {
 	systray.AddSeparator()
 	c.mSyncNow = systray.AddMenuItem("Sync now", "Run sync immediately")
 	c.mPause = systray.AddMenuItem(pauseResumeMenuTitle(cfg.SyncPaused), "Pause or resume syncing")
-	c.mDashboard = systray.AddMenuItem("Open dashboard", "Open server dashboard in browser")
 
 	systray.AddSeparator()
 	c.mGamesMenu = systray.AddMenuItem("Synced games", "Recently synced games")
@@ -147,7 +152,6 @@ func (c *TrayController) buildMenu(cfg *config) {
 		_ = c.mGamesMenu.AddSubMenuItem("(no synced games yet)", "Games appear after first sync")
 	}
 
-	systray.AddSeparator()
 	c.mDiscoveredMenu = systray.AddMenuItem("Discovered games", "Installed games matched to manifest")
 	for i := 0; i < maxDiscoveredSlots; i++ {
 		slot := c.mDiscoveredMenu.AddSubMenuItem("", "Discovered game")
@@ -157,21 +161,25 @@ func (c *TrayController) buildMenu(cfg *config) {
 	}
 	c.mAddGame = c.mDiscoveredMenu.AddSubMenuItem("Add a game manually…", "Search by name or add a save folder by path")
 	c.mRescan = c.mDiscoveredMenu.AddSubMenuItem("Rescan installed games", "Re-scan launchers and refresh manifest")
+	c.mDashboard = systray.AddMenuItem("Open dashboard ↗", "Open the server dashboard in your browser")
 
 	systray.AddSeparator()
-	c.mConflicts = systray.AddMenuItem("Conflicts: 0", "Pending sync conflicts")
-	c.mConflicts.Disable()
-	c.mConflictsLocal = systray.AddMenuItem("Conflicts: keep all local", "Push local for all conflicts")
-	c.mConflictsSrv = systray.AddMenuItem("Conflicts: use all server", "Pull server for all conflicts")
-	c.mConflictsLocal.Disable()
-	c.mConflictsSrv.Disable()
-	c.mOutbox = systray.AddMenuItem("Pending uploads: 0", "Offline upload queue")
+	// Conflicts, pending uploads, and errors all live here and stay hidden
+	// until they actually apply, so the healthy menu shows none of them. The
+	// conflict controls are grouped in one submenu that only appears when a
+	// game changed on two devices.
+	c.mConflicts = systray.AddMenuItem("Resolve conflicts", "Games changed on two devices")
+	c.mConflictsLocal = c.mConflicts.AddSubMenuItem("Keep all local files (overwrite server)", "Push the local copy for every conflict")
+	c.mConflictsSrv = c.mConflicts.AddSubMenuItem("Use all server versions (overwrite local)", "Pull the server copy for every conflict")
+	c.mConflictsReview = c.mConflicts.AddSubMenuItem("Review each in browser…", "Open the conflicts view to decide per file")
+	c.mConflicts.Hide()
+	c.mOutbox = systray.AddMenuItem("Pending uploads: 0", "Saves queued while offline — retried automatically")
 	c.mOutbox.Disable()
+	c.mOutbox.Hide()
 	c.mLastError = systray.AddMenuItem("", "Last sync error")
 	c.mLastError.Disable()
 	c.mLastError.Hide()
 
-	systray.AddSeparator()
 	// Account & Setup submenu — connection and login.
 	c.mAccountMenu = systray.AddMenuItem("Account & Setup", "Server connection and login")
 	c.mServer = c.mAccountMenu.AddSubMenuItem("Server: (not set)", "Current server URL")
@@ -278,7 +286,23 @@ func (c *TrayController) startRefreshLoop() {
 	}()
 }
 
+// gameIDAt / discoveredIDAt return a slot's game ID under refreshMu so the
+// per-slot click handlers never read a string being rewritten by a refresh.
+func (c *TrayController) gameIDAt(idx int) string {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	return c.gameIDs[idx]
+}
+
+func (c *TrayController) discoveredIDAt(idx int) string {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	return c.discoveredIDs[idx]
+}
+
 func (c *TrayController) refreshFromSnapshot() {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
 	snap := GetTraySnapshot()
 	c.applyIcon(snap)
 	systray.SetTooltip(formatTrayTooltip(snap))
@@ -341,22 +365,20 @@ func (c *TrayController) refreshFromSnapshot() {
 	}
 
 	if snap.ConflictCount > 0 {
-		c.mConflicts.SetTitle(fmt.Sprintf("Conflicts: %d", snap.ConflictCount))
-		c.mConflicts.Enable()
-		c.mConflictsLocal.Enable()
-		c.mConflictsSrv.Enable()
+		suffix := ""
+		if snap.ConflictCount != 1 {
+			suffix = "s"
+		}
+		c.mConflicts.SetTitle(fmt.Sprintf("⚠ Resolve %d conflict%s", snap.ConflictCount, suffix))
+		c.mConflicts.Show()
 	} else {
-		c.mConflicts.SetTitle("Conflicts: 0")
-		c.mConflicts.Disable()
-		c.mConflictsLocal.Disable()
-		c.mConflictsSrv.Disable()
+		c.mConflicts.Hide()
 	}
 
 	if snap.PendingUploads > 0 {
-		c.mOutbox.SetTitle(fmt.Sprintf("Pending uploads: %d", snap.PendingUploads))
+		c.mOutbox.SetTitle(fmt.Sprintf("%d upload%s pending", snap.PendingUploads, plural(snap.PendingUploads)))
 		c.mOutbox.Show()
 	} else {
-		c.mOutbox.SetTitle("Pending uploads: 0")
 		c.mOutbox.Hide()
 	}
 
@@ -491,6 +513,13 @@ func formatGameRow(g GameRow) string {
 	return prefix + title + " — " + formatAgo(g.LastSyncAt)
 }
 
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
 func formatAgo(t time.Time) string {
 	if t.IsZero() {
 		return "—"
@@ -591,6 +620,15 @@ func (c *TrayController) startClickHandlers() {
 			resolveAllConflictsUseServer()
 			refreshTrayCounts()
 			c.refreshFromSnapshot()
+		}
+	}()
+	go func() {
+		for range c.mConflictsReview.ClickedCh {
+			if url := GetSetupURL(); url != "" {
+				_ = openURL(url + "/insights")
+			} else {
+				openDashboard(c.cfg())
+			}
 		}
 	}()
 	go func() {
@@ -727,7 +765,7 @@ func (c *TrayController) startClickHandlers() {
 		idx := i
 		go func() {
 			for range slot.ClickedCh {
-				gameID := c.gameIDs[idx]
+				gameID := c.gameIDAt(idx)
 				cfg := c.cfg()
 				if gameID == "" || cfg == nil {
 					continue
@@ -750,7 +788,7 @@ func (c *TrayController) startClickHandlers() {
 		idx := i
 		go func() {
 			for range slot.ClickedCh {
-				gameID := c.discoveredIDs[idx]
+				gameID := c.discoveredIDAt(idx)
 				if gameID == "" {
 					continue
 				}

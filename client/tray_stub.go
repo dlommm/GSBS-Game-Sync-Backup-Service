@@ -1,12 +1,13 @@
-//go:build !windows && !linux
+//go:build !windows && !linux && !darwin
 
 package main
 
 import "os"
 
-// runTray is implemented on Windows (tray_windows.go) and Linux (tray_linux.go). This stub is for other OSes.
+// runTray is implemented on Windows (tray_windows.go), Linux (tray_linux.go),
+// and macOS (tray_darwin.go). This stub is for any other OS.
 func runTray() {
-	panic("tray only on Windows and Linux")
+	panic("tray only on Windows, Linux, and macOS")
 }
 
 // runLoginDialogProcess runs the GUI login dialog; only implemented on Windows.
