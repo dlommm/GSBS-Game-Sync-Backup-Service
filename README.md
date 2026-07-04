@@ -4,7 +4,9 @@
 </h1>
 
 [![CI](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/codeql.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/codeql.yml)
 [![Release](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml/badge.svg)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/gsbs/gsbs)](https://goreportcard.com/report/github.com/gsbs/gsbs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker Hub](https://img.shields.io/badge/Docker-dendlomm%2Fgsbs--server-blue)](https://hub.docker.com/r/dendlomm/gsbs-server)
 [![Latest release](https://img.shields.io/github/v/release/dlommm/GSBS--Game-Sync---Backup-Service-)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest)
@@ -18,13 +20,29 @@
 <table align="center">
   <tr>
     <td align="center" bgcolor="#4338ca">
-      <strong>🚀 GSBS v3 — Major release</strong><br>
-      S3 manifest bundle sync · full PCGW catalog in minutes, not days · far fewer API calls · sync reliability improvements
+      <strong>🚀 GSBS v4 — Major release</strong><br>
+      Zero-config setup wizard · game-aware sync (pause while playing) · built-in offsite backups + one-command restore · notifications · save export/import · end-to-end encryption upgraded to Argon2id · macOS + arm64 clients
     </td>
   </tr>
 </table>
 
-**Sync game saves across Windows and Linux.** Run a central server, install clients on each PC, and GSBS keeps saves in sync — only writing pulled files where the game is actually installed.
+**Sync game saves across Windows, Linux, and macOS.** Run a central server, install clients on each PC, and GSBS keeps saves in sync — only writing pulled files where the game is actually installed, and pausing while a game is running so it never touches a live save.
+
+### Why GSBS?
+
+| | **GSBS** | Ludusavi | Syncthing | Steam Cloud |
+|---|---|---|---|---|
+| Multi-device **live sync** | ✅ central server | ❌ local backup only | ✅ generic file sync | ✅ (Steam games only) |
+| Knows *where* each game saves | ✅ PCGamingWiki manifest | ✅ | ❌ you configure paths | ✅ (Steam only) |
+| Cross-OS path translation | ✅ Windows ↔ Linux ↔ Proton | ✅ | ❌ | n/a |
+| Version history + restore | ✅ per-file | ✅ | ⚠️ file versioning | ⚠️ limited |
+| Pause sync while playing | ✅ | n/a | ❌ | ✅ |
+| End-to-end encryption | ✅ optional (Argon2id) | ❌ | ✅ | ❌ |
+| Web dashboard | ✅ | ❌ (GUI/CLI) | ✅ | ❌ |
+| Self-hosted / your data | ✅ | ✅ | ✅ | ❌ Valve-hosted |
+| Any game (not just Steam) | ✅ | ✅ | ✅ | ❌ |
+
+GSBS is a *hosted, multi-client, versioned save-sync service* — the combination Ludusavi (local backup), Syncthing (generic P2P), and Steam Cloud (Steam-only, Valve-hosted) each cover only part of.
 
 | Dashboard | System tray |
 |-----------|-------------|
@@ -37,12 +55,10 @@
 ```bash
 git clone https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-.git
 cd GSBS--Game-Sync---Backup-Service-   # folder name matches the GitHub repo name
-cp .env.example .env
-# Edit .env — set GSBS_SESSION_SECRET (openssl rand -hex 32)
 docker compose up -d
 ```
 
-Open `https://your-domain` (via Caddy) or use [docker-compose.dev.yml](docker-compose.dev.yml) for local HTTP on port 8080. See [docs/COMPOSE.md](docs/COMPOSE.md) and [docs/INSTALL.md](docs/INSTALL.md).
+No configuration needed — GSBS generates its own secret and opens a **setup wizard** in your browser where you create the admin account. Open `https://your-domain` (via Caddy) or use [docker-compose.dev.yml](docker-compose.dev.yml) for local HTTP on port 8080. See [docs/COMPOSE.md](docs/COMPOSE.md) and [docs/INSTALL.md](docs/INSTALL.md).
 
 On first boot, fresh installs fetch the **S3 manifest bundle** automatically — the full PCGW catalog is ready in minutes, not days.
 
@@ -67,29 +83,23 @@ Register on the server WebUI, create an API token, and log in from the client. G
 
 ## Features
 
-- **Multi-user** — many users, each with multiple clients (desktop + laptop).
-- **Auto-upload** — watches save locations and uploads on change.
-- **Auto-discovery** — scans Steam, Epic, GOG, Ubisoft, Heroic, Lutris, and more against the PCGW manifest.
-- **Offline queue** — failed uploads persist and retry automatically.
-- **Pull on new client** — only writes saves where the game folder exists.
-- **OS-aware paths** — `%USERPROFILE%`, Steam libraries, Proton `compatdata`, etc.
-- **WebUI + admin** — dashboard, save versions, activity, admin overview.
-- **Client auto-update** — checks GitHub Releases; install from the tray menu.
+- **Multi-user, multi-device** — many users, each with multiple clients (desktop + laptop + Steam Deck).
+- **Game-aware sync** — detects running games and defers sync until you quit, so a live save is never touched mid-session.
+- **Auto-discovery** — scans Steam, Epic, GOG, Ubisoft, EA, Xbox, Heroic, Lutris, Bottles, Prism against the PCGamingWiki manifest.
+- **OS-aware paths** — `%USERPROFILE%`, Steam libraries, Proton `compatdata`, cross-OS Windows ↔ Linux translation.
+- **Version history + restore** — every save is versioned; restore any file from the web dashboard.
+- **End-to-end encryption** — optional client-side AES-256-GCM (Argon2id); the server only ever sees ciphertext.
+- **Built-in backups + restore** — scheduled `tar.zst` snapshots (DB + keys + saves) to local disk and/or S3, with `gsbs-server restore`.
+- **Notifications** — webhook / Discord / ntfy alerts for conflicts, quota, new devices, backups, and stale devices.
+- **Export / import** — download real save archives (per game or whole account) and re-import them anywhere.
+- **Offline queue** — failed uploads persist and retry automatically; conflicts surface in the tray.
+- **Zero-config setup** — no required env vars; a browser wizard creates the admin account on first run.
+- **Light/dark web UI + admin**, **OpenAPI spec** at `/api/openapi.json`, and a localization framework.
+- **Clients for Windows, Linux (incl. Flatpak / arm64), and macOS.**
 
-### What's new in v3
+See [CHANGELOG.md](CHANGELOG.md) for the full v4 release notes and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how conflict resolution and encryption work.
 
-**Manifest ready in minutes, not days.** Fresh installs default to **S3 manifest bundle sync** — a pre-built PCGamingWiki snapshot on public object storage (Cloudflare R2, S3-compatible). The server downloads the full catalog (~40k+ games) in one fetch instead of crawling the PCGW API page-by-page, which previously took **days** on a new server.
-
-**Far fewer PCGW API calls.** Routine updates fetch a small `index.json` version pointer first. When nothing changed, ETag/`304 Not Modified` exits in seconds with **zero** bundle download and **no** PCGW traffic. When a new version is published, the server applies only what changed via smart merge.
-
-**Other v3 highlights:**
-
-- **Encrypted save dedup** — unchanged encrypted saves no longer re-upload every sync cycle
-- **First-push overwrite guard** — prevents a fresh client from silently clobbering another machine's save
-- **Crash-safe canonical saves** — atomic disk writes when using `GSBS_SAVE_ROOT`
-- **Client manifest pagination (3.0.1)** — full catalog download for large game libraries
-
-Switch sync mode anytime in **Admin → Settings** (`s3` bundle vs direct PCGW API). See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md) and [CHANGELOG.md](CHANGELOG.md).
+The save-location manifest comes from PCGamingWiki — fresh installs pull a pre-built bundle (full ~40k-game catalog in one fetch); switch to live API sync anytime in **Admin → Settings**. See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
 
 ## Documentation
 

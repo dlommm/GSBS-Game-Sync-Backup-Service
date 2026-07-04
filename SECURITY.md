@@ -48,9 +48,9 @@ GSBS does not commit passwords, API keys, or session secrets. Use environment va
 
 ## Known limitations / roadmap
 
-Tracked hardening work, in rough priority order:
+Most of the 4.0.0 hardening backlog is now resolved. Remaining items:
 
-- **CSP allows `'unsafe-inline'` scripts** — removing it requires refactoring the WebUI's inline scripts; XSS is currently mitigated by template escaping and CSRF tokens.
-- ~~TOTP secrets are stored unencrypted in the database~~ — **fixed in 4.0.0**: sealed with AES-256-GCM under `gsbs-keys/totp.key` (kept outside the DB; back it up with the database).
-- ~~First-push overwrite guard is inactive under the default `last_write_wins` policy~~ — **fixed in 4.0.0**: the guard is always on; a new device's first push surfaces a conflict instead of overwriting. Pre-4.0 clients can additionally be covered by the opt-in *Settings → Sync Safety* server check.
-- **Windows installers are not code-signed**; verify `SHA256SUMS` from GitHub Releases.
+- **Installers and binaries are not code-signed / notarized** (Windows SmartScreen, macOS Gatekeeper) — this needs paid signing certificates. Releases ship a verifiable **build-provenance attestation** (`gh attestation verify`) and `SHA256SUMS`; download only from the official GitHub Releases.
+- **Save *content* is only protected if you enable end-to-end encryption** — otherwise the server (and its backups) hold plaintext saves. Passwords (bcrypt) and TOTP secrets (encrypted under `gsbs-keys/`) are always protected.
+
+Resolved in 4.0.0: `'unsafe-inline'` removed from the CSP (scripts and styles); TOTP secrets encrypted at rest; first-push overwrite guard always on; storage quotas enforced atomically counting version history; HTTP timeouts; server-side content-hash verification.

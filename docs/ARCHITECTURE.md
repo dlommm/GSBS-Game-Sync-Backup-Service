@@ -32,6 +32,50 @@
    - If the target directory **does not exist**, skip (game not installed).
    - If it exists, write file (and optionally backup existing).
 
+## Multi-client conflict resolution (4.0.0)
+
+Two machines can change the same save between syncs. GSBS resolves this without a central lock, using content hashes and per-slot preconditions rather than trusting clocks.
+
+**On push**, the client sends a precondition so the server never silently clobbers:
+- `X-GSBS-If-Hash: <last-known>` when it has synced this slot before → server returns **409** if its current hash differs (optimistic concurrency).
+- `X-GSBS-If-Absent: 1` on the *first* push of a slot (fresh device or cleared cache) → server returns **409** if a *different* save already exists. This guard is always on as of 4.0.0, so a new machine can no longer overwrite another's save on first contact.
+
+A 409 is recorded as a conflict on the client (tray + `conflicts.json`) and resolved by the user, not auto-picked.
+
+**On pull**, `DecidePull` compares the local file mtime against the server's `updated_at`. Because those come from *different clocks*, the client first estimates the server offset from response `Date` headers and treats timestamps within a ±2-minute window as simultaneous. The decision matrix (content differs):
+
+| Policy | local newer (outside window) | server newer (outside window) | within skew window |
+|---|---|---|---|
+| `last_write_wins` (default) | skip (keep local) | apply (take server) | **conflict** |
+| `keep_local` | skip | apply | skip |
+| `keep_server` | apply | apply | apply |
+
+Per-game overrides (`conflict_policy_overrides`) select the policy per game. Reconciliation on startup refuses to run at all if it can't fetch the server's hashes (never pushes blind).
+
+## Encryption model
+
+End-to-end encryption is **client-side and optional** (per account flag + local passphrase). The server only ever stores ciphertext and cannot read encrypted saves.
+
+- **Envelope**: AES-256-GCM. Two KDF formats coexist — legacy `v1` (PBKDF2-SHA256, 100k) with no prefix, and `v2` (`gsbs2:` prefix, Argon2id t=3/64 MiB). Clients read both formats forever.
+- **Fleet auto-negotiation**: a client writes the stronger `v2` format only once the server reports every device seen in the last 30 days runs ≥ 4.0.0 (`crypto_v2_ready`), so a mixed fleet never produces a blob an older device can't read. `crypto_v2: true/false` in the client config forces or pins the format.
+- **Hashes**: the client dedups and sends `X-Content-Hash` as the *plaintext* SHA-256. For unencrypted pushes the server verifies it against the received bytes; for encrypted pushes it can't (only ciphertext is transmitted) and stores the declared value by design.
+- **At rest on the server**: TOTP secrets are sealed with AES-256-GCM under a key file in `gsbs-keys/` (kept outside the database). Back up `gsbs-keys/` with the DB.
+
+## Threat model
+
+| Threat | Mitigation |
+|---|---|
+| Network attacker (MITM) | Deploy behind TLS (Caddy/nginx/Traefik); the server sets HSTS and marks cookies Secure when it sees HTTPS. Encrypted saves are authenticated end-to-end (AES-GCM). |
+| Stolen device token | Tokens are stored SHA-256-hashed with a 90-day expiry; revoke per-device from the Devices page; a password change revokes all other devices + sessions. |
+| Malicious / buggy client | Server validates every path (`pkg/savepath`), caps sizes, enforces quota in-transaction, and verifies the content hash for unencrypted pushes. |
+| Database file / backup exfiltration | Passwords are bcrypt; TOTP secrets are encrypted under `gsbs-keys/` (not in the DB). Save *content* is only protected if the user enabled E2E encryption. |
+| Quota abuse / storage exhaustion | Per-user and global limits count version history and are enforced inside the write transaction; a disk-free preflight returns 507 before writing. |
+| Cross-user access | Every save/version query is scoped by `user_id`; admin vs user is role-gated. |
+| Brute force | Per-IP rate limiting on password login, TOTP verify, and registration; single-use TOTP codes. |
+| SSRF via cover proxy | The cover fetcher only contacts the fixed Steam CDN and an allowlist of PCGW image hosts, with numeric IDs and size/type caps. |
+
+Residual (documented) gaps: unsigned installers/binaries (needs paid signing), and save content is unprotected unless the user opts into E2E encryption.
+
 ## Path resolution
 
 - **Placeholders** (from PCGW or config):
