@@ -89,6 +89,14 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
+# --- Ad-hoc sign the bundle (free, no Apple account). A completely unsigned
+# bundle makes quarantined downloads fail with the dead-end "GSBS is damaged"
+# dialog; an ad-hoc-signed, sealed bundle gets the softer "can't verify the
+# developer" flow with a working Open Anyway path instead. Still not
+# notarization — the one-time Gatekeeper approval remains documented.
+codesign --force --deep --sign - "$APP"
+codesign --verify --deep --strict "$APP"
+
 # --- Stage the DMG contents: the .app + a drag target to /Applications ---
 STAGE="${WORK}/dmg"
 mkdir -p "$STAGE"
