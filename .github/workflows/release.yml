@@ -100,17 +100,21 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.tag }}
           COMMIT: ${{ github.sha }}
-        run: ./script/build.sh "$VERSION" dist linux-amd64
+        run: ./script/build.sh "$VERSION" dist linux-amd64,linux-arm64
       - name: Install nfpm
         run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.41.1
-      - name: Build .deb
+      - name: Build .deb (amd64 + arm64)
         env:
           VERSION: ${{ needs.version.outputs.tag }}
-        run: ./script/packaging/linux/build-deb.sh dist "$VERSION"
-      - name: Build AppImage
+        run: |
+          ./script/packaging/linux/build-deb.sh dist "$VERSION" amd64
+          ./script/packaging/linux/build-deb.sh dist "$VERSION" arm64
+      - name: Build AppImage (amd64 + arm64)
         env:
           VERSION: ${{ needs.version.outputs.tag }}
-        run: ./script/packaging/linux/build-appimage.sh dist "$VERSION"
+        run: |
+          ./script/packaging/linux/build-appimage.sh dist "$VERSION" amd64
+          ./script/packaging/linux/build-appimage.sh dist "$VERSION" arm64
       - name: Verify AppImage in dist
         run: test -f "dist/gsbs-client-${{ needs.version.outputs.value }}-x86_64.AppImage"
       - name: Generate release manifests
@@ -125,10 +129,44 @@ jobs:
           path: |
             dist/gsbs-server-linux-amd64
             dist/gsbs-client-linux-amd64
+            dist/gsbs-client-linux-arm64
             dist/gsbs-client_*.deb
             dist/gsbs-client-${{ needs.version.outputs.value }}-x86_64.AppImage
+            dist/gsbs-client-${{ needs.version.outputs.value }}-aarch64.AppImage
             dist/SHA256SUMS
             dist/latest-client.json
+
+  build-macos:
+    needs: [version, test, lint]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Build macOS binaries (native cgo; unsigned)
+        env:
+          VERSION: ${{ needs.version.outputs.tag }}
+          COMMIT: ${{ github.sha }}
+        run: ./script/build.sh "$VERSION" dist darwin-arm64,darwin-amd64
+      - name: Package tarballs
+        run: |
+          cd dist
+          for arch in arm64 amd64; do
+            tar -czf "gsbs-client-darwin-${arch}.tar.gz" "gsbs-client-darwin-${arch}"
+            tar -czf "gsbs-server-darwin-${arch}.tar.gz" "gsbs-server-darwin-${arch}"
+          done
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-macos
+          path: |
+            dist/gsbs-client-darwin-*.tar.gz
+            dist/gsbs-server-darwin-*.tar.gz
 
   build-windows:
     needs: [version, test, lint]
@@ -280,7 +318,7 @@ jobs:
             COMMIT=${{ github.sha }}
 
   release:
-    needs: [version, build-linux, build-windows, docker]
+    needs: [version, build-linux, build-windows, build-macos, docker]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -297,6 +335,11 @@ jobs:
         uses: actions/download-artifact@v6
         with:
           name: release-windows
+          path: dist
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v6
+        with:
+          name: release-macos
           path: dist
       - name: Merge SHA256SUMS and latest-client.json
         env:
@@ -331,10 +374,16 @@ jobs:
             dist/gsbs-client-windows-amd64.exe
             dist/gsbs-server-linux-amd64
             dist/gsbs-client-linux-amd64
+            dist/gsbs-client-linux-arm64
+            dist/gsbs-client-darwin-arm64.tar.gz
+            dist/gsbs-client-darwin-amd64.tar.gz
+            dist/gsbs-server-darwin-arm64.tar.gz
+            dist/gsbs-server-darwin-amd64.tar.gz
             dist/gsbs-client-setup-*.exe
             dist/gsbs-server-setup-*.exe
             dist/gsbs-client_*.deb
             dist/gsbs-client-${{ needs.version.outputs.value }}-x86_64.AppImage
+            dist/gsbs-client-${{ needs.version.outputs.value }}-aarch64.AppImage
             dist/SHA256SUMS
             dist/latest-client.json
             dist/gsbs-*.sbom.spdx.json

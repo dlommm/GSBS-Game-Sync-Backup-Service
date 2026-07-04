@@ -92,10 +92,24 @@ Requires AppIndicator/tray support on your desktop (see [CLIENT.md](CLIENT.md)).
 ### Linux — raw binary
 
 ```bash
-chmod +x gsbs-client-linux-amd64
+chmod +x gsbs-client-linux-amd64     # or gsbs-client-linux-arm64 on ARM
 ./gsbs-client-linux-amd64 login
 ./gsbs-client-linux-amd64
 ```
+
+### macOS
+
+```bash
+# Apple Silicon: gsbs-client-darwin-arm64.tar.gz — Intel: gsbs-client-darwin-amd64.tar.gz
+tar -xzf gsbs-client-darwin-arm64.tar.gz
+xattr -d com.apple.quarantine gsbs-client-darwin-arm64   # clear the Gatekeeper flag (unsigned build)
+./gsbs-client-darwin-arm64 login
+./gsbs-client-darwin-arm64
+```
+
+The tray menu's **Run at startup** installs a per-user LaunchAgent (`~/Library/LaunchAgents/io.github.dlommm.GSBS.plist`). Updates are manual on macOS (download the newer tarball); the in-app self-updater is Windows/Linux only.
+
+> **Gatekeeper:** macOS binaries are not notarized (that needs a paid Apple Developer account). If Gatekeeper blocks the app, run the `xattr -d com.apple.quarantine …` command above, or right-click the binary in Finder → **Open** the first time. Download only from the official [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest).
 
 ## First run
 

@@ -96,6 +96,19 @@ jobs:
           BUILD_WEBUI: "0"
         run: ./script/build.sh "$VERSION" dist linux-amd64
 
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: Build macOS client + server (native cgo)
+        run: |
+          go build -o /dev/null ./client
+          go build -o /dev/null ./server
+
   build-windows:
     runs-on: windows-latest
     steps:

@@ -118,11 +118,25 @@ build_linux() {
 
 build_darwin() {
   local arch="$1"
-  export GOOS=darwin GOARCH="$arch" CGO_ENABLED=0
+  # The macOS systray uses AppKit via cgo, and go-sqlite3 needs cgo too, so the
+  # darwin binaries must be built natively on a macOS host (no cross-compile).
+  if [ "$HOST_GOOS" != "darwin" ]; then
+    echo "Skipping darwin-${arch} (must build on a macOS host; use the macos CI runner)"
+    return 0
+  fi
+  export GOOS=darwin GOARCH="$arch" CGO_ENABLED=1
   go build -trimpath -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-server-darwin-${arch}" ./server
   echo "Built gsbs-server-darwin-${arch}"
   go build -trimpath -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-client-darwin-${arch}" ./client
   echo "Built gsbs-client-darwin-${arch}"
+}
+
+build_linux_arm64() {
+  # The Linux client is pure Go (D-Bus tray), so it cross-compiles cleanly.
+  # The server stays Docker-multiarch (cgo go-sqlite3); we ship the client here.
+  export GOOS=linux GOARCH=arm64 CGO_ENABLED=0
+  go build -trimpath -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-client-linux-arm64" ./client
+  echo "Built gsbs-client-linux-arm64"
 }
 
 if want_platform windows-amd64; then
@@ -131,6 +145,10 @@ fi
 
 if want_platform linux-amd64; then
   build_linux
+fi
+
+if want_platform linux-arm64; then
+  build_linux_arm64
 fi
 
 if want_platform darwin-amd64; then
