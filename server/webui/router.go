@@ -196,6 +196,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleAdminSettingsSave(w, r)
 	case path == "/admin/covers/clear" && r.Method == http.MethodPost:
 		h.handleClearCoverCache(w, r)
+	case path == "/admin/integrity/run" && r.Method == http.MethodPost:
+		h.handleAdminIntegrityRun(w, r)
 	case path == "/admin/pcgw/source" && r.Method == http.MethodPost:
 		h.handleAdminChooseSource(w, r)
 	case path == "/admin/analytics" && r.Method == http.MethodGet:

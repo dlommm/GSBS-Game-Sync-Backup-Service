@@ -8,8 +8,17 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 Major release: full-project security & reliability audit fixes plus new flagship features. One startup behavior change (see **Upgrade note** below).
 
+### Added
+
+- **Weekly data-integrity verification.** A new `integrity_check` job re-hashes every stored save against its recorded checksum and reports problems (hash mismatch, missing file, unreadable file) on the admin overview, with a "Verify now" button. Client-encrypted saves are skipped — the server cannot read them by design. Findings clear automatically once a slot verifies clean again.
+- **History pruning.** The audit log, manifest-fetch log, and stats snapshots are now pruned on a daily schedule (defaults: 180 / 30 / 730 days; `GSBS_AUDIT_RETENTION_DAYS`, `GSBS_MANIFEST_FETCH_RETENTION_DAYS`, `GSBS_STATS_RETENTION_DAYS`, `0` = keep forever). Optional age-based save-version pruning via `GSBS_SAVE_VERSION_MAX_AGE_DAYS` (off by default; always keeps the newest 3 versions per file).
+- **Server log rotation.** File logging (`GSBS_LOG_FILE`/`GSBS_SERVICE_LOG_PATH`) now rotates by size — 20 MiB × 3 backups by default, tunable via `GSBS_LOG_MAX_BYTES` / `GSBS_LOG_MAX_BACKUPS` (`GSBS_LOG_MAX_BYTES=0` restores unbounded append).
+- **Disk-full protection.** Pushes are refused with HTTP 507 *before* any bytes are written when the storage volume is nearly full (free space < 2× payload + 256 MiB). Clients queue the save in their offline outbox and retry automatically.
+- Dashboard: the storage gauge now reflects total stored bytes **including version history** (what the quota actually enforces), with a warning banner at 80% and when over quota.
+
 ### Security
 
+- **Storage quotas are now real limits.** Enforcement moved inside the database write transaction (concurrent pushes can no longer race past the limit) and usage now counts version history — previously only current saves counted, so real disk use could reach ~8× the configured quota. Users already over the new accounting are grandfathered: their saves keep syncing as long as usage does not grow; only growth is blocked.
 - **WebUI two-factor (TOTP) verification and registration are now rate-limited** with the same per-IP limiter as password login. Previously an attacker who knew the password could brute-force the 6-digit code without throttling, and open registration could be spammed.
 - **`GSBS_SESSION_SECRET` strength is now enforced at startup**: the server refuses to start with a secret shorter than 32 characters or a known placeholder value. For local development only, set `GSBS_INSECURE_DEV_SECRET=1` to bypass (the dev compose file does this automatically).
 - The auto-generated `/metrics` bearer token is no longer written to the log in cleartext — only a SHA-256 fingerprint prefix is logged. Set `GSBS_METRICS_TOKEN` explicitly to scrape metrics.
@@ -18,6 +27,7 @@ Major release: full-project security & reliability audit fixes plus new flagship
 
 ### Fixed
 
+- **A failed database transaction can no longer destroy a save file** (filesystem storage mode). New content is staged beside the canonical file and only renamed into place after the transaction commits; previously the old save was overwritten first and then deleted on rollback, losing the last good copy. Orphaned staging files are swept at startup.
 - **Client save writes are now crash/power-loss durable**: pulled saves, conflict records, the offline outbox, and the push hash cache are fsynced before the atomic rename. Previously a power cut at the wrong moment could leave a truncated or empty file.
 - **Locked-file detection on Windows now checks the OS error code** (`ERROR_SHARING_VIOLATION`/`ERROR_LOCK_VIOLATION`) instead of matching English error text, so saves locked by a running game are correctly queued to the outbox on localized Windows installs.
 - Pulls for legacy server rows that lack a content hash now respect the configured conflict policy instead of silently overwriting the local file.
@@ -31,6 +41,8 @@ Major release: full-project security & reliability audit fixes plus new flagship
 ### Upgrade note
 
 - Deployments using a `GSBS_SESSION_SECRET` shorter than 32 characters will not start after upgrading until the secret is replaced (`openssl rand -base64 32`). Rotating the secret logs out active WebUI sessions; API clients are unaffected.
+- **Storage usage will appear higher after upgrading** — quotas now count version history (up to `GSBS_SAVE_VERSION_RETENTION` ≈ 8 copies per file), which better reflects real disk use. Nobody loses data and existing over-quota users keep syncing (shrink/replace allowed, growth blocked); raise quotas or lower version retention if users hit limits unexpectedly.
+- History tables are pruned by default from this release (audit 180 days, manifest fetches 30, stats snapshots 730). Set the corresponding `GSBS_*_RETENTION_DAYS` variable to `0` to keep records forever.
 
 ## [3.2.3] - 2026-06-26
 

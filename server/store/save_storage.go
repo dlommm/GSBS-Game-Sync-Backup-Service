@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -114,61 +115,125 @@ func (s *sqliteStore) readSaveContent(storagePath sql.NullString, content []byte
 	return content, nil
 }
 
-func (s *sqliteStore) writeSaveToFilesystem(ctx context.Context, userID, gameID, relPath string, content []byte) (string, error) {
+// stageSaveWrite prepares a save write without touching the canonical file:
+// it resolves the final path, ensures the directories exist, and stages the
+// fsync'd content in a temp file beside it. The canonical file is replaced
+// only by promoteStagedFile after the accompanying DB transaction commits,
+// so a failed transaction can never destroy the previous good save.
+func (s *sqliteStore) stageSaveWrite(ctx context.Context, userID, gameID, relPath string, content []byte) (tmpPath, finalPath string, err error) {
 	if err := s.EnsureUserStorage(ctx, userID); err != nil {
-		return "", err
+		return "", "", err
 	}
 	absPath, err := savepath.JoinUserGamePath(s.saveRoot, userID, gameID, relPath)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o750); err != nil {
-		return "", err
+		return "", "", err
 	}
-	if err := atomicWriteFileSync(absPath, content, 0o640); err != nil {
-		return "", err
+	tmp, err := stageTempFile(filepath.Dir(absPath), content)
+	if err != nil {
+		return "", "", err
 	}
-	return absPath, nil
+	return tmp, absPath, nil
 }
 
-// atomicWriteFile writes content to a temp file in the same directory, fsyncs
-// it, then atomically renames it into place and fsyncs the parent directory.
-// This guarantees a reader never observes a torn or partial canonical save:
-// after a crash or power loss the destination is either the old bytes or the
-// complete new bytes, never a truncated mix. The destination directory is
-// assumed to already exist.
-func atomicWriteFileSync(path string, content []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
+// stageTempFile writes content to an fsync'd temp file inside dir and returns
+// its path. The data is durable but not yet visible under any canonical name;
+// pair with promoteStagedFile, or os.Remove to discard.
+func stageTempFile(dir string, content []byte) (string, error) {
 	tmp, err := os.CreateTemp(dir, ".gsbs-*.tmp")
 	if err != nil {
-		return err
+		return "", err
 	}
 	tmpName := tmp.Name()
-	// Best-effort cleanup if we fail before the rename; a no-op once renamed.
-	defer func() { _ = os.Remove(tmpName) }()
 	if _, err := tmp.Write(content); err != nil {
 		_ = tmp.Close()
-		return err
+		_ = os.Remove(tmpName)
+		return "", err
 	}
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
-		return err
+		_ = os.Remove(tmpName)
+		return "", err
 	}
 	if err := tmp.Close(); err != nil {
-		return err
+		_ = os.Remove(tmpName)
+		return "", err
 	}
+	return tmpName, nil
+}
+
+// promoteStagedFile atomically renames a staged temp file onto path and
+// fsyncs the parent directory so the rename survives a crash. After a crash
+// or power loss the destination is either the old bytes or the complete new
+// bytes, never a truncated mix.
+func promoteStagedFile(tmpName, path string, perm os.FileMode) error {
 	if err := os.Chmod(tmpName, perm); err != nil {
 		return err
 	}
 	if err := os.Rename(tmpName, path); err != nil {
 		return err
 	}
-	// fsync the parent directory so the rename itself survives a crash.
-	if d, derr := os.Open(dir); derr == nil {
+	if d, derr := os.Open(filepath.Dir(path)); derr == nil {
 		_ = d.Sync()
 		_ = d.Close()
 	}
 	return nil
+}
+
+// atomicWriteFileSync is stage+promote in one step, for writes that carry no
+// DB transaction (blob migration and similar).
+func atomicWriteFileSync(path string, content []byte, perm os.FileMode) error {
+	tmpName, err := stageTempFile(filepath.Dir(path), content)
+	if err != nil {
+		return err
+	}
+	if err := promoteStagedFile(tmpName, path, perm); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
+}
+
+// sweepStagedTempFiles removes orphaned staged temp files (".gsbs-*.tmp")
+// left under the save root by a crash between staging and promotion. Called
+// once at startup, before the server accepts writes.
+func (s *sqliteStore) sweepStagedTempFiles() {
+	if !s.filesystemEnabled() {
+		return
+	}
+	var removed int
+	_ = filepath.WalkDir(s.saveRoot, func(path string, d iofs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		name := d.Name()
+		if strings.HasPrefix(name, ".gsbs-") && strings.HasSuffix(name, ".tmp") {
+			if os.Remove(path) == nil {
+				removed++
+			}
+		}
+		return nil
+	})
+	if removed > 0 {
+		logx.Logger().Info().Str("component", "store").Int("count", removed).Str("save_root", s.saveRoot).
+			Msg("GSBS: removed orphaned staged save temp file(s)")
+	}
+}
+
+// FreeSpaceForWrites reports free bytes on the volume that receives save
+// writes: the save root in filesystem mode, otherwise the database directory.
+// Returns -1 for in-memory databases (no meaningful volume).
+func (s *sqliteStore) FreeSpaceForWrites() (int64, error) {
+	target := s.saveRoot
+	if target == "" {
+		if isInMemoryPath(s.dbPath) {
+			return -1, nil
+		}
+		target = filepath.Dir(s.dbPath)
+	}
+	return freeDiskBytes(target)
 }
 
 func removeSaveFile(storagePath string) {

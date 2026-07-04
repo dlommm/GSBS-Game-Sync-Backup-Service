@@ -10,14 +10,23 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 Major release: security & reliability audit fixes plus new flagship features.
 
+### Added
+
+- Weekly **data-integrity verification** job with admin overview findings + "Verify now" (encrypted saves are skipped by design).
+- **History pruning** (audit log 180d, manifest fetches 30d, stats snapshots 730d; `GSBS_*_RETENTION_DAYS`, `0` = forever) and optional age-based save-version pruning (`GSBS_SAVE_VERSION_MAX_AGE_DAYS`, keeps newest 3 per file).
+- **Server log rotation** (20 MiB × 3 by default; `GSBS_LOG_MAX_BYTES` / `GSBS_LOG_MAX_BACKUPS`).
+- **Disk-full protection**: pushes get HTTP 507 before any bytes land when the volume is nearly full; clients retry from their outbox.
+
 ### Security
 
+- **Storage quotas are now real limits**: enforced atomically inside the write transaction and counting version history. Over-quota users are grandfathered (shrink/replace allowed, growth blocked). Dashboards show the new usage figure with 80%/over warnings. See [Upgrading](Upgrading).
 - WebUI two-factor (TOTP) verification and registration are now rate-limited like password login.
 - `GSBS_SESSION_SECRET` must be at least 32 characters and not a placeholder — the server refuses to start otherwise (`GSBS_INSECURE_DEV_SECRET=1` bypasses for local development). See [Upgrading](Upgrading).
 - The auto-generated `/metrics` token is no longer logged in cleartext; compose files gained `no-new-privileges` and resource limits.
 
 ### Fixed
 
+- A failed database transaction can no longer destroy a save file in filesystem storage mode (content is staged and only promoted after commit).
 - Client save writes (pulled saves, outbox, conflict records) are now fsynced before the atomic rename — durable across power loss.
 - Locked-file detection on Windows uses the OS error code, so it works on localized (non-English) Windows.
 - Pulls for legacy server rows without a content hash now respect the conflict policy instead of overwriting the local file.

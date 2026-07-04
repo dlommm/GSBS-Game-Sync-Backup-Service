@@ -79,6 +79,46 @@
   </div>
 </section>
 
+<section class="panel panel-compact" aria-label="Data integrity">
+  <div class="panel-header">
+    <h2>Data Integrity
+      {{if gt .IntegrityCount 0}}<span class="badge-warn">{{.IntegrityCount}} problem{{if ne .IntegrityCount 1}}s{{end}}</span>
+      {{else}}<span class="badge-success">Healthy</span>{{end}}
+    </h2>
+    <form method="POST" action="/admin/integrity/run">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit" class="btn btn-secondary btn-sm" {{if .IntegrityRunning}}disabled{{end}}>
+        {{if .IntegrityRunning}}Verifying&hellip;{{else}}Verify now{{end}}
+      </button>
+    </form>
+  </div>
+  <div class="panel-body">
+    <p class="cell-muted" style="margin:0;">
+      Weekly job that re-hashes every stored save against its recorded checksum (client-encrypted saves are skipped — the server cannot read them).
+      {{if .IntegrityLastRun}}Last run: {{.IntegrityLastRun.StartedAt}} ({{.IntegrityLastRun.Status}}).{{else}}Not run yet.{{end}}
+    </p>
+    {{if .IntegrityFindings}}
+    <div class="table-wrap" style="margin-top:.75rem;">
+      <table class="data-table">
+        <thead><tr><th>Found</th><th>User</th><th>Game</th><th>File</th><th>Problem</th></tr></thead>
+        <tbody>
+        {{range .IntegrityFindings}}
+          <tr>
+            <td>{{.At}}</td>
+            <td>{{if .Username}}{{.Username}}{{else}}{{.UserID}}{{end}}</td>
+            <td>{{.GameID}}</td>
+            <td class="cell-muted">{{.PathKey}}</td>
+            <td><span class="badge-warn">{{.Kind}}</span></td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+    <p class="cell-muted" style="margin:.5rem 0 0;">Restore an affected save from its version history, or delete the slot and let the client push a fresh copy.</p>
+    {{end}}
+  </div>
+</section>
+
 <section class="panel" id="admin-jobs-panel"
          hx-get="/admin/partial/jobs?context=overview"
          hx-trigger="load, job-finished from:body, job-progress from:body"

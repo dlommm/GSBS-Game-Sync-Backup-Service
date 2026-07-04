@@ -19,7 +19,13 @@
 | `GSBS_MAX_STORAGE_BYTES` | (unlimited) | Global storage limit in bytes; 0 = unlimited |
 | `GSBS_READ_ONLY` | `false` | Set `true` to disable push and delete (pull and read still work) |
 | `GSBS_SAVE_VERSION_RETENTION` | `8` | Save versions kept per slot (recommended 5–10) |
+| `GSBS_SAVE_VERSION_MAX_AGE_DAYS` | `0` | Also delete versions older than this many days (0 = off). The newest 3 versions per file always survive |
+| `GSBS_AUDIT_RETENTION_DAYS` | `180` | Days of audit-log history kept (pruned daily at 03:30; 0 = keep forever) |
+| `GSBS_MANIFEST_FETCH_RETENTION_DAYS` | `30` | Days of manifest-fetch log kept (0 = keep forever) |
+| `GSBS_STATS_RETENTION_DAYS` | `730` | Days of stats snapshots kept (0 = keep forever) |
 | `GSBS_LOG_LEVEL` | `info` | Structured log level: `debug`, `info`, `warn`, `error` |
+| `GSBS_LOG_MAX_BYTES` | `20971520` | Rotate the server log file at this size in bytes (0 = never rotate) |
+| `GSBS_LOG_MAX_BACKUPS` | `3` | Rotated log files kept (`server.log.1` … `.N`) |
 | `GSBS_SERVICE_LOG_PATH` | `C:\ProgramData\GSBS\logs\server.log` (Windows service mode) | Preferred file path for server logs (used by service mode and by console mode when set) |
 | `GSBS_LOG_FILE` | (unset) | Legacy/compatibility file path for server logs when `GSBS_SERVICE_LOG_PATH` is not set |
 | `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token lifetime (default 90 days) |

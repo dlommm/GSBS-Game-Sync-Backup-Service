@@ -41,7 +41,10 @@ func ConfiguredLogFilePath() (path, sourceEnv string) {
 	return "", ""
 }
 
-// InitFile configures logging to append JSON logs to the given file path.
+// InitFile configures logging to write JSON logs to the given file path with
+// size-based rotation (defaults 20 MiB / 3 backups; GSBS_LOG_MAX_BYTES and
+// GSBS_LOG_MAX_BACKUPS override, GSBS_LOG_MAX_BYTES=0 restores the legacy
+// unbounded append).
 func InitFile(path string) error {
 	if strings.TrimSpace(path) == "" {
 		return os.ErrInvalid
@@ -49,6 +52,14 @@ func InitFile(path string) error {
 	clean := filepath.Clean(path)
 	if err := os.MkdirAll(filepath.Dir(clean), 0o755); err != nil {
 		return err
+	}
+	if maxBytes, backups, rotate := rotationConfigFromEnv(); rotate {
+		w, err := newRotatingWriter(clean, maxBytes, backups)
+		if err != nil {
+			return err
+		}
+		initWithWriter(w, w)
+		return nil
 	}
 	f, err := os.OpenFile(clean, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {

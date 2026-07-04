@@ -12,15 +12,20 @@
 </section>
 {{if gt .QuotaBytes 0}}
 <section class="storage-hero" aria-label="Storage overview">
-  <div class="storage-hero-gauge" aria-hidden="true">{{gaugeSVG .Stats.TotalBytes .QuotaBytes 168 104}}</div>
+  <div class="storage-hero-gauge" aria-hidden="true">{{gaugeSVG .Stats.UsageBytes .QuotaBytes 168 104}}</div>
   <div class="storage-hero-info">
-    <div class="storage-hero-label">Storage used</div>
-    <div class="storage-hero-value">{{formatBytes .Stats.TotalBytes}} <span>/ {{formatBytes .QuotaBytes}}</span></div>
+    <div class="storage-hero-label">Storage used (including version history)</div>
+    <div class="storage-hero-value">{{formatBytes .Stats.UsageBytes}} <span>/ {{formatBytes .QuotaBytes}}</span></div>
     <div class="quota-bar-track storage-hero-bar">
-      <div class="quota-bar-fill {{quotaBarClass .Stats.TotalBytes .QuotaBytes}}" style="width:{{printf "%.1f" (percent .Stats.TotalBytes .QuotaBytes)}}%;"></div>
+      <div class="quota-bar-fill {{quotaBarClass .Stats.UsageBytes .QuotaBytes}}" style="width:{{printf "%.1f" (percent .Stats.UsageBytes .QuotaBytes)}}%;"></div>
     </div>
   </div>
 </section>
+{{if gt .Stats.UsageBytes .QuotaBytes}}
+<div class="notice notice-warn" role="alert">Storage quota exceeded — new save uploads are blocked until usage drops. Delete old games or versions, or ask your admin to raise the quota. Existing saves keep syncing when they shrink or stay the same size.</div>
+{{else if ge (percent .Stats.UsageBytes .QuotaBytes) 80.0}}
+<div class="notice notice-warn" role="alert">Storage {{printf "%.0f" (percent .Stats.UsageBytes .QuotaBytes)}}% full. Quota counts your saves plus their version history; free space by deleting old games or lowering version retention.</div>
+{{end}}
 {{end}}
 {{end}}
 {{end}}

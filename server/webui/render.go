@@ -43,8 +43,9 @@ type dashboardStats struct {
 	ClientCount int
 	SaveCount   int
 	GameCount   int
-	TotalBytes  int64
-	StoreError  bool // true when any store call failed; template renders an error notice
+	TotalBytes  int64 // current saves only (what the stat card shows)
+	UsageBytes  int64 // saves + retained version history (what quotas enforce against)
+	StoreError  bool  // true when any store call failed; template renders an error notice
 }
 
 type saveVersionsData struct {
@@ -155,6 +156,11 @@ type adminOverviewData struct {
 	// (prebuilt bundle vs live PCGW API) when none has been explicitly chosen.
 	ShowSourcePrompt bool
 	Version          string
+	// Blob-integrity verification (weekly job + manual trigger).
+	IntegrityFindings []store.IntegrityFinding
+	IntegrityCount    int
+	IntegrityRunning  bool
+	IntegrityLastRun  *store.JobRun
 }
 
 type adminUsersData struct {

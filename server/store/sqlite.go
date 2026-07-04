@@ -42,7 +42,11 @@ func NewSQLite(path string) (Store, error) {
 	// For in-memory databases (:memory:) each SQLite connection gets its own separate
 	// database, so multiple open connections would create multiple isolated DBs. Pin
 	// to a single connection so migration and subsequent queries always see the same DB.
-	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000")
+	// _txlock=immediate makes BeginTx take the write lock up front, so
+	// read-then-write transactions (quota check, version numbering) serialize
+	// behind busy_timeout instead of failing mid-flight with a
+	// SQLITE_BUSY_SNAPSHOT lock upgrade under concurrent writers.
+	db, err := sql.Open("sqlite3", path+"?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate")
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +67,9 @@ func NewSQLite(path string) (Store, error) {
 				Msg("GSBS: blob-to-filesystem migration failed")
 		}
 	}
+	// Discard staged save temp files orphaned by a crash between staging and
+	// promotion (see UpsertSaveWithMeta); runs before any writes are accepted.
+	s.sweepStagedTempFiles()
 	return s, nil
 }
 
@@ -614,30 +621,49 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 			return false, fmt.Errorf("relative path required when GSBS_SAVE_ROOT is set")
 		}
 	}
-	var storagePath string
+	var storagePath, stagedTmp, oldStorage string
 	var dbContent interface{} = content
 	if s.filesystemEnabled() {
-		var oldStorage sql.NullString
+		var old sql.NullString
 		_ = s.db.QueryRowContext(ctx,
 			`SELECT storage_path FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
 			userID, gameID, pathKey,
-		).Scan(&oldStorage)
-		storagePath, err = s.writeSaveToFilesystem(ctx, userID, gameID, relPath, content)
+		).Scan(&old)
+		oldStorage = old.String
+		// Stage beside the canonical file; it is promoted (renamed into
+		// place) only after the transaction commits, so no error path below
+		// can destroy the previous good save. The deferred remove discards
+		// the staged bytes on every non-promoted return.
+		stagedTmp, storagePath, err = s.stageSaveWrite(ctx, userID, gameID, relPath, content)
 		if err != nil {
 			return false, err
 		}
-		if oldStorage.Valid && oldStorage.String != "" && oldStorage.String != storagePath {
-			removeSaveFile(oldStorage.String)
-		}
+		defer func() {
+			if stagedTmp != "" {
+				_ = os.Remove(stagedTmp)
+			}
+		}()
 		dbContent = nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		if s.filesystemEnabled() && storagePath != "" {
-			removeSaveFile(storagePath)
-		}
 		return false, err
+	}
+	enforceQuota := meta != nil && meta.QuotaBytes > 0
+	enforceGlobal := meta != nil && meta.GlobalLimitBytes > 0
+	var preUsage, preTotal int64
+	if enforceQuota {
+		if preUsage, err = userStorageUsage(ctx, tx, userID); err != nil {
+			_ = tx.Rollback()
+			return false, err
+		}
+	}
+	if enforceGlobal {
+		if preTotal, err = totalStorageUsage(ctx, tx); err != nil {
+			_ = tx.Rollback()
+			return false, err
+		}
 	}
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO saves (user_id, game_id, path_key, content, relative_path, storage_path, updated_at, content_hash, content_size, client_id, encrypted)
@@ -650,9 +676,6 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 	)
 	if err != nil {
 		_ = tx.Rollback()
-		if s.filesystemEnabled() && storagePath != "" {
-			removeSaveFile(storagePath)
-		}
 		return false, err
 	}
 	var nextVer int
@@ -698,8 +721,51 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 			userID, gameID, pathKey, cutoff.Int64,
 		)
 	}
+	// Quota is enforced after all writes and pruning inside this transaction,
+	// so the projected usage is exact and concurrent pushes serialize on
+	// SQLite's single writer — no check-then-write race. Grandfathering: a
+	// user already over the limit is only blocked from growing (post > pre),
+	// never from shrinking or replacing.
+	if enforceQuota {
+		postUsage, uerr := userStorageUsage(ctx, tx, userID)
+		if uerr != nil {
+			_ = tx.Rollback()
+			return false, uerr
+		}
+		if postUsage > meta.QuotaBytes && postUsage > preUsage {
+			_ = tx.Rollback()
+			return false, ErrQuotaExceeded
+		}
+	}
+	if enforceGlobal {
+		postTotal, terr := totalStorageUsage(ctx, tx)
+		if terr != nil {
+			_ = tx.Rollback()
+			return false, terr
+		}
+		if postTotal > meta.GlobalLimitBytes && postTotal > preTotal {
+			_ = tx.Rollback()
+			return false, ErrGlobalLimitExceeded
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return false, err
+	}
+	if stagedTmp != "" {
+		if perr := promoteStagedFile(stagedTmp, storagePath, 0o640); perr != nil {
+			// The row is committed but the canonical file still holds the
+			// previous bytes, so the stored hash disagrees with the file
+			// until the next successful push. Loud log so operators notice;
+			// the deferred remove cleans up the staged temp.
+			logx.Logger().Error().Str("component", "store").Str("user_id", userID).Str("game_id", gameID).
+				Str("path_key", pathKey).Str("path", storagePath).Err(perr).
+				Msg("GSBS: failed to promote staged save after commit; canonical file is stale")
+		} else {
+			stagedTmp = ""
+			if oldStorage != "" && oldStorage != storagePath {
+				removeSaveFile(oldStorage)
+			}
+		}
 	}
 	return false, nil
 }
@@ -1389,6 +1455,102 @@ func (s *sqliteStore) UserStorageBytes(ctx context.Context, userID string) (int6
 		`SELECT COALESCE(SUM(COALESCE(content_size, LENGTH(content), 0)), 0) FROM saves WHERE user_id = ?`, userID,
 	).Scan(&n)
 	return n, err
+}
+
+// Usage = current saves (file/blob bytes) + retained version history (always
+// stored as DB blobs). Both terms are real disk footprint, so this is what
+// quotas enforce against.
+const userUsageSQL = `SELECT
+	COALESCE((SELECT SUM(COALESCE(content_size, LENGTH(content), 0)) FROM saves WHERE user_id = ?), 0)
+  + COALESCE((SELECT SUM(LENGTH(content)) FROM save_versions WHERE user_id = ?), 0)`
+
+const totalUsageSQL = `SELECT
+	COALESCE((SELECT SUM(COALESCE(content_size, LENGTH(content), 0)) FROM saves), 0)
+  + COALESCE((SELECT SUM(LENGTH(content)) FROM save_versions), 0)`
+
+// queryRower is satisfied by both *sql.DB and *sql.Tx so the usage queries
+// can run standalone or inside the quota-enforcing write transaction.
+type queryRower interface {
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+}
+
+func userStorageUsage(ctx context.Context, q queryRower, userID string) (int64, error) {
+	var n int64
+	err := q.QueryRowContext(ctx, userUsageSQL, userID, userID).Scan(&n)
+	return n, err
+}
+
+func totalStorageUsage(ctx context.Context, q queryRower) (int64, error) {
+	var n int64
+	err := q.QueryRowContext(ctx, totalUsageSQL).Scan(&n)
+	return n, err
+}
+
+// StorageUsage returns the user's total stored bytes including version history.
+func (s *sqliteStore) StorageUsage(ctx context.Context, userID string) (int64, error) {
+	return userStorageUsage(ctx, s.db, userID)
+}
+
+// TotalStorageUsage returns total stored bytes including version history.
+func (s *sqliteStore) TotalStorageUsage(ctx context.Context) (int64, error) {
+	return totalStorageUsage(ctx, s.db)
+}
+
+// PruneHistory deletes append-only history older than the retention windows
+// and optionally age-prunes save versions (keeping a newest-N floor per slot).
+func (s *sqliteStore) PruneHistory(ctx context.Context, auditDays, manifestDays, statsDays, versionMaxAgeDays int) (PruneCounts, error) {
+	var pc PruneCounts
+	cutoff := func(days int) string {
+		return time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339)
+	}
+	del := func(query, before string) (int64, error) {
+		res, err := s.db.ExecContext(ctx, query, before)
+		if err != nil {
+			return 0, err
+		}
+		n, _ := res.RowsAffected()
+		return n, nil
+	}
+	var err error
+	if auditDays > 0 {
+		if pc.Audit, err = del(`DELETE FROM audit_log WHERE at < ?`, cutoff(auditDays)); err != nil {
+			return pc, fmt.Errorf("prune audit_log: %w", err)
+		}
+	}
+	if manifestDays > 0 {
+		if pc.ManifestFetches, err = del(`DELETE FROM manifest_fetches WHERE fetched_at < ?`, cutoff(manifestDays)); err != nil {
+			return pc, fmt.Errorf("prune manifest_fetches: %w", err)
+		}
+	}
+	if statsDays > 0 {
+		if pc.Stats, err = del(`DELETE FROM stats_snapshots WHERE at < ?`, cutoff(statsDays)); err != nil {
+			return pc, fmt.Errorf("prune stats_snapshots: %w", err)
+		}
+	}
+	if versionMaxAgeDays > 0 {
+		// Age-based version pruning with a newest-N floor: even if every
+		// version of a slot is ancient, the newest min(retention, 3) survive
+		// so a restore point always exists.
+		keep := 3
+		if s.versionRetention < keep {
+			keep = s.versionRetention
+		}
+		res, rerr := s.db.ExecContext(ctx, `
+			DELETE FROM save_versions
+			WHERE updated_at < ?
+			  AND version NOT IN (
+			    SELECT v2.version FROM save_versions v2
+			    WHERE v2.user_id = save_versions.user_id
+			      AND v2.game_id = save_versions.game_id
+			      AND v2.path_key = save_versions.path_key
+			    ORDER BY v2.version DESC LIMIT ?
+			  )`, cutoff(versionMaxAgeDays), keep)
+		if rerr != nil {
+			return pc, fmt.Errorf("prune save_versions: %w", rerr)
+		}
+		pc.SaveVersions, _ = res.RowsAffected()
+	}
+	return pc, nil
 }
 
 // DistinctGameCount returns the number of unique games a user has saves for.

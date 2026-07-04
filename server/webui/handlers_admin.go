@@ -268,6 +268,16 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 	}
 	stats := h.loadAdminStats(ctx)
 	showGettingStarted := stats.UserCount <= 1 && stats.ClientCount == 0 && stats.SaveCount == 0
+	integrityCount, _ := h.store.CountIntegrityFindings(ctx)
+	var integrityFindings []store.IntegrityFinding
+	if integrityCount > 0 {
+		integrityFindings, _ = h.store.ListIntegrityFindings(ctx, 20)
+	}
+	var integrityLastRun *store.JobRun
+	if runs, err := h.store.ListJobRuns(ctx, "integrity_check", 1); err == nil && len(runs) > 0 {
+		integrityLastRun = &runs[0]
+	}
+	integrityRunning := h.jobRunner != nil && h.jobRunner.IsRunning("integrity_check")
 	// Show the source-choice card until the admin explicitly picks one (and only
 	// when not pinned by GSBS_PCGW_SYNC_SOURCE).
 	_, sourceEnvPinned := os.LookupEnv(store.EnvPCGWSyncSource)
@@ -310,7 +320,35 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 		IdleTotalETASec:       jobsData.IdleTotalETASec,
 		IdlePerRunETASec:      jobsData.IdlePerRunETASec,
 		Version:               h.gsbsVersion,
+		IntegrityFindings:     integrityFindings,
+		IntegrityCount:        integrityCount,
+		IntegrityRunning:      integrityRunning,
+		IntegrityLastRun:      integrityLastRun,
 	})
+}
+
+// handleAdminIntegrityRun starts a manual blob-integrity verification.
+func (h *WebHandler) handleAdminIntegrityRun(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if h.jobRunner != nil {
+		if _, err := h.jobRunner.TryRunIntegrityCheck(context.Background()); err != nil {
+			if errors.Is(err, job.ErrJobAlreadyRunning) {
+				Redirect(w, r, "/admin?error=job_already_running")
+				return
+			}
+			Redirect(w, r, "/admin?error=job_start_failed")
+			return
+		}
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "integrity_check", "")
+	Redirect(w, r, "/admin?integrity_started=1")
 }
 
 func (h *WebHandler) serveAdminUsers(w http.ResponseWriter, r *http.Request) {

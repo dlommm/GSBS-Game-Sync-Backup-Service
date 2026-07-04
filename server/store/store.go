@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/types"
@@ -9,6 +10,17 @@ import (
 
 // WebSessionMaxAge is how long an inactive browser session is kept (matches WebUI cookie lifetime).
 const WebSessionMaxAge = 7 * 24 * time.Hour
+
+// ErrQuotaExceeded is returned by UpsertSaveWithMeta when the write would grow
+// a user's total stored bytes (current saves plus retained version history)
+// beyond SaveMeta.QuotaBytes. Enforced inside the write transaction, so
+// concurrent pushes cannot race past the limit. Users already over quota may
+// still shrink or replace (writes that do not grow their usage).
+var ErrQuotaExceeded = errors.New("storage quota exceeded")
+
+// ErrGlobalLimitExceeded is the server-wide equivalent of ErrQuotaExceeded,
+// enforced against SaveMeta.GlobalLimitBytes.
+var ErrGlobalLimitExceeded = errors.New("global storage limit exceeded")
 
 // Store is the persistence layer for users, clients, and saves.
 type Store interface {
@@ -108,6 +120,27 @@ type Store interface {
 	ListSaveSummariesPaginated(ctx context.Context, userID string, limit, offset int) ([]SaveSummary, int, error)
 	// UserStorageBytes returns total bytes of save content for a user.
 	UserStorageBytes(ctx context.Context, userID string) (int64, error)
+	// StorageUsage returns a user's total stored bytes: current saves plus
+	// retained version history. This is the figure quotas enforce against.
+	StorageUsage(ctx context.Context, userID string) (int64, error)
+	// TotalStorageUsage is StorageUsage across all users.
+	TotalStorageUsage(ctx context.Context) (int64, error)
+	// PruneHistory deletes append-only history older than the given retention
+	// windows (in days; 0 disables that table) and, when versionMaxAgeDays > 0,
+	// save versions older than that age — always keeping the newest
+	// min(retention, 3) versions per slot regardless of age.
+	PruneHistory(ctx context.Context, auditDays, manifestDays, statsDays, versionMaxAgeDays int) (PruneCounts, error)
+	// RunIntegrityCheck re-hashes stored unencrypted saves against their
+	// recorded content_hash, recording/clearing integrity_findings rows.
+	RunIntegrityCheck(ctx context.Context) (IntegrityResult, error)
+	// CountIntegrityFindings returns the number of slots with an open finding.
+	CountIntegrityFindings(ctx context.Context) (int, error)
+	// ListIntegrityFindings returns open findings, newest first.
+	ListIntegrityFindings(ctx context.Context, limit int) ([]IntegrityFinding, error)
+	// FreeSpaceForWrites reports free bytes on the volume that receives save
+	// writes (save root in filesystem mode, else the DB directory). Returns
+	// -1 when the volume cannot be determined (in-memory databases).
+	FreeSpaceForWrites() (int64, error)
 	// DistinctGameCount returns number of unique games with saves for a user.
 	DistinctGameCount(ctx context.Context, userID string) (int, error)
 
@@ -271,6 +304,19 @@ type SaveRecord struct {
 	UpdatedAt time.Time
 }
 
+// PruneCounts reports rows deleted by PruneHistory.
+type PruneCounts struct {
+	Audit           int64
+	ManifestFetches int64
+	Stats           int64
+	SaveVersions    int64
+}
+
+// Total is the sum of all pruned rows (for logging).
+func (p PruneCounts) Total() int64 {
+	return p.Audit + p.ManifestFetches + p.Stats + p.SaveVersions
+}
+
 // SaveMeta optional metadata for upsert (hash dedup, client tracking).
 type SaveMeta struct {
 	ContentHash  string
@@ -278,6 +324,13 @@ type SaveMeta struct {
 	ClientID     string
 	Encrypted    bool
 	RelativePath string // validated client-relative path when GSBS_SAVE_ROOT is set
+
+	// QuotaBytes / GlobalLimitBytes (0 = unlimited) make UpsertSaveWithMeta
+	// enforce storage limits inside its transaction against total stored
+	// bytes including version history; violations return ErrQuotaExceeded /
+	// ErrGlobalLimitExceeded and roll the write back.
+	QuotaBytes       int64
+	GlobalLimitBytes int64
 }
 
 type ClientInfo struct {

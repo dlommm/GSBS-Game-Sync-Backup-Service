@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -51,6 +52,22 @@ func checkSessionSecretStrength(secret string) error {
 		return fmt.Errorf("GSBS_SESSION_SECRET is too weak (need >= 32 characters, not a placeholder); generate with: openssl rand -base64 32 (or set GSBS_INSECURE_DEV_SECRET=1 for local development)")
 	}
 	return nil
+}
+
+// envRetentionDays reads a non-negative day count from an env var (0 = keep
+// forever). Invalid or negative values fall back to the default.
+func envRetentionDays(name string, def int) int {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		logx.Logger().Warn().Str("var", name).Str("value", v).Int("default", def).
+			Msg("invalid retention-days value; using default")
+		return def
+	}
+	return n
 }
 
 func newServerApp() (*serverApp, error) {
@@ -176,6 +193,47 @@ func newServerApp() (*serverApp, error) {
 	} else {
 		_ = id3
 		logx.Logger().Info().Msg("cron: session GC scheduled daily 04:00")
+	}
+
+	// History pruning keeps the append-only tables (audit log, manifest-fetch
+	// log, stats snapshots) and optionally old save versions from growing
+	// forever. Each window is configurable in days; 0 disables that table.
+	auditDays := envRetentionDays("GSBS_AUDIT_RETENTION_DAYS", 180)
+	manifestDays := envRetentionDays("GSBS_MANIFEST_FETCH_RETENTION_DAYS", 30)
+	statsDays := envRetentionDays("GSBS_STATS_RETENTION_DAYS", 730)
+	versionMaxAgeDays := envRetentionDays("GSBS_SAVE_VERSION_MAX_AGE_DAYS", 0)
+	if auditDays > 0 || manifestDays > 0 || statsDays > 0 || versionMaxAgeDays > 0 {
+		if _, scheduleErr := c.AddFunc("30 3 * * *", func() {
+			pc, err := st.PruneHistory(context.Background(), auditDays, manifestDays, statsDays, versionMaxAgeDays)
+			if err != nil {
+				logx.Logger().Error().Err(err).Msg("cron: history pruning")
+			} else if pc.Total() > 0 {
+				logx.Logger().Info().
+					Int64("audit", pc.Audit).Int64("manifest_fetches", pc.ManifestFetches).
+					Int64("stats", pc.Stats).Int64("save_versions", pc.SaveVersions).
+					Msg("cron: history pruning removed old rows")
+			}
+		}); scheduleErr != nil {
+			logx.Logger().Error().Err(scheduleErr).Msg("cron: failed to schedule history pruning")
+		} else {
+			logx.Logger().Info().
+				Int("audit_days", auditDays).Int("manifest_days", manifestDays).
+				Int("stats_days", statsDays).Int("version_max_age_days", versionMaxAgeDays).
+				Msg("cron: history pruning scheduled daily 03:30")
+		}
+	}
+
+	// Weekly blob-integrity verification (Monday 06:00): re-hashes stored
+	// unencrypted saves against their recorded hashes; findings surface on
+	// the admin overview. Admins can also trigger it manually there.
+	if _, scheduleErr := c.AddFunc("0 6 * * 1", func() {
+		if _, err := runner.TryRunIntegrityCheck(context.Background()); err != nil && !errors.Is(err, job.ErrJobAlreadyRunning) {
+			logx.Logger().Error().Err(err).Msg("cron: integrity check failed to start")
+		}
+	}); scheduleErr != nil {
+		logx.Logger().Error().Err(scheduleErr).Msg("cron: failed to schedule integrity check")
+	} else {
+		logx.Logger().Info().Msg("cron: integrity check scheduled weekly Monday 06:00")
 	}
 
 	addr := os.Getenv("GSBS_ADDR")

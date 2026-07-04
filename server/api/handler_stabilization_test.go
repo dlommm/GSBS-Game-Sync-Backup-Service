@@ -54,6 +54,22 @@ func (f *failStore) UserStorageBytes(ctx context.Context, userID string) (int64,
 	return f.Store.UserStorageBytes(ctx, userID)
 }
 
+// The push pre-checks consult the usage variants (saves + version history),
+// so the fail-closed injection covers them too.
+func (f *failStore) TotalStorageUsage(ctx context.Context) (int64, error) {
+	if f.totalStorageBytesErr != nil {
+		return 0, f.totalStorageBytesErr
+	}
+	return f.Store.TotalStorageUsage(ctx)
+}
+
+func (f *failStore) StorageUsage(ctx context.Context, userID string) (int64, error) {
+	if f.userStorageBytesErr != nil {
+		return 0, f.userStorageBytesErr
+	}
+	return f.Store.StorageUsage(ctx, userID)
+}
+
 // captureLog redirects the global zerolog logger to a buffer for the duration of
 // the test, restoring it in t.Cleanup.
 func captureLog(t *testing.T) *bytes.Buffer {

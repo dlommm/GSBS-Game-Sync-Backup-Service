@@ -117,6 +117,137 @@ func TestAtomicWriteFileSync(t *testing.T) {
 	}
 }
 
+// A failed transaction must never destroy the previous good save file: the
+// new content is staged beside the canonical file and promoted only after
+// commit. This is the regression test for the write-before-transaction data
+// loss (blob was overwritten first, then deleted on rollback).
+func TestSQLite_UpsertSave_TxFailureKeepsPreviousFile(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("GSBS_SAVE_ROOT", root)
+
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatalf("NewSQLite: %v", err)
+	}
+
+	ctx := context.Background()
+	userID, err := st.CreateUser(ctx, "u", "h")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if _, err := st.UpsertSaveWithMeta(ctx, userID, "game1", "pk1", []byte("previous-good-bytes"), &SaveMeta{RelativePath: "saves/slot.dat"}); err != nil {
+		t.Fatalf("initial upsert: %v", err)
+	}
+
+	s := st.(*sqliteStore)
+	var storagePath string
+	if err := s.db.QueryRow(
+		`SELECT storage_path FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+		userID, "game1", "pk1",
+	).Scan(&storagePath); err != nil {
+		t.Fatalf("query storage_path: %v", err)
+	}
+
+	// Close the DB so the transaction cannot begin, then attempt an overwrite.
+	if err := st.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if _, err := st.UpsertSaveWithMeta(ctx, userID, "game1", "pk1", []byte("NEW-bytes-that-must-not-land"), &SaveMeta{RelativePath: "saves/slot.dat"}); err == nil {
+		t.Fatal("expected upsert to fail on closed DB")
+	}
+
+	got, err := os.ReadFile(storagePath)
+	if err != nil {
+		t.Fatalf("previous save file must still exist: %v", err)
+	}
+	if string(got) != "previous-good-bytes" {
+		t.Fatalf("previous save corrupted: %q", got)
+	}
+	assertNoStagedTemps(t, root)
+}
+
+// A transaction that fails mid-flight (FK violation for an unknown user)
+// must leave no canonical file and no staged temp behind.
+func TestSQLite_UpsertSave_FKFailureNoOrphanFile(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("GSBS_SAVE_ROOT", root)
+
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatalf("NewSQLite: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	ctx := context.Background()
+	if _, err := st.UpsertSaveWithMeta(ctx, "ghost-user", "game1", "pk1", []byte("bytes"), &SaveMeta{RelativePath: "saves/slot.dat"}); err == nil {
+		t.Fatal("expected FK violation for unknown user")
+	}
+	if _, err := os.Stat(filepath.Join(root, "ghost-user", "game1", "saves", "slot.dat")); !os.IsNotExist(err) {
+		t.Fatalf("canonical file must not exist after rollback, stat err=%v", err)
+	}
+	assertNoStagedTemps(t, root)
+}
+
+// Orphaned staged temps from a crash are swept at startup; real saves are kept.
+func TestSweepStagedTempFiles(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("GSBS_SAVE_ROOT", root)
+
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatalf("NewSQLite: %v", err)
+	}
+	ctx := context.Background()
+	userID, err := st.CreateUser(ctx, "u", "h")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertSaveWithMeta(ctx, userID, "game1", "pk1", []byte("keep-me"), &SaveMeta{RelativePath: "saves/slot.dat"}); err != nil {
+		t.Fatal(err)
+	}
+	var storagePath string
+	if err := st.(*sqliteStore).db.QueryRow(
+		`SELECT storage_path FROM saves WHERE user_id = ?`, userID,
+	).Scan(&storagePath); err != nil {
+		t.Fatal(err)
+	}
+	_ = st.Close()
+
+	orphan := filepath.Join(filepath.Dir(storagePath), ".gsbs-crashed.tmp")
+	if err := os.WriteFile(orphan, []byte("torn"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	st2, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatalf("NewSQLite (sweep): %v", err)
+	}
+	t.Cleanup(func() { _ = st2.Close() })
+
+	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
+		t.Fatalf("orphaned staged temp should be swept, stat err=%v", err)
+	}
+	if got, err := os.ReadFile(storagePath); err != nil || string(got) != "keep-me" {
+		t.Fatalf("real save must survive sweep: %q err=%v", got, err)
+	}
+}
+
+func assertNoStagedTemps(t *testing.T, root string) {
+	t.Helper()
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(d.Name()) == ".tmp" {
+			t.Errorf("staged temp residue: %s", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+}
+
 func TestSQLite_MultiUserIsolation(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("GSBS_SAVE_ROOT", root)

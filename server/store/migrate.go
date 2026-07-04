@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 21
+const schemaVersion = 22
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -121,10 +121,33 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{19, s.stepPCGWBundleSettings},
 		{20, s.stepPCGWSyncSourceS3},
 		{21, stepSaveVersionChangeMeta},
+		{22, stepIntegrityFindings},
 	}
 }
 
 // ── Step implementations ──────────────────────────────────────────────────────
+
+// stepIntegrityFindings records blob-corruption findings from the weekly
+// integrity_check job: one row per save slot with a problem, replaced on
+// re-check and removed when the slot verifies clean again.
+func stepIntegrityFindings(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS integrity_findings (
+			id TEXT PRIMARY KEY,
+			at TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			game_id TEXT NOT NULL,
+			path_key TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			expected_hash TEXT,
+			actual_hash TEXT
+		);
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_integrity_findings_slot
+			ON integrity_findings(user_id, game_id, path_key);
+		CREATE INDEX IF NOT EXISTS idx_integrity_findings_at ON integrity_findings(at);
+	`)
+	return err
+}
 
 func stepCoreTables(tx *sql.Tx) error {
 	_, err := tx.Exec(`

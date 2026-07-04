@@ -98,6 +98,13 @@ func (h *WebHandler) loadDashboardStats(ctx context.Context, userID string) dash
 	} else {
 		stats.TotalBytes = totalBytes
 	}
+	usageBytes, err := h.store.StorageUsage(ctx, userID)
+	if err != nil {
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard stats: storage usage failed")
+		stats.StoreError = true
+	} else {
+		stats.UsageBytes = usageBytes
+	}
 	gameCount, err := h.store.DistinctGameCount(ctx, userID)
 	if err != nil {
 		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard stats: distinct game count failed")

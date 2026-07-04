@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,6 +31,10 @@ import (
 
 // MaxSaveSize is the maximum allowed body size for POST /api/saves (50 MiB).
 const MaxSaveSize = 50 * 1024 * 1024
+
+// diskFreeFloorBytes is the minimum free space the save volume must retain
+// after accepting a push (beyond twice the payload for staging + storage).
+const diskFreeFloorBytes = 256 << 20
 
 // contextKey is a typed key for values stored in request contexts.
 type contextKey string
@@ -761,11 +766,26 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "empty content"})
 		return
 	}
+	// Disk-free preflight: refuse writes when the target volume is nearly
+	// full, before any bytes land. 507 is retryable — clients queue the push
+	// in their outbox and try again later. Preflight errors fail open (the
+	// quota checks and the write itself still protect the server).
+	if free, ferr := h.store.FreeSpaceForWrites(); ferr == nil && free >= 0 && free < int64(len(content))*2+diskFreeFloorBytes {
+		logx.Logger().Warn().Int64("free_bytes", free).Int("payload", len(content)).
+			Msg("api push refused: server storage low")
+		writeJSON(w, http.StatusInsufficientStorage, map[string]string{"error": "server storage low"})
+		return
+	}
+	// Storage limits: the advisory pre-checks below reject clearly-over
+	// pushes cheaply; the authoritative, race-free check runs inside the
+	// upsert transaction (see SaveMeta.QuotaBytes) and counts version
+	// history. Both apply the grandfather rule: an already-over user is only
+	// blocked from growing, never from shrinking or replacing.
 	existingSize, _ := h.store.GetSaveContentSize(r.Context(), userID, gameID, pathKey)
 	delta := int64(len(content)) - existingSize
-	// Global storage quota check (0 = unlimited)
+	// Global storage limit pre-check (0 = unlimited)
 	if h.maxStorageBytes > 0 {
-		total, err := h.store.TotalStorageBytes(r.Context())
+		total, err := h.store.TotalStorageUsage(r.Context())
 		if err != nil {
 			logx.Logger().Error().
 				Str("user_id", userID).
@@ -775,14 +795,18 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "storage check failed"})
 			return
 		}
-		if total+delta > h.maxStorageBytes {
+		if total+delta > h.maxStorageBytes && delta > 0 {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "global storage limit exceeded"})
 			return
 		}
 	}
-	// Per-user storage quota check (0 = unlimited)
-	if quota, qErr := h.store.UserQuotaBytes(r.Context(), userID); qErr == nil && quota > 0 {
-		current, err := h.store.UserStorageBytes(r.Context(), userID)
+	// Per-user storage quota pre-check (0 = unlimited)
+	var userQuota int64
+	if q, qErr := h.store.UserQuotaBytes(r.Context(), userID); qErr == nil {
+		userQuota = q
+	}
+	if userQuota > 0 {
+		current, err := h.store.StorageUsage(r.Context(), userID)
 		if err != nil {
 			logx.Logger().Error().
 				Str("user_id", userID).
@@ -792,7 +816,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "storage check failed"})
 			return
 		}
-		if current+delta > quota {
+		if current+delta > userQuota && delta > 0 {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "storage quota exceeded"})
 			return
 		}
@@ -850,18 +874,27 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 	// clientID was stashed in context by withAuth; no need to re-validate the token.
 	clientID, _ := r.Context().Value(contextClientID).(string)
 	meta := &store.SaveMeta{
-		ContentHash:  contentHash,
-		ContentSize:  contentSize,
-		ClientID:     clientID,
-		Encrypted:    encrypted,
-		RelativePath: relPath,
+		ContentHash:      contentHash,
+		ContentSize:      contentSize,
+		ClientID:         clientID,
+		Encrypted:        encrypted,
+		RelativePath:     relPath,
+		QuotaBytes:       userQuota,
+		GlobalLimitBytes: h.maxStorageBytes,
 	}
 	skipped, err := h.store.UpsertSaveWithMeta(r.Context(), userID, gameID, pathKey, content, meta)
 	if err != nil {
-		logx.Logger().Error().
-			Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).
-			Err(err).Msg("api push upsert failed")
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
+		switch {
+		case errors.Is(err, store.ErrQuotaExceeded):
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "storage quota exceeded"})
+		case errors.Is(err, store.ErrGlobalLimitExceeded):
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "global storage limit exceeded"})
+		default:
+			logx.Logger().Error().
+				Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).
+				Err(err).Msg("api push upsert failed")
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
+		}
 		return
 	}
 	if skipped {
