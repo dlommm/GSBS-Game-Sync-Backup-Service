@@ -2,6 +2,8 @@
 
 Base URL: your server root (e.g. `https://gsbs.example.com`). All endpoints except health, register, login, and manifest (for anonymous fetch) require authentication.
 
+> **Machine-readable spec:** a full [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) description is served at **`GET /api/openapi.json`** (also in the repo at [`server/api/openapi.json`](../server/api/openapi.json)). A CI test keeps it in exact sync with the implemented routes — load it into Swagger UI, Postman, or an OpenAPI client generator.
+
 ## Authentication
 
 - **Registration**: `POST /api/register` with JSON `{"username":"...","password":"..."}`. Password min 8 chars. Returns `{"status":"ok"}` or 4xx with `{"error":"..."}`. Disabled when `GSBS_ALLOW_REGISTER` is false.

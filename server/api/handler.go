@@ -179,8 +179,45 @@ func (h *Handler) InvalidateManifestCache() {
 	h.manifestCache.mu.Unlock()
 }
 
+// RouteDef describes one API endpoint for documentation and the OpenAPI
+// drift test. auth reports whether a bearer token is required.
+type RouteDef struct {
+	Method string
+	Path   string
+	Auth   bool
+}
+
+// Routes returns the canonical list of API endpoints. It is the single source
+// of truth checked against docs/openapi.json by openapi_test.go, so the spec
+// can never silently drift from the implemented surface.
+func Routes() []RouteDef {
+	return []RouteDef{
+		{"GET", "/api/health", false},
+		{"POST", "/api/register", false},
+		{"POST", "/api/login", false},
+		{"POST", "/api/login/totp", false},
+		{"GET", "/api/saves", true},
+		{"POST", "/api/saves", true},
+		{"DELETE", "/api/saves", true},
+		{"GET", "/api/manifest", false},
+		{"GET", "/api/manifest/v2", false},
+		{"GET", "/api/clients", true},
+		{"POST", "/api/clients/revoke", true},
+		{"GET", "/api/saves/versions", true},
+		{"GET", "/api/saves/versions/download", true},
+		{"POST", "/api/saves/versions/restore", true},
+		{"GET", "/api/events", true},
+		{"POST", "/api/change-password", true},
+		{"POST", "/api/token/refresh", true},
+		{"GET", "/api/account", true},
+		{"GET", "/api/openapi.json", false},
+	}
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
+	case r.URL.Path == "/api/openapi.json" && r.Method == http.MethodGet:
+		h.handleOpenAPI(w, r)
 	case r.URL.Path == "/api/health" && r.Method == http.MethodGet:
 		h.handleHealth(w, r)
 	case r.URL.Path == "/api/register" && r.Method == http.MethodPost:

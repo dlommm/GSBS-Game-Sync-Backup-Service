@@ -1,0 +1,231 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "GSBS Server API",
+    "version": "4.0.0",
+    "description": "HTTP API for GSBS sync clients. Saves are pushed and pulled as whole files. Encrypted saves are AES-256-GCM ciphertext produced client-side; the server stores opaque bytes. All authenticated endpoints use a bearer token issued by /api/login."
+  },
+  "servers": [{ "url": "/", "description": "The GSBS server host" }],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer" }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": { "error": { "type": "string" } }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string" },
+          "totp_required": { "type": "boolean" },
+          "totp_token": { "type": "string" }
+        }
+      },
+      "SaveSummaries": {
+        "type": "object",
+        "properties": {
+          "saves": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "game_id": { "type": "string" },
+                "path_key": { "type": "string" },
+                "game_title": { "type": "string" },
+                "updated_at": { "type": "string" },
+                "content_hash": { "type": "string" },
+                "encrypted": { "type": "boolean" },
+                "relative_path": { "type": "string" },
+                "size_bytes": { "type": "integer" }
+              }
+            }
+          },
+          "total": { "type": "integer" },
+          "crypto_v2_ready": { "type": "boolean" }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": { "description": "Missing or invalid bearer token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "TooManyRequests": { "description": "Rate limited", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    }
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Liveness/readiness probe",
+        "parameters": [{ "name": "ready", "in": "query", "schema": { "type": "string", "enum": ["1"] }, "description": "When 1, also pings the database" }],
+        "responses": { "200": { "description": "Healthy" }, "503": { "description": "Database unreachable (readiness)" } }
+      }
+    },
+    "/api/register": {
+      "post": {
+        "summary": "Register a new account (when open registration is enabled)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "username": { "type": "string" }, "password": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Registered" }, "403": { "description": "Registration disabled" }, "429": { "$ref": "#/components/responses/TooManyRequests" } }
+      }
+    },
+    "/api/login": {
+      "post": {
+        "summary": "Log in and register a device, returning a bearer token",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "username": { "type": "string" }, "password": { "type": "string" }, "client_name": { "type": "string" }, "client_os": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Token (or totp_required)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginResponse" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" }, "429": { "$ref": "#/components/responses/TooManyRequests" } }
+      }
+    },
+    "/api/login/totp": {
+      "post": {
+        "summary": "Complete a two-factor login using the totp_token from /api/login",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "totp_token": { "type": "string" }, "code": { "type": "string" }, "client_name": { "type": "string" }, "client_os": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Token", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginResponse" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/saves": {
+      "get": {
+        "summary": "Pull saves. With ?summaries=1 returns lightweight metadata; otherwise full content (base64, optionally gzip).",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "summaries", "in": "query", "schema": { "type": "string", "enum": ["1"] } },
+          { "name": "game_id", "in": "query", "schema": { "type": "string" } },
+          { "name": "path_key", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Saves", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SaveSummaries" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      },
+      "post": {
+        "summary": "Push a save (whole-file). Body is the raw save bytes (ciphertext when encrypted).",
+        "description": "Preconditions: X-GSBS-If-Hash (optimistic concurrency) or X-GSBS-If-Absent (first-push guard) → 409 on mismatch. For unencrypted pushes the server verifies X-Content-Hash. Storage quota (counting version history) is enforced in-transaction.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "X-Game-ID", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "X-Path-Key", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "X-Relative-Path", "in": "header", "schema": { "type": "string" } },
+          { "name": "X-Content-Hash", "in": "header", "schema": { "type": "string" }, "description": "sha256 of plaintext" },
+          { "name": "X-Content-Size", "in": "header", "schema": { "type": "integer" } },
+          { "name": "X-Encrypted", "in": "header", "schema": { "type": "string", "enum": ["1"] } },
+          { "name": "X-GSBS-If-Hash", "in": "header", "schema": { "type": "string" } },
+          { "name": "X-GSBS-If-Absent", "in": "header", "schema": { "type": "string", "enum": ["1"] } },
+          { "name": "X-GSBS-Client-Version", "in": "header", "schema": { "type": "string" } },
+          { "name": "Content-Encoding", "in": "header", "schema": { "type": "string", "enum": ["gzip"] } }
+        ],
+        "requestBody": { "required": true, "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } } },
+        "responses": {
+          "200": { "description": "Stored (status ok or unchanged)" },
+          "400": { "description": "Content hash mismatch or bad request", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "description": "Conflict (precondition failed)", "content": { "application/json": { "schema": { "type": "object", "properties": { "error": { "type": "string" }, "current_hash": { "type": "string" }, "current_version": { "type": "integer" } } } } } },
+          "413": { "description": "Save too large or over quota", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "507": { "description": "Server storage low (retryable)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "delete": {
+        "summary": "Delete a save slot",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "game_id", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "path_key", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Deleted" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/manifest": {
+      "get": {
+        "summary": "PCGamingWiki save-location manifest (v1). Public, non-sensitive.",
+        "parameters": [
+          { "name": "since", "in": "query", "schema": { "type": "string" } },
+          { "name": "platform", "in": "query", "schema": { "type": "string" } },
+          { "name": "include", "in": "query", "schema": { "type": "string", "enum": ["saves", "config", "both"] } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Manifest entries" } }
+      }
+    },
+    "/api/manifest/v2": {
+      "get": {
+        "summary": "PCGamingWiki save-location manifest (v2 shape). Public.",
+        "responses": { "200": { "description": "Manifest v2" } }
+      }
+    },
+    "/api/clients": {
+      "get": {
+        "summary": "List the caller's registered devices",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Devices" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/clients/revoke": {
+      "post": {
+        "summary": "Revoke a device token",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Revoked" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/saves/versions": {
+      "get": {
+        "summary": "List retained versions of a save",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "game_id", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "path_key", "in": "query", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Versions" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/saves/versions/download": {
+      "get": {
+        "summary": "Download a specific save version",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "game_id", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "path_key", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "version", "in": "query", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Version bytes" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/saves/versions/restore": {
+      "post": {
+        "summary": "Roll a save back to a previous version",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Restored" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/events": {
+      "get": {
+        "summary": "Server-Sent Events stream (save-updated, client-activity, …)",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "text/event-stream" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/change-password": {
+      "post": {
+        "summary": "Change the caller's password (revokes other devices and sessions)",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Changed" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/token/refresh": {
+      "post": {
+        "summary": "Refresh the caller's device token",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "New token" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/account": {
+      "get": {
+        "summary": "Account settings (encryption_enabled, crypto_v2_ready)",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Account" }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/openapi.json": {
+      "get": {
+        "summary": "This OpenAPI specification",
+        "responses": { "200": { "description": "OpenAPI 3.1 document" } }
+      }
+    }
+  }
+}
