@@ -82,15 +82,18 @@ type config struct {
 	BottlesFolder               string            `json:"bottles_folder,omitempty"`
 	PrismFolder                 string            `json:"prism_folder,omitempty"`
 	FlatpakSteamFolder          string            `json:"flatpak_steam_folder,omitempty"`
-	SteamLibraryFolders         []string          `json:"steam_library_folders,omitempty"` // extra Steam library roots (e.g. D:\SteamLibrary)
-	GameInstallPaths            map[string]string `json:"game_install_paths,omitempty"`    // manifest game_id -> absolute install folder override
-	DiscoveryInterval           Duration          `json:"discovery_interval,omitempty"`    // default 4h; re-scan installed games
-	AutoWatchMode               string            `json:"auto_watch_mode,omitempty"`       // "legacy" (default) or "discovered"
-	ConflictPolicy              string            `json:"conflict_policy,omitempty"`       // last_write_wins, keep_local, keep_server
-	EncryptionPassphrase        string            `json:"encryption_passphrase,omitempty"` // local E2E key; never sent to server
-	CryptoV2                    *bool             `json:"crypto_v2,omitempty"`             // nil=auto (server fleet signal), true=force Argon2id format, false=pin legacy
-	UpdateCheckEnabled          *bool             `json:"update_check_enabled,omitempty"`  // default true; set false to disable client update checks
-	UpdateRepo                  string            `json:"update_repo,omitempty"`           // GitHub owner/repo override for release checks
+	SteamLibraryFolders         []string          `json:"steam_library_folders,omitempty"`     // extra Steam library roots (e.g. D:\SteamLibrary)
+	GameInstallPaths            map[string]string `json:"game_install_paths,omitempty"`        // manifest game_id -> absolute install folder override
+	DiscoveryInterval           Duration          `json:"discovery_interval,omitempty"`        // default 4h; re-scan installed games
+	AutoWatchMode               string            `json:"auto_watch_mode,omitempty"`           // "legacy" (default) or "discovered"
+	ConflictPolicy              string            `json:"conflict_policy,omitempty"`           // last_write_wins, keep_local, keep_server
+	EncryptionPassphrase        string            `json:"encryption_passphrase,omitempty"`     // local E2E key; never sent to server
+	CryptoV2                    *bool             `json:"crypto_v2,omitempty"`                 // nil=auto (server fleet signal), true=force Argon2id format, false=pin legacy
+	GameAwareSync               *bool             `json:"game_aware_sync,omitempty"`           // default true: defer sync for a game while it is running
+	GameScanInterval            Duration          `json:"game_scan_interval,omitempty"`        // process-scan interval for game detection (default 15s)
+	ConflictPolicyOverrides     map[string]string `json:"conflict_policy_overrides,omitempty"` // game_id -> policy (last_write_wins, keep_local, keep_server)
+	UpdateCheckEnabled          *bool             `json:"update_check_enabled,omitempty"`      // default true; set false to disable client update checks
+	UpdateRepo                  string            `json:"update_repo,omitempty"`               // GitHub owner/repo override for release checks
 	WatchPaths                  []watchPath       `json:"watch_paths"`
 }
 
@@ -260,4 +263,17 @@ func (c *config) effectiveConflictPolicy() string {
 	default:
 		return "last_write_wins"
 	}
+}
+
+// effectiveConflictPolicyFor returns the conflict policy for one game: a
+// per-game override from conflict_policy_overrides when valid, otherwise the
+// global policy.
+func (c *config) effectiveConflictPolicyFor(gameID string) string {
+	if p, ok := c.ConflictPolicyOverrides[gameID]; ok {
+		switch p {
+		case "keep_local", "keep_server", "last_write_wins":
+			return p
+		}
+	}
+	return c.effectiveConflictPolicy()
 }

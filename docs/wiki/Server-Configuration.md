@@ -31,6 +31,10 @@
 | `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token lifetime (default 90 days) |
 | `GSBS_TRUST_PROXY` | (unset) | Trust `X-Forwarded-For` / `X-Real-IP` from reverse proxy |
 | `GSBS_TOTP_KEY_FILE` | `<db dir>/gsbs-keys/totp.key` | At-rest encryption key file for 2FA secrets (auto-created 0600). **Back it up with the database** |
+| `GSBS_BACKUP_DIR` | `<db dir>/backups` | Destination for scheduled backups; setting it also enables the schedule |
+| `GSBS_BACKUP_CRON` | `0 5 * * *` | Backup schedule override (admin setting otherwise) |
+| `GSBS_BACKUP_S3_ENDPOINT` | (unset) | S3-compatible endpoint for offsite upload (e.g. `s3.eu-central-1.amazonaws.com`, `minio.lan:9000`) |
+| `GSBS_BACKUP_S3_BUCKET` / `_ACCESS_KEY` / `_SECRET_KEY` / `_PREFIX` / `_INSECURE` | (unset) | Bucket, credentials (env-only — never stored in the DB), optional key prefix, `_INSECURE=1` for plain HTTP |
 | `GSBS_METRICS_TOKEN` | (unset) | Bearer token required to access `/metrics` |
 
 ### Rate limiting

@@ -123,6 +123,45 @@ func TestQuota_GrandfatherAllowsShrink(t *testing.T) {
 	}
 }
 
+// Per-game retention overrides win over the global version retention.
+func TestRetentionOverridePerGame(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := context.Background()
+	userID, err := st.CreateUser(ctx, "u", "h")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetAdminSetting(ctx, AdminSettingRetentionOverrides, `{"g-short": 2}`); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 4; i++ {
+		if _, err := st.UpsertSaveWithMeta(ctx, userID, "g-short", "pk", payload(byte('a'+i), 10+i), &SaveMeta{}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.UpsertSaveWithMeta(ctx, userID, "g-normal", "pk", payload(byte('a'+i), 10+i), &SaveMeta{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	short, err := st.ListSaveVersions(ctx, userID, "g-short", "pk", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(short) != 2 {
+		t.Fatalf("override game kept %d versions, want 2", len(short))
+	}
+	normal, err := st.ListSaveVersions(ctx, userID, "g-normal", "pk", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(normal) != 4 {
+		t.Fatalf("default game kept %d versions, want 4 (under default retention)", len(normal))
+	}
+}
+
 // Two concurrent pushes near the limit: exactly one wins, the other gets
 // ErrQuotaExceeded, and final usage stays within quota. Uses a file-backed DB
 // so both goroutines run real concurrent transactions.

@@ -37,7 +37,7 @@ func main() {
 	alsoStderr := runtime.GOOS != "windows" || consoleMode()
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "login", "login-dialog", "list", "debug-sync":
+		case "login", "login-dialog", "list", "debug-sync", "export":
 			alsoStderr = true
 		}
 	}
@@ -60,6 +60,12 @@ func main() {
 				}
 			}
 			runList(dryRunPull)
+			return
+		case "export":
+			if err := runExportCommand(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "export:", err)
+				os.Exit(1)
+			}
 			return
 		case "debug-sync":
 			if len(os.Args) < 3 {

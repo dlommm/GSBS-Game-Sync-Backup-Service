@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
+	"github.com/gsbs/gsbs/server/job"
 	"github.com/gsbs/gsbs/server/logx"
+	"github.com/gsbs/gsbs/server/notify"
 	"github.com/gsbs/gsbs/server/store"
 	"github.com/robfig/cron/v3"
 )
@@ -23,6 +26,20 @@ type adminSettingsData struct {
 	PCGWPathExcludesJSON      string
 	AutoRunFirstStart         bool
 	LegacyPushProtection      bool
+	BackupEnabled             bool
+	BackupCron                string
+	BackupKeep                int
+	BackupIncludeCovers       bool
+	BackupDirEnv              bool // GSBS_BACKUP_DIR pinned via environment
+	BackupRunning             bool
+	BackupLastRun             *store.JobRun
+	NotifyWebhookURL          string
+	NotifyDiscordURL          string
+	NotifyNtfyURL             string
+	NotifyStaleDays           string
+	NotifyEventTypes          []string
+	NotifyEventsChecked       map[string]bool
+	RetentionOverridesJSON    string
 	PCGWSyncSource            string
 	PCGWBundleCron            string
 	PCGWBundleURL             string
@@ -61,6 +78,35 @@ func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) 
 	auto := settings[store.AdminSettingPCGWAutoRunFirstStart]
 	data.AutoRunFirstStart = auto == "true" || auto == "1"
 	data.LegacyPushProtection = store.LegacyPushProtectionFromSettings(settings)
+	data.BackupEnabled = job.BackupEnabled(settings)
+	data.BackupCron = job.BackupCronExpr(settings)
+	backupCfg := job.BackupConfigFrom(settings, h.store.DatabasePath())
+	data.BackupKeep = backupCfg.Keep
+	data.BackupIncludeCovers = backupCfg.IncludeCovers
+	_, data.BackupDirEnv = os.LookupEnv("GSBS_BACKUP_DIR")
+	if h.jobRunner != nil {
+		data.BackupRunning = h.jobRunner.IsRunning("backup")
+	}
+	if runs, err := h.store.ListJobRuns(ctx, "backup", 1); err == nil && len(runs) > 0 {
+		data.BackupLastRun = &runs[0]
+	}
+	data.NotifyWebhookURL = settings[store.AdminSettingNotifyWebhookURL]
+	data.NotifyDiscordURL = settings[store.AdminSettingNotifyDiscordURL]
+	data.NotifyNtfyURL = settings[store.AdminSettingNotifyNtfyURL]
+	data.NotifyStaleDays = settings[store.AdminSettingNotifyStaleDays]
+	if data.NotifyStaleDays == "" {
+		data.NotifyStaleDays = "14"
+	}
+	data.NotifyEventTypes = notify.AllEvents
+	enabled := notify.ParseEventFilter(settings[store.AdminSettingNotifyEvents])
+	data.NotifyEventsChecked = make(map[string]bool, len(notify.AllEvents))
+	for _, ev := range notify.AllEvents {
+		data.NotifyEventsChecked[ev] = enabled == nil || enabled[ev]
+	}
+	data.RetentionOverridesJSON = settings[store.AdminSettingRetentionOverrides]
+	if strings.TrimSpace(data.RetentionOverridesJSON) == "" {
+		data.RetentionOverridesJSON = "{}"
+	}
 
 	if _, ok := os.LookupEnv(store.EnvPCGWSyncSource); ok {
 		data.PCGWSyncSourceEnvOverride = true
@@ -265,6 +311,83 @@ func (h *WebHandler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Requ
 		legacyGuardVal = "true"
 	}
 	if err := h.store.SetAdminSetting(ctx, store.AdminSettingLegacyPushProtection, legacyGuardVal); err != nil {
+		Redirect(w, r, "/admin/settings?error=save_failed")
+		return
+	}
+	backupEnabledVal := "false"
+	if r.FormValue("backup_enabled") == "1" {
+		backupEnabledVal = "true"
+	}
+	backupCoversVal := "false"
+	if r.FormValue("backup_include_covers") == "1" {
+		backupCoversVal = "true"
+	}
+	backupKeep := strings.TrimSpace(r.FormValue("backup_keep"))
+	if backupKeep != "" {
+		if n, convErr := strconv.Atoi(backupKeep); convErr != nil || n < 1 || n > 365 {
+			Redirect(w, r, "/admin/settings?error=invalid_backup_keep")
+			return
+		}
+	}
+	for key, val := range map[string]string{
+		job.SettingBackupEnabled:       backupEnabledVal,
+		job.SettingBackupCron:          strings.TrimSpace(r.FormValue("backup_cron")),
+		job.SettingBackupKeep:          backupKeep,
+		job.SettingBackupIncludeCovers: backupCoversVal,
+	} {
+		if err := h.store.SetAdminSetting(ctx, key, val); err != nil {
+			Redirect(w, r, "/admin/settings?error=save_failed")
+			return
+		}
+	}
+	var enabledEvents []string
+	for _, ev := range notify.AllEvents {
+		if r.FormValue("notify_event_"+ev) == "1" {
+			enabledEvents = append(enabledEvents, ev)
+		}
+	}
+	eventsJSON := ""
+	if len(enabledEvents) > 0 && len(enabledEvents) < len(notify.AllEvents) {
+		if b, jerr := json.Marshal(enabledEvents); jerr == nil {
+			eventsJSON = string(b)
+		}
+	}
+	staleDays := strings.TrimSpace(r.FormValue("notify_stale_days"))
+	if staleDays != "" {
+		if n, convErr := strconv.Atoi(staleDays); convErr != nil || n < 0 || n > 3650 {
+			Redirect(w, r, "/admin/settings?error=invalid_stale_days")
+			return
+		}
+	}
+	for key, val := range map[string]string{
+		store.AdminSettingNotifyWebhookURL: strings.TrimSpace(r.FormValue("notify_webhook_url")),
+		store.AdminSettingNotifyDiscordURL: strings.TrimSpace(r.FormValue("notify_discord_url")),
+		store.AdminSettingNotifyNtfyURL:    strings.TrimSpace(r.FormValue("notify_ntfy_url")),
+		store.AdminSettingNotifyEvents:     eventsJSON,
+		store.AdminSettingNotifyStaleDays:  staleDays,
+	} {
+		if err := h.store.SetAdminSetting(ctx, key, val); err != nil {
+			Redirect(w, r, "/admin/settings?error=save_failed")
+			return
+		}
+	}
+	retOverrides := strings.TrimSpace(r.FormValue("retention_overrides"))
+	if retOverrides != "" && retOverrides != "{}" {
+		var m map[string]int
+		if err := json.Unmarshal([]byte(retOverrides), &m); err != nil {
+			Redirect(w, r, "/admin/settings?error=invalid_retention_overrides")
+			return
+		}
+		for _, n := range m {
+			if n < 1 || n > 50 {
+				Redirect(w, r, "/admin/settings?error=invalid_retention_overrides")
+				return
+			}
+		}
+	} else {
+		retOverrides = ""
+	}
+	if err := h.store.SetAdminSetting(ctx, store.AdminSettingRetentionOverrides, retOverrides); err != nil {
 		Redirect(w, r, "/admin/settings?error=save_failed")
 		return
 	}

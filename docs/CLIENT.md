@@ -24,6 +24,10 @@ Inside that directory you will find:
 | **gsbs.log** | Client log file. All client activity (login, sync, pull, push, watcher, tray actions, errors) is written here so you can see what is happening. |
 | **client.lock** | Single-instance lock while the tray app is running (Unix flock / Windows mutex). |
 
+## CLI commands
+
+Besides the tray app, `gsbs-client` offers subcommands: `login`, `list [--dry-run-pull]`, `debug-sync <game_id> [--dry-run]`, and `export [--game ID] [--out DIR]` — the latter downloads your saves (decrypting end-to-end-encrypted ones locally) into a zip archive with a manifest that any GSBS server can re-import (WebUI → My Games → Import archive).
+
 ## System tray (Windows and Linux)
 
 When started without `--console`, the client runs in the system tray.
@@ -116,7 +120,7 @@ When no watch paths are built at startup or after a manifest refresh, the client
 
 Example log line: `sync: no watch paths — skipped discovered=12 platform=40 missing_dir=3 malformed=0`
 
-Optional config: `conflict_policy` (`last_write_wins`, `keep_local`, `keep_server`), launcher folder overrides (`heroic_folder`, `lutris_folder`, `bottles_folder`, `prism_folder`, `flatpak_steam_folder`, `ea_app_folder`), `steam_library_folders` (extra Steam library roots when not in `libraryfolders.vdf`), `game_install_paths` (per-game install folder override for `<game-install-folder>` resolution), `launcher_user_id` (auto-detected from Steam when empty; tray **Detect launcher paths** merges it into config), `discovery_interval`.
+Optional config: `conflict_policy` (`last_write_wins`, `keep_local`, `keep_server`), launcher folder overrides (`heroic_folder`, `lutris_folder`, `bottles_folder`, `prism_folder`, `flatpak_steam_folder`, `ea_app_folder`), `steam_library_folders` (extra Steam library roots when not in `libraryfolders.vdf`), `game_install_paths` (per-game install folder override for `<game-install-folder>` resolution), `launcher_user_id` (auto-detected from Steam when empty; tray **Detect launcher paths** merges it into config), `discovery_interval`, `game_aware_sync` (default `true`: sync for a game is deferred while it runs and flushed on exit; unavailable under Flatpak), `game_scan_interval` (process-scan interval, default `15s`), `conflict_policy_overrides` (per-game policy map, e.g. `{"12345": "keep_local"}`), `crypto_v2` (`true`/`false` pins the save-encryption format; unset follows the server's fleet-readiness signal).
 
 ### Cross-OS sync (Windows ↔ Linux / Steam Deck)
 
@@ -185,7 +189,7 @@ Enable **End-to-end encryption** in WebUI **Settings**. Set `encryption_passphra
 - **Upload**: File watcher debounces changes (2s) and pushes with SHA256 hash metadata. Duplicate content (same hash as the last successful push for that slot) is skipped locally; the server may also respond with `{"status":"unchanged"}`. A supervisor restarts the watcher if fsnotify fails.
 - **Startup reconciliation**: On startup (after the initial pull), the client scans all local save files under watched directories and uploads any that are not yet on the server. This ensures saves reach the server on first install or when the server has no record — not just when files change. Files already matching the server hash are skipped.
 - **Download**: Uses summary + hash comparison to fetch only changed saves; listens for SSE `save-updated` events from other machines. Transient network errors use exponential backoff (`pkg/retry`).
-- **Conflicts**: Default policy is `last_write_wins` (`conflict_policy`). When both local and server changed, conflicts are recorded in `conflicts.json` with hashes and timestamps. Resolve from the tray (keep all local / use all server) or the WebUI dashboard. Legacy `skip_overwrite_when_local_newer: true` maps to `keep_local`.
+- **Conflicts**: Default policy is `last_write_wins` (`conflict_policy`). When both local and server changed, conflicts are recorded in `conflicts.json` with hashes and timestamps. Resolve from the tray (keep all local / use all server) or the WebUI dashboard. Legacy `skip_overwrite_when_local_newer: true` maps to `keep_local`. Per-game overrides via `conflict_policy_overrides`. Since 4.0.0 a new device's FIRST push of an existing save always surfaces a conflict instead of overwriting, and near-simultaneous changes (within a 2-minute clock-skew window) conflict rather than letting the faster clock win.
 - **Versions**: Server keeps last N versions per save (`GSBS_SAVE_VERSION_RETENTION`). Restore from WebUI **Versions** link or tray **Open dashboard**.
 
 ## Log file (gsbs.log)

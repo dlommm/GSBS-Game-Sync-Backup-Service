@@ -8,6 +8,7 @@ import (
 
 	"github.com/gsbs/gsbs/server/auth"
 	"github.com/gsbs/gsbs/server/logx"
+	"github.com/gsbs/gsbs/server/notify"
 	"github.com/gsbs/gsbs/server/sse"
 )
 
@@ -95,6 +96,11 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logx.Logger().Info().Str("username", username).Msg("webui login ok")
+	h.notifyEvent(notify.Event{
+		Type: notify.EventLogin, UserID: userID,
+		Title: "New web login",
+		Body:  fmt.Sprintf("Account %q signed in to the web dashboard from %s.", username, clientIP(r)),
+	})
 	SetSession(w, r, h.secret, sessionID)
 	Redirect(w, r, "/dashboard")
 }
@@ -158,6 +164,13 @@ func (h *WebHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		logx.Logger().Error().Err(err).Msg("webui login totp create session failed")
 		http.Error(w, "Login failed.", http.StatusInternalServerError)
 		return
+	}
+	if username, unameErr := h.store.UsernameByID(r.Context(), userID); unameErr == nil {
+		h.notifyEvent(notify.Event{
+			Type: notify.EventLogin, UserID: userID,
+			Title: "New web login",
+			Body:  fmt.Sprintf("Account %q signed in to the web dashboard (2FA) from %s.", username, clientIP(r)),
+		})
 	}
 	SetSession(w, r, h.secret, sessionID)
 	Redirect(w, r, "/dashboard")

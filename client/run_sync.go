@@ -158,6 +158,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	pullOpts := sync.PullOptions{
 		BackupBeforeOverwrite: cfg.BackupOnPull,
 		ConflictPolicy:        cfg.effectiveConflictPolicy(),
+		PolicyFor:             cfg.effectiveConflictPolicyFor,
 		PullContext:           buildPullContext(cfg),
 	}
 
@@ -260,6 +261,30 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 	pullOpts.WatchRoot = watchRoot
 
+	// Game-aware sync: skip pulls for running games starting from the very
+	// first pull; the file watcher is attached to the poller further below
+	// (it does not exist yet at this point).
+	var gameWatcherRef *sync.Watcher
+	var gameWatcherMu gosync.Mutex
+	getGameWatcher := func() *sync.Watcher {
+		gameWatcherMu.Lock()
+		defer gameWatcherMu.Unlock()
+		return gameWatcherRef
+	}
+	rootsSnapshot := func() map[string][]string {
+		installRootsMu.RLock()
+		defer installRootsMu.RUnlock()
+		out := make(map[string][]string, len(installRoots))
+		for k, v := range installRoots {
+			out[k] = v
+		}
+		return out
+	}
+	gamePoller := startGameWatch(ctx, cfg, getGameWatcher, rootsSnapshot)
+	if gamePoller != nil {
+		pullOpts.SkipGame = gamePoller.Running
+	}
+
 	doPull := func(label string) {
 		if SyncPaused.Load() || (cfg.SkipSyncWhenMetered && IsMeteredConnection()) {
 			return
@@ -299,6 +324,12 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		return err
 	}
 	watcher.SetInstallRoots(installRoots)
+	if gamePoller != nil {
+		watcher.DeferPush = gamePoller.Running
+		gameWatcherMu.Lock()
+		gameWatcherRef = watcher
+		gameWatcherMu.Unlock()
+	}
 	watchPaths := getSyncWatchPaths()
 	if err := watcher.AddPaths(watchPaths); err != nil {
 		log.Println("watch paths:", err)

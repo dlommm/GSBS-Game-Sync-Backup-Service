@@ -90,6 +90,75 @@
     </div>
 
     <div class="settings-form-section">
+      <h3 class="settings-form-section-title">Backups</h3>
+      <p class="settings-form-section-desc">Nightly archive of the database, encryption keys, and stored saves (tar.zst). Destination: <code>GSBS_BACKUP_DIR</code>{{if .BackupDirEnv}} <span class="badge-success">set via environment</span>{{else}} (defaults to <code>backups/</code> beside the database){{end}}. Optional S3 upload via <code>GSBS_BACKUP_S3_*</code> variables. Restore with <code>gsbs-server restore</code> — see docs/RESTORE.md.</p>
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="backup_enabled" value="1" {{if .BackupEnabled}}checked{{end}}>
+          <span>Enable scheduled backups</span>
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="backup_cron">Schedule (cron)</label>
+        <input id="backup_cron" name="backup_cron" class="text-input text-input-mono" value="{{.BackupCron}}" spellcheck="false">
+        <p class="form-hint">Schedule changes take effect after a server restart. “Backup now” always works.</p>
+      </div>
+      <div class="form-group">
+        <label for="backup_keep">Archives to keep</label>
+        <input id="backup_keep" name="backup_keep" class="text-input" type="number" min="1" max="365" value="{{.BackupKeep}}">
+      </div>
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="backup_include_covers" value="1" {{if .BackupIncludeCovers}}checked{{end}}>
+          <span>Include cover-art cache (re-downloadable; enlarges archives)</span>
+        </label>
+      </div>
+      {{if .BackupLastRun}}
+      <p class="form-hint">Last backup: {{.BackupLastRun.StartedAt}} — {{.BackupLastRun.Status}}{{if .BackupLastRun.ErrorMessage}} ({{.BackupLastRun.ErrorMessage}}){{end}}</p>
+      {{end}}
+    </div>
+
+    <div class="settings-form-section">
+      <h3 class="settings-form-section-title">Notifications</h3>
+      <p class="settings-form-section-desc">Server alerts via plain HTTP — a generic webhook (JSON), a Discord webhook, and/or an <a href="https://ntfy.sh" rel="noopener noreferrer" target="_blank">ntfy</a> topic URL. Leave a field empty to disable that channel. Users can additionally set personal channels in their own Settings.</p>
+      <div class="form-group">
+        <label for="notify_webhook_url">Webhook URL (JSON POST)</label>
+        <input id="notify_webhook_url" name="notify_webhook_url" class="text-input text-input-mono" value="{{.NotifyWebhookURL}}" spellcheck="false" placeholder="https://example.com/hook">
+      </div>
+      <div class="form-group">
+        <label for="notify_discord_url">Discord webhook URL</label>
+        <input id="notify_discord_url" name="notify_discord_url" class="text-input text-input-mono" value="{{.NotifyDiscordURL}}" spellcheck="false" placeholder="https://discord.com/api/webhooks/…">
+      </div>
+      <div class="form-group">
+        <label for="notify_ntfy_url">ntfy topic URL</label>
+        <input id="notify_ntfy_url" name="notify_ntfy_url" class="text-input text-input-mono" value="{{.NotifyNtfyURL}}" spellcheck="false" placeholder="https://ntfy.sh/my-gsbs-topic">
+      </div>
+      <div class="form-group">
+        <label>Events</label>
+        {{range .NotifyEventTypes}}
+        <label class="checkbox-label">
+          <input type="checkbox" name="notify_event_{{.}}" value="1" {{if index $.NotifyEventsChecked .}}checked{{end}}>
+          <span>{{.}}</span>
+        </label>
+        {{end}}
+      </div>
+      <div class="form-group">
+        <label for="notify_stale_days">Stale-device alert after (days)</label>
+        <input id="notify_stale_days" name="notify_stale_days" class="text-input" type="number" min="0" max="3650" value="{{.NotifyStaleDays}}">
+        <p class="form-hint">Alerts once when a device stops syncing for this long (0 disables).</p>
+      </div>
+    </div>
+
+    <div class="settings-form-section">
+      <h3 class="settings-form-section-title">Version Retention Overrides</h3>
+      <p class="settings-form-section-desc">Per-game override of how many save versions are kept (global default: <code>GSBS_SAVE_VERSION_RETENTION</code>). JSON object of game ID to count (1–50), e.g. <code>{"12345": 20}</code>. Applies within a minute of saving.</p>
+      <div class="form-group">
+        <label for="retention_overrides">Overrides (JSON)</label>
+        <textarea id="retention_overrides" name="retention_overrides" class="text-input text-input-mono" rows="3" spellcheck="false">{{.RetentionOverridesJSON}}</textarea>
+      </div>
+    </div>
+
+    <div class="settings-form-section">
       <h3 class="settings-form-section-title">Sync Safety</h3>
       <div class="form-group">
         <label class="checkbox-label">
@@ -118,6 +187,32 @@
       <button type="submit" class="btn-primary">Save settings</button>
     </div>
   </form>
+</section>
+
+<section class="panel">
+  <div class="panel-header"><h2>Test Notifications</h2></div>
+  <div class="panel-body">
+    <p class="cell-muted" style="margin:0 0 .75rem;">Sends a test event to every configured channel above (save settings first).</p>
+    <form method="POST" action="/admin/notify/test">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit" class="btn-secondary">Send test notification</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-header"><h2>Backup Now</h2></div>
+  <div class="panel-body">
+    <p class="cell-muted" style="margin:0 0 .75rem;">
+      Runs a full backup immediately (database snapshot, encryption keys, stored saves{{if .BackupIncludeCovers}}, covers{{end}}), regardless of the schedule above.
+    </p>
+    <form method="POST" action="/admin/backup/run">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit" class="btn-secondary" {{if .BackupRunning}}disabled{{end}}>
+        {{if .BackupRunning}}Backup running&hellip;{{else}}Backup now{{end}}
+      </button>
+    </form>
+  </div>
 </section>
 
 <section class="panel">

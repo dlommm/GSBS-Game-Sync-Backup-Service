@@ -10,6 +10,7 @@ import (
 	"github.com/gsbs/gsbs/server/auth"
 	"github.com/gsbs/gsbs/server/job"
 	"github.com/gsbs/gsbs/server/netutil"
+	"github.com/gsbs/gsbs/server/notify"
 	"github.com/gsbs/gsbs/server/ratelimit"
 	"github.com/gsbs/gsbs/server/schedule"
 	"github.com/gsbs/gsbs/server/sse"
@@ -33,6 +34,18 @@ type WebHandler struct {
 	readOnly        bool
 	loginLimiter    *ratelimit.Limiter
 	coverRoot       string
+	notifyFn        func(notify.Event)
+}
+
+// SetNotifier wires the notification system into the WebUI handler.
+func (h *WebHandler) SetNotifier(fn func(notify.Event)) {
+	h.notifyFn = fn
+}
+
+func (h *WebHandler) notifyEvent(ev notify.Event) {
+	if h.notifyFn != nil {
+		h.notifyFn(ev)
+	}
 }
 
 // NewWebHandler creates a WebHandler. loginLimiter may be nil (no rate limit on WebUI login).
@@ -154,6 +167,10 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleExportSaves(w, r, "csv")
 	case path == "/dashboard/export/saves.json" && r.Method == http.MethodGet:
 		h.handleExportSaves(w, r, "json")
+	case path == "/dashboard/export/archive.zip" && r.Method == http.MethodGet:
+		h.handleExportZip(w, r)
+	case path == "/dashboard/games/import" && r.Method == http.MethodPost:
+		h.handleImportSaves(w, r)
 	case path == "/dashboard/games/bulk-delete" && r.Method == http.MethodPost:
 		h.handleBulkDeleteGames(w, r)
 	case path == "/dashboard/clients" && r.Method == http.MethodGet:
@@ -198,6 +215,12 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleClearCoverCache(w, r)
 	case path == "/admin/integrity/run" && r.Method == http.MethodPost:
 		h.handleAdminIntegrityRun(w, r)
+	case path == "/admin/backup/run" && r.Method == http.MethodPost:
+		h.handleAdminBackupRun(w, r)
+	case path == "/admin/notify/test" && r.Method == http.MethodPost:
+		h.handleAdminNotifyTest(w, r)
+	case path == "/dashboard/settings/notifications" && r.Method == http.MethodPost:
+		h.handleUserNotifySave(w, r)
 	case path == "/admin/pcgw/source" && r.Method == http.MethodPost:
 		h.handleAdminChooseSource(w, r)
 	case path == "/admin/analytics" && r.Method == http.MethodGet:

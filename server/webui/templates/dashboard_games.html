@@ -9,8 +9,17 @@
   <div class="page-head-actions">
     <a class="btn-ghost-sm" href="/dashboard/export/saves.csv" download>Export CSV</a>
     <a class="btn-ghost-sm" href="/dashboard/export/saves.json" download>Export JSON</a>
+    <a class="btn-ghost-sm" href="/dashboard/export/archive.zip" title="Download every save file as a zip archive (importable on any GSBS server)">Export saves (.zip)</a>
+    {{if not .ReadOnly}}
+    <form method="post" action="/dashboard/games/import" enctype="multipart/form-data" class="inline-form"
+          onsubmit="return this.archive.files.length > 0 || (alert('Choose a GSBS export .zip first.'), false);">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <label class="btn-ghost-sm import-label">Import archive…<input type="file" name="archive" accept=".zip" class="sr-only" onchange="if(this.files.length){this.form.submit()}"></label>
+    </form>
+    {{end}}
   </div>
 </div>
+{{if .ImportedMsg}}<div class="notice">{{.ImportedMsg}}</div>{{end}}
 
 <form id="games-filter" class="games-toolbar" onsubmit="return false;" role="search" aria-label="Filter games">
   <div class="search-wrap games-search">

@@ -63,6 +63,7 @@ type settingsData struct {
 	CurrentSessionID  string
 	TOTPEnabled       bool
 	EncryptionEnabled bool
+	Notify            store.UserNotifySettings
 }
 
 // gameCard is one tile/row on the My Games page.
@@ -78,16 +79,17 @@ type gameCard struct {
 // dashboardGamesData drives both the My Games page and its HTMX cards partial.
 type dashboardGamesData struct {
 	PageData
-	Games      []gameCard
-	TotalGames int
-	TotalFiles int
-	TotalBytes int64
-	MaxFiles   int    // largest FileCount among games, for the progress ring scale
-	Query      string // active search
-	Status     string // active status filter: all, healthy, stale
-	Sort       string // recent, name, size, files
-	View       string // grid, list
-	ReadOnly   bool
+	Games       []gameCard
+	TotalGames  int
+	TotalFiles  int
+	TotalBytes  int64
+	MaxFiles    int    // largest FileCount among games, for the progress ring scale
+	Query       string // active search
+	Status      string // active status filter: all, healthy, stale
+	Sort        string // recent, name, size, files
+	View        string // grid, list
+	ReadOnly    bool
+	ImportedMsg string // "Imported N save(s)" feedback after archive import
 }
 
 // gameDetailData drives the individual game detail page.

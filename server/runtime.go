@@ -20,6 +20,7 @@ import (
 	"github.com/gsbs/gsbs/server/job"
 	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/metrics"
+	"github.com/gsbs/gsbs/server/notify"
 	"github.com/gsbs/gsbs/server/schedule"
 	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
@@ -145,6 +146,79 @@ func newServerApp() (*serverApp, error) {
 	pcgwCronSched := schedule.NewPCGWCron(c, st, runner)
 	webHandler := webui.NewWebHandler(st, authSvc, sessionSecret, os.Getenv("GSBS_ADMIN_USERNAME"), allowRegister, hub, apiHandler, runner, pcgwCronSched, Version, maxStorageBytes, readOnly, authLimiter)
 
+	// Notifications: events flow to admin sinks (admin_settings) and, for
+	// user-scoped events, additionally to that user's own sinks. Sinks are
+	// resolved per event so settings changes apply without a restart.
+	notifier := notify.New(context.Background(),
+		func(nctx context.Context) notify.Sinks {
+			settings, err := st.ListAdminSettings(nctx)
+			if err != nil {
+				return notify.Sinks{}
+			}
+			return notify.Sinks{
+				WebhookURL: strings.TrimSpace(settings[store.AdminSettingNotifyWebhookURL]),
+				DiscordURL: strings.TrimSpace(settings[store.AdminSettingNotifyDiscordURL]),
+				NtfyURL:    strings.TrimSpace(settings[store.AdminSettingNotifyNtfyURL]),
+				Events:     notify.ParseEventFilter(settings[store.AdminSettingNotifyEvents]),
+			}
+		},
+		func(nctx context.Context, userID string) notify.Sinks {
+			ns, err := st.GetUserNotifySettings(nctx, userID)
+			if err != nil {
+				return notify.Sinks{}
+			}
+			return notify.Sinks{
+				WebhookURL: strings.TrimSpace(ns.WebhookURL),
+				DiscordURL: strings.TrimSpace(ns.DiscordURL),
+				NtfyURL:    strings.TrimSpace(ns.NtfyURL),
+				Events:     notify.ParseEventFilter(ns.EventsJSON),
+			}
+		},
+	)
+	apiHandler.SetNotifier(notifier.Notify)
+	webHandler.SetNotifier(notifier.Notify)
+	job.OnBackupFinished = func(success bool, detail string) {
+		title := "GSBS backup completed"
+		if !success {
+			title = "GSBS backup FAILED"
+		}
+		notifier.Notify(notify.Event{Type: notify.EventBackup, Title: title, Body: detail})
+	}
+
+	// Daily stale-device check (07:15): alerts once per stale period.
+	if _, scheduleErr := c.AddFunc("15 7 * * *", func() {
+		nctx := context.Background()
+		settings, err := st.ListAdminSettings(nctx)
+		if err != nil {
+			return
+		}
+		staleDays := 14
+		if v := strings.TrimSpace(settings[store.AdminSettingNotifyStaleDays]); v != "" {
+			if n, convErr := strconv.Atoi(v); convErr == nil && n >= 0 {
+				staleDays = n
+			}
+		}
+		if staleDays == 0 {
+			return
+		}
+		stale, err := st.ListStaleClientsNeedingAlert(nctx, staleDays)
+		if err != nil {
+			logx.Logger().Error().Err(err).Msg("cron: stale-device check")
+			return
+		}
+		for _, sc := range stale {
+			notifier.Notify(notify.Event{
+				Type:   notify.EventStaleDevice,
+				Title:  "Device has stopped syncing",
+				Body:   fmt.Sprintf("%s (%s) last synced %s — its saves are no longer being backed up.", sc.Name, sc.Username, sc.LastSeen),
+				UserID: sc.UserID,
+			})
+			_ = st.MarkClientStaleNotified(nctx, sc.ClientID)
+		}
+	}); scheduleErr != nil {
+		logx.Logger().Error().Err(scheduleErr).Msg("cron: failed to schedule stale-device check")
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiHandler)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(webui.StaticFiles())))
@@ -234,6 +308,22 @@ func newServerApp() (*serverApp, error) {
 		logx.Logger().Error().Err(scheduleErr).Msg("cron: failed to schedule integrity check")
 	} else {
 		logx.Logger().Info().Msg("cron: integrity check scheduled weekly Monday 06:00")
+	}
+
+	// Scheduled offsite backups: opt-in via admin settings or GSBS_BACKUP_DIR.
+	// The schedule is read at startup (changing it in Settings needs a
+	// restart, noted in the UI); "Backup now" works regardless.
+	if backupSettings, sErr := st.ListAdminSettings(ctx); sErr == nil && job.BackupEnabled(backupSettings) {
+		expr := job.BackupCronExpr(backupSettings)
+		if _, scheduleErr := c.AddFunc(expr, func() {
+			if _, err := runner.TryRunBackup(context.Background()); err != nil && !errors.Is(err, job.ErrJobAlreadyRunning) {
+				logx.Logger().Error().Err(err).Msg("cron: backup failed to start")
+			}
+		}); scheduleErr != nil {
+			logx.Logger().Error().Err(scheduleErr).Str("expr", expr).Msg("cron: failed to schedule backup")
+		} else {
+			logx.Logger().Info().Str("expr", expr).Msg("cron: backup scheduled")
+		}
 	}
 
 	addr := os.Getenv("GSBS_ADDR")

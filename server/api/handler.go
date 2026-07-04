@@ -23,6 +23,7 @@ import (
 	"github.com/gsbs/gsbs/server/auth"
 	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/netutil"
+	"github.com/gsbs/gsbs/server/notify"
 	"github.com/gsbs/gsbs/server/ratelimit"
 	"github.com/gsbs/gsbs/server/sse"
 	"github.com/gsbs/gsbs/server/store"
@@ -81,6 +82,65 @@ type Handler struct {
 		mu  sync.Mutex
 		val bool
 		at  time.Time
+	}
+
+	// notifyFn, when set, receives notification events (conflicts, quota,
+	// device registrations). Delivery is asynchronous on the notifier side.
+	notifyFn func(notify.Event)
+
+	// quotaAlerted dedups "quota exceeded" notifications per user (the
+	// outbox retries blocked pushes every couple of minutes — without dedup
+	// that would spam the sinks).
+	quotaAlerted struct {
+		mu sync.Mutex
+		m  map[string]time.Time
+	}
+}
+
+// SetNotifier wires the notification system into the API handler.
+func (h *Handler) SetNotifier(fn func(notify.Event)) {
+	h.notifyFn = fn
+}
+
+func (h *Handler) notifyEvent(ev notify.Event) {
+	if h.notifyFn != nil {
+		h.notifyFn(ev)
+	}
+}
+
+// notifyQuota emits threshold-crossing and blocked notifications. "Exceeded"
+// alerts fire at most once per user per 6 hours.
+func (h *Handler) notifyQuota(userID string, before, after, quota int64, blocked bool) {
+	if h.notifyFn == nil || quota <= 0 {
+		return
+	}
+	if blocked {
+		h.quotaAlerted.mu.Lock()
+		if h.quotaAlerted.m == nil {
+			h.quotaAlerted.m = make(map[string]time.Time)
+		}
+		last, seen := h.quotaAlerted.m[userID]
+		if seen && time.Since(last) < 6*time.Hour {
+			h.quotaAlerted.mu.Unlock()
+			return
+		}
+		h.quotaAlerted.m[userID] = time.Now()
+		h.quotaAlerted.mu.Unlock()
+		h.notifyEvent(notify.Event{
+			Type: notify.EventQuota, UserID: userID,
+			Title: "Storage quota exceeded",
+			Body:  "New save uploads are blocked until usage drops. Free space by deleting old games or versions, or raise the quota.",
+		})
+		return
+	}
+	threshold := quota * 8 / 10
+	if before < threshold && after >= threshold && after <= quota {
+		pct := after * 100 / quota
+		h.notifyEvent(notify.Event{
+			Type: notify.EventQuota, UserID: userID,
+			Title: "Storage quota 80% reached",
+			Body:  fmt.Sprintf("Save storage is at %d%% of the quota (version history included).", pct),
+		})
 	}
 }
 
@@ -322,13 +382,18 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	_, token, err := h.auth.Login(r.Context(), req.Username, req.Password, req.ClientName, req.ClientOS)
+	loginUserID, token, err := h.auth.Login(r.Context(), req.Username, req.Password, req.ClientName, req.ClientOS)
 	if err != nil {
 		logx.Logger().Warn().Str("username", req.Username).Err(err).Msg("api login failed")
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "bad credentials"})
 		return
 	}
 	logx.Logger().Info().Str("username", req.Username).Str("client", req.ClientName).Str("os", req.ClientOS).Msg("api login ok")
+	h.notifyEvent(notify.Event{
+		Type: notify.EventDeviceRegistered, UserID: loginUserID,
+		Title: "New device connected",
+		Body:  fmt.Sprintf("%q (%s) logged in and can now sync saves. Not you? Revoke it on the Devices page.", req.ClientName, req.ClientOS),
+	})
 	writeJSON(w, http.StatusOK, loginResponse{Token: token})
 }
 
@@ -416,6 +481,11 @@ func (h *Handler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "login failed"})
 		return
 	}
+	h.notifyEvent(notify.Event{
+		Type: notify.EventDeviceRegistered, UserID: userID,
+		Title: "New device connected",
+		Body:  fmt.Sprintf("%q (%s) logged in with 2FA and can now sync saves. Not you? Revoke it on the Devices page.", req.ClientName, req.ClientOS),
+	})
 	writeJSON(w, http.StatusOK, loginResponse{Token: token})
 }
 
@@ -525,7 +595,7 @@ func (h *Handler) handleSaveSummaries(w http.ResponseWriter, r *http.Request, us
 		items[i] = map[string]interface{}{
 			"game_id": s.GameID, "path_key": s.PathKey, "game_title": s.GameTitle,
 			"size_bytes": s.SizeBytes, "updated_at": s.UpdatedAt, "content_hash": s.ContentHash,
-			"encrypted": s.Encrypted,
+			"encrypted": s.Encrypted, "relative_path": s.RelativePath,
 		}
 	}
 	resp := map[string]interface{}{"saves": items}
@@ -854,12 +924,13 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		}
 	}
 	// Per-user storage quota pre-check (0 = unlimited)
-	var userQuota int64
+	var userQuota, usageBefore int64
 	if q, qErr := h.store.UserQuotaBytes(r.Context(), userID); qErr == nil {
 		userQuota = q
 	}
 	if userQuota > 0 {
 		current, err := h.store.StorageUsage(r.Context(), userID)
+		usageBefore = current
 		if err != nil {
 			logx.Logger().Error().
 				Str("user_id", userID).
@@ -885,6 +956,11 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			return
 		}
 		if serverHash != ifHash {
+			h.notifyEvent(notify.Event{
+				Type: notify.EventConflict, UserID: userID,
+				Title: "Sync conflict detected",
+				Body:  fmt.Sprintf("Two devices changed the same save for %s. Resolve it from the tray or the web dashboard.", gameID),
+			})
 			writeJSON(w, http.StatusConflict, map[string]interface{}{
 				"error":           "conflict",
 				"current_hash":    serverHash,
@@ -910,6 +986,11 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			return
 		}
 		if serverHash != "" && serverHash != incoming {
+			h.notifyEvent(notify.Event{
+				Type: notify.EventConflict, UserID: userID,
+				Title: "Sync conflict on a new device",
+				Body:  fmt.Sprintf("A device pushed %s for the first time but the server already holds a different save. Resolve it from the tray or the web dashboard.", gameID),
+			})
 			writeJSON(w, http.StatusConflict, map[string]interface{}{
 				"error":           "conflict",
 				"current_hash":    serverHash,
@@ -934,6 +1015,11 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			lastWriter, _ := h.store.GetSaveClientID(r.Context(), userID, gameID, pathKey)
 			caller, _ := r.Context().Value(contextClientID).(string)
 			if lastWriter != "" && caller != "" && lastWriter != caller {
+				h.notifyEvent(notify.Event{
+					Type: notify.EventConflict, UserID: userID,
+					Title: "Sync conflict (older client, strict mode)",
+					Body:  fmt.Sprintf("An older client tried to overwrite %s last written by another device.", gameID),
+				})
 				writeJSON(w, http.StatusConflict, map[string]interface{}{
 					"error":           "conflict",
 					"current_hash":    serverHash,
@@ -977,6 +1063,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 	if err != nil {
 		switch {
 		case errors.Is(err, store.ErrQuotaExceeded):
+			h.notifyQuota(userID, 0, 0, userQuota, true)
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "storage quota exceeded"})
 		case errors.Is(err, store.ErrGlobalLimitExceeded):
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "global storage limit exceeded"})
@@ -987,6 +1074,11 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "save failed"})
 		}
 		return
+	}
+	if userQuota > 0 && !skipped {
+		if after, uerr := h.store.StorageUsage(r.Context(), userID); uerr == nil {
+			h.notifyQuota(userID, usageBefore, after, userQuota, false)
+		}
 	}
 	if skipped {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "unchanged"})

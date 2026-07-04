@@ -106,6 +106,12 @@ func (h *WebHandler) serveDashboardGames(w http.ResponseWriter, r *http.Request)
 		IsAdmin:   h.isAdminUser(r.Context(), userID, username),
 		CSRFToken: csrfToken, NavActive: "games",
 	}
+	if n := r.URL.Query().Get("imported"); n != "" {
+		data.ImportedMsg = "Imported " + n + " save(s) from archive."
+		if f := r.URL.Query().Get("import_failed"); f != "" && f != "0" {
+			data.ImportedMsg += " " + f + " entrie(s) were skipped (invalid or over quota)."
+		}
+	}
 	h.render(w, "dashboard_games.html", data)
 }
 

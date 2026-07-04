@@ -56,6 +56,7 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 	sessions, _ := h.store.ListSessionsByUser(r.Context(), userID)
 	totpEnabled, _ := h.store.IsTOTPEnabled(r.Context(), userID)
 	encryptionEnabled, _ := h.store.IsEncryptionEnabled(r.Context(), userID)
+	notifySettings, _ := h.store.GetUserNotifySettings(r.Context(), userID)
 	h.render(w, "settings.html", settingsData{
 		PageData: PageData{
 			PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
@@ -63,6 +64,7 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 		},
 		Sessions: sessions, CurrentSessionID: GetSessionID(r, h.secret), TOTPEnabled: totpEnabled,
 		EncryptionEnabled: encryptionEnabled,
+		Notify:            notifySettings,
 	})
 }
 

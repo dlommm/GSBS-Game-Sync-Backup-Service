@@ -71,27 +71,57 @@ type pendingPush struct {
 
 // Watcher watches local directories and uploads matching file changes to the server.
 type Watcher struct {
-	resolver        *paths.Resolver
-	currentOS       paths.OS
-	client          *Client
-	fw              *fsnotify.Watcher
-	mu              sync.Mutex
-	pathMap         map[string]pathEntry
-	timers          map[string]*time.Timer
-	pending         map[string]pendingPush
-	emptyRetries    map[string]bool     // filePath -> true when re-checking a previously-empty file
-	settleRetries   map[string]int      // filePath -> re-arm count while the file keeps changing mid-read
-	installRoots    map[string][]string // manifest game_id -> install folders for <game-install-folder>
-	consecErr       int
-	IsPaused        func() bool
+	resolver      *paths.Resolver
+	currentOS     paths.OS
+	client        *Client
+	fw            *fsnotify.Watcher
+	mu            sync.Mutex
+	pathMap       map[string]pathEntry
+	timers        map[string]*time.Timer
+	pending       map[string]pendingPush
+	emptyRetries  map[string]bool     // filePath -> true when re-checking a previously-empty file
+	settleRetries map[string]int      // filePath -> re-arm count while the file keeps changing mid-read
+	installRoots  map[string][]string // manifest game_id -> install folders for <game-install-folder>
+	consecErr     int
+	IsPaused      func() bool
+	// DeferPush, when set, reports that pushes for a game should wait (the
+	// game is running and may be mid-write); the pending push is re-armed
+	// rather than dropped, and FlushPendingFor fires it when the game exits.
+	DeferPush       func(gameID string) bool
 	ExcludePatterns []string
 	Verbose         bool
 }
+
+// gameDeferRecheck is how often a deferred push re-checks whether its game
+// has exited (FlushPendingFor short-circuits the wait on a detected exit).
+const gameDeferRecheck = 30 * time.Second
 
 // maxSettleRetries caps how often an unstable (still-being-written) file is
 // re-queued before we push the latest snapshot anyway with a warning — a
 // constantly-written file must not starve forever.
 const maxSettleRetries = 5
+
+// FlushPendingFor immediately fires any deferred/pending pushes for a game —
+// called when the game exits so its final save state uploads right away
+// instead of waiting out the defer re-check interval.
+func (w *Watcher) FlushPendingFor(gameID string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n := 0
+	for filePath, p := range w.pending {
+		if p.gameID != gameID {
+			continue
+		}
+		if t := w.timers[filePath]; t != nil {
+			// Reset re-fires the timer's original closure (with its context).
+			t.Reset(time.Millisecond)
+			n++
+		}
+	}
+	if n > 0 {
+		logSyncInfo("push_flush_game_exit", "game_id", gameID, "count", n)
+	}
+}
 
 // SetInstallRoots updates per-game install roots used to resolve <game-install-folder>
 // templates. Safe to call concurrently with AddPaths/RemoveStalePaths.
@@ -562,6 +592,20 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 	}()
 	if w.IsPaused != nil && w.IsPaused() {
 		logSyncInfo("watcher_push_paused", "game_id", gameID, "file", filePath)
+		return
+	}
+	// Game-aware deferral: while the game runs, keep the push pending and
+	// re-check periodically. Writes accumulate under one pending entry, so
+	// the final save state uploads once after the session ends.
+	if w.DeferPush != nil && w.DeferPush(gameID) {
+		w.mu.Lock()
+		w.pending[filePath] = pendingPush{gameID: gameID, pathKey: pathKey, ruleKey: ruleKey, relPath: relPath, filePath: filePath}
+		w.timers[filePath] = time.AfterFunc(gameDeferRecheck, func() {
+			w.pushDebounced(ctx, gameID, pathKey, ruleKey, relPath, filePath)
+		})
+		requeued = true
+		w.mu.Unlock()
+		logSyncDebug("push_deferred_game_running", "game_id", gameID, "file", filePath)
 		return
 	}
 	if w.excludeMatch(filePath, relPath) {

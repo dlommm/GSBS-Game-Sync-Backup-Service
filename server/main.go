@@ -178,6 +178,13 @@ func metricsAuth(token string, next http.Handler) http.Handler {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "restore" {
+		if err := runRestore(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "restore:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	opts, err := parseCLIOptions(os.Args[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

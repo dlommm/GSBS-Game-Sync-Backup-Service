@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 24
+const schemaVersion = 26
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -124,6 +124,8 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{22, stepIntegrityFindings},
 		{23, s.stepEncryptTOTPSecrets},
 		{24, stepClientAppVersion},
+		{25, stepClientStaleNotified},
+		{26, stepUserNotifySettings},
 	}
 }
 
@@ -135,6 +137,31 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 // recently-seen device reports a version that can read it.
 func stepClientAppVersion(tx *sql.Tx) error {
 	_, err := tx.Exec(`ALTER TABLE clients ADD COLUMN app_version TEXT`)
+	return err
+}
+
+// stepClientStaleNotified deduplicates stale-device notifications: set when a
+// "device hasn't synced in N days" alert fires, cleared when the device
+// reappears, so the daily check alerts once per stale period.
+func stepClientStaleNotified(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE clients ADD COLUMN stale_notified_at TEXT`)
+	return err
+}
+
+// stepUserNotifySettings holds per-user notification sinks (webhook/Discord/
+// ntfy URLs + event filter); admin-level sinks live in admin_settings.
+func stepUserNotifySettings(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS user_notify_settings (
+			user_id TEXT PRIMARY KEY,
+			webhook_url TEXT NOT NULL DEFAULT '',
+			discord_url TEXT NOT NULL DEFAULT '',
+			ntfy_url TEXT NOT NULL DEFAULT '',
+			events TEXT NOT NULL DEFAULT '',
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		);
+	`)
 	return err
 }
 

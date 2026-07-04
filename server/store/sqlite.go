@@ -30,6 +30,45 @@ type sqliteStore struct {
 	totpKeyOnce  sync.Once
 	totpKeyBytes []byte
 	totpKeyErr   error
+
+	// Cached per-game version-retention overrides (admin_settings key
+	// "retention_overrides", JSON {"game_id": N}); refreshed every 60s so
+	// admin edits apply without a restart.
+	retentionOv struct {
+		mu sync.Mutex
+		m  map[string]int
+		at time.Time
+	}
+}
+
+// AdminSettingRetentionOverrides holds per-game version-retention overrides
+// as a JSON object {"game_id": keepN}.
+const AdminSettingRetentionOverrides = "retention_overrides"
+
+// retentionForGame resolves the version retention for one game: a valid
+// per-game override (1–50) wins over the global GSBS_SAVE_VERSION_RETENTION.
+func (s *sqliteStore) retentionForGame(ctx context.Context, gameID string) int {
+	base := s.versionRetention
+	if base < 5 {
+		base = saveVersionRetentionDefault
+	}
+	s.retentionOv.mu.Lock()
+	if time.Since(s.retentionOv.at) >= time.Minute {
+		s.retentionOv.at = time.Now()
+		s.retentionOv.m = nil
+		if raw, err := s.GetAdminSetting(ctx, AdminSettingRetentionOverrides); err == nil && strings.TrimSpace(raw) != "" {
+			var m map[string]int
+			if json.Unmarshal([]byte(raw), &m) == nil {
+				s.retentionOv.m = m
+			}
+		}
+	}
+	n, ok := s.retentionOv.m[gameID]
+	s.retentionOv.mu.Unlock()
+	if ok && n >= 1 && n <= 50 {
+		return n
+	}
+	return base
 }
 
 // NewSQLite creates a SQLite-backed store.
@@ -630,10 +669,7 @@ func (s *sqliteStore) GetSaveHashAndVersion(ctx context.Context, userID, gameID,
 }
 
 func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pathKey string, content []byte, meta *SaveMeta) (skipped bool, err error) {
-	retention := s.versionRetention
-	if retention < 5 {
-		retention = saveVersionRetentionDefault
-	}
+	retention := s.retentionForGame(ctx, gameID)
 	contentHash := hashContent(content)
 	contentSize := int64(len(content))
 	clientID := ""
@@ -1599,6 +1635,19 @@ func (s *sqliteStore) StorageUsage(ctx context.Context, userID string) (int64, e
 func (s *sqliteStore) TotalStorageUsage(ctx context.Context) (int64, error) {
 	return totalStorageUsage(ctx, s.db)
 }
+
+// VacuumInto writes a consistent snapshot of the database to destPath using
+// SQLite's online VACUUM INTO (safe under WAL while the server is running).
+func (s *sqliteStore) VacuumInto(ctx context.Context, destPath string) error {
+	_, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, destPath)
+	return err
+}
+
+// DatabasePath returns the SQLite file path this store was opened with.
+func (s *sqliteStore) DatabasePath() string { return s.dbPath }
+
+// SaveRootPath returns the filesystem save root ("" = DB-blob mode).
+func (s *sqliteStore) SaveRootPath() string { return s.saveRoot }
 
 // PruneHistory deletes append-only history older than the retention windows
 // and optionally age-prunes save versions (keeping a newest-N floor per slot).

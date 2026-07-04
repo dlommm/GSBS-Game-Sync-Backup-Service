@@ -12,6 +12,11 @@ Major release: security & reliability audit fixes plus new flagship features.
 
 ### Added
 
+- **Game-aware sync**: the client defers a game's pushes and pulls while it is running and flushes immediately on exit (on by default; not available under Flatpak).
+- **Built-in server backups + restore**: scheduled tar.zst archives (DB snapshot + keys + saves), local retention, optional S3 upload, `gsbs-server restore` command, docs/RESTORE.md runbook.
+- **Notifications**: webhook/Discord/ntfy alerts for conflicts, quota, new devices/logins, backup results, and stale devices — server-wide and per-user.
+- **Save export & import**: real save bytes as zip archives (per game or whole account, optional version history), importable into any GSBS server; `gsbs-client export` downloads and decrypts locally.
+- **Per-game controls**: version-retention overrides (server) and conflict-policy overrides (client); Devices page shows app versions.
 - Weekly **data-integrity verification** job with admin overview findings + "Verify now" (encrypted saves are skipped by design).
 - **History pruning** (audit log 180d, manifest fetches 30d, stats snapshots 730d; `GSBS_*_RETENTION_DAYS`, `0` = forever) and optional age-based save-version pruning (`GSBS_SAVE_VERSION_MAX_AGE_DAYS`, keeps newest 3 per file).
 - **Server log rotation** (20 MiB × 3 by default; `GSBS_LOG_MAX_BYTES` / `GSBS_LOG_MAX_BACKUPS`).

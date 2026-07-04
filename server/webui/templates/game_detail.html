@@ -16,14 +16,18 @@
       <span class="cell-muted">Last synced {{formatTime .LastSynced}}</span>
     </div>
   </div>
-  {{if not .ReadOnly}}
-  <form class="game-detail-actions" method="post" action="/dashboard/game/delete"
-        onsubmit="return confirm('Delete ALL {{.FileCount}} saved file(s) for {{.Title}} from the server? This cannot be undone.');">
-    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-    <input type="hidden" name="game_id" value="{{.GameID}}">
-    <button type="submit" class="btn-danger-sm">Delete all saves</button>
-  </form>
-  {{end}}
+  <div class="game-detail-actions">
+    <a class="btn-ghost-sm" href="/dashboard/export/archive.zip?game_id={{urlquery .GameID}}" title="Latest save files as a zip">Export (.zip)</a>
+    <a class="btn-ghost-sm" href="/dashboard/export/archive.zip?game_id={{urlquery .GameID}}&versions=all" title="Includes retained version history">Export + history</a>
+    {{if not .ReadOnly}}
+    <form method="post" action="/dashboard/game/delete"
+          onsubmit="return confirm('Delete ALL {{.FileCount}} saved file(s) for {{.Title}} from the server? This cannot be undone.');">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <input type="hidden" name="game_id" value="{{.GameID}}">
+      <button type="submit" class="btn-danger-sm">Delete all saves</button>
+    </form>
+    {{end}}
+  </div>
 </header>
 
 <section class="metric-row" aria-label="Game metrics">

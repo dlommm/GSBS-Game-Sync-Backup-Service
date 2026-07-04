@@ -387,6 +387,14 @@ func (c *TrayController) applyIcon(snap TraySnapshot) {
 }
 
 func formatStatusHeader(snap TraySnapshot) string {
+	// Game-aware deferral wins over the idle line (but not over active
+	// syncing/paused/error states, which the user should still see).
+	if snap.GamesRunning > 0 && snap.Status == TrayStatusIdle {
+		if snap.GamesRunning == 1 {
+			return "GSBS — In game: sync deferred"
+		}
+		return fmt.Sprintf("GSBS — In game (%d): sync deferred", snap.GamesRunning)
+	}
 	switch snap.Status {
 	case TrayStatusSyncing:
 		return "GSBS — Syncing…"

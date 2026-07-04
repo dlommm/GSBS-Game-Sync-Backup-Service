@@ -61,6 +61,33 @@
       </form>
     </div>
   </section>
+
+  <section class="panel settings-card">
+    <div class="panel-header"><h2>My notifications</h2></div>
+    <div class="settings-card-body">
+      <ul class="settings-list cell-muted">
+        <li>Personal alerts for your account: sync conflicts, quota warnings, new devices and logins, stale devices.</li>
+        <li>Delivered to your own webhook, Discord webhook, or ntfy topic. Leave empty to disable.</li>
+      </ul>
+      <form method="post" action="/dashboard/settings/notifications" class="auth-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <label>Webhook URL (JSON)
+          <input type="url" name="notify_webhook_url" value="{{.Notify.WebhookURL}}" placeholder="https://example.com/hook" spellcheck="false">
+        </label>
+        <label>Discord webhook URL
+          <input type="url" name="notify_discord_url" value="{{.Notify.DiscordURL}}" placeholder="https://discord.com/api/webhooks/…" spellcheck="false">
+        </label>
+        <label>ntfy topic URL
+          <input type="url" name="notify_ntfy_url" value="{{.Notify.NtfyURL}}" placeholder="https://ntfy.sh/my-topic" spellcheck="false">
+        </label>
+        <label class="settings-toggle">
+          <input type="checkbox" name="send_test" value="1">
+          Send a test notification after saving
+        </label>
+        <button type="submit">Save notification settings</button>
+      </form>
+    </div>
+  </section>
 </div>
 
 <section class="panel">

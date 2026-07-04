@@ -247,6 +247,49 @@ func (r *rateLimitReader) Close() error {
 	return nil
 }
 
+// DownloadedSave is one decrypted save fetched for local export.
+type DownloadedSave struct {
+	GameID       string
+	PathKey      string
+	RelativePath string // may be empty on very old server rows
+	Content      []byte // decrypted plaintext (the local passphrase is applied)
+	UpdatedAt    string
+}
+
+// DownloadAll fetches every save (optionally filtered to one game) and
+// decrypts encrypted payloads locally — the basis of `gsbs-client export`.
+func (c *Client) DownloadAll(ctx context.Context, gameID string) ([]DownloadedSave, error) {
+	summaries, err := c.pullSummaries(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []DownloadedSave
+	for _, s := range summaries.Saves {
+		if gameID != "" && s.GameID != gameID {
+			continue
+		}
+		resp, err := c.pullSingle(ctx, s.GameID, s.PathKey)
+		if err != nil {
+			return nil, fmt.Errorf("download %s/%s: %w", s.GameID, s.PathKey, err)
+		}
+		for _, entry := range resp.Saves {
+			raw, err := base64.StdEncoding.DecodeString(entry.Content)
+			if err != nil {
+				return nil, fmt.Errorf("decode %s/%s: %w", s.GameID, s.PathKey, err)
+			}
+			content, err := c.decodeContent(raw, entry.Encrypted)
+			if err != nil {
+				return nil, fmt.Errorf("decrypt %s/%s: %w (is the encryption passphrase configured?)", s.GameID, s.PathKey, err)
+			}
+			out = append(out, DownloadedSave{
+				GameID: s.GameID, PathKey: s.PathKey, RelativePath: s.RelativePath,
+				Content: content, UpdatedAt: entry.UpdatedAt,
+			})
+		}
+	}
+	return out, nil
+}
+
 // FileHash returns SHA256 hex of file content.
 func FileHash(content []byte) string {
 	h := sha256.Sum256(content)
@@ -256,12 +299,13 @@ func FileHash(content []byte) string {
 // SummaryResponse is the decoded summaries API response.
 type SummaryResponse struct {
 	Saves []struct {
-		GameID      string `json:"game_id"`
-		PathKey     string `json:"path_key"`
-		GameTitle   string `json:"game_title"`
-		UpdatedAt   string `json:"updated_at"`
-		ContentHash string `json:"content_hash"`
-		Encrypted   bool   `json:"encrypted,omitempty"`
+		GameID       string `json:"game_id"`
+		PathKey      string `json:"path_key"`
+		GameTitle    string `json:"game_title"`
+		UpdatedAt    string `json:"updated_at"`
+		ContentHash  string `json:"content_hash"`
+		Encrypted    bool   `json:"encrypted,omitempty"`
+		RelativePath string `json:"relative_path,omitempty"`
 	} `json:"saves"`
 	// CryptoV2Ready is the server's fleet signal: every recently-seen device
 	// on the account can read the v2 save-encryption format. Absent on old
@@ -440,6 +484,10 @@ func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryRespo
 		if absPath == "" {
 			continue
 		}
+		if opts.SkipGame != nil && opts.SkipGame(s.GameID) {
+			logSyncDebug("pull_deferred_game_running", "game_id", s.GameID, "path_key", s.PathKey)
+			continue
+		}
 		elig := paths.EvaluatePullEligibility(absPath, s.GameID, opts.PullContext)
 		if elig == paths.SkipNotInstalled || elig == paths.SkipNoAnchor {
 			continue
@@ -464,7 +512,7 @@ func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryRespo
 		// Translate the server timestamp onto the local clock before the
 		// mtime comparison; DecidePull's skew window absorbs the residue.
 		serverTime = serverTime.Add(-c.serverClockOffset())
-		decision := DecidePull(localExists, localHash, localMtime, s.ContentHash, serverTime, opts.ConflictPolicy)
+		decision := DecidePull(localExists, localHash, localMtime, s.ContentHash, serverTime, opts.policyFor(s.GameID))
 		if decision == PullSkip {
 			continue
 		}
@@ -580,6 +628,10 @@ func (c *Client) applyOneSave(gameID, pathKey, updatedAt, contentB64, absPath st
 }
 
 func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, absPath string, opts PullOptions, encrypted bool) error {
+	if opts.SkipGame != nil && opts.SkipGame(gameID) {
+		logSyncDebug("pull_deferred_game_running", "game_id", gameID, "path_key", pathKey)
+		return nil
+	}
 	raw, err := base64.StdEncoding.DecodeString(contentB64)
 	if err != nil {
 		return fmt.Errorf("decode game=%s: %w", gameID, err)
@@ -607,7 +659,7 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 	// Same one-clock translation as the summaries path.
 	serverTime = serverTime.Add(-c.serverClockOffset())
 	serverHash := FileHash(content)
-	decision := DecidePull(localExists, localHash, localMtime, serverHash, serverTime, opts.ConflictPolicy)
+	decision := DecidePull(localExists, localHash, localMtime, serverHash, serverTime, opts.policyFor(gameID))
 	if decision == PullSkip {
 		return nil
 	}

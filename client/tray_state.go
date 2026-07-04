@@ -83,6 +83,7 @@ type TraySnapshot struct {
 	ConflictCount  int
 	Metered        bool
 	Paused         bool
+	GamesRunning   int // running games detected by game-aware sync
 	WatcherHealthy bool
 	AuthFailed     bool // true when the outbox/push is paused due to a 401 auth failure
 	ManifestAge    time.Duration
@@ -100,10 +101,23 @@ type trayState struct {
 	conflictCount  int
 	metered        bool
 	paused         bool
+	gamesRunning   int // running games detected by game-aware sync (pushes deferred)
 	games          map[string]*GameRow
 	discovered     map[string]*GameRow
 	titleCache     map[string]string
 	subscribers    []chan struct{}
+}
+
+// SetGamesRunning updates how many tracked games are currently running
+// (game-aware sync); the tray header shows a "sync deferred" line while > 0.
+func SetGamesRunning(n int) {
+	globalTrayState.mu.Lock()
+	changed := globalTrayState.gamesRunning != n
+	globalTrayState.gamesRunning = n
+	globalTrayState.mu.Unlock()
+	if changed {
+		notifyTrayState()
+	}
 }
 
 var globalTrayState = &trayState{
@@ -494,6 +508,7 @@ func GetTraySnapshot() TraySnapshot {
 		ConflictCount:  globalTrayState.conflictCount,
 		Metered:        globalTrayState.metered,
 		Paused:         globalTrayState.paused,
+		GamesRunning:   globalTrayState.gamesRunning,
 		WatcherHealthy: WatcherHealthy.Load(),
 		AuthFailed:     clientsync.IsOutboxAuthFailed(),
 		ManifestAge:    ManifestETagAge(),

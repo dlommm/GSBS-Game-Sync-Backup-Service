@@ -155,6 +155,21 @@ type Store interface {
 	// writes (save root in filesystem mode, else the DB directory). Returns
 	// -1 when the volume cannot be determined (in-memory databases).
 	FreeSpaceForWrites() (int64, error)
+	// VacuumInto writes a consistent snapshot of the database to destPath
+	// (safe while the server is running; used by the backup job).
+	VacuumInto(ctx context.Context, destPath string) error
+	// GetUserNotifySettings / SetUserNotifySettings manage a user's personal
+	// notification sinks (webhook/Discord/ntfy + event filter).
+	GetUserNotifySettings(ctx context.Context, userID string) (UserNotifySettings, error)
+	SetUserNotifySettings(ctx context.Context, userID string, ns UserNotifySettings) error
+	// ListStaleClientsNeedingAlert / MarkClientStaleNotified drive the daily
+	// "device hasn't synced in N days" alert with per-period dedup.
+	ListStaleClientsNeedingAlert(ctx context.Context, days int) ([]StaleClient, error)
+	MarkClientStaleNotified(ctx context.Context, clientID string) error
+	// DatabasePath returns the SQLite file path ("" semantics for :memory:).
+	DatabasePath() string
+	// SaveRootPath returns the filesystem save root ("" = DB-blob mode).
+	SaveRootPath() string
 	// DistinctGameCount returns number of unique games with saves for a user.
 	DistinctGameCount(ctx context.Context, userID string) (int, error)
 

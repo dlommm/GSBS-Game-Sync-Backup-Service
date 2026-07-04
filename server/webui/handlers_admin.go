@@ -327,6 +327,30 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// handleAdminBackupRun starts a manual backup.
+func (h *WebHandler) handleAdminBackupRun(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, username, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	if h.jobRunner != nil {
+		if _, err := h.jobRunner.TryRunBackup(context.Background()); err != nil {
+			if errors.Is(err, job.ErrJobAlreadyRunning) {
+				Redirect(w, r, "/admin/settings?error=job_already_running")
+				return
+			}
+			Redirect(w, r, "/admin/settings?error=job_start_failed")
+			return
+		}
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "run_job", "backup", "")
+	Redirect(w, r, "/admin/settings?backup_started=1")
+}
+
 // handleAdminIntegrityRun starts a manual blob-integrity verification.
 func (h *WebHandler) handleAdminIntegrityRun(w http.ResponseWriter, r *http.Request) {
 	if !ValidateCSRF(r, h.secret) {
