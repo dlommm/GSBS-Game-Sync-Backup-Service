@@ -109,13 +109,24 @@ jobs:
         run: |
           ./script/packaging/linux/build-deb.sh dist "$VERSION" amd64
           ./script/packaging/linux/build-deb.sh dist "$VERSION" arm64
-      - name: Build AppImage (amd64 + arm64)
+      - name: Register QEMU (for the arm64 AppImage tooling)
+        # linuxdeploy ships as an arch-native AppImage, so building the arm64
+        # AppImage on this amd64 runner needs binfmt emulation. Best-effort:
+        # if it can't register (e.g. restricted runner), the arm64 AppImage is
+        # simply skipped below — arm64 still ships as .deb + raw binary.
+        continue-on-error: true
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: Build AppImage (amd64 required, arm64 best-effort)
         env:
           VERSION: ${{ needs.version.outputs.tag }}
         run: |
           ./script/packaging/linux/build-appimage.sh dist "$VERSION" amd64
-          ./script/packaging/linux/build-appimage.sh dist "$VERSION" arm64
-      - name: Verify AppImage in dist
+          if ! ./script/packaging/linux/build-appimage.sh dist "$VERSION" arm64; then
+            echo "::warning::arm64 AppImage build failed (needs QEMU emulation); shipping arm64 as .deb + raw binary only"
+          fi
+      - name: Verify amd64 AppImage in dist
         run: test -f "dist/gsbs-client-${{ needs.version.outputs.value }}-x86_64.AppImage"
       - name: Generate release manifests
         env:
