@@ -13,6 +13,16 @@ const (
 	AdminSettingPCGWPathExcludes      = "pcgw_path_excludes"
 	AdminSettingPCGWAutoRunFirstStart = "pcgw_auto_run_on_first_start"
 	AdminSettingPCGWFirstRunDone      = "pcgw_first_run_done"
+	// AdminSettingAllowRegister ("true"/"false"): DB-backed registration policy
+	// used when GSBS_ALLOW_REGISTER is unset (setup wizard / Server Settings).
+	AdminSettingAllowRegister = "allow_register"
+	// AdminSettingMaxStorageBytes: DB-backed global storage limit (bytes, 0 =
+	// unlimited) used when GSBS_MAX_STORAGE_BYTES is unset.
+	AdminSettingMaxStorageBytes = "max_storage_bytes"
+	// AdminSettingSetupCompletedAt records when the first-run setup wizard
+	// finished (RFC3339); its presence is not required (the wizard also
+	// deactivates once a user exists) but it is shown in Server Settings.
+	AdminSettingSetupCompletedAt = "setup_completed_at"
 	// AdminSettingLegacyPushProtection ("true"/"1" = on, default off): reject
 	// precondition-less pushes from pre-4.0 clients with 409 when the slot was
 	// last written by a different device. Strict multi-device safety for

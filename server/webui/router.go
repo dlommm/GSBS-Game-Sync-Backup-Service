@@ -116,6 +116,20 @@ func clientIP(r *http.Request) string {
 
 func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
+
+	// First-run setup wizard: while no user exists, every page redirects to
+	// /setup and the wizard creates the first (admin) account. Once any user
+	// exists the wizard 404s and the redirect stops. Static assets and covers
+	// stay reachable so the wizard page can render.
+	if strings.HasPrefix(path, "/setup") {
+		h.serveSetup(w, r)
+		return
+	}
+	if h.setupNeeded(r) && !strings.HasPrefix(path, "/covers/") {
+		Redirect(w, r, "/setup")
+		return
+	}
+
 	switch {
 	case path == "/login/totp":
 		if r.Method == http.MethodGet {

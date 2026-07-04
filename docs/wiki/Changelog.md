@@ -12,6 +12,7 @@ Major release: security & reliability audit fixes plus new flagship features.
 
 ### Added
 
+- **Zero-config first run + web setup wizard**: no required environment variables — the server auto-generates its session secret and opens a browser wizard to create the admin account (first user = admin) and pick options. Settings resolve `env > database > default`. See [Installation](Installation).
 - **Game-aware sync**: the client defers a game's pushes and pulls while it is running and flushes immediately on exit (on by default; not available under Flatpak).
 - **Built-in server backups + restore**: scheduled tar.zst archives (DB snapshot + keys + saves), local retention, optional S3 upload, `gsbs-server restore` command, docs/RESTORE.md runbook.
 - **Notifications**: webhook/Discord/ntfy alerts for conflicts, quota, new devices/logins, backup results, and stale devices — server-wide and per-user.

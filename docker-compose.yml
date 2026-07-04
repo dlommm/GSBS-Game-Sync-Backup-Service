@@ -5,15 +5,13 @@ services:
     restart: unless-stopped
     expose:
       - "8080"
+    # No required environment variables. On first run the server generates a
+    # session secret into the data volume and opens a web setup wizard where
+    # you create the admin account and choose options. Everything below is an
+    # optional override — see .env.example / docs/INSTALL.md.
     environment:
-      GSBS_ADDR: ":8080"
       GSBS_DB: /app/data/gsbs.db
       GSBS_SAVE_ROOT: /app/data/gamesaves
-      GSBS_SESSION_SECRET: ${GSBS_SESSION_SECRET:?set GSBS_SESSION_SECRET in .env}
-      GSBS_PCGW_SYNC_SOURCE: github
-      GSBS_PCGW_BUNDLE_CRON: "0 4 * * *"
-      GSBS_PCGW_CRON: "0 3 * * 0"
-      GSBS_LOG_LEVEL: info
     volumes:
       - gsbs-data:/app/data
     # Entrypoint drops root -> uid 1000 via su-exec, which no-new-privileges permits.

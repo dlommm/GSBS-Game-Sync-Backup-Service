@@ -18,9 +18,8 @@ services:
       GSBS_ADDR: ":8080"
       GSBS_DB: /app/data/gsbs.db
       GSBS_SAVE_ROOT: /app/data/gamesaves
-      GSBS_SESSION_SECRET: ${GSBS_SESSION_SECRET:-dev-change-me-in-production}
-      # Dev only: the default secret above fails the production strength check.
-      GSBS_INSECURE_DEV_SECRET: "1"
+      # The session secret is auto-generated into the data volume on first run,
+      # so no secret is needed for local dev. Set GSBS_SESSION_SECRET to pin one.
       GSBS_ALLOW_REGISTER: "true"
       GSBS_PCGW_SYNC_SOURCE: github
       GSBS_PCGW_BUNDLE_CRON: "0 4 * * *"

@@ -15,22 +15,14 @@ Production deployment with Caddy TLS reverse proxy and auto-HTTPS:
 ```bash
 git clone https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-.git
 cd GSBS--Game-Sync---Backup-Service-
-cp .env.example .env
-```
-
-Edit `.env` and set at minimum:
-
-```bash
-GSBS_SESSION_SECRET=<output of: openssl rand -hex 32>
-```
-
-Start the server:
-
-```bash
 docker compose up -d
 ```
 
+GSBS starts with **no required configuration**: it generates its own session secret into the data volume and opens a browser **setup wizard** where you create the admin account (the first user is the administrator) and choose registration/storage/backup options. Copy `.env.example` to `.env` only to pin optional overrides.
+
 Edit `docs/Caddyfile` with your domain before exposing to the internet. For full Compose options (health checks, TLS alternatives, nginx, Traefik) see [Server Configuration](Server-Configuration).
+
+> **Security:** the setup wizard is open only until the first account is created and locks 60 minutes after startup. Complete it promptly and don't leave an un-configured instance exposed.
 
 **Local development** (plain HTTP on port 8080, no TLS):
 
@@ -44,7 +36,6 @@ docker compose -f docker-compose.dev.yml up --build
 docker pull dendlomm/gsbs-server:latest
 docker run -d \
   -p 8080:8080 \
-  -e GSBS_SESSION_SECRET="your-secret-at-least-32-chars" \
   -e GSBS_DB="/app/data/gsbs.db" \
   -v gsbs-data:/app/data \
   dendlomm/gsbs-server:latest
@@ -55,16 +46,16 @@ docker run -d \
 Download `gsbs-server-linux-amd64` or `gsbs-server-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest), then:
 
 ```bash
-export GSBS_SESSION_SECRET="your-secret-at-least-32-chars"
 export GSBS_DB="/path/to/gsbs.db"
 ./gsbs-server-linux-amd64
+# then open the printed address and complete the setup wizard
 ```
 
 ### Option D: Windows server installer wizard
 
 1. Download `gsbs-server-setup-X.Y.Z-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest).
 2. Run the installer as Administrator.
-3. In the wizard, set at least `GSBS_ADDR`, `GSBS_DB`, and `GSBS_SESSION_SECRET` (or click **Generate secure secret**).
+3. In the installer, set `GSBS_DB` and the port; the session secret is generated automatically (or set `GSBS_SESSION_SECRET` to pin one).
 4. By default, leave **Install and run GSBS Server as a Windows Service (recommended)** enabled.
 5. Finish install and optionally open GSBS Admin in your browser.
 
@@ -151,11 +142,10 @@ chmod +x gsbs-client-linux-amd64
 
 After server and client are installed:
 
-1. Open the server WebUI (e.g. `https://your-domain` or `http://localhost:8080`).
-2. Click **Register** to create your account.
-3. In **Settings → API tokens**, create a token for your client.
-4. On the client, open the tray menu → **Login…**. Enter the server URL and credentials.
-5. GSBS stores the token in `config.json` and starts syncing. Use **Sync now** or **Open local status** from the tray to verify.
+1. Open the server WebUI (e.g. `https://your-domain` or `http://localhost:8080`). On a fresh server the **setup wizard** appears automatically.
+2. Complete the wizard: create the admin account (the first user is the administrator) and choose registration/storage/backup options.
+3. On the client, open the tray menu → **Login…**. Enter the server URL and your credentials.
+4. GSBS stores the token in `config.json` and starts syncing. Use **Sync now** or **Open local status** from the tray to verify.
 
 Config and logs are stored in:
 - **Windows:** `%APPDATA%\gsbs\`

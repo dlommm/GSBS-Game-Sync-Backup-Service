@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Set up GSBS</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/theme-boot.js"></script>
+</head>
+<body class="auth-page">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <main id="main-content" class="auth-card setup-card" role="main">
+    <img src="/static/logo.png" alt="GSBS" class="auth-logo">
+    <h1>Welcome to GSBS</h1>
+    <p class="subtitle">Let's create your admin account and finish setup. No configuration files needed.</p>
+    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+    {{if .Locked}}
+    <p class="error" role="alert">For security, first-run setup is only available for a short time after the server starts. Restart the server, then reload this page to complete setup.</p>
+    {{else}}
+    <form method="post" action="/setup" class="auth-form">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+
+      <fieldset class="setup-fieldset">
+        <legend>Admin account</legend>
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" required autocomplete="username" minlength="3" autofocus>
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required autocomplete="new-password" minlength="8">
+        <label for="confirm_password">Confirm password</label>
+        <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password" minlength="8">
+        <p class="form-hint">This first account becomes the administrator. You can enable two-factor authentication afterwards in Settings.</p>
+      </fieldset>
+
+      <fieldset class="setup-fieldset">
+        <legend>Registration</legend>
+        <label class="settings-toggle">
+          <input type="checkbox" name="allow_register" value="1">
+          Allow anyone to register new accounts
+        </label>
+        <p class="form-hint">Leave off for a private server (recommended). You create additional users from the admin panel.</p>
+      </fieldset>
+
+      <fieldset class="setup-fieldset">
+        <legend>Storage (optional)</legend>
+        <label for="storage_quota_gb">Global storage limit (GB)</label>
+        <input id="storage_quota_gb" name="storage_quota_gb" type="number" min="0" step="0.5" placeholder="Unlimited">
+        <p class="form-hint">Total save storage across all users. Leave blank for unlimited. Counts version history.</p>
+      </fieldset>
+
+      <fieldset class="setup-fieldset">
+        <legend>Backups &amp; alerts (optional)</legend>
+        <label class="settings-toggle">
+          <input type="checkbox" name="enable_backups" value="1">
+          Enable nightly backups
+        </label>
+        <p class="form-hint">Snapshots the database, keys, and saves to <code>backups/</code> beside the database. Configure S3 and schedule later in Settings.</p>
+        <label for="notify_webhook_url">Notification webhook URL</label>
+        <input id="notify_webhook_url" name="notify_webhook_url" type="url" placeholder="https://example.com/hook (optional)">
+        <p class="form-hint">Optional JSON webhook for conflicts, quota, new devices, and backup results.</p>
+      </fieldset>
+
+      <button type="submit">Create admin &amp; finish setup</button>
+    </form>
+    {{end}}
+  </main>
+</body>
+</html>

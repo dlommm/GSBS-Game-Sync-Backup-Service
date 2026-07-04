@@ -101,22 +101,39 @@ func newServerApp() (*serverApp, error) {
 	}
 
 	authSvc := auth.NewService(st)
+	// Registration policy precedence: env GSBS_ALLOW_REGISTER wins; otherwise
+	// the admin_settings value (set by the setup wizard or Server Settings);
+	// otherwise the default (open). This lets a zero-env deployment be
+	// configured entirely through the web UI.
 	allowRegister := true
-	if v := os.Getenv("GSBS_ALLOW_REGISTER"); strings.EqualFold(v, "false") || v == "0" {
-		allowRegister = false
-		logx.Logger().Info().Msg("public registration is DISABLED (set GSBS_ALLOW_REGISTER=true to enable)")
+	if v, ok := os.LookupEnv("GSBS_ALLOW_REGISTER"); ok {
+		allowRegister = !(strings.EqualFold(v, "false") || v == "0")
+	} else if s, err := st.GetAdminSetting(ctx, store.AdminSettingAllowRegister); err == nil && s != "" {
+		allowRegister = !(s == "false" || s == "0")
+	}
+	if !allowRegister {
+		logx.Logger().Info().Msg("public registration is DISABLED")
 	}
 
 	sessionSecret := os.Getenv("GSBS_SESSION_SECRET")
 	if sessionSecret == "" {
-		_ = st.Close()
-		return nil, fmt.Errorf("GSBS_SESSION_SECRET must be set; generate with: openssl rand -base64 32")
-	}
-	// This one secret signs sessions, CSRF tokens, and both TOTP step tokens;
-	// a guessable value makes all of them forgeable.
-	if err := checkSessionSecretStrength(sessionSecret); err != nil {
-		_ = st.Close()
-		return nil, err
+		// Zero-config path: persist a strong random secret in gsbs-keys/ (the
+		// same protected directory as the TOTP key) and reuse it thereafter.
+		// An explicitly-set env value always wins and is strength-checked.
+		s, secErr := loadOrCreateSessionSecret(dbPath)
+		if secErr != nil {
+			_ = st.Close()
+			return nil, fmt.Errorf("session secret: %w", secErr)
+		}
+		sessionSecret = s
+		logx.Logger().Info().Msg("session secret: using auto-generated key (gsbs-keys/session.secret); set GSBS_SESSION_SECRET to override")
+	} else {
+		// This one secret signs sessions, CSRF tokens, and both TOTP step
+		// tokens; a guessable value makes all of them forgeable.
+		if err := checkSessionSecretStrength(sessionSecret); err != nil {
+			_ = st.Close()
+			return nil, err
+		}
 	}
 
 	hub := sse.NewHub()
@@ -127,7 +144,14 @@ func newServerApp() (*serverApp, error) {
 	manifestLimiter := rateLimiterFromEnv("GSBS_RATE_LIMIT_MANIFEST", 60, time.Minute)
 
 	maxStorageBytes := int64(0)
-	if v := os.Getenv("GSBS_MAX_STORAGE_BYTES"); v != "" {
+	if v := os.Getenv("GSBS_MAX_STORAGE_BYTES"); v == "" {
+		// DB-backed default when the env var is unset (setup wizard / Server Settings).
+		if s, err := st.GetAdminSetting(ctx, store.AdminSettingMaxStorageBytes); err == nil && s != "" {
+			if n, parseErr := strconv.ParseInt(s, 10, 64); parseErr == nil && n >= 0 {
+				maxStorageBytes = n
+			}
+		}
+	} else {
 		if n, parseErr := strconv.ParseInt(v, 10, 64); parseErr == nil && n >= 0 {
 			maxStorageBytes = n
 			if n > 0 {

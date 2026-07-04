@@ -16,6 +16,7 @@ var handlerTemplates = []string{
 	"login.html",
 	"login_totp.html",
 	"register.html",
+	"setup.html",
 	"dashboard.html",
 	"settings.html",
 	"enable_2fa.html",
@@ -257,6 +258,12 @@ func templateTestData(name string) interface{} {
 		return map[string]interface{}{
 			"AllowRegister": true,
 			"CSRFToken":     "csrf-test",
+		}
+	case "setup.html":
+		return map[string]interface{}{
+			"CSRFToken": "csrf-test",
+			"Error":     "",
+			"Locked":    false,
 		}
 	case "enable_2fa.html":
 		return map[string]interface{}{

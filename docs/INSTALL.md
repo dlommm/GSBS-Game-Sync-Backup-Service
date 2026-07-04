@@ -4,17 +4,19 @@ This guide covers end-user installation of the GSBS server and client. For build
 
 ## Server
 
+GSBS needs **no configuration to start**. On first run it generates its own session secret and opens a browser **setup wizard** where you create the admin account (the first user is the administrator) and pick registration/storage/backup options. Environment variables are optional overrides.
+
 ### Option A: Docker Compose (recommended)
 
 Production deployment with Caddy TLS reverse proxy:
 
 ```bash
-cp .env.example .env
-# Set GSBS_SESSION_SECRET to a long random string (openssl rand -hex 32)
 docker compose up -d
 ```
 
-Edit [docs/Caddyfile](Caddyfile) with your domain before exposing to the internet. See [COMPOSE.md](COMPOSE.md) for details, health checks, and reverse-proxy alternatives (nginx, Traefik).
+Then open your server in a browser and complete the setup wizard. Edit [docs/Caddyfile](Caddyfile) with your domain before exposing to the internet. See [COMPOSE.md](COMPOSE.md) for details, health checks, and reverse-proxy alternatives (nginx, Traefik). Copy `.env.example` to `.env` only if you want to pin optional settings.
+
+> **Security note:** the setup wizard is only open until the first account is created, and it locks 60 minutes after the server starts. Complete setup promptly, and don't expose an un-configured instance to the internet longer than necessary.
 
 **Local development** (direct HTTP on port 8080):
 
@@ -28,17 +30,18 @@ docker compose -f docker-compose.dev.yml up --build
 docker pull dendlomm/gsbs-server:latest
 docker run -d \
   -p 8080:8080 \
-  -e GSBS_SESSION_SECRET="your-secret" \
   -e GSBS_DB=/app/data/gsbs.db \
   -v gsbs-data:/app/data \
   dendlomm/gsbs-server:latest
 ```
 
+Open `http://your-host:8080` and complete the setup wizard.
+
 See [DOCKER.md](DOCKER.md) for environment variables and production tips.
 
 ### Option C: Binary (advanced)
 
-Download `gsbs-server-linux-amd64` or `gsbs-server-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest), set `GSBS_SESSION_SECRET`, and run the binary.
+Download `gsbs-server-linux-amd64` or `gsbs-server-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest) and run the binary — it starts with no configuration and opens the setup wizard on first run. To restore from a backup, use `gsbs-server restore <archive>` (see [RESTORE.md](RESTORE.md)).
 
 ## Client
 

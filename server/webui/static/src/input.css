@@ -1117,3 +1117,9 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 .restore-wizard-step.active { display: block; }
 .restore-review-list { list-style: none; margin: 0.5rem 0 0; padding: 0; }
 .restore-review-list li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+
+/* ---- Setup wizard ---- */
+.setup-card { max-width: 34rem; text-align: left; }
+.setup-card h1, .setup-card .subtitle { text-align: center; }
+.setup-fieldset { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem 1.25rem 1.25rem; margin: 0 0 1.25rem; }
+.setup-fieldset legend { padding: 0 0.5rem; font-weight: 600; color: var(--text-secondary); }
