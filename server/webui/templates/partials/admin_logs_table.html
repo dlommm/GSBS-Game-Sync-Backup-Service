@@ -7,8 +7,8 @@
     <thead><tr><th scope="col">Time</th><th scope="col">App</th><th scope="col">Level</th><th scope="col">Event</th><th scope="col">Summary</th><th scope="col">Context</th><th scope="col">Details</th></tr></thead>
     <tbody>
       {{range .Entries}}
-      <tr>
-        <td class="cell-muted log-time">{{if .Timestamp}}{{formatTime .Timestamp}}{{else}}—{{end}}</td>
+      <tr class="{{if eq .Level "error"}}log-row-error{{else if eq .Level "warn"}}log-row-warn{{else if eq .Level "debug"}}log-row-debug{{end}}">
+        <td class="cell-muted log-time" {{if .Timestamp}}title="{{.Timestamp}}"{{end}}>{{if .Timestamp}}{{formatTime .Timestamp}}{{else}}—{{end}}</td>
         <td class="log-component"><span class="code-inline">{{if .Component}}{{.Component}}{{else}}—{{end}}</span></td>
         <td>
           {{if eq .Level "error"}}<span class="badge-failed log-level">{{.Level}}</span>

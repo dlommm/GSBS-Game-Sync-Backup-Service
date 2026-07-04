@@ -6,8 +6,18 @@
     <h1 class="page-title">Insights</h1>
     <p class="page-sub">Your backup activity and health at a glance.</p>
   </div>
+  <nav class="window-selector" aria-label="Time window">
+    <a href="/dashboard/analytics?days=7" class="window-option{{if eq .WindowDays 7}} active{{end}}" {{if eq .WindowDays 7}}aria-current="page"{{end}}>7d</a>
+    <a href="/dashboard/analytics?days=30" class="window-option{{if eq .WindowDays 30}} active{{end}}" {{if eq .WindowDays 30}}aria-current="page"{{end}}>30d</a>
+    <a href="/dashboard/analytics?days=90" class="window-option{{if eq .WindowDays 90}} active{{end}}" {{if eq .WindowDays 90}}aria-current="page"{{end}}>90d</a>
+  </nav>
 </div>
+<div id="insights-root"
+     hx-get="/dashboard/analytics?days={{.WindowDays}}"
+     hx-trigger="save-updated from:body delay:2s"
+     hx-select="#insights-root" hx-swap="outerHTML">
 {{template "partials/insights_body.html" .}}
+</div>
 {{end}}
 {{define "dashboard_analytics_scripts"}}
 <div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>

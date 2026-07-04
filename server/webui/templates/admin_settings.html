@@ -2,11 +2,21 @@
 {{define "admin_settings_title"}}Admin Settings — GSBS{{end}}
 {{define "admin_settings_content"}}
 <section class="panel">
-  <div class="panel-header"><h2>PCGW Sync</h2></div>
-  <form method="post" action="/admin/settings/save" class="settings-form">
+  <div class="panel-header"><h2>Server Settings</h2></div>
+  <nav class="settings-anchor-nav" aria-label="Settings sections">
+    <a href="#section-sync-source">Sync source</a>
+    <a href="#section-bundle">Bundle schedule</a>
+    <a href="#section-api-sync">API schedule</a>
+    <a href="#section-backups">Backups</a>
+    <a href="#section-notifications">Notifications</a>
+    <a href="#section-retention">Retention</a>
+    <a href="#section-safety">Sync safety</a>
+    <a href="#section-filters">Filters</a>
+  </nav>
+  <form method="post" action="/admin/settings/save" class="settings-form" data-dirty-track>
     <input type="hidden" name="csrf" value="{{.CSRFToken}}">
 
-    <div class="settings-form-section">
+    <div class="settings-form-section" id="section-sync-source">
       <h3 class="settings-form-section-title">Sync source</h3>
       <p class="settings-form-section-desc">Choose how the server updates PCGW mirror data. The S3 bundle is a prebuilt snapshot fetched from object storage (Cloudflare R2/S3) and avoids direct PCGW API calls. Switching to Manual imports the S3 bundle once to seed, then runs only on-demand PCGW API syncs.</p>
       {{if .PCGWSyncSourceEnvOverride}}
@@ -24,7 +34,7 @@
       </div>
     </div>
 
-    <div class="settings-form-section">
+    <div class="settings-form-section" id="section-bundle">
       <h3 class="settings-form-section-title">Bundle fetch schedule</h3>
       <p class="settings-form-section-desc">Used when sync source is the S3 bundle. Fetches the small index.json version pointer and only downloads the full bundle when a newer version is published (ETag/304 = no download).</p>
       {{if .PCGWBundleCronEnvOverride}}
@@ -51,7 +61,7 @@
       </div>
     </div>
 
-    <div class="settings-form-section">
+    <div class="settings-form-section" id="section-api-sync">
       <h3 class="settings-form-section-title">API sync schedule</h3>
       <p class="settings-form-section-desc">Used in Manual mode. Switching to Manual clears this schedule (manual-only); set a cron here to re-enable automatic PCGW API syncs.</p>
     {{if .PCGWCronEnvOverride}}
@@ -89,7 +99,7 @@
       <p class="form-hint">S3 mode: fetch the full bundle. Manual mode: incremental PCGW sync. Runs once until the first-run marker is set.</p>
     </div>
 
-    <div class="settings-form-section">
+    <div class="settings-form-section" id="section-backups">
       <h3 class="settings-form-section-title">Backups</h3>
       <p class="settings-form-section-desc">Nightly archive of the database, encryption keys, and stored saves (tar.zst). Destination: <code>GSBS_BACKUP_DIR</code>{{if .BackupDirEnv}} <span class="badge-success">set via environment</span>{{else}} (defaults to <code>backups/</code> beside the database){{end}}. Optional S3 upload via <code>GSBS_BACKUP_S3_*</code> variables. Restore with <code>gsbs-server restore</code> — see docs/RESTORE.md.</p>
       <div class="form-group">
@@ -118,7 +128,7 @@
       {{end}}
     </div>
 
-    <div class="settings-form-section">
+    <div class="settings-form-section" id="section-notifications">
       <h3 class="settings-form-section-title">Notifications</h3>
       <p class="settings-form-section-desc">Server alerts via plain HTTP — a generic webhook (JSON), a Discord webhook, and/or an <a href="https://ntfy.sh" rel="noopener noreferrer" target="_blank">ntfy</a> topic URL. Leave a field empty to disable that channel. Users can additionally set personal channels in their own Settings.</p>
       <div class="form-group">
@@ -149,7 +159,7 @@
       </div>
     </div>
 
-    <div class="settings-form-section">
+    <div class="settings-form-section" id="section-retention">
       <h3 class="settings-form-section-title">Version Retention Overrides</h3>
       <p class="settings-form-section-desc">Per-game override of how many save versions are kept (global default: <code>GSBS_SAVE_VERSION_RETENTION</code>). JSON object of game ID to count (1–50), e.g. <code>{"12345": 20}</code>. Applies within a minute of saving.</p>
       <div class="form-group">
@@ -158,7 +168,7 @@
       </div>
     </div>
 
-    <div class="settings-form-section">
+    <div class="settings-form-section" id="section-safety">
       <h3 class="settings-form-section-title">Sync Safety</h3>
       <div class="form-group">
         <label class="checkbox-label">
@@ -169,7 +179,7 @@
       </div>
     </div>
 
-    <div class="settings-form-section">
+    <div class="settings-form-section" id="section-filters">
       <h3 class="settings-form-section-title">PCGW Filters</h3>
       <p class="settings-form-section-desc">Substring excludes applied during API sync. Path excludes use defaults when empty.</p>
 
@@ -186,6 +196,10 @@
     <div class="form-actions">
       <button type="submit" class="btn-primary">Save settings</button>
     </div>
+    <div class="sticky-save-bar" data-save-bar>
+      <span class="save-bar-hint">You have unsaved changes</span>
+      <button type="submit" class="btn-primary">Save settings</button>
+    </div>
   </form>
 </section>
 
@@ -194,7 +208,7 @@
   <div class="panel-body">
     <p class="cell-muted u-mb-sm">Sends a test event to every configured channel above (save settings first).</p>
     <form method="POST" action="/admin/notify/test">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <button type="submit" class="btn-secondary">Send test notification</button>
     </form>
   </div>
@@ -207,7 +221,7 @@
       Runs a full backup immediately (database snapshot, encryption keys, stored saves{{if .BackupIncludeCovers}}, covers{{end}}), regardless of the schedule above.
     </p>
     <form method="POST" action="/admin/backup/run">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <button type="submit" class="btn-secondary" {{if .BackupRunning}}disabled{{end}}>
         {{if .BackupRunning}}Backup running&hellip;{{else}}Backup now{{end}}
       </button>

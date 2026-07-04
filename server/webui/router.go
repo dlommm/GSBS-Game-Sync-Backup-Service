@@ -104,7 +104,8 @@ func (h *WebHandler) requireAdmin(w http.ResponseWriter, r *http.Request) (userI
 		return "", "", false
 	}
 	if !h.isAdminUser(r.Context(), userID, username) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		h.renderError(w, http.StatusForbidden, "Access denied",
+			"This area requires an administrator account.")
 		return "", "", false
 	}
 	return userID, username, true
@@ -295,6 +296,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleConfirm2FA(w, r)
 	case path == "/dashboard/settings/2fa/disable" && r.Method == http.MethodPost:
 		h.handleDisable2FA(w, r)
+	case path == "/dashboard/settings/2fa/recovery" && r.Method == http.MethodPost:
+		h.handleRegenerateRecoveryCodes(w, r)
 	case path == "/dashboard/settings/encryption" && r.Method == http.MethodPost:
 		h.handleEncryptionSettings(w, r)
 	case path == "/admin/manifest.csv" && r.Method == http.MethodGet:
@@ -305,6 +308,6 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.routeAdminPCGW(w, r) {
 			return
 		}
-		http.NotFound(w, r)
+		h.notFoundPage(w)
 	}
 }

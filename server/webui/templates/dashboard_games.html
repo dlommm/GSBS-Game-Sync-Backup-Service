@@ -47,12 +47,12 @@
             hx-get="/dashboard/partial/games" hx-target="#games-grid" hx-include="#games-filter" hx-swap="innerHTML"
             hx-vals='{"view":"grid"}'
             data-view-value="grid"
-            aria-label="Grid view">▦ Grid</button>
+            aria-label="Grid view">{{iconSVG "grid" 13}} Grid</button>
     <button type="button" class="view-btn{{if eq .View "list"}} active{{end}}"
             hx-get="/dashboard/partial/games" hx-target="#games-grid" hx-include="#games-filter" hx-swap="innerHTML"
             hx-vals='{"view":"list"}'
             data-view-value="list"
-            aria-label="List view">☰ List</button>
+            aria-label="List view">{{iconSVG "list" 13}} List</button>
   </div>
   <input type="hidden" id="games-view" name="view" value="{{.View}}">
 </form>

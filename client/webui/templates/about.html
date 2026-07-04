@@ -1,70 +1,32 @@
-{{define "about"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GSBS — About this client</title>
-  <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="stylesheet" href="/static/app.css">
-</head>
-<body class="app-shell">
-  <a href="#main-content" class="skip-link">Skip to main content</a>
-  {{template "partials/topbar.html" .}}
-  <main id="main-content" class="page-content" role="main">
-    {{template "partials/alerts.html" .}}
+{{define "about"}}{{template "layout" .}}{{end}}
+{{define "about_content"}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">About GSBS</h1>
+    <p class="page-sub">Game Sync &amp; Backup Service — self-hosted save syncing &amp; versioned backups.</p>
+  </div>
+</div>
 
-    <h1 style="font-size:1.1rem;font-weight:700;margin:0 0 1.25rem;">About this client</h1>
+<section class="panel">
+  <div class="panel-header"><h2>This client</h2></div>
+  <div class="config-grid">
+    <div class="config-item"><span class="config-key">Version</span><span class="config-val">{{.Version}}</span></div>
+    <div class="config-item"><span class="config-key">Platform</span><span class="config-val">{{.GOOS}}/{{.GOARCH}}</span></div>
+    {{if .BuildDate}}<div class="config-item"><span class="config-key">Built</span><span class="config-val">{{.BuildDate}}</span></div>{{end}}
+    {{if .Commit}}<div class="config-item"><span class="config-key">Commit</span><span class="config-val"><code class="code-inline">{{.Commit}}</code></span></div>{{end}}
+    {{if .ServerURL}}<div class="config-item"><span class="config-key">Server</span><span class="config-val">{{.ServerURL}}</span></div>{{end}}
+  </div>
+</section>
 
-    <section class="panel" aria-labelledby="about-heading">
-      <div class="panel-header">
-        <h2 id="about-heading">Build &amp; runtime details</h2>
-      </div>
-      <dl class="config-grid" style="padding:0 1.25rem 1.25rem;">
-        <div>
-          <dt style="font-size:0.8125rem;color:var(--text-muted);">Client version</dt>
-          <dd style="margin-top:0.25rem;font-weight:600;font-size:0.9375rem;">{{if .Version}}{{.Version}}{{else}}—{{end}}</dd>
-        </div>
-        <div>
-          <dt style="font-size:0.8125rem;color:var(--text-muted);">Runtime</dt>
-          <dd style="margin-top:0.25rem;font-weight:600;font-size:0.9375rem;">{{if .GOOS}}{{.GOOS}}/{{.GOARCH}}{{else}}—{{end}}</dd>
-        </div>
-        {{if .BuildDate}}
-        <div>
-          <dt style="font-size:0.8125rem;color:var(--text-muted);">Build date</dt>
-          <dd style="margin-top:0.25rem;font-weight:600;font-size:0.9375rem;">{{.BuildDate}}</dd>
-        </div>
-        {{end}}
-        {{if .Commit}}
-        <div>
-          <dt style="font-size:0.8125rem;color:var(--text-muted);">Commit</dt>
-          <dd style="margin-top:0.25rem;font-weight:600;font-size:0.9375rem;">{{.Commit}}</dd>
-        </div>
-        {{end}}
-        <div style="grid-column:1/-1;">
-          <dt style="font-size:0.8125rem;color:var(--text-muted);">What this client does</dt>
-          <dd style="margin-top:0.25rem;color:var(--text-secondary);font-size:0.875rem;">
-            Watches local save folders, uploads changes on detection, and pulls fresh saves from your GSBS server.
-            Installed games are matched automatically via the manifest from the server.
-          </dd>
-        </div>
-      </dl>
-    </section>
-
-    <section class="panel" aria-labelledby="links-heading" style="margin-top:1.25rem;">
-      <div class="panel-header">
-        <h2 id="links-heading">Links</h2>
-      </div>
-      <ul style="list-style:none;margin:0;padding:0 1.25rem 1.25rem;display:flex;flex-direction:column;gap:0.5rem;font-size:0.9375rem;">
-        <li><a href="https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-" target="_blank" rel="noopener noreferrer">Project on GitHub →</a></li>
-        <li><a href="https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases" target="_blank" rel="noopener noreferrer">Releases &amp; changelog →</a></li>
-        <li><a href="https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/issues" target="_blank" rel="noopener noreferrer">Report an issue →</a></li>
-      </ul>
-    </section>
-  </main>
-
-  <div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;max-width:24rem;"></div>
-  <script src="/static/toast.js"></script>
-</body>
-</html>
+<section class="panel">
+  <div class="panel-header"><h2>Links</h2></div>
+  <div class="panel-body">
+    <ul class="settings-list">
+      <li><a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service" target="_blank" rel="noopener">GitHub repository ↗</a></li>
+      <li><a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases" target="_blank" rel="noopener">Releases &amp; changelog ↗</a></li>
+      <li><a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/issues" target="_blank" rel="noopener">Report an issue ↗</a></li>
+      <li><a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki" target="_blank" rel="noopener">Documentation wiki ↗</a></li>
+    </ul>
+  </div>
+</section>
 {{end}}

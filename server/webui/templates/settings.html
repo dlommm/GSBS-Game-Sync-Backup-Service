@@ -9,9 +9,13 @@
       <label for="current_password">Current password</label>
       <input id="current_password" name="current_password" type="password" required autocomplete="current-password">
       <label for="new_password">New password</label>
-      <input id="new_password" name="new_password" type="password" required autocomplete="new-password">
+      <div class="password-wrap">
+        <input id="new_password" name="new_password" type="password" required autocomplete="new-password">
+        <button type="button" class="password-toggle-btn" data-password-toggle="new_password" aria-label="Show password" aria-pressed="false"><span class="icon-eye">{{iconSVG "eye" 15}}</span><span class="icon-eye-off">{{iconSVG "eye-off" 15}}</span></button>
+      </div>
+      <div class="strength-meter" data-strength-for="new_password" data-score="0" aria-hidden="true"><div class="strength-track"><div class="strength-fill"></div></div><span class="strength-label"></span></div>
       <label for="confirm_password">Confirm new password</label>
-      <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password">
+      <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password" data-match-of="new_password">
       <button type="submit">Update password</button>
     </form>
   </section>
@@ -22,14 +26,31 @@
       {{if .TOTPEnabled}}
       <p><span class="badge-success">Enabled</span></p>
       <p class="cell-muted">Your account requires an authenticator code at login.</p>
-      <form method="post" action="/dashboard/settings/2fa/disable" class="auth-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password" required>
-        <label for="code">Authenticator code</label>
-        <input id="code" name="code" type="text" inputmode="numeric" required>
-        <button type="submit" class="btn-danger-sm">Disable 2FA</button>
-      </form>
+      <p class="cell-muted">
+        Recovery codes remaining:
+        {{if le .RecoveryCount 2}}<span class="badge-warn">{{.RecoveryCount}}</span>{{else}}<span class="badge-success">{{.RecoveryCount}}</span>{{end}}
+      </p>
+      <details class="settings-subsection">
+        <summary class="btn-ghost-sm">Regenerate recovery codes</summary>
+        <form method="post" action="/dashboard/settings/2fa/recovery" class="auth-form">
+          <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+          <label for="recovery_password">Confirm password</label>
+          <input id="recovery_password" name="password" type="password" required autocomplete="current-password">
+          <button type="submit" class="btn-secondary-sm">Generate new codes</button>
+          <p class="form-hint">Replaces every existing recovery code with a fresh set of 10 codes.</p>
+        </form>
+      </details>
+      <details class="settings-subsection">
+        <summary class="btn-ghost-sm">Disable 2FA</summary>
+        <form method="post" action="/dashboard/settings/2fa/disable" class="auth-form">
+          <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" required>
+          <label for="code">Authenticator code</label>
+          <input id="code" name="code" type="text" inputmode="numeric" required>
+          <button type="submit" class="btn-danger-sm">Disable 2FA</button>
+        </form>
+      </details>
       {{else}}
       <p><span class="badge-warn">Off</span></p>
       <p class="cell-muted">Add an extra layer of security with an authenticator app.</p>

@@ -6,15 +6,84 @@
   {{template "partials/metric-card.html" (dict "Label" "Devices" "Value" .DeviceCount "Sub" (printf "%d online" .OnlineCount))}}
 </section>
 
+<section class="panel protection-panel" aria-labelledby="protection-heading">
+  <div class="panel-header"><h2 id="protection-heading">Protection at a glance</h2></div>
+  <div class="protection-grid">
+    <div class="protection-item {{if .Protection.BackupsHealthy}}tone-ok{{else}}tone-danger{{end}}">
+      <span class="protection-icon">{{iconSVG "shield" 18}}</span>
+      <span class="protection-text">
+        <span class="protection-title">Backups</span>
+        <span class="protection-sub">{{if .Protection.BackupsHealthy}}All devices syncing{{else}}A device has gone quiet{{end}}</span>
+      </span>
+    </div>
+    <div class="protection-item {{if .Protection.TOTPEnabled}}tone-ok{{else}}tone-warn{{end}}">
+      <span class="protection-icon">{{iconSVG "key" 18}}</span>
+      <span class="protection-text">
+        <span class="protection-title">Two-factor auth</span>
+        <span class="protection-sub">{{if .Protection.TOTPEnabled}}Enabled{{else}}Off — enable it in Settings{{end}}</span>
+      </span>
+    </div>
+    <div class="protection-item {{if gt .Protection.EncryptedPct 0}}tone-ok{{else}}tone-neutral{{end}}">
+      <span class="protection-icon">{{iconSVG "save" 18}}</span>
+      <span class="protection-text">
+        <span class="protection-title">End-to-end encryption</span>
+        <span class="protection-sub">{{if gt .Protection.TotalSaves 0}}{{.Protection.EncryptedPct}}% of saves encrypted{{else}}No saves yet{{end}}</span>
+      </span>
+    </div>
+    <div class="protection-item {{if gt .Protection.DevicesOnline 0}}tone-ok{{else}}tone-neutral{{end}}">
+      <span class="protection-icon">{{iconSVG "device" 18}}</span>
+      <span class="protection-text">
+        <span class="protection-title">Devices</span>
+        <span class="protection-sub">{{.Protection.DevicesOnline}} of {{.Protection.DeviceCount}} online now</span>
+      </span>
+    </div>
+  </div>
+</section>
+
 <div class="analytics-cols">
   <section class="panel" aria-labelledby="volume-heading">
     <div class="panel-header-actions">
       <h2 id="volume-heading">Sync volume</h2>
-      <span class="cell-muted">{{.SyncTotal}} sync{{if ne .SyncTotal 1}}s{{end}} · last {{len .SyncByDay}} days</span>
+      <span class="cell-muted">{{.SyncTotal}} sync{{if ne .SyncTotal 1}}s{{end}} · last {{.WindowDays}} days</span>
     </div>
     <div class="panel-body">
       <div class="bars-chart">{{barsSVG .SyncByDay 480 120}}</div>
     </div>
+  </section>
+
+  <section class="panel" aria-labelledby="bytes-heading">
+    <div class="panel-header-actions">
+      <h2 id="bytes-heading">Data synced</h2>
+      <span class="cell-muted">{{formatBytes .BytesTotal}} · last {{.WindowDays}} days</span>
+    </div>
+    <div class="panel-body">
+      <div class="bars-chart">{{bytesBarsSVG .BytesByDay 480 120}}</div>
+    </div>
+  </section>
+</div>
+
+<div class="analytics-cols">
+  <section class="panel" aria-labelledby="byclient-heading">
+    <div class="panel-header-actions">
+      <h2 id="byclient-heading">Activity by device</h2>
+      <span class="cell-muted">version writes · last {{.WindowDays}} days</span>
+    </div>
+    {{if .ByClient}}
+    <div class="topgames-list">
+      {{range .ByClient}}
+      <div class="topgame-row">
+        <span class="topgame-icon">{{iconSVG "device" 20}}</span>
+        <span class="topgame-info">
+          <span class="topgame-title">{{.Label}}</span>
+          <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
+        </span>
+        <span class="topgame-size">{{.Count}} · {{formatBytes .Bytes}}</span>
+      </div>
+      {{end}}
+    </div>
+    {{else}}
+    {{template "partials/empty-state.html" (dict "Icon" "device" "Title" "No sync activity yet" "Sub" "Once your devices push saves, you'll see which device does the work.")}}
+    {{end}}
   </section>
 
   <section class="panel" aria-labelledby="health-heading">
@@ -27,6 +96,51 @@
       </li>
       {{end}}
     </ul>
+  </section>
+</div>
+
+<div class="analytics-cols">
+  <section class="panel" aria-labelledby="rhythm-heading">
+    <div class="panel-header-actions">
+      <h2 id="rhythm-heading">Play rhythm</h2>
+      <span class="cell-muted">when your saves change · last {{.WindowDays}} days</span>
+    </div>
+    <div class="panel-body rhythm-grid">
+      <div>
+        <h3 class="cell-muted u-title-sm">By weekday</h3>
+        <div class="bars-chart bars-chart-sm">{{barsSVG .WeekdaySeries 280 70}}</div>
+        <div class="rhythm-axis"><span>Sun</span><span>Wed</span><span>Sat</span></div>
+      </div>
+      <div>
+        <h3 class="cell-muted u-title-sm">By hour (UTC)</h3>
+        <div class="bars-chart bars-chart-sm">{{barsSVG .HoursSeries 280 70}}</div>
+        <div class="rhythm-axis"><span>00</span><span>12</span><span>23</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="mostactive-heading">
+    <div class="panel-header-actions">
+      <h2 id="mostactive-heading">Most active games</h2>
+      <span class="cell-muted">by version writes · last {{.WindowDays}} days</span>
+    </div>
+    {{if .MostActive}}
+    <div class="topgames-list">
+      {{$link := .LinkGames}}
+      {{range .MostActive}}
+      {{if $link}}<a class="topgame-row" href="/dashboard/games/{{urlquery .GameID}}">{{else}}<div class="topgame-row">{{end}}
+        <span class="topgame-icon">{{gameIconSVG .Title 28}}</span>
+        <span class="topgame-info">
+          <span class="topgame-title">{{.Title}}</span>
+          <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
+        </span>
+        <span class="topgame-size">{{.Versions}} sync{{if ne .Versions 1}}s{{end}}</span>
+      {{if $link}}</a>{{else}}</div>{{end}}
+      {{end}}
+    </div>
+    {{else}}
+    {{template "partials/empty-state.html" (dict "Title" "Nothing synced in this window" "Sub" "Play something! Saves sync automatically while GSBS is running.")}}
+    {{end}}
   </section>
 </div>
 
@@ -52,22 +166,50 @@
     {{end}}
   </section>
 
-  <section class="panel" aria-labelledby="devices-heading">
-    <div class="panel-header"><h2 id="devices-heading">Devices</h2></div>
-    {{if .Devices}}
-    <ul class="device-mini-list">
-      {{range .Devices}}
-      <li class="device-mini">
-        <span class="client-status {{if .Online}}online{{else}}offline{{end}}" aria-hidden="true"></span>
-        <span class="device-mini-name">{{.Name}}</span>
-        <span class="os-badge os-{{.OS}}">{{.OS}}</span>
-        <span class="device-mini-when">{{if .Online}}online{{else}}{{formatTime .LastSeen}}{{end}}</span>
-      </li>
+  <section class="panel" aria-labelledby="history-heading">
+    <div class="panel-header"><h2 id="history-heading">Version history</h2></div>
+    <div class="panel-body">
+      <div class="config-grid">
+        <div class="config-item"><span class="config-key">Files tracked</span><span class="config-val">{{.Depth.Slots}}</span></div>
+        <div class="config-item"><span class="config-key">Versions kept</span><span class="config-val">{{.Depth.Versions}}</span></div>
+        <div class="config-item"><span class="config-key">Average depth</span><span class="config-val">{{printf "%.1f" .Depth.AvgPerSlot}} versions/file</span></div>
+        {{if .Depth.TopCount}}
+        <div class="config-item"><span class="config-key">Deepest history</span><span class="config-val">{{.Depth.TopGameTitle}} · {{.Depth.TopCount}} versions</span></div>
+        {{end}}
+      </div>
+      {{if .CategoryBars}}
+      <h3 class="cell-muted u-title-sm u-mt-sm">Storage by content type</h3>
+      <div class="topgames-list">
+        {{range .CategoryBars}}
+        <div class="topgame-row">
+          <span class="topgame-info">
+            <span class="topgame-title">{{.Label}}</span>
+            <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
+          </span>
+          <span class="topgame-size">{{formatBytes .Bytes}}</span>
+        </div>
+        {{end}}
+      </div>
       {{end}}
-    </ul>
-    {{else}}
-    <div class="panel-empty"><p>No devices connected.</p></div>
-    {{end}}
+    </div>
   </section>
 </div>
+
+<section class="panel" aria-labelledby="devices-heading">
+  <div class="panel-header"><h2 id="devices-heading">Devices</h2></div>
+  {{if .Devices}}
+  <ul class="device-mini-list">
+    {{range .Devices}}
+    <li class="device-mini">
+      <span class="client-status {{if .Online}}online{{else}}offline{{end}}" aria-hidden="true"></span>
+      <span class="device-mini-name">{{.Name}}</span>
+      <span class="os-badge os-{{.OS}}">{{.OS}}</span>
+      <span class="device-mini-when">{{if .Online}}online{{else}}<span title="{{.LastSeen}}">{{formatTime .LastSeen}}</span>{{end}}</span>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <div class="panel-empty"><p>No devices connected.</p></div>
+  {{end}}
+</section>
 {{end}}

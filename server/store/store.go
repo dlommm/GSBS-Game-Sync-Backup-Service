@@ -59,6 +59,11 @@ type Store interface {
 	GetTOTPSecret(ctx context.Context, userID string) (string, error)
 	SetTOTPSecret(ctx context.Context, userID string, secret string) error
 	SetTOTPEnabled(ctx context.Context, userID string, enabled bool) error
+	// 2FA one-time recovery codes (SHA-256 hashes; consumed codes are deleted).
+	SetRecoveryCodes(ctx context.Context, userID string, hashes []string) error
+	ConsumeRecoveryCode(ctx context.Context, userID, hash string) (bool, error)
+	CountRecoveryCodes(ctx context.Context, userID string) (int, error)
+	DeleteRecoveryCodes(ctx context.Context, userID string) error
 	// IsEncryptionEnabled reports whether the user has E2E encryption enabled.
 	IsEncryptionEnabled(ctx context.Context, userID string) (bool, error)
 	// SetEncryptionEnabled toggles E2E encryption for the user.
@@ -322,6 +327,25 @@ type Store interface {
 	// LargestChangeForGame returns the biggest positive byte change recorded across
 	// all of a user's save versions for a game. ok is false when there is none.
 	LargestChangeForGame(ctx context.Context, userID, gameID string) (row SaveChangeRow, ok bool, err error)
+
+	// Insights aggregates (WebUI analytics; see analytics.go).
+	SyncVolumeByDayAll(ctx context.Context, days int) ([]DayCount, error)
+	SyncBytesByDay(ctx context.Context, userID string, days int) ([]DayBytes, error)
+	VersionsByClient(ctx context.Context, userID string, days int) ([]ClientVolumeRow, error)
+	ActivityByWeekday(ctx context.Context, userID string, days int) ([]int, error)
+	ActivityByHour(ctx context.Context, userID string, days int) ([]int, error)
+	MostActiveGames(ctx context.Context, userID string, days, limit int) ([]SaveGameStatRow, error)
+	VersionDepth(ctx context.Context, userID string) (SlotDepthStats, error)
+	CountEncryptedSaves(ctx context.Context, userID string) (encrypted, total int, err error)
+	ClientVersionCounts(ctx context.Context) ([]LabelCount, error)
+	ClientOSCounts(ctx context.Context) ([]LabelCount, error)
+	AuditActionCounts(ctx context.Context, days, limit int) ([]LabelCount, error)
+	AuditVolumeByDay(ctx context.Context, days int) ([]DayCount, error)
+	ManifestFetchByDay(ctx context.Context, days int) ([]DayCount, error)
+	ActiveUsersByDay(ctx context.Context, days int) ([]DayCount, error)
+	SignupsByMonth(ctx context.Context, months int) ([]MonthCount, error)
+	UserAdoptionStats(ctx context.Context) (AdoptionStats, error)
+	JobRunStats(ctx context.Context) ([]JobStatRow, error)
 
 	// Close releases resources (e.g. DB connection).
 	Close() error

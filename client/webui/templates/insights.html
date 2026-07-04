@@ -1,0 +1,142 @@
+{{define "insights"}}{{template "layout" .}}{{end}}
+{{define "insights_content"}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Sync insights</h1>
+    <p class="page-sub">What this PC has been syncing — history survives restarts.</p>
+  </div>
+</div>
+
+<div class="stats-row client-stats-row" role="region" aria-label="Sync summary">
+  <div class="stat-card">
+    <div class="stat-label">Sync cycles recorded</div>
+    <div class="stat-value">{{.TotalCycles}}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Success rate</div>
+    <div class="stat-value">{{if .TotalCycles}}{{.SuccessPct}}%{{else}}—{{end}}</div>
+    <p class="stat-footnote">{{.OKCycles}} of {{.TotalCycles}} cycles</p>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Saves synced (7d)</div>
+    <div class="stat-value">{{.SavesSynced7d}}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Last failure</div>
+    <div class="stat-value stat-value-sm">{{if .LastFailure}}{{.LastFailure}}{{else}}None recorded{{end}}</div>
+  </div>
+</div>
+
+<div class="analytics-cols">
+  <section class="panel">
+    <div class="panel-header"><h2>Sync cycles — last 7 days</h2></div>
+    {{if .DayBars}}
+    <div class="topgames-list">
+      {{range .DayBars}}
+      <div class="topgame-row">
+        <span class="topgame-info">
+          <span class="topgame-title">{{.Label}}</span>
+          <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
+        </span>
+        <span class="topgame-size">{{.Count}} cycle{{if ne .Count 1}}s{{end}}</span>
+      </div>
+      {{end}}
+    </div>
+    {{else}}
+    <div class="panel-empty"><p>No sync cycles recorded yet — history starts collecting now.</p></div>
+    {{end}}
+  </section>
+
+  <section class="panel">
+    <div class="panel-header-actions">
+      <h2>Pending uploads</h2>
+      <span class="cell-muted">{{len .Outbox}} queued</span>
+    </div>
+    {{if .Outbox}}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th scope="col">Game</th><th scope="col">File</th><th scope="col">Size</th><th scope="col">Queued</th><th scope="col">Attempts</th></tr></thead>
+        <tbody>
+          {{range .Outbox}}
+          <tr>
+            <td class="cell-primary">{{.GameID}}</td>
+            <td class="cell-muted"><code class="code-inline">{{.PathKey}}</code></td>
+            <td class="cell-size">{{formatBytes .SizeBytes}}</td>
+            <td class="cell-muted" title="{{.CreatedAt}}">{{formatTime .CreatedAt}}</td>
+            <td class="cell-muted">{{.Attempts}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <p class="panel-subtitle">Queued while the server was unreachable; retried automatically for up to 7 days.</p>
+    {{else}}
+    <div class="panel-empty"><p>Nothing queued — every save is on the server. ✓</p></div>
+    {{end}}
+  </section>
+</div>
+
+<section class="panel">
+  <div class="panel-header-actions">
+    <h2>Conflicts</h2>
+    <span class="cell-muted">{{len .Conflicts}} recorded</span>
+  </div>
+  {{if .Conflicts}}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th scope="col">Detected</th><th scope="col">Game</th><th scope="col">File</th><th scope="col">Resolution</th><th scope="col">Local changed</th><th scope="col">Server changed</th></tr></thead>
+      <tbody>
+        {{range .Conflicts}}
+        <tr>
+          <td class="cell-muted" title="{{.DetectedAt}}">{{formatTime .DetectedAt}}</td>
+          <td class="cell-primary">{{.GameID}}</td>
+          <td class="cell-muted" title="{{.FilePath}}"><code class="code-inline">{{.PathKey}}</code></td>
+          <td>{{if .Policy}}<span class="badge-warn">{{.Policy}}</span>{{else}}—{{end}}</td>
+          <td class="cell-muted">{{if .LocalMtime}}{{formatTime .LocalMtime}}{{else}}—{{end}}</td>
+          <td class="cell-muted">{{if .ServerUpdatedAt}}{{formatTime .ServerUpdatedAt}}{{else}}—{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="panel-subtitle">The same save changed on two PCs; your conflict policy chose the winner. Older versions are restorable from the server dashboard.</p>
+  {{else}}
+  <div class="panel-empty"><p>No conflicts recorded. Your devices are taking turns nicely.</p></div>
+  {{end}}
+</section>
+
+<section class="panel">
+  <div class="panel-header-actions">
+    <h2>Per-game state</h2>
+    <a class="btn-ghost-sm" href="/games">Add a game</a>
+  </div>
+  {{if .Games}}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th scope="col">Game</th><th scope="col">Status</th><th scope="col">Last activity</th><th scope="col">Direction</th><th scope="col" class="th-action"></th></tr></thead>
+      <tbody>
+        {{range .Games}}
+        <tr>
+          <td class="cell-primary">{{.Title}}</td>
+          <td>
+            {{if .Conflict}}<span class="badge-failed">conflict</span>
+            {{else if eq .Status "error"}}<span class="badge-failed">error</span>
+            {{else if eq .Status "pending"}}<span class="badge-warn">pending</span>
+            {{else if eq .Status "syncing"}}<span class="badge-running">syncing</span>
+            {{else}}<span class="badge-success">ok</span>{{end}}
+          </td>
+          <td class="cell-muted" {{if .LastSyncAt}}title="{{.LastSyncAt}}"{{end}}>{{if .LastSyncAt}}{{formatTime .LastSyncAt}}{{else}}—{{end}}</td>
+          <td class="cell-muted">{{if .Direction}}{{.Direction}}{{else}}—{{end}}</td>
+          <td class="cell-action">
+            <button type="button" class="btn-ghost-sm" data-open-folder="{{.GameID}}">Reveal folder</button>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <div class="panel-empty"><p>No games tracked yet on this PC. <a href="/games">Add one</a> or let discovery find them after login.</p></div>
+  {{end}}
+</section>
+{{end}}

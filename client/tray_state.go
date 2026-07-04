@@ -326,6 +326,11 @@ func UpdateSyncProgress(current, total int) {
 
 // UpdateFromSyncEnd records sync completion.
 func UpdateFromSyncEnd(err error, stats SyncEndStats) {
+	entry := SyncHistoryEntry{At: time.Now(), OK: err == nil, GamesSynced: stats.GamesSynced, SavesSynced: stats.SavesSynced}
+	if err != nil {
+		entry.Err = err.Error()
+	}
+	go AppendSyncHistory(entry)
 	globalTrayState.mu.Lock()
 	globalTrayState.lastSyncAt = time.Now()
 	globalTrayState.progress = SyncProgress{}

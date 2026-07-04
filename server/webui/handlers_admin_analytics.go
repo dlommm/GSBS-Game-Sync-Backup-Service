@@ -57,14 +57,77 @@ type adminAnalyticsData struct {
 	SyncRunsSuccess    int
 	SyncRunsFailed     int
 	SyncRunsSuccessPct float64
+
+	// Overview tab: adoption & reliability panels
+	VersionDist []labelBar
+	OSDist      []labelBar
+	Adoption    store.AdoptionStats
+	TOTPPct     int
+	EncPct      int
+	Signups     []store.MonthCount
+	SignupTotal int
+	JobStats    []store.JobStatRow
+	TrendWindow int // stats-snapshot window (days): 30 / 90 / 365
+
+	// Fleet Activity tab: real save-sync activity across all users
+	FleetWindowDays  int
+	FleetVolume      []store.DayCount
+	FleetVolumeTotal int
+	FleetBytes       []store.DayBytes
+	FleetBytesTotal  int64
+	ActiveUsers      []store.DayCount
+	AuditActions     []labelBar
+	AuditByDay       []store.DayCount
+	AuditTotal       int
+	FetchByDay       []store.DayCount
+	FetchTotal       int
+}
+
+func labelBarsFromCounts(rows []store.LabelCount) []labelBar {
+	maxN := 0
+	for _, r := range rows {
+		if r.Count > maxN {
+			maxN = r.Count
+		}
+	}
+	out := make([]labelBar, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, labelBar{Label: r.Label, Count: r.Count, Pct: pctOfMax(r.Count, maxN)})
+	}
+	return out
+}
+
+// downsample keeps at most maxPoints evenly-spaced rows (oldest→newest order
+// is preserved; the last row is always kept so "now" stays on the chart).
+func downsampleSnapshots(rows []store.StatsSnapshotRow, maxPoints int) []store.StatsSnapshotRow {
+	if len(rows) <= maxPoints || maxPoints <= 1 {
+		return rows
+	}
+	out := make([]store.StatsSnapshotRow, 0, maxPoints)
+	step := float64(len(rows)-1) / float64(maxPoints-1)
+	for i := 0; i < maxPoints; i++ {
+		out = append(out, rows[int(float64(i)*step+0.5)])
+	}
+	return out
 }
 
 func analyticsTabFromQuery(r *http.Request) string {
 	switch strings.TrimSpace(r.URL.Query().Get("tab")) {
-	case "pcgw", "sync", "overview":
+	case "pcgw", "sync", "overview", "fleet":
 		return strings.TrimSpace(r.URL.Query().Get("tab"))
 	default:
 		return "overview"
+	}
+}
+
+func trendWindowFromQuery(r *http.Request) int {
+	switch r.URL.Query().Get("window") {
+	case "90":
+		return 90
+	case "365":
+		return 365
+	default:
+		return 30
 	}
 }
 
@@ -162,6 +225,67 @@ func (h *WebHandler) serveAdminAnalytics(w http.ResponseWriter, r *http.Request)
 				users = users[:5]
 			}
 			data.TopUsers = users
+
+			// Adoption & reliability panels.
+			if vc, err := h.store.ClientVersionCounts(ctx); err == nil {
+				data.VersionDist = labelBarsFromCounts(vc)
+			}
+			if oc, err := h.store.ClientOSCounts(ctx); err == nil {
+				data.OSDist = labelBarsFromCounts(oc)
+			}
+			if ad, err := h.store.UserAdoptionStats(ctx); err == nil {
+				data.Adoption = ad
+				if ad.Users > 0 {
+					data.TOTPPct = ad.TOTPEnabled * 100 / ad.Users
+					data.EncPct = ad.EncryptionEnabled * 100 / ad.Users
+				}
+			}
+			if su, err := h.store.SignupsByMonth(ctx, 12); err == nil {
+				data.Signups = su
+				for _, m := range su {
+					data.SignupTotal += m.Count
+				}
+			}
+			data.JobStats, _ = h.store.JobRunStats(ctx)
+		}
+	}
+
+	if tab == "fleet" {
+		days := 30
+		switch r.URL.Query().Get("days") {
+		case "7":
+			days = 7
+		case "90":
+			days = 90
+		}
+		data.FleetWindowDays = days
+		if v, err := h.store.SyncVolumeByDayAll(ctx, days); err == nil {
+			data.FleetVolume = v
+			for _, d := range v {
+				data.FleetVolumeTotal += d.Count
+			}
+		}
+		if b, err := h.store.SyncBytesByDay(ctx, "", days); err == nil {
+			data.FleetBytes = b
+			for _, d := range b {
+				data.FleetBytesTotal += d.Bytes
+			}
+		}
+		data.ActiveUsers, _ = h.store.ActiveUsersByDay(ctx, days)
+		if ac, err := h.store.AuditActionCounts(ctx, days, 8); err == nil {
+			data.AuditActions = labelBarsFromCounts(ac)
+		}
+		if av, err := h.store.AuditVolumeByDay(ctx, days); err == nil {
+			data.AuditByDay = av
+			for _, d := range av {
+				data.AuditTotal += d.Count
+			}
+		}
+		if mf, err := h.store.ManifestFetchByDay(ctx, days); err == nil {
+			data.FetchByDay = mf
+			for _, d := range mf {
+				data.FetchTotal += d.Count
+			}
 		}
 	}
 

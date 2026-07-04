@@ -2,8 +2,8 @@
 {{define "game_detail_title"}}{{.Title}} — GSBS{{end}}
 {{define "game_detail_content"}}
 <p class="breadcrumb">
-  <a href="/dashboard">Dashboard</a> →
-  <a href="/dashboard/games">My Games</a> →
+  <a href="/dashboard">Dashboard</a> <span class="crumb-sep" aria-hidden="true">/</span>
+  <a href="/dashboard/games">My Games</a> <span class="crumb-sep" aria-hidden="true">/</span>
   <span aria-current="page">{{.Title}}</span>
 </p>
 
@@ -96,7 +96,7 @@
       <h3 class="u-m0" id="preview-title">Preview</h3>
       <button type="button" class="btn-ghost-sm" data-close-dialog>Close</button>
     </div>
-    <div id="preview-body"><p class="cell-muted">Loading…</p></div>
+    <div id="preview-body">{{template "partials/loading_skeleton.html" .}}</div>
   </div>
 </dialog>
 {{end}}

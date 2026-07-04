@@ -3,6 +3,7 @@
 {{define "admin_analytics_content"}}
 <nav class="analytics-tabs" aria-label="Analytics sections">
   <a href="/admin/analytics?tab=overview" class="analytics-tab{{if eq .Tab "overview"}} active{{end}}">Overview</a>
+  <a href="/admin/analytics?tab=fleet" class="analytics-tab{{if eq .Tab "fleet"}} active{{end}}">Fleet Activity</a>
   <a href="/admin/analytics?tab=pcgw" class="analytics-tab{{if eq .Tab "pcgw"}} active{{end}}">PCGW Catalog</a>
   <a href="/admin/analytics?tab=sync" class="analytics-tab{{if eq .Tab "sync"}} active{{end}}">Sync History</a>
 </nav>
@@ -120,7 +121,14 @@
 
   {{if .StatsSnapshots}}
   <section class="panel">
-    <div class="panel-header"><h2>Trends (30 days)</h2></div>
+    <div class="panel-header-actions">
+      <h2>Trends</h2>
+      <nav class="window-selector" aria-label="Trend window">
+        <a href="/admin/analytics?tab=overview&amp;window=30" class="window-option{{if eq .TrendWindow 30}} active{{end}}">30d</a>
+        <a href="/admin/analytics?tab=overview&amp;window=90" class="window-option{{if eq .TrendWindow 90}} active{{end}}">90d</a>
+        <a href="/admin/analytics?tab=overview&amp;window=365" class="window-option{{if eq .TrendWindow 365}} active{{end}}">1y</a>
+      </nav>
+    </div>
     <div class="chart-wrap analytics-chart-grid">
       <div><h3 class="analytics-chart-label">Users</h3>{{chartLineSVG .StatsSnapshots "users" 400 120}}</div>
       <div><h3 class="analytics-chart-label">Clients</h3>{{chartLineSVG .StatsSnapshots "clients" 400 120}}</div>
@@ -131,6 +139,170 @@
   {{else}}
   <section class="panel panel-empty"><p>No stats snapshots yet. Daily snapshots are recorded at midnight.</p></section>
   {{end}}
+
+  <div class="analytics-two-col">
+    <section class="panel panel-compact">
+      <div class="panel-header"><h2>Client version adoption</h2></div>
+      {{if .VersionDist}}
+      <div class="topgames-list">
+        {{range .VersionDist}}
+        <div class="topgame-row">
+          <span class="topgame-info">
+            <span class="topgame-title">{{.Label}}</span>
+            <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
+          </span>
+          <span class="topgame-size">{{.Count}} device{{if ne .Count 1}}s{{end}}</span>
+        </div>
+        {{end}}
+      </div>
+      <p class="panel-subtitle">Devices report their app version on every sync — this drives the encryption-upgrade auto-negotiation.</p>
+      {{else}}
+      <div class="panel-empty"><p>No devices registered yet.</p></div>
+      {{end}}
+    </section>
+
+    <section class="panel panel-compact">
+      <div class="panel-header"><h2>Platforms</h2></div>
+      {{if .OSDist}}
+      <div class="topgames-list">
+        {{range .OSDist}}
+        <div class="topgame-row">
+          <span class="topgame-info">
+            <span class="topgame-title">{{.Label}}</span>
+            <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
+          </span>
+          <span class="topgame-size">{{.Count}}</span>
+        </div>
+        {{end}}
+      </div>
+      {{else}}
+      <div class="panel-empty"><p>No devices registered yet.</p></div>
+      {{end}}
+    </section>
+  </div>
+
+  <div class="analytics-two-col">
+    <section class="panel panel-compact">
+      <div class="panel-header"><h2>Security adoption</h2></div>
+      <div class="config-grid">
+        <div class="config-item"><span class="config-key">Accounts</span><span class="config-val">{{.Adoption.Users}}{{if .Adoption.Disabled}} ({{.Adoption.Disabled}} disabled){{end}}</span></div>
+        <div class="config-item"><span class="config-key">Admins</span><span class="config-val">{{.Adoption.Admins}}</span></div>
+        <div class="config-item"><span class="config-key">Two-factor auth</span><span class="config-val">{{.Adoption.TOTPEnabled}} ({{.TOTPPct}}%)</span></div>
+        <div class="config-item"><span class="config-key">E2E encryption</span><span class="config-val">{{.Adoption.EncryptionEnabled}} ({{.EncPct}}%)</span></div>
+      </div>
+      {{if .Signups}}
+      <h3 class="analytics-chart-label u-mt-sm">Signups (12 months · {{.SignupTotal}} total)</h3>
+      <div class="chart-wrap"><div class="bars-chart bars-chart-sm">{{barsSVG (monthsToDays .Signups) 400 60}}</div></div>
+      {{end}}
+    </section>
+
+    <section class="panel panel-compact">
+      <div class="panel-header"><h2>Job reliability</h2></div>
+      {{if .JobStats}}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th scope="col">Job</th><th scope="col">Runs</th><th scope="col">Success</th><th scope="col">Avg duration</th><th scope="col">Last</th></tr></thead>
+          <tbody>
+            {{range .JobStats}}
+            <tr>
+              <td class="cell-primary">{{.JobName}}</td>
+              <td class="cell-muted">{{.Runs}}</td>
+              <td>{{if gt .Runs 0}}{{percentInt .Succeeded .Runs}}%{{else}}—{{end}}</td>
+              <td class="cell-muted">{{printf "%.1fs" .AvgDurationSec}}</td>
+              <td>{{if eq .LastStatus "success"}}<span class="badge-success">success</span>{{else if .LastStatus}}<span class="badge-failed">{{.LastStatus}}</span>{{else}}—{{end}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}
+      <div class="panel-empty"><p>No job runs recorded yet.</p></div>
+      {{end}}
+    </section>
+  </div>
+</div>
+{{end}}
+
+{{if eq .Tab "fleet"}}
+<div class="analytics-panel active">
+  <div class="page-head">
+    <div>
+      <h2 class="u-m0">Fleet save-sync activity</h2>
+      <p class="page-sub">What every connected device pushed, across all users.</p>
+    </div>
+    <nav class="window-selector" aria-label="Fleet window">
+      <a href="/admin/analytics?tab=fleet&amp;days=7" class="window-option{{if eq .FleetWindowDays 7}} active{{end}}">7d</a>
+      <a href="/admin/analytics?tab=fleet&amp;days=30" class="window-option{{if eq .FleetWindowDays 30}} active{{end}}">30d</a>
+      <a href="/admin/analytics?tab=fleet&amp;days=90" class="window-option{{if eq .FleetWindowDays 90}} active{{end}}">90d</a>
+    </nav>
+  </div>
+
+  <div class="analytics-two-col">
+    <section class="panel panel-compact">
+      <div class="panel-header-actions">
+        <h2>Sync volume (all users)</h2>
+        <span class="cell-muted">{{.FleetVolumeTotal}} sync{{if ne .FleetVolumeTotal 1}}s{{end}}</span>
+      </div>
+      <div class="chart-wrap"><div class="bars-chart">{{barsSVG .FleetVolume 480 120}}</div></div>
+    </section>
+    <section class="panel panel-compact">
+      <div class="panel-header-actions">
+        <h2>Data synced (all users)</h2>
+        <span class="cell-muted">{{formatBytes .FleetBytesTotal}}</span>
+      </div>
+      <div class="chart-wrap"><div class="bars-chart">{{bytesBarsSVG .FleetBytes 480 120}}</div></div>
+    </section>
+  </div>
+
+  <div class="analytics-two-col">
+    <section class="panel panel-compact">
+      <div class="panel-header"><h2>Active users per day</h2></div>
+      <div class="chart-wrap"><div class="bars-chart">{{barsSVG .ActiveUsers 480 100}}</div></div>
+    </section>
+    <section class="panel panel-compact">
+      <div class="panel-header-actions">
+        <h2>Manifest downloads</h2>
+        <span class="cell-muted">{{.FetchTotal}} fetch{{if ne .FetchTotal 1}}es{{end}}</span>
+      </div>
+      <div class="chart-wrap"><div class="bars-chart">{{barsSVG .FetchByDay 480 100}}</div></div>
+    </section>
+  </div>
+
+  <div class="analytics-two-col">
+    <section class="panel panel-compact">
+      <div class="panel-header-actions">
+        <h2>Admin &amp; security actions</h2>
+        <span class="cell-muted">{{.AuditTotal}} audit entr{{if ne .AuditTotal 1}}ies{{else}}y{{end}}</span>
+      </div>
+      <div class="chart-wrap"><div class="bars-chart bars-chart-sm">{{barsSVG .AuditByDay 480 70}}</div></div>
+      {{if .AuditActions}}
+      <div class="topgames-list">
+        {{range .AuditActions}}
+        <div class="topgame-row">
+          <span class="topgame-info">
+            <span class="topgame-title">{{auditLabel .Label}}</span>
+            <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
+          </span>
+          <span class="topgame-size">{{.Count}}</span>
+        </div>
+        {{end}}
+      </div>
+      {{end}}
+      <p class="panel-subtitle">Full detail in <a href="/admin/activity">Activity → Audit log</a>.</p>
+    </section>
+
+    <section class="panel panel-compact">
+      <div class="panel-header"><h2>Reading this tab</h2></div>
+      <div class="panel-body">
+        <ul class="settings-list cell-muted">
+          <li><strong>Sync volume</strong> counts accepted save pushes (one per new version).</li>
+          <li><strong>Data synced</strong> is the stored size of those versions.</li>
+          <li><strong>Active users</strong> pushed at least one save that day.</li>
+          <li><strong>Manifest downloads</strong> are clients refreshing save-location data.</li>
+        </ul>
+      </div>
+    </section>
+  </div>
 </div>
 {{end}}
 

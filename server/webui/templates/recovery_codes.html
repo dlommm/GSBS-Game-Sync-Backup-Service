@@ -1,0 +1,24 @@
+{{template "layout" .}}
+{{define "recovery_codes_title"}}Recovery codes — GSBS{{end}}
+{{define "recovery_codes_content"}}
+<section class="panel recovery-panel">
+  <div class="panel-header"><h2>Your two-factor recovery codes</h2></div>
+  <div class="panel-body">
+    <p class="notice notice-warn">
+      <strong>Save these codes now — they are shown only once.</strong>
+      Each code signs you in exactly one time if you lose access to your authenticator app.
+      Store them somewhere safe (a password manager is ideal).
+    </p>
+    <ul class="recovery-code-grid" id="recovery-codes">
+      {{range .Codes}}<li><code>{{.}}</code></li>{{end}}
+    </ul>
+    <div class="recovery-actions">
+      <button type="button" class="btn-secondary" data-copy="{{.CodesJoined}}">{{iconSVG "copy" 14}} Copy all</button>
+      <a class="btn-secondary" href="{{.DownloadData}}" download="gsbs-recovery-codes.txt">{{iconSVG "download" 14}} Download .txt</a>
+      <a class="btn-primary" href="/dashboard/settings">I saved them — done</a>
+    </div>
+    <p class="form-hint">Regenerating codes from Settings invalidates this entire set.</p>
+  </div>
+</section>
+{{end}}
+{{define "recovery_codes_scripts"}}{{end}}

@@ -94,16 +94,16 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "SAMEORIGIN")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		// No 'unsafe-inline': all scripts are external (/static/*.js) and all
-		// styling is in app.css or applied via the CSSOM by app.js — inline
-		// scripts, on*= handlers, and style="" attributes were removed in
-		// 4.0.0 (guarded by template_csp_test.go). Google Fonts on the
-		// pre-auth login/register pages are the only external hosts.
+		// No 'unsafe-inline' and no external hosts: all scripts are external
+		// (/static/*.js), all styling is in app.css or applied via the CSSOM
+		// by app.js (inline scripts, on*= handlers, and style="" attributes
+		// are guarded against by template_csp_test.go), and fonts are
+		// vendored woff2 served from /static/fonts/.
 		h.Set("Content-Security-Policy",
 			"default-src 'self'; "+
 				"script-src 'self'; "+
-				"style-src 'self' https://fonts.googleapis.com; "+
-				"font-src 'self' https://fonts.gstatic.com; "+
+				"style-src 'self'; "+
+				"font-src 'self'; "+
 				"img-src 'self' data:; "+
 				"connect-src 'self'")
 		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {

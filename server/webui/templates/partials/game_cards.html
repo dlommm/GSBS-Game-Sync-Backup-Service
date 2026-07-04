@@ -59,7 +59,7 @@
 {{end}}
 {{else}}
 {{if .Query}}
-{{template "partials/empty-state.html" (dict "Icon" "🔍" "Title" "No games match your search" "Sub" "Try a different name or clear the search box.")}}
+{{template "partials/empty-state.html" (dict "Icon" "search" "Title" "No games match your search" "Sub" "Try a different name or clear the search box.")}}
 {{else}}
 {{template "partials/empty-state.html" (dict "Title" "No games synced yet" "Sub" "Connect a device with the GSBS client and your game saves will appear here automatically." "CTAHref" "/dashboard/settings" "CTALabel" "Manage devices")}}
 {{end}}

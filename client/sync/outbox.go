@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -296,4 +297,32 @@ func OutboxCount() int {
 		}
 	}
 	return n
+}
+
+// ListOutbox returns the pending outbox entries (metadata only — inline
+// payloads are omitted), newest first. Used by the client insights page.
+func ListOutbox() []OutboxEntry {
+	dir := outboxDir()
+	dirEntries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []OutboxEntry
+	for _, de := range dirEntries {
+		if de.IsDir() || filepath.Ext(de.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, de.Name())) //nolint:gosec // G304: fixed outbox dir + dir-listing names
+		if err != nil {
+			continue
+		}
+		var e OutboxEntry
+		if err := json.Unmarshal(data, &e); err != nil {
+			continue
+		}
+		e.Content = "" // strip payload
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
 }

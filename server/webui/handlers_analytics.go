@@ -47,6 +47,47 @@ type userInsights struct {
 	// detail page. False in the admin drill-down (those routes are the admin's
 	// own saves, not the target user's).
 	LinkGames bool
+
+	// Deep-insights additions (window-scoped unless noted).
+	WindowDays    int
+	BytesByDay    []store.DayBytes
+	BytesTotal    int64
+	ByClient      []labelBar       // device attribution (version writes per device)
+	WeekdaySeries []store.DayCount // Sun..Sat activity rhythm (rendered via barsSVG)
+	HoursSeries   []store.DayCount // 0..23 UTC activity rhythm (rendered via barsSVG)
+	MostActive    []activeGameRow
+	Depth         store.SlotDepthStats // all-time
+	CategoryBars  []labelBar           // Saves/Config/Other storage split (all-time)
+	Protection    protectionInfo       // all-time
+	HasActivity   bool                 // any version writes in the window
+}
+
+// labelBar is a generic labelled horizontal/vertical bar (Pct of the max).
+type labelBar struct {
+	Label string
+	Count int
+	Bytes int64
+	Pct   int
+}
+
+// activeGameRow ranks a game by version writes in the window.
+type activeGameRow struct {
+	GameID   string
+	Title    string
+	Versions int
+	Bytes    int64
+	Pct      int
+}
+
+// protectionInfo backs the "how safe are my saves" panel.
+type protectionInfo struct {
+	EncryptedSaves int
+	TotalSaves     int
+	EncryptedPct   int
+	TOTPEnabled    bool
+	DevicesOnline  int
+	DeviceCount    int
+	BackupsHealthy bool
 }
 
 type analyticsData struct {
@@ -108,9 +149,31 @@ func backupHealthAlerts(devices []clientRow, saveCount int) []healthAlert {
 	return alerts
 }
 
+// insightsWindow parses the ?days selector (7/30/90; default 30).
+func insightsWindow(r *http.Request) int {
+	switch r.URL.Query().Get("days") {
+	case "7":
+		return 7
+	case "90":
+		return 90
+	default:
+		return analyticsWindowDays
+	}
+}
+
+func pctOfMax(v, maxV int) int {
+	if maxV <= 0 {
+		return 0
+	}
+	return v * 100 / maxV
+}
+
 // buildUserInsights computes the per-user analytics for a given user. It is used
 // both by the user's own Insights page and the admin drill-down.
-func (h *WebHandler) buildUserInsights(ctx context.Context, userID string) userInsights {
+func (h *WebHandler) buildUserInsights(ctx context.Context, userID string, days int) userInsights {
+	if days <= 0 {
+		days = analyticsWindowDays
+	}
 	saves, err := h.store.ListSaveSummaries(ctx, userID)
 	if err != nil {
 		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("insights: list saves failed")
@@ -121,7 +184,7 @@ func (h *WebHandler) buildUserInsights(ctx context.Context, userID string) userI
 		totalBytes += g.TotalBytes
 	}
 	devices, online := h.loadClientRows(ctx, userID)
-	syncByDay, err := h.store.SyncVolumeByDay(ctx, userID, analyticsWindowDays)
+	syncByDay, err := h.store.SyncVolumeByDay(ctx, userID, days)
 	if err != nil {
 		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("insights: sync volume by day failed")
 	}
@@ -129,6 +192,95 @@ func (h *WebHandler) buildUserInsights(ctx context.Context, userID string) userI
 	for _, d := range syncByDay {
 		syncTotal += d.Count
 	}
+
+	bytesByDay, _ := h.store.SyncBytesByDay(ctx, userID, days)
+	var bytesTotal int64
+	for _, d := range bytesByDay {
+		bytesTotal += d.Bytes
+	}
+
+	// Device attribution.
+	var byClient []labelBar
+	if rows, err := h.store.VersionsByClient(ctx, userID, days); err == nil {
+		maxN := 0
+		for _, r := range rows {
+			if r.Versions > maxN {
+				maxN = r.Versions
+			}
+		}
+		for _, r := range rows {
+			byClient = append(byClient, labelBar{Label: r.ClientName, Count: r.Versions, Bytes: r.Bytes, Pct: pctOfMax(r.Versions, maxN)})
+		}
+	}
+
+	// Activity rhythm (weekday + hour, UTC), reusing the barsSVG day-series shape.
+	var weekdaySeries, hoursSeries []store.DayCount
+	if wd, err := h.store.ActivityByWeekday(ctx, userID, days); err == nil {
+		names := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
+		for i, n := range wd {
+			weekdaySeries = append(weekdaySeries, store.DayCount{Day: names[i], Count: n})
+		}
+	}
+	if hh, err := h.store.ActivityByHour(ctx, userID, days); err == nil {
+		for i, n := range hh {
+			hoursSeries = append(hoursSeries, store.DayCount{Day: fmt.Sprintf("%02d:00 UTC", i), Count: n})
+		}
+	}
+
+	// Most active games.
+	var mostActive []activeGameRow
+	if rows, err := h.store.MostActiveGames(ctx, userID, days, 5); err == nil {
+		maxN := 0
+		for _, r := range rows {
+			if r.SaveCount > maxN {
+				maxN = r.SaveCount
+			}
+		}
+		for _, r := range rows {
+			mostActive = append(mostActive, activeGameRow{
+				GameID: r.GameID, Title: r.GameTitle, Versions: r.SaveCount, Bytes: r.StorageBytes,
+				Pct: pctOfMax(r.SaveCount, maxN),
+			})
+		}
+	}
+
+	depth, _ := h.store.VersionDepth(ctx, userID)
+
+	// Save vs config storage split from the existing category grouping.
+	catBytes := map[string]int64{}
+	for _, g := range groups {
+		for _, c := range g.Categories {
+			catBytes[c.Name] += c.TotalBytes
+		}
+	}
+	var categoryBars []labelBar
+	var maxCat int64 = 1
+	for _, name := range []string{"Saves", "Config", "Other"} {
+		if catBytes[name] > maxCat {
+			maxCat = catBytes[name]
+		}
+	}
+	for _, name := range []string{"Saves", "Config", "Other"} {
+		if b, ok := catBytes[name]; ok && b > 0 {
+			categoryBars = append(categoryBars, labelBar{Label: name, Bytes: b, Pct: int(b * 100 / maxCat)})
+		}
+	}
+
+	// Protection panel.
+	encSaves, totalSaves, _ := h.store.CountEncryptedSaves(ctx, userID)
+	totpOn, _ := h.store.IsTOTPEnabled(ctx, userID)
+	alerts := backupHealthAlerts(devices, len(saves))
+	healthy := true
+	for _, a := range alerts {
+		if a.Tone == "danger" {
+			healthy = false
+		}
+	}
+	encPct := 0
+	if totalSaves > 0 {
+		encPct = encSaves * 100 / totalSaves
+	}
+
 	return userInsights{
 		GameCount:   len(groups),
 		SaveCount:   len(saves),
@@ -139,8 +291,24 @@ func (h *WebHandler) buildUserInsights(ctx context.Context, userID string) userI
 		SyncTotal:   syncTotal,
 		TopGames:    topGamesFromGroups(groups, 5),
 		Devices:     devices,
-		Alerts:      backupHealthAlerts(devices, len(saves)),
+		Alerts:      alerts,
 		LinkGames:   true,
+
+		WindowDays:    days,
+		BytesByDay:    bytesByDay,
+		BytesTotal:    bytesTotal,
+		ByClient:      byClient,
+		WeekdaySeries: weekdaySeries,
+		HoursSeries:   hoursSeries,
+		MostActive:    mostActive,
+		Depth:         depth,
+		CategoryBars:  categoryBars,
+		Protection: protectionInfo{
+			EncryptedSaves: encSaves, TotalSaves: totalSaves, EncryptedPct: encPct,
+			TOTPEnabled: totpOn, DevicesOnline: online, DeviceCount: len(devices),
+			BackupsHealthy: healthy,
+		},
+		HasActivity: syncTotal > 0,
 	}
 }
 
@@ -156,6 +324,6 @@ func (h *WebHandler) serveDashboardAnalytics(w http.ResponseWriter, r *http.Requ
 			IsAdmin:   h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken, NavActive: "analytics",
 		},
-		userInsights: h.buildUserInsights(r.Context(), userID),
+		userInsights: h.buildUserInsights(r.Context(), userID, insightsWindow(r)),
 	})
 }

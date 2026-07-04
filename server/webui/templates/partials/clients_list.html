@@ -9,7 +9,7 @@
       <span class="client-name">{{.Name}}</span>
       <span class="os-badge os-{{.OS}}">{{.OS}}</span>
     </div>
-    <div class="client-card-meta">{{if .Online}}Online now{{else}}Last seen {{formatTime .LastSeen}}{{end}}</div>
+    <div class="client-card-meta">{{if .Online}}Online now{{else}}Last seen <span title="{{.LastSeen}}">{{formatTime .LastSeen}}</span>{{end}}</div>
     {{if not $.ReadOnly}}
     <div class="client-card-actions">
       <button type="button" class="btn-ghost-sm" data-open-dialog="rename-{{.ID}}">Rename</button>
@@ -39,6 +39,6 @@
   {{end}}
 </div>
 {{else}}
-{{template "partials/empty-state.html" (dict "Icon" "🖥️" "Title" "No devices connected" "Sub" "Run gsbs-client login on your PC to connect it and start syncing your saves.")}}
+{{template "partials/empty-state.html" (dict "Icon" "device" "Title" "No devices connected" "Sub" "Run gsbs-client login on your PC to connect it and start syncing your saves.")}}
 {{end}}
 {{end}}

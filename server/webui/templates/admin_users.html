@@ -59,7 +59,7 @@
       </tbody>
     </table>
   </div>
-  {{else}}<div class="panel-empty"><p>No users yet. Use the button above to create the first account.</p></div>{{end}}
+  {{else}}{{template "partials/empty-state.html" (dict "Icon" "user" "Title" "No users yet" "Sub" "Use the button above to create the first account.")}}{{end}}
 </section>
 
 <section class="panel">
@@ -67,14 +67,14 @@
   {{if .Clients}}
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th scope="col">User</th><th scope="col">Name</th><th scope="col">Platform</th><th scope="col">Last active</th><th scope="col" class="th-action"></th></tr></thead>
+      <thead><tr><th scope="col" data-sortable>User</th><th scope="col" data-sortable>Name</th><th scope="col" data-sortable>Platform</th><th scope="col" data-sortable>Last active</th><th scope="col" class="th-action"></th></tr></thead>
       <tbody>
         {{range .Clients}}
         <tr>
           <td>{{.Username}}</td>
           <td class="cell-primary">{{.Name}}</td>
           <td><span class="os-badge os-{{.OS}}">{{.OS}}</span></td>
-          <td class="cell-muted">{{formatTime .LastSeen}}</td>
+          <td class="cell-muted" title="{{.LastSeen}}">{{formatTime .LastSeen}}</td>
           <td class="cell-action">
             <form method="post" action="/admin/revoke" class="inline-form" data-confirm="Revoke client token?">
               <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
@@ -87,7 +87,7 @@
       </tbody>
     </table>
   </div>
-  {{else}}<div class="panel-empty"><p>No clients registered. Run <code>gsbs-client login</code> on a PC to connect it.</p></div>{{end}}
+  {{else}}{{template "partials/empty-state.html" (dict "Icon" "device" "Title" "No clients registered" "Sub" "Run gsbs-client login on a PC to connect it.")}}{{end}}
 </section>
 
 <dialog id="create-user-dialog">
@@ -102,11 +102,15 @@
         </div>
         <div class="form-group">
           <label for="new_password">Password</label>
-          <input id="new_password" name="password" type="password" class="text-input" required autocomplete="new-password">
+          <div class="password-wrap">
+            <input id="new_password" name="password" type="password" class="text-input" required autocomplete="new-password">
+            <button type="button" class="password-toggle-btn" data-password-toggle="new_password" aria-label="Show password" aria-pressed="false"><span class="icon-eye">{{iconSVG "eye" 15}}</span><span class="icon-eye-off">{{iconSVG "eye-off" 15}}</span></button>
+          </div>
+          <div class="strength-meter" data-strength-for="new_password" data-score="0" aria-hidden="true"><div class="strength-track"><div class="strength-fill"></div></div><span class="strength-label"></span></div>
         </div>
         <div class="form-group">
           <label for="new_confirm_password">Confirm password</label>
-          <input id="new_confirm_password" name="confirm_password" type="password" class="text-input" required autocomplete="new-password">
+          <input id="new_confirm_password" name="confirm_password" type="password" class="text-input" required autocomplete="new-password" data-match-of="new_password">
         </div>
       </div>
     </div>
@@ -126,14 +130,16 @@
       <input type="hidden" name="user_id" id="quota-user-id">
       <div class="dialog-form-fields">
         <div class="quota-presets">
-          <button type="button" class="btn-ghost-sm" data-quota-preset="5368709120">5 GB</button>
-          <button type="button" class="btn-ghost-sm" data-quota-preset="21474836480">20 GB</button>
-          <button type="button" class="btn-ghost-sm" data-quota-preset="53687091200">50 GB</button>
+          <button type="button" class="btn-ghost-sm" data-quota-preset="5">5 GB</button>
+          <button type="button" class="btn-ghost-sm" data-quota-preset="20">20 GB</button>
+          <button type="button" class="btn-ghost-sm" data-quota-preset="50">50 GB</button>
           <button type="button" class="btn-ghost-sm" data-quota-preset="0">Unlimited</button>
         </div>
         <div class="form-group">
-          <label for="quota_bytes">Custom quota (bytes, 0 = unlimited)</label>
-          <input id="quota_bytes" name="quota_bytes" type="number" min="0" step="1" class="text-input" required>
+          <label for="quota_gb">Quota (GB, 0 = unlimited)</label>
+          <input id="quota_gb" type="number" min="0" step="0.5" class="text-input" required>
+          <input id="quota_bytes" name="quota_bytes" type="hidden">
+          <p class="form-hint">Counts stored bytes including version history.</p>
         </div>
       </div>
     </div>

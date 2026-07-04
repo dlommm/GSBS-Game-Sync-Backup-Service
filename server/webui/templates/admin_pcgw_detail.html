@@ -43,8 +43,26 @@
   <details class="detail-section">
     <summary>{{.PlatformKey}} <span class="cell-muted">({{.PlatformRawLabel}})</span></summary>
     <div class="two-col detail-grid">
-      <div><h4>Parsed</h4><pre class="detail-pre">Saves: {{printf "%#v" .SaveLocations}}
-Config: {{printf "%#v" .ConfigLocations}}</pre></div>
+      <div>
+        <h4>Parsed locations</h4>
+        {{if .SaveLocations}}
+        <div class="path-entry-group">
+          <span class="badge-success">Saves</span>
+          <ul class="path-entry-list">
+            {{range .SaveLocations}}{{range .PathTemplates}}<li><code class="code-inline">{{.}}</code></li>{{end}}{{if .Notes}}<li class="cell-muted path-entry-note">{{.Notes}}</li>{{end}}{{end}}
+          </ul>
+        </div>
+        {{end}}
+        {{if .ConfigLocations}}
+        <div class="path-entry-group">
+          <span class="badge-running">Config</span>
+          <ul class="path-entry-list">
+            {{range .ConfigLocations}}{{range .PathTemplates}}<li><code class="code-inline">{{.}}</code></li>{{end}}{{if .Notes}}<li class="cell-muted path-entry-note">{{.Notes}}</li>{{end}}{{end}}
+          </ul>
+        </div>
+        {{end}}
+        {{if not (or .SaveLocations .ConfigLocations)}}<p class="cell-muted">No save or config locations parsed for this platform.</p>{{end}}
+      </div>
       <div><h4>Raw wikitext</h4><pre class="detail-pre">{{.SectionWikitext}}</pre></div>
     </div>
   </details>
@@ -68,10 +86,26 @@ Config: {{printf "%#v" .ConfigLocations}}</pre></div>
   {{end}}
 </section>
 
-<details class="panel panel-compact">
-  <summary class="panel-header u-cursor-pointer"><h2 class="u-inline">Infobox / game row</h2></summary>
-  <pre class="detail-pre u-section-msg-plain">{{printf "%#v" .Game}}</pre>
-</details>
+<section class="panel panel-compact">
+  <div class="panel-header"><h2>Game record</h2></div>
+  <div class="config-grid u-section-msg-plain">
+    <div class="config-item"><span class="config-key">Page ID</span><span class="config-val">{{.Game.PageID}}</span></div>
+    <div class="config-item"><span class="config-key">Page name</span><span class="config-val">{{.Game.PageName}}</span></div>
+    {{if .Game.SteamAppIDs}}<div class="config-item"><span class="config-key">Steam App IDs</span><span class="config-val">{{join .Game.SteamAppIDs ", "}}</span></div>{{end}}
+    {{if .Game.GOGID}}<div class="config-item"><span class="config-key">GOG ID</span><span class="config-val">{{.Game.GOGID}}</span></div>{{end}}
+    {{if .Game.EpicID}}<div class="config-item"><span class="config-key">Epic ID</span><span class="config-val">{{.Game.EpicID}}</span></div>{{end}}
+    {{if .Game.UbisoftID}}<div class="config-item"><span class="config-key">Ubisoft ID</span><span class="config-val">{{.Game.UbisoftID}}</span></div>{{end}}
+    {{if .Game.MicrosoftID}}<div class="config-item"><span class="config-key">Microsoft ID</span><span class="config-val">{{.Game.MicrosoftID}}</span></div>{{end}}
+    {{if .Game.BattlenetID}}<div class="config-item"><span class="config-key">Battle.net ID</span><span class="config-val">{{.Game.BattlenetID}}</span></div>{{end}}
+    {{if .Game.ItchID}}<div class="config-item"><span class="config-key">itch.io ID</span><span class="config-val">{{.Game.ItchID}}</span></div>{{end}}
+    {{if .Game.Developers}}<div class="config-item"><span class="config-key">Developers</span><span class="config-val">{{join .Game.Developers ", "}}</span></div>{{end}}
+    {{if .Game.Publishers}}<div class="config-item"><span class="config-key">Publishers</span><span class="config-val">{{join .Game.Publishers ", "}}</span></div>{{end}}
+    {{if .Game.ReleaseDates}}<div class="config-item"><span class="config-key">Released</span><span class="config-val">{{join .Game.ReleaseDates ", "}}</span></div>{{end}}
+    {{if .Game.Engines}}<div class="config-item"><span class="config-key">Engines</span><span class="config-val">{{join .Game.Engines ", "}}</span></div>{{end}}
+    {{if .Game.CoverURL}}<div class="config-item"><span class="config-key">Cover URL</span><span class="config-val"><code class="code-inline">{{.Game.CoverURL}}</code></span></div>{{end}}
+    {{if .Game.RedirectsTo}}<div class="config-item"><span class="config-key">Redirects to</span><span class="config-val">{{.Game.RedirectsTo}}</span></div>{{end}}
+  </div>
+</section>
 
 {{if .Metadata}}
 <section class="panel panel-compact">

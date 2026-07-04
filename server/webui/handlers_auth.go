@@ -136,7 +136,8 @@ func (h *WebHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	code := strings.TrimSpace(r.FormValue("code"))
-	if code == "" {
+	recoveryCode := strings.TrimSpace(r.FormValue("recovery_code"))
+	if code == "" && recoveryCode == "" {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login_totp.html", map[string]interface{}{
 			"Error":     "Enter the code from your authenticator app.",
@@ -144,19 +145,42 @@ func (h *WebHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	secret, err := h.store.GetTOTPSecret(r.Context(), userID)
-	if err != nil || secret == "" {
-		ClearTOTPStepCookie(w)
-		Redirect(w, r, "/login")
-		return
-	}
-	if !auth.ValidateTOTPOnce(userID, code, secret) {
-		csrfToken := SetCSRFToken(w, r, h.secret)
-		h.render(w, "login_totp.html", map[string]interface{}{
-			"Error":     "Invalid code. Please try again.",
-			"CSRFToken": csrfToken,
-		})
-		return
+	if recoveryCode != "" {
+		// One-time recovery code instead of an authenticator code.
+		consumed, err := h.store.ConsumeRecoveryCode(r.Context(), userID, hashRecoveryCode(recoveryCode))
+		if err != nil || !consumed {
+			csrfToken := SetCSRFToken(w, r, h.secret)
+			h.render(w, "login_totp.html", map[string]interface{}{
+				"Error":     "Invalid or already-used recovery code.",
+				"CSRFToken": csrfToken,
+				"Recovery":  true,
+			})
+			return
+		}
+		if remaining, err := h.store.CountRecoveryCodes(r.Context(), userID); err == nil && remaining <= 2 {
+			if username, unameErr := h.store.UsernameByID(r.Context(), userID); unameErr == nil {
+				h.notifyEvent(notify.Event{
+					Type: notify.EventLogin, UserID: userID,
+					Title: "Recovery codes running low",
+					Body:  fmt.Sprintf("Account %q has %d two-factor recovery code(s) left. Regenerate a fresh set in Settings.", username, remaining),
+				})
+			}
+		}
+	} else {
+		secret, err := h.store.GetTOTPSecret(r.Context(), userID)
+		if err != nil || secret == "" {
+			ClearTOTPStepCookie(w)
+			Redirect(w, r, "/login")
+			return
+		}
+		if !auth.ValidateTOTPOnce(userID, code, secret) {
+			csrfToken := SetCSRFToken(w, r, h.secret)
+			h.render(w, "login_totp.html", map[string]interface{}{
+				"Error":     "Invalid code. Please try again.",
+				"CSRFToken": csrfToken,
+			})
+			return
+		}
 	}
 	ClearTOTPStepCookie(w)
 	sessionID, err := h.store.CreateSession(r.Context(), userID, r.UserAgent())

@@ -422,7 +422,7 @@ func (h *WebHandler) serveAdminUserDetail(w http.ResponseWriter, r *http.Request
 	}
 	quota, _ := h.store.UserQuotaBytes(ctx, targetID)
 	role, _ := h.store.UserRole(ctx, targetID)
-	insights := h.buildUserInsights(ctx, targetID)
+	insights := h.buildUserInsights(ctx, targetID, 0)
 	insights.LinkGames = false // admin context: don't link to the admin's own game pages
 	h.render(w, "admin_user_detail.html", adminUserDetailData{
 		PageData:       h.adminPageData(w, r, adminID, adminName, "users", "admin_user_detail"),

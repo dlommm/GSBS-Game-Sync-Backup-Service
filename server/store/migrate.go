@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 27
+const schemaVersion = 29
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -127,6 +127,8 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{25, stepClientStaleNotified},
 		{26, stepUserNotifySettings},
 		{27, stepUserLocale},
+		{28, stepTOTPRecoveryCodes},
+		{29, stepAnalyticsIndexes},
 	}
 }
 
@@ -144,6 +146,33 @@ func stepClientAppVersion(tx *sql.Tx) error {
 // stepUserLocale stores each user's preferred UI language (i18n).
 func stepUserLocale(tx *sql.Tx) error {
 	_, err := tx.Exec(`ALTER TABLE users ADD COLUMN locale TEXT`)
+	return err
+}
+
+// stepTOTPRecoveryCodes stores one-time 2FA recovery codes (SHA-256 hashes of
+// high-entropy random codes; a consumed code's row is deleted).
+func stepTOTPRecoveryCodes(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS totp_recovery_codes (
+			user_id TEXT NOT NULL,
+			code_hash TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY (user_id, code_hash),
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		);
+	`)
+	return err
+}
+
+// stepAnalyticsIndexes covers the analytics aggregations added in the WebUI
+// insights overhaul: fleet-wide per-day sync volume groups save_versions by
+// updated_at, and per-device attribution groups by client_id — both would
+// full-scan the largest table without these.
+func stepAnalyticsIndexes(tx *sql.Tx) error {
+	if _, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_save_versions_updated_at ON save_versions(updated_at)`); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_save_versions_client ON save_versions(client_id)`)
 	return err
 }
 

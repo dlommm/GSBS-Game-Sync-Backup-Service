@@ -1,85 +1,68 @@
-{{define "settings"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GSBS — Settings</title>
-  <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="stylesheet" href="/static/app.css">
-</head>
-<body class="app-shell">
-  <a href="#main-content" class="skip-link">Skip to main content</a>
-  {{template "partials/topbar.html" .}}
-  <main id="main-content" class="page-content" role="main">
-    {{template "partials/alerts.html" .}}
+{{define "settings"}}{{template "layout" .}}{{end}}
+{{define "settings_content"}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Settings</h1>
+    <p class="page-sub">Edit common client options without touching <code class="code-inline">config.json</code>. Saving restarts sync.</p>
+  </div>
+</div>
 
-    <h1 style="font-size:1.1rem;font-weight:700;margin:0 0 0.25rem;">Settings</h1>
-    <p style="font-size:0.875rem;color:var(--text-secondary);margin:0 0 1.25rem;">
-      Edit common client options without touching <code>config.json</code>. Saving restarts sync.
-    </p>
-
-    <form method="POST" action="/settings/save">
-      <section class="panel" aria-labelledby="sync-heading">
-        <div class="panel-header"><h2 id="sync-heading">Sync</h2></div>
-        <div style="display:flex;flex-direction:column;gap:1rem;padding:0 1.25rem 1.25rem;">
-          <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
-            <span>Sync interval <span style="color:var(--text-muted);">(how often to pull; e.g. 30s, 5m, 1h)</span></span>
-            <input type="text" name="sync_interval" value="{{.SyncInterval}}" style="max-width:14rem;">
-          </label>
-
-          <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
-            <span>Conflict policy</span>
-            <select name="conflict_policy" style="max-width:18rem;">
-              <option value="last_write_wins" {{if eq .ConflictPolicy "last_write_wins"}}selected{{end}}>Last write wins (default)</option>
-              <option value="keep_local" {{if eq .ConflictPolicy "keep_local"}}selected{{end}}>Keep local copy</option>
-              <option value="keep_server" {{if eq .ConflictPolicy "keep_server"}}selected{{end}}>Keep server copy</option>
-            </select>
-          </label>
-
-          <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
-            <span>Sync content</span>
-            <select name="manifest_include" style="max-width:18rem;">
-              <option value="both" {{if eq .ManifestInclude "both"}}selected{{end}}>Saves and config (default)</option>
-              <option value="saves" {{if eq .ManifestInclude "saves"}}selected{{end}}>Saves only</option>
-              <option value="config" {{if eq .ManifestInclude "config"}}selected{{end}}>Config only</option>
-            </select>
-          </label>
-
-          <label style="display:flex;flex-direction:column;gap:0.35rem;font-size:0.875rem;">
-            <span>Max bandwidth <span style="color:var(--text-muted);">(KiB/s; blank or 0 = unlimited)</span></span>
-            <input type="number" name="max_sync_kbps" min="0" value="{{if .MaxSyncKbps}}{{.MaxSyncKbps}}{{end}}" style="max-width:10rem;">
-          </label>
-        </div>
-      </section>
-
-      <section class="panel" aria-labelledby="behavior-heading" style="margin-top:1.25rem;">
-        <div class="panel-header"><h2 id="behavior-heading">Behavior</h2></div>
-        <div style="display:flex;flex-direction:column;gap:0.85rem;padding:0 1.25rem 1.25rem;font-size:0.875rem;">
-          <label style="display:flex;align-items:center;gap:0.6rem;">
-            <input type="checkbox" name="backup_on_pull" {{if .BackupOnPull}}checked{{end}}>
-            <span>Back up the existing file (<code>.gsbs.bak</code>) before overwriting on pull</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:0.6rem;">
-            <input type="checkbox" name="use_compression" {{if .UseCompression}}checked{{end}}>
-            <span>Compress sync traffic (gzip) to save bandwidth</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:0.6rem;">
-            <input type="checkbox" name="skip_sync_when_metered" {{if .SkipSyncWhenMetered}}checked{{end}}>
-            <span>Skip syncing on metered connections (Windows)</span>
-          </label>
-        </div>
-      </section>
-
-      <div style="display:flex;gap:0.75rem;margin-top:1.25rem;">
-        <button type="submit" class="btn-primary" style="padding:0.7rem 1.4rem;">Save settings</button>
-        <a href="/dashboard" class="btn-ghost" style="padding:0.7rem 1.4rem;">Cancel</a>
+<form method="POST" action="/settings/save" data-dirty-track>
+  <section class="panel" aria-labelledby="sync-heading">
+    <div class="panel-header"><h2 id="sync-heading">Sync</h2></div>
+    <div class="panel-body form-stack">
+      <div class="form-group">
+        <label for="sync_interval">Sync interval</label>
+        <input type="text" id="sync_interval" name="sync_interval" value="{{.SyncInterval}}" class="text-input input-narrow" spellcheck="false">
+        <p class="form-hint">How often to pull from the server — e.g. 30s, 5m, 1h (minimum 30s).</p>
       </div>
-    </form>
-  </main>
+      <div class="form-group">
+        <label for="conflict_policy">Conflict policy</label>
+        <select id="conflict_policy" name="conflict_policy" class="filter-select input-medium">
+          <option value="last_write_wins" {{if eq .ConflictPolicy "last_write_wins"}}selected{{end}}>Last write wins (default)</option>
+          <option value="keep_local" {{if eq .ConflictPolicy "keep_local"}}selected{{end}}>Keep local copy</option>
+          <option value="keep_server" {{if eq .ConflictPolicy "keep_server"}}selected{{end}}>Keep server copy</option>
+        </select>
+        <p class="form-hint">What happens when the same save changed on two PCs. Per-game overrides live in config.json.</p>
+      </div>
+      <div class="form-group">
+        <label for="manifest_include">Sync content</label>
+        <select id="manifest_include" name="manifest_include" class="filter-select input-medium">
+          <option value="both" {{if eq .ManifestInclude "both"}}selected{{end}}>Saves and config (default)</option>
+          <option value="saves" {{if eq .ManifestInclude "saves"}}selected{{end}}>Saves only</option>
+          <option value="config" {{if eq .ManifestInclude "config"}}selected{{end}}>Config only</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="max_sync_kbps">Max bandwidth</label>
+        <input type="number" id="max_sync_kbps" name="max_sync_kbps" min="0" value="{{if .MaxSyncKbps}}{{.MaxSyncKbps}}{{end}}" class="text-input input-narrow">
+        <p class="form-hint">KiB/s; blank or 0 = unlimited.</p>
+      </div>
+    </div>
+  </section>
 
-  <div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;max-width:24rem;"></div>
-  <script src="/static/toast.js"></script>
-</body>
-</html>
+  <section class="panel" aria-labelledby="behavior-heading">
+    <div class="panel-header"><h2 id="behavior-heading">Behavior</h2></div>
+    <div class="panel-body form-stack">
+      <label class="checkbox-label">
+        <input type="checkbox" name="backup_on_pull" {{if .BackupOnPull}}checked{{end}}>
+        <span>Back up the existing file (<code class="code-inline">.gsbs.bak</code>) before overwriting on pull</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" name="use_compression" {{if .UseCompression}}checked{{end}}>
+        <span>Compress sync traffic (gzip) to save bandwidth</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" name="skip_sync_when_metered" {{if .SkipSyncWhenMetered}}checked{{end}}>
+        <span>Skip syncing on metered connections (Windows)</span>
+      </label>
+    </div>
+  </section>
+
+  <div class="form-actions-row">
+    <button type="submit" class="btn-primary">Save settings</button>
+    <a href="/dashboard" class="btn-ghost">Cancel</a>
+    <span class="save-bar-hint" data-dirty-hint hidden>Unsaved changes</span>
+  </div>
+</form>
 {{end}}

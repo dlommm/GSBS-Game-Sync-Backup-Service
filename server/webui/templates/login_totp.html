@@ -4,21 +4,37 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Two-factor authentication — GSBS</title>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
   <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="apple-touch-icon" href="/static/logo.png">
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/theme-boot.js"></script>
 </head>
 <body class="auth-page">
   <a href="#main-content" class="skip-link">Skip to main content</a>
   <main id="main-content" class="auth-card" role="main">
-    <h1>Authenticator code</h1>
-    <p class="subtitle">Enter the code from your authenticator app</p>
+    <img src="/static/logo.png" alt="GSBS" class="auth-logo">
+    <h1>Two-factor authentication</h1>
+    <p class="subtitle">Enter the 6-digit code from your authenticator app</p>
     {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
     <form method="post" action="/login/totp" class="auth-form">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <label for="code">Code</label>
-      <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" required autofocus>
+      <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" {{if not .Recovery}}autofocus{{end}}>
       <button type="submit">Verify</button>
     </form>
+    <details class="auth-recovery" {{if .Recovery}}open{{end}}>
+      <summary>Lost your authenticator? Use a recovery code</summary>
+      <form method="post" action="/login/totp" class="auth-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <label for="recovery_code">Recovery code</label>
+        <input id="recovery_code" name="recovery_code" type="text" autocomplete="off" spellcheck="false" placeholder="XXXXX-XXXXX" {{if .Recovery}}autofocus{{end}}>
+        <button type="submit">Sign in with recovery code</button>
+      </form>
+      <p class="cell-muted">Each recovery code works once. No codes left? Ask an administrator to reset 2FA on your account.</p>
+    </details>
   </main>
 </body>
 </html>

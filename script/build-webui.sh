@@ -15,6 +15,7 @@ echo "Built ${WEBUI}/static/app.css"
 # Sync compiled CSS + shared static assets to client webui.
 mkdir -p "${CLIENT_STATIC}/fonts"
 cp "${WEBUI}/static/app.css" "${CLIENT_STATIC}/app.css"
+cp "${WEBUI}/static/theme-boot.js" "${CLIENT_STATIC}/theme-boot.js"
 cp "${WEBUI}/static/favicon.png" "${CLIENT_STATIC}/favicon.png"
 cp "${ROOT}/docs/images/gsbs-icon.png" "${CLIENT_STATIC}/logo.png"
 cp "${WEBUI}/static/fonts/"*.woff2 "${CLIENT_STATIC}/fonts/"

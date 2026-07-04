@@ -6,20 +6,20 @@
          hx-get="/dashboard/partial/stats"
          hx-trigger="load, save-updated from:body"
          hx-swap="innerHTML">
-  <p class="cell-muted">Loading stats…</p>
+  {{template "partials/loading_skeleton.html" .}}
 </section>
 
 <nav class="quick-tiles" aria-label="Quick access">
   <a class="quick-tile" href="/dashboard/games">
-    <span class="quick-tile-icon" aria-hidden="true">🎮</span>
+    <span class="quick-tile-icon" aria-hidden="true">{{iconSVG "game" 22}}</span>
     <span class="quick-tile-text"><span class="quick-tile-title">My Games</span><span class="quick-tile-sub">Browse synced saves</span></span>
   </a>
   <a class="quick-tile" href="/dashboard/clients">
-    <span class="quick-tile-icon" aria-hidden="true">🖥️</span>
+    <span class="quick-tile-icon" aria-hidden="true">{{iconSVG "device" 22}}</span>
     <span class="quick-tile-text"><span class="quick-tile-title">Devices</span><span class="quick-tile-sub">Manage connected devices</span></span>
   </a>
   <a class="quick-tile" href="/dashboard/settings">
-    <span class="quick-tile-icon" aria-hidden="true">⚙️</span>
+    <span class="quick-tile-icon" aria-hidden="true">{{iconSVG "settings" 22}}</span>
     <span class="quick-tile-text"><span class="quick-tile-title">Settings</span><span class="quick-tile-sub">Security &amp; account</span></span>
   </a>
 </nav>
@@ -33,7 +33,7 @@
        hx-get="/dashboard/partial/clients"
        hx-trigger="load, save-updated from:body"
        hx-swap="innerHTML">
-    <p class="panel-empty">Loading devices…</p>
+    {{template "partials/loading_skeleton.html" .}}
   </div>
 </section>
 
@@ -51,7 +51,7 @@
        hx-get="/dashboard/partial/activity"
        hx-trigger="load, save-updated from:body"
        hx-swap="innerHTML">
-    <p class="panel-empty">Loading activity…</p>
+    {{template "partials/loading_skeleton.html" .}}
   </div>
   <p class="panel-empty tab-empty" id="activity-tab-empty" hidden>No recent activity in this category.</p>
 </section>

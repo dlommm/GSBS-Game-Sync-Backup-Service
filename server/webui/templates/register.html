@@ -4,11 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Register — GSBS</title>
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
   <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="apple-touch-icon" href="/static/logo.png">
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/theme-boot.js"></script>
 </head>
 <body class="auth-page">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
   <main id="main-content" class="auth-card" role="main">
     <img src="/static/logo.png" alt="GSBS" class="auth-logo">
     <h1>Create account</h1>
@@ -19,9 +24,13 @@
       <label for="username">Username</label>
       <input id="username" name="username" type="text" required autocomplete="username">
       <label for="password">Password</label>
-      <input id="password" name="password" type="password" required autocomplete="new-password">
+      <div class="password-wrap">
+        <input id="password" name="password" type="password" required autocomplete="new-password">
+        <button type="button" class="password-toggle-btn" data-password-toggle="password" aria-label="Show password" aria-pressed="false"><span class="icon-eye">{{iconSVG "eye" 15}}</span><span class="icon-eye-off">{{iconSVG "eye-off" 15}}</span></button>
+      </div>
+      <div class="strength-meter" data-strength-for="password" data-score="0" aria-hidden="true"><div class="strength-track"><div class="strength-fill"></div></div><span class="strength-label"></span></div>
       <label for="confirm_password">Confirm password</label>
-      <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password">
+      <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password" data-match-of="password">
       <button type="submit">Register</button>
     </form>
     <section class="auth-help">
@@ -34,5 +43,6 @@
     </section>
     <p class="auth-footer"><a href="/login">Back to sign in</a></p>
   </main>
+  <script src="/static/app.js" defer></script>
 </body>
 </html>

@@ -32,24 +32,36 @@
   /* ---- Users page: quota dialog ---- */
 
   function initQuotaDialog() {
+    var GB = 1024 * 1024 * 1024;
     document.addEventListener('click', function (e) {
       var open = e.target.closest('[data-quota-open]');
       if (open) {
         var id = document.getElementById('quota-user-id');
         var name = document.getElementById('quota-dialog-user');
-        var val = document.getElementById('quota_bytes');
+        var gb = document.getElementById('quota_gb');
         if (id) id.value = open.getAttribute('data-user-id') || '';
         if (name) name.textContent = open.getAttribute('data-username') || '';
-        if (val) val.value = open.getAttribute('data-quota') || '0';
+        if (gb) {
+          var bytes = parseInt(open.getAttribute('data-quota') || '0', 10) || 0;
+          gb.value = bytes === 0 ? '0' : String(Math.round((bytes / GB) * 2) / 2);
+        }
         var dlg = document.getElementById('quota-dialog');
         if (dlg && dlg.showModal) dlg.showModal();
         return;
       }
       var preset = e.target.closest('[data-quota-preset]');
       if (preset) {
-        var input = document.getElementById('quota_bytes');
+        var input = document.getElementById('quota_gb');
         if (input) input.value = preset.getAttribute('data-quota-preset');
       }
+    });
+    // The handler still receives bytes: convert the GB field on submit.
+    document.addEventListener('submit', function (e) {
+      var form = e.target;
+      if (!form.querySelector || !form.querySelector('#quota_gb')) return;
+      var gb = parseFloat(form.querySelector('#quota_gb').value || '0') || 0;
+      var bytesField = form.querySelector('#quota_bytes');
+      if (bytesField) bytesField.value = String(Math.round(gb * GB));
     });
   }
 
@@ -117,6 +129,18 @@
     });
   }
 
+  /* ---- Long settings forms: show the sticky save bar once dirty ---- */
+
+  function initDirtyTracking() {
+    document.querySelectorAll('form[data-dirty-track]').forEach(function (form) {
+      var bar = form.querySelector('[data-save-bar]');
+      if (!bar) return;
+      function markDirty() { bar.classList.add('visible'); }
+      form.addEventListener('input', markDirty);
+      form.addEventListener('change', markDirty);
+    });
+  }
+
   /* ---- Logs page: filter + auto-refresh ---- */
 
   function initLogsPage() {
@@ -131,7 +155,14 @@
     }
     function refreshLogs() {
       if (!window.htmx) return;
-      window.htmx.ajax('GET', buildQuery(), { target: '#admin-logs-table', swap: 'innerHTML' });
+      var req = window.htmx.ajax('GET', buildQuery(), { target: '#admin-logs-table', swap: 'innerHTML' });
+      if (req && typeof req.then === 'function') {
+        req.then(function () {
+          table.classList.remove('refresh-pulse');
+          void table.offsetWidth; // restart the animation
+          table.classList.add('refresh-pulse');
+        });
+      }
     }
     var csvBtn = document.getElementById('logs-csv-btn');
     function updateCsvLink() {
@@ -171,5 +202,6 @@
     initQuotaDialog();
     initActionMenus();
     initLogsPage();
+    initDirtyTracking();
   });
 })();

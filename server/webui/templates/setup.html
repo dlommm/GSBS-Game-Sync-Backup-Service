@@ -3,8 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
   <title>Set up GSBS</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="apple-touch-icon" href="/static/logo.png">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/theme-boot.js"></script>
 </head>
@@ -18,21 +22,33 @@
     {{if .Locked}}
     <p class="error" role="alert">For security, first-run setup is only available for a short time after the server starts. Restart the server, then reload this page to complete setup.</p>
     {{else}}
-    <form method="post" action="/setup" class="auth-form">
+    <nav class="wizard-steps" aria-label="Setup progress" id="setup-progress">
+      <span class="wizard-step wizard-step-active" data-step-label="1">1. Account</span><span class="wizard-sep" aria-hidden="true">→</span>
+      <span class="wizard-step wizard-step-pending" data-step-label="2">2. Access</span><span class="wizard-sep" aria-hidden="true">→</span>
+      <span class="wizard-step wizard-step-pending" data-step-label="3">3. Storage</span><span class="wizard-sep" aria-hidden="true">→</span>
+      <span class="wizard-step wizard-step-pending" data-step-label="4">4. Extras</span><span class="wizard-sep" aria-hidden="true">→</span>
+      <span class="wizard-step wizard-step-pending" data-step-label="5">5. Review</span>
+    </nav>
+
+    <form method="post" action="/setup" class="auth-form" id="setup-wizard-form">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
 
-      <fieldset class="setup-fieldset">
+      <fieldset class="setup-fieldset setup-step active" data-step="1">
         <legend>Admin account</legend>
         <label for="username">Username</label>
         <input id="username" name="username" type="text" required autocomplete="username" minlength="3" autofocus>
         <label for="password">Password</label>
-        <input id="password" name="password" type="password" required autocomplete="new-password" minlength="8">
+        <div class="password-wrap">
+          <input id="password" name="password" type="password" required autocomplete="new-password" minlength="8">
+          <button type="button" class="password-toggle-btn" data-password-toggle="password" aria-label="Show password" aria-pressed="false"><span class="icon-eye">{{iconSVG "eye" 15}}</span><span class="icon-eye-off">{{iconSVG "eye-off" 15}}</span></button>
+        </div>
+        <div class="strength-meter" data-strength-for="password" data-score="0" aria-hidden="true"><div class="strength-track"><div class="strength-fill"></div></div><span class="strength-label"></span></div>
         <label for="confirm_password">Confirm password</label>
-        <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password" minlength="8">
+        <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password" minlength="8" data-match-of="password">
         <p class="form-hint">This first account becomes the administrator. You can enable two-factor authentication afterwards in Settings.</p>
       </fieldset>
 
-      <fieldset class="setup-fieldset">
+      <fieldset class="setup-fieldset setup-step" data-step="2">
         <legend>Registration</legend>
         <label class="settings-toggle">
           <input type="checkbox" name="allow_register" value="1">
@@ -41,15 +57,15 @@
         <p class="form-hint">Leave off for a private server (recommended). You create additional users from the admin panel.</p>
       </fieldset>
 
-      <fieldset class="setup-fieldset">
-        <legend>Storage (optional)</legend>
+      <fieldset class="setup-fieldset setup-step" data-step="3">
+        <legend>Storage</legend>
         <label for="storage_quota_gb">Global storage limit (GB)</label>
         <input id="storage_quota_gb" name="storage_quota_gb" type="number" min="0" step="0.5" placeholder="Unlimited">
         <p class="form-hint">Total save storage across all users. Leave blank for unlimited. Counts version history.</p>
       </fieldset>
 
-      <fieldset class="setup-fieldset">
-        <legend>Backups &amp; alerts (optional)</legend>
+      <fieldset class="setup-fieldset setup-step" data-step="4">
+        <legend>Backups &amp; alerts</legend>
         <label class="settings-toggle">
           <input type="checkbox" name="enable_backups" value="1">
           Enable nightly backups
@@ -60,9 +76,26 @@
         <p class="form-hint">Optional JSON webhook for conflicts, quota, new devices, and backup results.</p>
       </fieldset>
 
-      <button type="submit">Create admin &amp; finish setup</button>
+      <fieldset class="setup-fieldset setup-step" data-step="5">
+        <legend>Review</legend>
+        <dl class="setup-review" id="setup-review">
+          <div><dt>Admin username</dt><dd data-review="username">—</dd></div>
+          <div><dt>Open registration</dt><dd data-review="allow_register">Off</dd></div>
+          <div><dt>Storage limit</dt><dd data-review="storage_quota_gb">Unlimited</dd></div>
+          <div><dt>Nightly backups</dt><dd data-review="enable_backups">Off</dd></div>
+          <div><dt>Webhook</dt><dd data-review="notify_webhook_url">—</dd></div>
+        </dl>
+        <p class="form-hint">Everything here can be changed later in the admin Settings page.</p>
+      </fieldset>
+
+      <div class="setup-nav">
+        <button type="button" class="btn-ghost" data-wizard-back hidden>Back</button>
+        <button type="button" class="btn-primary" data-wizard-next>Next</button>
+        <button type="submit" class="btn-primary" data-wizard-submit hidden>Create admin &amp; finish setup</button>
+      </div>
     </form>
     {{end}}
   </main>
+  <script src="/static/app.js" defer></script>
 </body>
 </html>

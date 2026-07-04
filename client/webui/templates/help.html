@@ -1,54 +1,33 @@
-{{define "help"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GSBS — Help</title>
-  <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="stylesheet" href="/static/app.css">
-</head>
-<body class="app-shell">
-  <a href="#main-content" class="skip-link">Skip to main content</a>
-  {{template "partials/topbar.html" .}}
-  <main id="main-content" class="page-content" role="main">
-    {{template "partials/alerts.html" .}}
+{{define "help"}}{{template "layout" .}}{{end}}
+{{define "help_content"}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Help</h1>
+    <p class="page-sub">What the statuses mean and how to fix common problems.</p>
+  </div>
+</div>
 
-    <h1 style="font-size:1.1rem;font-weight:700;margin:0 0 1.25rem;">Client help</h1>
+<section class="panel">
+  <div class="panel-header"><h2>Status reference</h2></div>
+  <div class="config-grid">
+    <div class="config-item"><span class="config-key">Connection</span><span class="config-val">Whether this PC has a valid login to your GSBS server. "Re-login required" means the token was revoked — open Setup and sign in again.</span></div>
+    <div class="config-item"><span class="config-key">Last sync</span><span class="config-val">When the most recent push/pull cycle finished, and whether it succeeded.</span></div>
+    <div class="config-item"><span class="config-key">Watcher</span><span class="config-val">The file watcher that notices save changes instantly. "Recovering" fixes itself; syncing continues on the interval either way.</span></div>
+    <div class="config-item"><span class="config-key">Pending uploads</span><span class="config-val">Saves queued while the server was unreachable. They retry automatically for 7 days.</span></div>
+    <div class="config-item"><span class="config-key">Conflicts</span><span class="config-val">The same save changed on two PCs. Your conflict policy decided which copy won; details in Insights.</span></div>
+  </div>
+</section>
 
-    <section class="panel" aria-labelledby="status-help-heading" style="margin-bottom:1rem;">
-      <div class="panel-header">
-        <h2 id="status-help-heading">What each status means</h2>
-      </div>
-      <div style="padding:0 1.25rem 1.25rem;">
-        <ul style="margin:0;padding:0;list-style:none;display:grid;gap:0.5rem;font-size:0.875rem;color:var(--text-secondary);">
-          <li><strong style="color:var(--text);">Connection:</strong> login and token state for this client.</li>
-          <li><strong style="color:var(--text);">Watcher:</strong> file watch pipeline health on your local save folders.</li>
-          <li><strong style="color:var(--text);">Pending uploads:</strong> queued files still waiting to push to the server.</li>
-          <li><strong style="color:var(--text);">Conflicts:</strong> manual choice needed — open the tray menu to resolve.</li>
-          <li><strong style="color:var(--text);">Discovered:</strong> number of installed games matched to the sync manifest.</li>
-        </ul>
-      </div>
-    </section>
-
-    <section class="panel" aria-labelledby="troubleshoot-heading">
-      <div class="panel-header">
-        <h2 id="troubleshoot-heading">Quick troubleshooting</h2>
-      </div>
-      <div style="padding:0 1.25rem 1.25rem;">
-        <ol style="margin:0;padding-left:1.25rem;display:grid;gap:0.5rem;font-size:0.875rem;color:var(--text-secondary);">
-          <li>Open <a href="/dashboard" style="color:var(--accent);text-decoration:none;font-weight:500;">Dashboard</a> and check for auth or watcher warnings.</li>
-          <li>Use <a href="/logs" style="color:var(--accent);text-decoration:none;font-weight:500;">View logs in browser</a> or <a href="/open-log" style="color:var(--accent);text-decoration:none;font-weight:500;">open log file</a> to inspect recent sync errors.</li>
-          <li>If a game is missing, add the save folder from <a href="/games" style="color:var(--accent);text-decoration:none;font-weight:500;">Add game</a>.</li>
-          <li>Run a manual sync from <a href="/quick-actions" style="color:var(--accent);text-decoration:none;font-weight:500;">Quick actions</a>.</li>
-          <li>If re-login is required, go to <a href="/" style="color:var(--accent);text-decoration:none;font-weight:500;">Setup</a> and reconnect.</li>
-        </ol>
-      </div>
-    </section>
-  </main>
-
-  <div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;max-width:24rem;"></div>
-  <script src="/static/toast.js"></script>
-</body>
-</html>
+<section class="panel">
+  <div class="panel-header"><h2>Quick troubleshooting</h2></div>
+  <div class="panel-body">
+    <ol class="help-steps">
+      <li><strong>Not connected?</strong> Open <a href="/">Setup</a> and log in with your server address and account.</li>
+      <li><strong>A game isn't syncing?</strong> Check it appears under <a href="/dashboard">Status → Matched games</a>; if not, <a href="/games">add its save folder</a>.</li>
+      <li><strong>Sync errors?</strong> Check <a href="/logs">Logs</a> with the level filter on <em>error</em>.</li>
+      <li><strong>Unexpected save contents?</strong> Restore any older version from the server dashboard → My Games → the file's history.</li>
+      <li><strong>Still stuck?</strong> <a href="/open-log">Open the log file</a> and attach it to a GitHub issue.</li>
+    </ol>
+  </div>
+</section>
 {{end}}

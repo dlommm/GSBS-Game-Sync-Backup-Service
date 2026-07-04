@@ -1,134 +1,61 @@
-{{define "logs"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GSBS — Client Logs</title>
-  <link rel="icon" type="image/png" href="/static/favicon.png">
-  <link rel="stylesheet" href="/static/app.css">
-</head>
-<body class="app-shell">
-  <a href="#main-content" class="skip-link">Skip to main content</a>
-  {{template "partials/topbar.html" .PageData}}
-  <main id="main-content" class="page-content" role="main">
-    {{template "partials/alerts.html" .PageData}}
+{{define "logs"}}{{template "layout" .}}{{end}}
+{{define "logs_content"}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Client logs</h1>
+    <p class="page-sub">
+      {{if .LogSourcePresent}}Reading <code class="code-inline">{{.LogSourcePath}}</code>. {{.LogSourceInfo}}{{else}}{{.LogSourceInfo}}{{end}}
+      Prefer a text editor? <a href="/open-log">Open the log file</a>.
+    </p>
+  </div>
+</div>
 
-    <section class="panel panel-compact">
-      <div class="panel-header"><h2>Client Logs</h2></div>
-      <p class="panel-subtitle">
-        {{if .LogSourcePresent}}
-          Showing logs from <code>{{.LogSourcePath}}</code>. {{.LogSourceInfo}}
-        {{else}}
-          {{.LogSourceInfo}}
-        {{end}}
-      </p>
-      <p class="panel-subtitle">Also available via tray menu or <a href="/open-log" style="color:var(--accent);text-decoration:none;font-weight:500;">open log file</a> in your default editor.</p>
-    </section>
-
-    <section class="panel">
-      <div class="panel-header-actions">
-        <h2>Filters</h2>
-        <div class="panel-actions">
-          <a id="logs-csv-btn" href="/logs/export.csv" class="btn-ghost-sm" download="client-logs.csv">Export CSV</a>
-          <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
-        </div>
-      </div>
-      <form id="logs-filters" class="filter-toolbar" method="get" action="/logs">
-        <select name="component" class="filter-select" aria-label="Application">
-          <option value="all" {{if eq .Query.Component "all"}}selected{{end}}>All applications</option>
-          <option value="sync" {{if eq .Query.Component "sync"}}selected{{end}}>sync</option>
-          <option value="auth" {{if eq .Query.Component "auth"}}selected{{end}}>auth</option>
-          <option value="tray" {{if eq .Query.Component "tray"}}selected{{end}}>tray</option>
-          <option value="setup" {{if eq .Query.Component "setup"}}selected{{end}}>setup</option>
-          <option value="client" {{if eq .Query.Component "client"}}selected{{end}}>client</option>
-        </select>
-        <select name="level" class="filter-select">
-          <option value="all" {{if eq .Query.Level "all"}}selected{{end}}>All levels</option>
-          <option value="debug" {{if eq .Query.Level "debug"}}selected{{end}}>debug</option>
-          <option value="info" {{if eq .Query.Level "info"}}selected{{end}}>info</option>
-          <option value="warn" {{if eq .Query.Level "warn"}}selected{{end}}>warn</option>
-          <option value="error" {{if eq .Query.Level "error"}}selected{{end}}>error</option>
-        </select>
-        <input type="search" class="search-input filter-search" name="q" value="{{.Query.Text}}" placeholder="Search op, game_id, path_key, error…">
-        <select name="limit" class="filter-select">
-          <option value="100" {{if eq .Query.Limit 100}}selected{{end}}>100 lines</option>
-          <option value="200" {{if eq .Query.Limit 200}}selected{{end}}>200 lines</option>
-          <option value="500" {{if eq .Query.Limit 500}}selected{{end}}>500 lines</option>
-          <option value="1000" {{if eq .Query.Limit 1000}}selected{{end}}>1000 lines</option>
-        </select>
-        <label class="checkbox-label">
-          <input type="checkbox" name="auto" value="1" {{if .Query.AutoRefresh}}checked{{end}}>
-          Auto-refresh
-        </label>
-        <select name="refresh" class="filter-select">
-          <option value="2" {{if eq .Query.RefreshSeconds 2}}selected{{end}}>2s</option>
-          <option value="5" {{if eq .Query.RefreshSeconds 5}}selected{{end}}>5s</option>
-          <option value="10" {{if eq .Query.RefreshSeconds 10}}selected{{end}}>10s</option>
-          <option value="30" {{if eq .Query.RefreshSeconds 30}}selected{{end}}>30s</option>
-        </select>
-        <button type="submit" class="btn-primary-sm">Apply</button>
-      </form>
-      <div id="client-logs-table">
-        {{template "partials/logs_table.html" .}}
-      </div>
-    </section>
-  </main>
-
-  <div id="toast-container" aria-live="polite" aria-atomic="true" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:0.5rem;max-width:24rem;"></div>
-  <script src="/static/toast.js"></script>
-  <script>
-  (function () {
-    const form = document.getElementById('logs-filters');
-    const table = document.getElementById('client-logs-table');
-    const refreshBtn = document.getElementById('logs-refresh-btn');
-    if (!form || !table) {
-      return;
-    }
-
-    function buildQuery() {
-      const params = new URLSearchParams(new FormData(form));
-      return '/partial/logs?' + params.toString();
-    }
-
-    function refreshLogs() {
-      fetch(buildQuery())
-        .then(function (r) { return r.text(); })
-        .then(function (html) { table.innerHTML = html; })
-        .catch(function () {});
-    }
-
-    form.addEventListener('submit', function (evt) {
-      evt.preventDefault();
-      refreshLogs();
-    });
-    if (refreshBtn) {
-      refreshBtn.addEventListener('click', refreshLogs);
-    }
-
-    let timer = null;
-    function syncAutoRefresh() {
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
-      const enabled = form.querySelector('input[name="auto"]');
-      const seconds = form.querySelector('select[name="refresh"]');
-      const interval = seconds ? Math.max(2000, parseInt(seconds.value || '5', 10) * 1000) : 5000;
-      if (enabled && enabled.checked) {
-        timer = setInterval(refreshLogs, interval);
-      }
-    }
-
-    form.addEventListener('change', function (evt) {
-      syncAutoRefresh();
-      if (evt.target.name !== 'auto' && evt.target.name !== 'refresh') {
-        refreshLogs();
-      }
-    });
-    syncAutoRefresh();
-  })();
-  </script>
-</body>
-</html>
+<section class="panel">
+  <div class="panel-header-actions">
+    <h2>Filters</h2>
+    <div class="panel-actions">
+      <span id="logs-tailing" class="badge-running" hidden>auto-refreshing</span>
+      <a id="logs-csv-btn" href="/logs/export.csv" class="btn-ghost-sm" download="client-logs.csv">Export CSV</a>
+      <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
+    </div>
+  </div>
+  <form id="logs-filters" class="filter-toolbar" method="get" action="/logs">
+    <select name="component" class="filter-select" aria-label="Application">
+      <option value="all" {{if eq .Query.Component "all"}}selected{{end}}>All applications</option>
+      <option value="sync" {{if eq .Query.Component "sync"}}selected{{end}}>sync</option>
+      <option value="auth" {{if eq .Query.Component "auth"}}selected{{end}}>auth</option>
+      <option value="tray" {{if eq .Query.Component "tray"}}selected{{end}}>tray</option>
+      <option value="setup" {{if eq .Query.Component "setup"}}selected{{end}}>setup</option>
+      <option value="client" {{if eq .Query.Component "client"}}selected{{end}}>client</option>
+    </select>
+    <select name="level" class="filter-select" aria-label="Level">
+      <option value="all" {{if eq .Query.Level "all"}}selected{{end}}>All levels</option>
+      <option value="debug" {{if eq .Query.Level "debug"}}selected{{end}}>debug</option>
+      <option value="info" {{if eq .Query.Level "info"}}selected{{end}}>info</option>
+      <option value="warn" {{if eq .Query.Level "warn"}}selected{{end}}>warn</option>
+      <option value="error" {{if eq .Query.Level "error"}}selected{{end}}>error</option>
+    </select>
+    <input type="search" class="search-input filter-search" name="q" value="{{.Query.Text}}" placeholder="Search op, game_id, path_key, error…">
+    <select name="limit" class="filter-select" aria-label="Line limit">
+      <option value="100" {{if eq .Query.Limit 100}}selected{{end}}>100 lines</option>
+      <option value="200" {{if eq .Query.Limit 200}}selected{{end}}>200 lines</option>
+      <option value="500" {{if eq .Query.Limit 500}}selected{{end}}>500 lines</option>
+      <option value="1000" {{if eq .Query.Limit 1000}}selected{{end}}>1000 lines</option>
+    </select>
+    <label class="checkbox-label">
+      <input type="checkbox" name="auto" value="1" {{if .Query.AutoRefresh}}checked{{end}}>
+      Auto-refresh
+    </label>
+    <select name="refresh" class="filter-select" aria-label="Refresh interval">
+      <option value="2" {{if eq .Query.RefreshSeconds 2}}selected{{end}}>2s</option>
+      <option value="5" {{if eq .Query.RefreshSeconds 5}}selected{{end}}>5s</option>
+      <option value="10" {{if eq .Query.RefreshSeconds 10}}selected{{end}}>10s</option>
+      <option value="30" {{if eq .Query.RefreshSeconds 30}}selected{{end}}>30s</option>
+    </select>
+    <button type="submit" class="btn-primary-sm">Apply</button>
+  </form>
+  <div id="client-logs-table">
+    {{template "partials/logs_table.html" .}}
+  </div>
+</section>
 {{end}}

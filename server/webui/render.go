@@ -64,6 +64,7 @@ type settingsData struct {
 	Sessions          []store.SessionRow
 	CurrentSessionID  string
 	TOTPEnabled       bool
+	RecoveryCount     int
 	EncryptionEnabled bool
 	Notify            store.UserNotifySettings
 	Locale            string
@@ -280,8 +281,82 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 		"auditTone":       auditTone,
 		"auditCategory":   auditCategory,
 		"barsSVG":         barsSVG,
+		"bytesBarsSVG":    bytesBarsSVG,
+		"monthsToDays":    monthsToDays,
 		"signedBytes":     signedBytes,
 		"dict":            dict,
+		"iconSVG":         iconSVG,
+		"timeAgo":         timeAgo,
+	}
+}
+
+// iconPaths holds the inner markup of each UI icon (16×16 viewBox, stroked
+// with currentColor at 1.4 — the same visual language as the admin sidebar).
+var iconPaths = map[string]string{
+	"game":     `<rect x="1.5" y="5" width="13" height="7" rx="3"/><path d="M5 7.5v2M4 8.5h2"/><circle cx="10.5" cy="7.8" r="0.8" fill="currentColor" stroke="none"/><circle cx="12.2" cy="9.4" r="0.8" fill="currentColor" stroke="none"/>`,
+	"device":   `<rect x="1.5" y="2.5" width="13" height="8.5" rx="1"/><path d="M5.5 14h5M8 11v3"/>`,
+	"settings": `<circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M12.4 3.6 11 5M5 11l-1.4 1.4"/>`,
+	"search":   `<circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3.5 3.5"/>`,
+	"sun":      `<circle cx="8" cy="8" r="3"/><path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1 1M11.6 11.6l1 1M12.6 3.4l-1 1M4.4 11.6l-1 1"/>`,
+	"moon":     `<path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z"/>`,
+	"grid":     `<rect x="1.5" y="1.5" width="5" height="5" rx="1"/><rect x="9.5" y="1.5" width="5" height="5" rx="1"/><rect x="1.5" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/>`,
+	"list":     `<path d="M5 4h9M5 8h9M5 12h9"/><circle cx="2" cy="4" r="0.9" fill="currentColor" stroke="none"/><circle cx="2" cy="8" r="0.9" fill="currentColor" stroke="none"/><circle cx="2" cy="12" r="0.9" fill="currentColor" stroke="none"/>`,
+	"chart":    `<path d="M2 14V2M2 14h12"/><rect x="4" y="8" width="2.2" height="4" fill="currentColor" stroke="none"/><rect x="7.5" y="5" width="2.2" height="7" fill="currentColor" stroke="none"/><rect x="11" y="9" width="2.2" height="3" fill="currentColor" stroke="none"/>`,
+	"clock":    `<circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/>`,
+	"shield":   `<path d="M8 1.5 13.5 3.5v4.2c0 3.2-2.3 5.6-5.5 6.8-3.2-1.2-5.5-3.6-5.5-6.8V3.5Z"/><path d="m5.5 7.8 1.8 1.8 3.2-3.4"/>`,
+	"save":     `<path d="M2.5 2.5h8.5l2.5 2.5v8.5h-11Z"/><path d="M5 2.5V6h5.5V2.5M5 13.5V9.5h6v4"/>`,
+	"folder":   `<path d="M1.5 4a1 1 0 0 1 1-1h3.6l1.5 1.8h6a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H2.5a1 1 0 0 1-1-1Z"/>`,
+	"copy":     `<rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 3.5v-1h-8v8h1"/>`,
+	"check":    `<path d="m3 8.5 3.2 3.2L13 4.5"/>`,
+	"x":        `<path d="m4 4 8 8M12 4l-8 8"/>`,
+	"alert":    `<path d="M8 2 14.5 13.5H1.5Z"/><path d="M8 6.5v3.2"/><circle cx="8" cy="11.6" r="0.7" fill="currentColor" stroke="none"/>`,
+	"info":     `<circle cx="8" cy="8" r="6"/><path d="M8 7.2V11"/><circle cx="8" cy="5" r="0.7" fill="currentColor" stroke="none"/>`,
+	"download": `<path d="M8 2v7.5M4.8 6.8 8 10l3.2-3.2M2.5 12.5v1h11v-1"/>`,
+	"refresh":  `<path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"/>`,
+	"key":      `<circle cx="5" cy="8" r="3"/><path d="M8 8h6M11.5 8v2.5M13.5 8v1.8"/>`,
+	"eye":      `<path d="M1.5 8s2.4-4.2 6.5-4.2S14.5 8 14.5 8s-2.4 4.2-6.5 4.2S1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="1.9"/>`,
+	"eye-off":  `<path d="M3 3l10 10M6.3 6.4a1.9 1.9 0 0 0 2.6 2.7M5 4.6C3 5.7 1.5 8 1.5 8s2.4 4.2 6.5 4.2c1.1 0 2.1-.3 3-.7M9.9 4A6.7 6.7 0 0 0 8 3.8C3.9 3.8 1.5 8 1.5 8"/>`,
+	"user":     `<circle cx="8" cy="5" r="2.6"/><path d="M2.5 14c0-3 2.5-4.5 5.5-4.5s5.5 1.5 5.5 4.5"/>`,
+	"logout":   `<path d="M6 2.5H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3M10.5 11 13.5 8l-3-3M6.5 8h7"/>`,
+}
+
+// iconSVG renders a named inline UI icon at the given pixel size. Unknown
+// names render the "info" icon so a typo is visible rather than invisible.
+func iconSVG(name string, size int) template.HTML {
+	inner, ok := iconPaths[name]
+	if !ok {
+		inner = iconPaths["info"]
+	}
+	if size <= 0 {
+		size = 16
+	}
+	return template.HTML(fmt.Sprintf(
+		`<svg viewBox="0 0 16 16" width="%d" height="%d" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">%s</svg>`,
+		size, size, inner))
+}
+
+// timeAgo renders a compact relative time ("2h ago", "3d ago"). Zero times
+// render as "never". Templates should pair it with an absolute title attr.
+func timeAgo(t time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+	d := time.Since(t)
+	switch {
+	case d < 0:
+		return "just now"
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	case d < 30*24*time.Hour:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	case d < 365*24*time.Hour:
+		return fmt.Sprintf("%dmo ago", int(d.Hours()/(24*30)))
+	default:
+		return fmt.Sprintf("%dy ago", int(d.Hours()/(24*365)))
 	}
 }
 
@@ -333,6 +408,53 @@ func barsSVG(counts []store.DayCount, width, height int) template.HTML {
 	return template.HTML(fmt.Sprintf( //nolint:gosec // G203: SVG markup built entirely from server-computed numbers, no user input
 		`<svg class="bars-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="Sync volume by day">%s</svg>`,
 		width, height, b.String()))
+}
+
+// bytesBarsSVG renders a vertical bar chart from a per-day byte series
+// (oldest first), mirroring barsSVG but with human-readable byte tooltips.
+func bytesBarsSVG(series []store.DayBytes, width, height int) template.HTML {
+	if len(series) == 0 {
+		return ""
+	}
+	var maxV int64 = 1
+	for _, d := range series {
+		if d.Bytes > maxV {
+			maxV = d.Bytes
+		}
+	}
+	n := len(series)
+	gap := 1.0
+	bw := (float64(width) - gap*float64(n-1)) / float64(n)
+	var b bytes.Buffer
+	for i, d := range series {
+		bh := float64(height) * float64(d.Bytes) / float64(maxV)
+		if d.Bytes > 0 && bh < 2 {
+			bh = 2
+		}
+		x := float64(i) * (bw + gap)
+		y := float64(height) - bh
+		fill := "var(--info)"
+		if d.Bytes == 0 {
+			fill = "var(--border)"
+			bh = 2
+			y = float64(height) - bh
+		}
+		fmt.Fprintf(&b, `<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s"><title>%s: %s</title></rect>`,
+			x, y, bw, bh, fill, d.Day, formatBytes(d.Bytes))
+	}
+	return template.HTML(fmt.Sprintf( //nolint:gosec // G203: SVG markup built entirely from server-computed numbers, no user input
+		`<svg class="bars-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="Data synced by day">%s</svg>`,
+		width, height, b.String()))
+}
+
+// monthsToDays adapts a per-month series to the DayCount shape barsSVG
+// renders (the Day field is just the tooltip label).
+func monthsToDays(months []store.MonthCount) []store.DayCount {
+	out := make([]store.DayCount, 0, len(months))
+	for _, m := range months {
+		out = append(out, store.DayCount{Day: m.Month, Count: m.Count})
+	}
+	return out
 }
 
 // auditCategory groups an audit action for the dashboard activity tabs.
@@ -412,23 +534,42 @@ func (h *WebHandler) render(w http.ResponseWriter, name string, data interface{}
 	}
 }
 
+// renderError serves the branded error page (error.html) with the given
+// status. Used instead of bare http.Error/http.NotFound on user-facing pages.
+func (h *WebHandler) renderError(w http.ResponseWriter, status int, title, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	h.render(w, "error.html", map[string]interface{}{
+		"StatusCode": status,
+		"Title":      title,
+		"Message":    message,
+	})
+}
+
+// notFoundPage is the branded 404 for unmatched WebUI routes.
+func (h *WebHandler) notFoundPage(w http.ResponseWriter) {
+	h.renderError(w, http.StatusNotFound, "Page not found",
+		"The page you're looking for doesn't exist or may have moved.")
+}
+
 func auditLabel(action string) string {
 	labels := map[string]string{
-		"restore_version":   "Restored save version",
-		"delete_save":       "Deleted save",
-		"delete_game_saves": "Deleted all saves for a game",
-		"revoke_client":     "Revoked client token",
-		"rename_client":     "Renamed a device",
-		"clear_cover_cache": "Cleared the cover-art cache",
-		"push_manifest":     "Pushed manifest update",
-		"run_job":           "Started PCGW sync job",
-		"disable_user":      "Disabled user",
-		"enable_user":       "Enabled user",
-		"delete_user":       "Deleted user",
-		"set_quota":         "Updated storage quota",
-		"revoke_session":    "Revoked session",
-		"enable_2fa":        "Enabled two-factor auth",
-		"disable_2fa":       "Disabled two-factor auth",
+		"restore_version":           "Restored save version",
+		"delete_save":               "Deleted save",
+		"delete_game_saves":         "Deleted all saves for a game",
+		"revoke_client":             "Revoked client token",
+		"rename_client":             "Renamed a device",
+		"clear_cover_cache":         "Cleared the cover-art cache",
+		"push_manifest":             "Pushed manifest update",
+		"run_job":                   "Started PCGW sync job",
+		"disable_user":              "Disabled user",
+		"enable_user":               "Enabled user",
+		"delete_user":               "Deleted user",
+		"set_quota":                 "Updated storage quota",
+		"revoke_session":            "Revoked session",
+		"enable_2fa":                "Enabled two-factor auth",
+		"regenerate_recovery_codes": "Regenerated 2FA recovery codes",
+		"disable_2fa":               "Disabled two-factor auth",
 	}
 	if l, ok := labels[action]; ok {
 		return l

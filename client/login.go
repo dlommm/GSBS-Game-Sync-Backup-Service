@@ -16,6 +16,11 @@ import (
 
 const loginTimeout = 30 * time.Second
 
+// ErrTOTPRequired is returned by DoLogin when the account has two-factor
+// authentication enabled and no code was provided; callers should collect a
+// 6-digit code and retry via DoLoginWithTOTP.
+var ErrTOTPRequired = fmt.Errorf("two-factor code required")
+
 // TestConnection checks whether the server URL is reachable (manifest v2, fallback v1).
 func TestConnection(serverURL string) error {
 	resp, err := pingManifestHealth(serverURL, "")
@@ -39,7 +44,14 @@ func defaultClientName() string {
 // Used by both CLI runLogin and the Windows tray login dialog.
 // Merges server URL, token, and client name into existing config so watch_paths and other settings are preserved.
 // serverURL must be non-empty (e.g. https://your-server:8080). clientName is sent to the server; if empty, defaultClientName() is used.
+// Accounts with 2FA enabled get ErrTOTPRequired — retry with DoLoginWithTOTP.
 func DoLogin(serverURL, username, password, clientName string) (*config, error) {
+	return DoLoginWithTOTP(serverURL, username, password, clientName, "")
+}
+
+// DoLoginWithTOTP is DoLogin plus the optional authenticator code needed for
+// accounts with two-factor authentication (the API's /api/login/totp step).
+func DoLoginWithTOTP(serverURL, username, password, clientName, totpCode string) (*config, error) {
 	serverURL = strings.TrimSpace(serverURL)
 	username = strings.TrimSpace(username)
 	password = strings.TrimSpace(password)
@@ -55,10 +67,7 @@ func DoLogin(serverURL, username, password, clientName string) (*config, error) 
 	}
 	// Normalize URL (no trailing slash)
 	serverURL = strings.TrimSuffix(serverURL, "/")
-	clientOS := "linux"
-	if runtime.GOOS == "windows" {
-		clientOS = "windows"
-	}
+	clientOS := runtime.GOOS // windows / linux / darwin
 	body := map[string]string{
 		"username":    username,
 		"password":    password,
@@ -83,11 +92,46 @@ func DoLogin(serverURL, username, password, clientName string) (*config, error) 
 		return nil, fmt.Errorf("login failed: %s", resp.Status)
 	}
 	var out struct {
-		Token string `json:"token"`
+		Token        string `json:"token"`
+		TotpRequired bool   `json:"totp_required"`
+		TotpToken    string `json:"totp_token"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		log.Printf("client login: failed server=%s username=%q: invalid response: %v", serverURL, username, err)
 		return nil, fmt.Errorf("invalid response: %w", err)
+	}
+	if out.TotpRequired {
+		code := strings.TrimSpace(totpCode)
+		if code == "" {
+			return nil, ErrTOTPRequired
+		}
+		totpBody, _ := json.Marshal(map[string]string{
+			"totp_token":  out.TotpToken,
+			"code":        code,
+			"client_name": clientName,
+			"client_os":   clientOS,
+		})
+		totpReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, serverURL+"/api/login/totp", bytes.NewReader(totpBody))
+		if err != nil {
+			return nil, fmt.Errorf("request: %w", err)
+		}
+		totpReq.Header.Set("Content-Type", "application/json")
+		totpResp, err := client.Do(totpReq)
+		if err != nil {
+			return nil, fmt.Errorf("request failed: %w", err)
+		}
+		defer totpResp.Body.Close()
+		if totpResp.StatusCode != http.StatusOK {
+			log.Printf("client login: totp step failed server=%s username=%q: %s", serverURL, username, totpResp.Status)
+			return nil, fmt.Errorf("invalid two-factor code")
+		}
+		var totpOut struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(totpResp.Body).Decode(&totpOut); err != nil {
+			return nil, fmt.Errorf("invalid response: %w", err)
+		}
+		out.Token = totpOut.Token
 	}
 	token := strings.TrimSpace(out.Token)
 	if token == "" {
@@ -141,6 +185,11 @@ func runLogin() {
 		clientName = clientNameLine
 	}
 	cfg, err := DoLogin(cfg.ServerURL, username, password, clientName)
+	if err == ErrTOTPRequired {
+		fmt.Print("Two-factor code: ")
+		codeLine, _ := reader.ReadString('\n')
+		cfg, err = DoLoginWithTOTP(cfg.ServerURL, username, password, clientName, strings.TrimSpace(codeLine))
+	}
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

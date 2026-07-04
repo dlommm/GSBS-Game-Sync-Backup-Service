@@ -1,6 +1,6 @@
 {{define "partials/empty-state.html"}}
 <div class="empty-state">
-  <div class="empty-state-icon" aria-hidden="true">{{if .Icon}}{{.Icon}}{{else}}🎮{{end}}</div>
+  <div class="empty-state-icon" aria-hidden="true">{{if .Icon}}{{iconSVG .Icon 30}}{{else}}{{iconSVG "game" 30}}{{end}}</div>
   <h3 class="empty-state-title">{{.Title}}</h3>
   {{if .Sub}}<p class="empty-state-sub">{{.Sub}}</p>{{end}}
   {{if .CTAHref}}<a class="btn-primary" href="{{.CTAHref}}">{{.CTALabel}}</a>{{end}}

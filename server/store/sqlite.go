@@ -395,6 +395,55 @@ func (s *sqliteStore) SetTOTPEnabled(ctx context.Context, userID string, enabled
 	return err
 }
 
+// SetRecoveryCodes replaces the user's 2FA recovery codes with the given
+// hashes (SHA-256 of high-entropy random codes; the plaintext is shown to the
+// user exactly once and never stored).
+func (s *sqliteStore) SetRecoveryCodes(ctx context.Context, userID string, hashes []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM totp_recovery_codes WHERE user_id = ?`, userID); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, h := range hashes {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO totp_recovery_codes (user_id, code_hash, created_at) VALUES (?, ?, ?)`,
+			userID, h, now); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ConsumeRecoveryCode burns a recovery code: the matching row is deleted so a
+// code can never be used twice. Returns whether a code matched.
+func (s *sqliteStore) ConsumeRecoveryCode(ctx context.Context, userID, hash string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM totp_recovery_codes WHERE user_id = ? AND code_hash = ?`, userID, hash)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// CountRecoveryCodes reports how many unused recovery codes remain.
+func (s *sqliteStore) CountRecoveryCodes(ctx context.Context, userID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM totp_recovery_codes WHERE user_id = ?`, userID).Scan(&n)
+	return n, err
+}
+
+// DeleteRecoveryCodes removes all recovery codes (2FA disable).
+func (s *sqliteStore) DeleteRecoveryCodes(ctx context.Context, userID string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM totp_recovery_codes WHERE user_id = ?`, userID)
+	return err
+}
+
 func (s *sqliteStore) IsEncryptionEnabled(ctx context.Context, userID string) (bool, error) {
 	var enabled int
 	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(encryption_enabled, 0) FROM users WHERE id = ?`, userID).Scan(&enabled)

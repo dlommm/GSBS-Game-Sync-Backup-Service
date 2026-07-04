@@ -17,9 +17,11 @@ var handlerTemplates = []string{
 	"login_totp.html",
 	"register.html",
 	"setup.html",
+	"error.html",
 	"dashboard.html",
 	"settings.html",
 	"enable_2fa.html",
+	"recovery_codes.html",
 	"save_versions.html",
 	"dashboard_games.html",
 	"game_detail.html",
@@ -70,6 +72,7 @@ var pageBlockTemplates = []string{
 	"dashboard_title", "dashboard_content", "dashboard_scripts",
 	"settings_title", "settings_content",
 	"enable_2fa_title", "enable_2fa_content",
+	"recovery_codes_title", "recovery_codes_content", "recovery_codes_scripts",
 	"save_versions_title", "save_versions_content",
 	"dashboard_games_title", "dashboard_games_content", "dashboard_games_scripts",
 	"game_detail_title", "game_detail_content", "game_detail_scripts",
@@ -264,6 +267,20 @@ func templateTestData(name string) interface{} {
 			"CSRFToken": "csrf-test",
 			"Error":     "",
 			"Locked":    false,
+		}
+	case "recovery_codes.html":
+		return map[string]interface{}{
+			"PageName": "recovery_codes", "Username": "testuser", "IsAdmin": false,
+			"CSRFToken": "csrf-test", "NavActive": "settings",
+			"Codes":        []string{"AAAAA-BBBBB", "CCCCC-DDDDD"},
+			"CodesJoined":  "AAAAA-BBBBB\nCCCCC-DDDDD",
+			"DownloadData": "data:text/plain;base64,dGVzdA==",
+		}
+	case "error.html":
+		return map[string]interface{}{
+			"StatusCode": 404,
+			"Title":      "Page not found",
+			"Message":    "The page you're looking for doesn't exist.",
 		}
 	case "enable_2fa.html":
 		return map[string]interface{}{

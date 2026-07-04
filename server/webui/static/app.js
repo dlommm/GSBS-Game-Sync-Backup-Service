@@ -40,6 +40,193 @@
       var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
       root.setAttribute('data-theme', next);
       try { localStorage.setItem('gsbs.theme', next); } catch (err) { /* private mode */ }
+      syncThemeColorMeta();
+    }
+  });
+
+  // Keep the browser-chrome color in step with the active theme.
+  function syncThemeColorMeta() {
+    var light = document.documentElement.getAttribute('data-theme') === 'light';
+    document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+      m.setAttribute('content', light ? '#f5f5f7' : '#09090b');
+      m.removeAttribute('media');
+    });
+  }
+
+  /* ---- Clipboard: <button data-copy="text"> or data-copy-target="#sel" ---- */
+
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-copy],[data-copy-target]');
+    if (!el) return;
+    var text = el.getAttribute('data-copy');
+    if (!text) {
+      var target = document.querySelector(el.getAttribute('data-copy-target') || '');
+      if (target) text = target.value !== undefined && target.value !== '' ? target.value : target.textContent.trim();
+    }
+    if (!text || !navigator.clipboard) return;
+    navigator.clipboard.writeText(text).then(function () {
+      if (window.gsbs && window.gsbs.toast) window.gsbs.toast('Copied to clipboard', 'info', 2000);
+    }, function () {
+      if (window.gsbs && window.gsbs.toast) window.gsbs.toast('Copy failed — select and copy manually', 'error');
+    });
+  });
+
+  /* ---- Password fields: show/hide, strength meter, confirm match ---- */
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-password-toggle]');
+    if (!btn) return;
+    var input = document.getElementById(btn.getAttribute('data-password-toggle'));
+    if (!input) return;
+    var show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+    btn.classList.toggle('showing', show);
+  });
+
+  function passwordScore(v) {
+    if (!v) return 0;
+    var score = 0;
+    if (v.length >= 8) score++;
+    if (v.length >= 12) score++;
+    var variety = 0;
+    if (/[a-z]/.test(v)) variety++;
+    if (/[A-Z]/.test(v)) variety++;
+    if (/[0-9]/.test(v)) variety++;
+    if (/[^A-Za-z0-9]/.test(v)) variety++;
+    if (variety >= 2) score++;
+    if (variety >= 3 && v.length >= 10) score++;
+    return score; // 0..4
+  }
+
+  document.addEventListener('input', function (e) {
+    var el = e.target;
+    // Strength meter: <div data-strength-for="input-id"> with .strength-bar inside
+    document.querySelectorAll('[data-strength-for="' + el.id + '"]').forEach(function (meter) {
+      var score = passwordScore(el.value);
+      var labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
+      meter.setAttribute('data-score', String(score));
+      var label = meter.querySelector('.strength-label');
+      if (label) label.textContent = el.value ? labels[score] || 'Weak' : '';
+    });
+    // Confirm-match: input with data-match-of="other-input-id"
+    var pairs = [];
+    if (el.hasAttribute('data-match-of')) pairs.push(el);
+    document.querySelectorAll('[data-match-of="' + el.id + '"]').forEach(function (other) { pairs.push(other); });
+    pairs.forEach(function (confirm) {
+      var source = document.getElementById(confirm.getAttribute('data-match-of'));
+      if (!source) return;
+      if (!confirm.value) { confirm.setCustomValidity(''); confirm.classList.remove('input-mismatch'); return; }
+      var ok = confirm.value === source.value;
+      confirm.setCustomValidity(ok ? '' : 'Passwords do not match');
+      confirm.classList.toggle('input-mismatch', !ok);
+    });
+  });
+
+  /* ---- Client-side table sorting: <th data-sortable [data-sort-numeric]> ---- */
+
+  document.addEventListener('click', function (e) {
+    var th = e.target.closest('th[data-sortable]');
+    if (!th) return;
+    var table = th.closest('table');
+    var tbody = table && table.tBodies[0];
+    if (!tbody) return;
+    var idx = Array.prototype.indexOf.call(th.parentNode.children, th);
+    var dir = th.getAttribute('aria-sort') === 'ascending' ? -1 : 1;
+    th.parentNode.querySelectorAll('th[data-sortable]').forEach(function (o) { o.removeAttribute('aria-sort'); });
+    th.setAttribute('aria-sort', dir === 1 ? 'ascending' : 'descending');
+    var numeric = th.hasAttribute('data-sort-numeric');
+    var rows = Array.prototype.slice.call(tbody.rows);
+    rows.sort(function (a, b) {
+      var av = (a.cells[idx] ? a.cells[idx].textContent : '').trim();
+      var bv = (b.cells[idx] ? b.cells[idx].textContent : '').trim();
+      if (numeric) {
+        var an = parseFloat(av.replace(/[^0-9.+-]/g, '')) || 0;
+        var bn = parseFloat(bv.replace(/[^0-9.+-]/g, '')) || 0;
+        return (an - bn) * dir;
+      }
+      return av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' }) * dir;
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+  });
+
+  /* ---- ARIA tablists: arrow-key navigation (roving tabindex) ---- */
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+    var tab = e.target.closest('[role="tab"]');
+    if (!tab) return;
+    var list = tab.closest('[role="tablist"]');
+    if (!list) return;
+    var tabs = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
+    var i = tabs.indexOf(tab);
+    var next = i;
+    if (e.key === 'ArrowLeft') next = (i - 1 + tabs.length) % tabs.length;
+    if (e.key === 'ArrowRight') next = (i + 1) % tabs.length;
+    if (e.key === 'Home') next = 0;
+    if (e.key === 'End') next = tabs.length - 1;
+    if (next !== i) {
+      e.preventDefault();
+      tabs[next].focus();
+      tabs[next].click();
+    }
+  });
+
+  /* ---- Keyboard shortcuts + "?" help overlay ---- */
+
+  var NAV_CHORDS = { d: '/dashboard', g: '/dashboard/games', i: '/dashboard/analytics', s: '/dashboard/settings', v: '/dashboard/clients' };
+  var chordArmed = false;
+  var chordTimer = null;
+
+  function inEditable(el) {
+    if (!el) return false;
+    var tag = (el.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+  }
+
+  function shortcutsDialog() {
+    var dlg = document.getElementById('gsbs-shortcuts');
+    if (dlg) return dlg;
+    dlg = document.createElement('dialog');
+    dlg.id = 'gsbs-shortcuts';
+    dlg.className = 'shortcuts-dialog';
+    dlg.setAttribute('aria-label', 'Keyboard shortcuts');
+    dlg.innerHTML = '<div class="dialog-body"><div class="dialog-head"><h3 class="u-m0">Keyboard shortcuts</h3></div>' +
+      '<dl class="shortcuts-list">' +
+      '<div><dt><kbd>⌘K</kbd> / <kbd>Ctrl K</kbd></dt><dd>Search &amp; command palette</dd></div>' +
+      '<div><dt><kbd>g</kbd> then <kbd>d</kbd></dt><dd>Dashboard</dd></div>' +
+      '<div><dt><kbd>g</kbd> then <kbd>g</kbd></dt><dd>My Games</dd></div>' +
+      '<div><dt><kbd>g</kbd> then <kbd>i</kbd></dt><dd>Insights</dd></div>' +
+      '<div><dt><kbd>g</kbd> then <kbd>v</kbd></dt><dd>Devices</dd></div>' +
+      '<div><dt><kbd>g</kbd> then <kbd>s</kbd></dt><dd>Settings</dd></div>' +
+      '<div><dt><kbd>?</kbd></dt><dd>This help</dd></div>' +
+      '<div><dt><kbd>Esc</kbd></dt><dd>Close dialogs</dd></div>' +
+      '</dl><div class="dialog-actions"><button type="button" class="btn-ghost-sm" data-close-dialog>Close</button></div></div>';
+    document.body.appendChild(dlg);
+    return dlg;
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (inEditable(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === '?') {
+      e.preventDefault();
+      var dlg = shortcutsDialog();
+      if (dlg.showModal && !dlg.open) dlg.showModal();
+      return;
+    }
+    if (chordArmed) {
+      chordArmed = false;
+      clearTimeout(chordTimer);
+      var dest = NAV_CHORDS[e.key.toLowerCase()];
+      if (dest) {
+        e.preventDefault();
+        window.location.href = dest;
+      }
+      return;
+    }
+    if (e.key.toLowerCase() === 'g') {
+      chordArmed = true;
+      chordTimer = setTimeout(function () { chordArmed = false; }, 1200);
     }
   });
 
@@ -102,6 +289,7 @@
   }
 
   onReady(function () {
+    syncThemeColorMeta();
     initDynamic(document);
     document.body.addEventListener('htmx:configRequest', function (evt) {
       evt.detail.credentials = 'same-origin';
@@ -119,7 +307,75 @@
     initActivityTabs();
     initBulkForm();
     initOnboardingTour();
+    initSetupWizard();
   });
+
+  /* ---- First-run setup wizard: stepped form (setup.html) ---- */
+
+  function initSetupWizard() {
+    var form = document.getElementById('setup-wizard-form');
+    if (!form) return;
+    var steps = Array.prototype.slice.call(form.querySelectorAll('.setup-step'));
+    var labels = Array.prototype.slice.call(document.querySelectorAll('#setup-progress .wizard-step'));
+    var backBtn = form.querySelector('[data-wizard-back]');
+    var nextBtn = form.querySelector('[data-wizard-next]');
+    var submitBtn = form.querySelector('[data-wizard-submit]');
+    var cur = 0;
+
+    function validateStep(i) {
+      var inputs = steps[i].querySelectorAll('input, select, textarea');
+      for (var j = 0; j < inputs.length; j++) {
+        if (!inputs[j].checkValidity()) {
+          inputs[j].reportValidity();
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function fillReview() {
+      var get = function (name) { return form.querySelector('[name="' + name + '"]'); };
+      var set = function (key, val) {
+        var dd = form.querySelector('[data-review="' + key + '"]');
+        if (dd) dd.textContent = val;
+      };
+      set('username', (get('username') || {}).value || '—');
+      set('allow_register', get('allow_register') && get('allow_register').checked ? 'On — anyone can register' : 'Off — admin creates users');
+      var quota = (get('storage_quota_gb') || {}).value;
+      set('storage_quota_gb', quota ? quota + ' GB' : 'Unlimited');
+      set('enable_backups', get('enable_backups') && get('enable_backups').checked ? 'On — nightly' : 'Off');
+      var hook = (get('notify_webhook_url') || {}).value;
+      set('notify_webhook_url', hook || '—');
+    }
+
+    function show(i) {
+      cur = i;
+      steps.forEach(function (s, j) { s.classList.toggle('active', j === i); });
+      labels.forEach(function (l, j) {
+        l.className = 'wizard-step ' + (j < i ? 'wizard-step-done' : j === i ? 'wizard-step-active' : 'wizard-step-pending');
+      });
+      backBtn.hidden = i === 0;
+      nextBtn.hidden = i === steps.length - 1;
+      submitBtn.hidden = i !== steps.length - 1;
+      if (i === steps.length - 1) fillReview();
+      var focusable = steps[i].querySelector('input, select, textarea');
+      if (focusable) focusable.focus();
+    }
+
+    nextBtn.addEventListener('click', function () {
+      if (!validateStep(cur)) return;
+      show(Math.min(cur + 1, steps.length - 1));
+    });
+    backBtn.addEventListener('click', function () { show(Math.max(cur - 1, 0)); });
+    // Enter on a non-final step advances instead of submitting half a form.
+    form.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && cur < steps.length - 1 && e.target.tagName !== 'TEXTAREA' && e.target.type !== 'submit' && e.target.type !== 'button') {
+        e.preventDefault();
+        nextBtn.click();
+      }
+    });
+    show(0);
+  }
 
   /* ---- Dashboard: activity feed tabs ---- */
 
@@ -221,13 +477,35 @@
       overlay.querySelector('.tour-progress').textContent = (i + 1) + ' / ' + steps.length;
       overlay.querySelector('[data-tour-next]').textContent = i === steps.length - 1 ? 'Done' : 'Next';
     }
+    var restoreFocus = document.activeElement;
     function done() {
       try { localStorage.setItem(KEY, '1'); } catch (err) { /* ignore */ }
       overlay.remove();
       document.removeEventListener('keydown', onKey);
+      if (restoreFocus && restoreFocus.focus) restoreFocus.focus();
     }
-    function onKey(e) { if (e.key === 'Escape') done(); }
+    function onKey(e) {
+      if (e.key === 'Escape') { done(); return; }
+      // Focus trap: keep Tab cycling inside the tour card.
+      if (e.key === 'Tab') {
+        var focusables = overlay.querySelectorAll('button');
+        if (!focusables.length) return;
+        var first = focusables[0];
+        var last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        } else if (!overlay.contains(document.activeElement)) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
     overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) { done(); return; } // backdrop click dismisses
       if (e.target.hasAttribute('data-tour-skip')) done();
       if (e.target.hasAttribute('data-tour-next')) {
         if (i >= steps.length - 1) { done(); return; }
@@ -238,5 +516,7 @@
     document.addEventListener('keydown', onKey);
     render();
     mount.appendChild(overlay);
+    var nextBtn = overlay.querySelector('[data-tour-next]');
+    if (nextBtn) nextBtn.focus();
   }
 })();

@@ -2,17 +2,30 @@
 {{define "enable_2fa_title"}}Enable 2FA — GSBS{{end}}
 {{define "enable_2fa_content"}}
 <section class="panel">
-  <div class="panel-header"><h2>Scan QR code</h2></div>
-  <div class="u-pad-foot-center">
+  <div class="panel-header"><h2>Set up two-factor authentication</h2></div>
+  <div class="panel-body">
     {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
-    <img class="u-block-center" src="{{.QRDataURL}}" alt="2FA QR code" width="200" height="200">
-    <p class="cell-muted">Or enter manually: <code class="code-inline">{{.Secret}}</code></p>
-    <form method="post" action="/dashboard/settings/2fa/confirm" class="auth-form u-maxw-16">
-      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <label for="code">Verification code</label>
-      <input id="code" name="code" type="text" inputmode="numeric" required autofocus>
-      <button type="submit">Confirm and enable</button>
-    </form>
+    <div class="twofa-setup-grid">
+      <div class="twofa-qr-col">
+        <img src="{{.QRDataURL}}" alt="2FA QR code" width="200" height="200">
+        <p class="cell-muted">Scan with any authenticator app<br>(1Password, Aegis, Google Authenticator…)</p>
+      </div>
+      <div class="twofa-manual-col">
+        <h3 class="u-title-sm cell-muted">Can't scan?</h3>
+        <p class="cell-muted">Enter this secret manually:</p>
+        <div class="twofa-secret-row">
+          <code class="code-inline" id="totp-secret">{{.Secret}}</code>
+          <button type="button" class="btn-ghost-sm" data-copy-target="#totp-secret" aria-label="Copy secret">{{iconSVG "copy" 13}} Copy</button>
+        </div>
+        <form method="post" action="/dashboard/settings/2fa/confirm" class="auth-form u-maxw-16">
+          <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+          <label for="code">Verification code</label>
+          <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" required autofocus>
+          <button type="submit">Confirm and enable</button>
+        </form>
+        <p class="form-hint">After confirming, you'll get 10 one-time recovery codes — save them; they're your way in if you lose this device.</p>
+      </div>
+    </div>
   </div>
 </section>
 {{end}}

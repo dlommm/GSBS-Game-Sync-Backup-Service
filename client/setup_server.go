@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	clientsync "github.com/gsbs/gsbs/client/sync"
 	clientwebui "github.com/gsbs/gsbs/client/webui"
 )
 
@@ -60,6 +61,9 @@ func StartSetupServer() string {
 	mux.HandleFunc("/games", handleAddGamePage)
 	mux.HandleFunc("/games/search", handleGamesSearch)
 	mux.HandleFunc("/games/add", handleGamesAdd)
+	mux.HandleFunc("/insights", handleInsightsPage)
+	mux.HandleFunc("/open-folder", handleOpenFolder)
+	mux.HandleFunc("/api/check-update", handleCheckUpdate)
 
 	for port := setupPortStart; port < setupPortEnd; port++ {
 		addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -72,7 +76,7 @@ func StartSetupServer() string {
 		setupURL = url
 		setupURLMu.Unlock()
 		srv := &http.Server{
-			Handler:           mux,
+			Handler:           clientSecurityHeaders(mux),
 			ReadHeaderTimeout: 10 * time.Second,
 			ReadTimeout:       time.Minute,
 			IdleTimeout:       2 * time.Minute,
@@ -88,6 +92,191 @@ func StartSetupServer() string {
 
 func listenPort(addr string) (net.Listener, error) {
 	return net.Listen("tcp", addr)
+}
+
+// clientSecurityHeaders applies the same strict CSP posture as the server
+// WebUI: all scripts/styles are external files, so no 'unsafe-inline' anywhere
+// (guarded by client/webui/template_csp_test.go).
+func clientSecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "SAMEORIGIN")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// openNative opens a file or folder with the platform's default handler.
+func openNative(path string) error {
+	switch runtime.GOOS {
+	case "windows":
+		return exec.Command("cmd", "/c", "start", "", path).Start() //nolint:gosec // G204: fixed OS utility on our own config-derived path
+	case "darwin":
+		return exec.Command("open", path).Start() //nolint:gosec // G204: fixed OS utility on our own config-derived path
+	default:
+		return exec.Command("xdg-open", path).Start() //nolint:gosec // G204: fixed OS utility on our own config-derived path
+	}
+}
+
+// handleOpenFolder reveals a watched game folder (or the config folder) in the
+// OS file manager. Only paths the client already knows about are allowed.
+func handleOpenFolder(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	target := ""
+	switch what := r.URL.Query().Get("what"); what {
+	case "config":
+		dir, _ := os.UserConfigDir()
+		target = filepath.Join(dir, "gsbs")
+	case "game":
+		gameID := r.URL.Query().Get("game_id")
+		cfg, _ := loadConfig()
+		if cfg != nil && gameID != "" {
+			for _, wp := range cfg.WatchPaths {
+				if wp.GameID == gameID && wp.Directory != "" {
+					target = wp.Directory
+					break
+				}
+			}
+		}
+	}
+	if target == "" {
+		http.Error(w, "unknown folder", http.StatusNotFound)
+		return
+	}
+	if st, err := os.Stat(target); err != nil || !st.IsDir() {
+		http.Error(w, "folder not found on disk", http.StatusNotFound)
+		return
+	}
+	if err := openNative(target); err != nil {
+		log.Printf("setup: open folder: %v", err)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
+// handleCheckUpdate runs a manual update check (same data the tray uses).
+func handleCheckUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	updateMu.Lock()
+	if updateInProgress {
+		updateMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"status":"checking"}`))
+		return
+	}
+	updateInProgress = true
+	updateMu.Unlock()
+	go func() {
+		defer func() {
+			updateMu.Lock()
+			updateInProgress = false
+			lastUpdateCheck = time.Now()
+			updateMu.Unlock()
+		}()
+		repo := ""
+		if cfg, _ := loadConfig(); cfg != nil {
+			repo = strings.TrimSpace(cfg.UpdateRepo)
+		}
+		result := CheckForUpdate(repo, true)
+		updateMu.Lock()
+		pendingUpdate = result.Info
+		updateMu.Unlock()
+	}()
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true,"status":"started"}`))
+}
+
+// handleInsightsPage renders the local sync-insights page: persisted cycle
+// history, per-game state, conflicts, and the offline outbox.
+func handleInsightsPage(w http.ResponseWriter, r *http.Request) {
+	history := LoadSyncHistory()
+	data := clientwebui.InsightsPageData{
+		PageData: clientwebui.PageData{NavActive: "insights", Title: "Sync insights"},
+	}
+	okCycles, saves7d := 0, 0
+	weekAgo := time.Now().AddDate(0, 0, -7)
+	perDay := map[string]int{}
+	for _, e := range history {
+		if e.OK {
+			okCycles++
+		} else if data.LastFailure == "" {
+			data.LastFailure = fmt.Sprintf("%s — %s", e.At.Local().Format("Jan 2 15:04"), e.Err)
+		}
+		if e.At.After(weekAgo) {
+			saves7d += e.SavesSynced
+			perDay[e.At.Local().Format("2006-01-02")]++
+		}
+	}
+	data.TotalCycles = len(history)
+	data.OKCycles = okCycles
+	if data.TotalCycles > 0 {
+		data.SuccessPct = okCycles * 100 / data.TotalCycles
+	}
+	data.SavesSynced7d = saves7d
+	maxDay := 1
+	for _, n := range perDay {
+		if n > maxDay {
+			maxDay = n
+		}
+	}
+	for i := 6; i >= 0; i-- {
+		day := time.Now().AddDate(0, 0, -i)
+		key := day.Local().Format("2006-01-02")
+		n := perDay[key]
+		data.DayBars = append(data.DayBars, clientwebui.InsightsBar{
+			Label: day.Local().Format("Mon"), Count: n, Pct: n * 100 / maxDay,
+		})
+	}
+
+	snap := GetTraySnapshot()
+	for _, g := range snap.Games {
+		row := clientwebui.InsightsGameRow{
+			GameID:   g.GameID,
+			Title:    g.Title,
+			Status:   string(g.Status),
+			Conflict: g.HasConflict,
+		}
+		if row.Title == "" {
+			row.Title = g.GameID
+		}
+		if !g.LastSyncAt.IsZero() {
+			row.LastSyncAt = g.LastSyncAt.UTC().Format(time.RFC3339)
+			row.Direction = string(g.LastDirection)
+		}
+		data.Games = append(data.Games, row)
+	}
+
+	for _, c := range clientsync.ListConflicts() {
+		data.Conflicts = append(data.Conflicts, clientwebui.InsightsConflictRow{
+			GameID:          c.GameID,
+			PathKey:         c.PathKey,
+			FilePath:        c.FilePath,
+			DetectedAt:      c.DetectedAt.UTC().Format(time.RFC3339),
+			Policy:          c.PolicyApplied,
+			LocalMtime:      c.LocalMtime,
+			ServerUpdatedAt: c.ServerUpdatedAt,
+		})
+	}
+	for _, e := range clientsync.ListOutbox() {
+		data.Outbox = append(data.Outbox, clientwebui.InsightsOutboxRow{
+			GameID:      e.GameID,
+			PathKey:     e.PathKey,
+			CreatedAt:   e.CreatedAt.UTC().Format(time.RFC3339),
+			Attempts:    e.Attempts,
+			SizeBytes:   e.ContentSize,
+			NextRetryAt: e.NextRetryAt.UTC().Format(time.RFC3339),
+		})
+	}
+	clientwebui.RenderInsightsPage(w, data)
 }
 
 // GetSetupURL returns the setup page URL if the server started, else "".
@@ -186,7 +375,10 @@ func handleSetupLogin(w http.ResponseWriter, r *http.Request) {
 	if clientName == "" {
 		clientName = defaultClientName()
 	}
-	_, err := DoLogin(server, user, pass, clientName)
+	_, err := DoLoginWithTOTP(server, user, pass, clientName, strings.TrimSpace(r.Form.Get("totp_code")))
+	if err == ErrTOTPRequired {
+		err = fmt.Errorf("this account has two-factor authentication — enter the 6-digit code from your authenticator app")
+	}
 	if err != nil {
 		clientwebui.RenderPage(w, "setup", clientwebui.PageData{
 			NavActive:       "setup",
@@ -214,6 +406,8 @@ type setupStatusResponse struct {
 	PendingUploads int      `json:"pending_uploads"`
 	ConflictCount  int      `json:"conflict_count"`
 	WatchedPaths   int      `json:"watched_paths"`
+	NextSyncETASec int      `json:"next_sync_eta_sec,omitempty"`
+	GamesRunning   int      `json:"games_running,omitempty"`
 	// Updater fields
 	UpdateLastCheckedAt  string `json:"update_last_checked_at,omitempty"`
 	UpdateLastCheckedAgo string `json:"update_last_checked_ago,omitempty"`
@@ -260,7 +454,13 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if cfg != nil {
 		resp.ServerURL = cfg.ServerURL
+		if interval := time.Duration(cfg.SyncInterval); interval > 0 && !syncAt.IsZero() {
+			if eta := time.Until(syncAt.Add(interval)); eta > 0 {
+				resp.NextSyncETASec = int(eta.Seconds())
+			}
+		}
 	}
+	resp.GamesRunning = snap.GamesRunning
 
 	// Populate update check state from the tray update loop vars.
 	updateMu.Lock()
@@ -301,15 +501,9 @@ func handleOpenLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logPath := ClientLogPath()
-	// On Windows, try to open the log file in the default editor.
-	if runtime.GOOS == "windows" {
-		if err := exec.Command("cmd", "/c", "start", "", logPath).Start(); err != nil { //nolint:gosec // G204: opens the user-selected local folder/browser; path comes from our own config
-			log.Printf("setup: open log: %v", err)
-		}
-	} else {
-		if err := exec.Command("xdg-open", logPath).Start(); err != nil { //nolint:gosec // G204: opens the user-selected local folder/browser; path comes from our own config
-			log.Printf("setup: open log: %v", err)
-		}
+	// Open the log with the platform's default handler (editor/viewer).
+	if err := openNative(logPath); err != nil {
+		log.Printf("setup: open log: %v", err)
 	}
 	clientwebui.RenderPage(w, "open_log", clientwebui.PageData{
 		NavActive: "help",

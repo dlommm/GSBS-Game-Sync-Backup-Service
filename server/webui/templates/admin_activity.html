@@ -13,42 +13,42 @@
   {{if .Fetches}}
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th scope="col">Client</th><th scope="col">User</th><th scope="col">Entries</th><th scope="col">Fetched</th></tr></thead>
+      <thead><tr><th scope="col" data-sortable>Client</th><th scope="col" data-sortable>User</th><th scope="col" data-sortable data-sort-numeric>Entries</th><th scope="col" data-sortable>Fetched</th></tr></thead>
       <tbody>
         {{range .Fetches}}
         <tr>
           <td class="cell-primary">{{if .ClientName}}{{.ClientName}}{{else}}<span class="cell-muted">anonymous</span>{{end}}</td>
           <td>{{if .Username}}{{.Username}}{{else}}—{{end}}</td>
           <td class="cell-size">{{.EntriesCount}}</td>
-          <td class="cell-muted">{{formatTime .FetchedAt}}</td>
+          <td class="cell-muted" title="{{.FetchedAt}}">{{formatTime .FetchedAt}}</td>
         </tr>
         {{end}}
       </tbody>
     </table>
   </div>
-  {{else}}<div class="panel-empty"><p>No manifest fetches recorded.</p></div>{{end}}
+  {{else}}{{template "partials/empty-state.html" (dict "Icon" "download" "Title" "No manifest fetches yet" "Sub" "Rows appear here whenever a client downloads the save-location manifest.")}}{{end}}
 </section>
 
 <section class="panel" id="audit-log-panel">
   <div class="panel-header"><h2>Audit log</h2></div>
   {{if .AuditLog}}
-  <div class="table-wrap">
+  <div class="table-wrap table-wrap-sticky">
     <table class="data-table">
-      <thead><tr><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Target</th><th scope="col">Details</th></tr></thead>
+      <thead><tr><th scope="col" data-sortable>Time</th><th scope="col" data-sortable>Actor</th><th scope="col" data-sortable>Action</th><th scope="col" data-sortable>Target</th><th scope="col">Details</th></tr></thead>
       <tbody>
         {{range .AuditLog}}
         <tr>
-          <td class="cell-muted">{{formatTime .At}}</td>
+          <td class="cell-muted" title="{{.At}}">{{formatTime .At}}</td>
           <td>{{.ActorUsername}}</td>
           <td>{{auditLabel .Action}}</td>
           <td class="cell-muted">{{.TargetID}}</td>
-          <td class="cell-muted">{{.Details}}</td>
+          <td class="cell-muted" {{if .Details}}title="{{.Details}}"{{end}}>{{truncate .Details 80}}</td>
         </tr>
         {{end}}
       </tbody>
     </table>
   </div>
-  {{else}}<div class="panel-empty"><p>No audit entries yet.</p></div>{{end}}
+  {{else}}{{template "partials/empty-state.html" (dict "Icon" "shield" "Title" "No audit entries yet" "Sub" "Security-relevant actions (logins, deletions, setting changes) are recorded here.")}}{{end}}
 </section>
 
 <section class="panel">
@@ -56,11 +56,11 @@
   {{if .StatsSnapshots}}
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th scope="col">Time</th><th scope="col">Users</th><th scope="col">Clients</th><th scope="col">Saves</th><th scope="col">Storage</th></tr></thead>
+      <thead><tr><th scope="col" data-sortable>Time</th><th scope="col" data-sortable data-sort-numeric>Users</th><th scope="col" data-sortable data-sort-numeric>Clients</th><th scope="col" data-sortable data-sort-numeric>Saves</th><th scope="col" data-sortable>Storage</th></tr></thead>
       <tbody>
         {{range .StatsSnapshots}}
         <tr>
-          <td class="cell-muted">{{formatTime .At}}</td>
+          <td class="cell-muted" title="{{.At}}">{{formatTime .At}}</td>
           <td>{{.UserCount}}</td>
           <td>{{.ClientCount}}</td>
           <td>{{.SaveCount}}</td>

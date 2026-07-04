@@ -15,13 +15,13 @@
   </nav>
   <div class="topbar-right">
     <button type="button" class="cmdk-trigger" data-cmdk-open aria-label="Search (Ctrl+K)">
-      <span class="cmdk-trigger-icon" aria-hidden="true">⌕</span>
+      <span class="cmdk-trigger-icon" aria-hidden="true">{{iconSVG "search" 14}}</span>
       <span class="cmdk-trigger-text">Search</span>
       <kbd class="cmdk-trigger-kbd">⌘K</kbd>
     </button>
     <button type="button" class="btn-ghost theme-toggle" data-action="toggle-theme" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
-      <span class="theme-toggle-dark" aria-hidden="true">🌙</span>
-      <span class="theme-toggle-light" aria-hidden="true">☀️</span>
+      <span class="theme-toggle-dark" aria-hidden="true">{{iconSVG "moon" 15}}</span>
+      <span class="theme-toggle-light" aria-hidden="true">{{iconSVG "sun" 15}}</span>
     </button>
     <span class="topbar-user">{{.Username}}</span>
     <form method="post" action="/logout" class="inline-form">

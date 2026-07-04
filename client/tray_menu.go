@@ -75,6 +75,8 @@ type TrayController struct {
 	mViewLog      *systray.MenuItem
 	mDataFolder   *systray.MenuItem
 	mLocalStatus  *systray.MenuItem
+	mLocalSet     *systray.MenuItem
+	mLocalIns     *systray.MenuItem
 	mAbout        *systray.MenuItem
 	mDiagnostics  *systray.MenuItem
 	mVersion      *systray.MenuItem
@@ -197,6 +199,8 @@ func (c *TrayController) buildMenu(cfg *config) {
 	c.mViewLog = c.mAdvancedMenu.AddSubMenuItem("View log", "Open client log file")
 	c.mDataFolder = c.mAdvancedMenu.AddSubMenuItem("Open data folder", "Open GSBS data folder")
 	c.mLocalStatus = c.mAdvancedMenu.AddSubMenuItem("Local status page", "Open local sync status in browser")
+	c.mLocalSet = c.mAdvancedMenu.AddSubMenuItem("Settings page", "Open client settings in browser")
+	c.mLocalIns = c.mAdvancedMenu.AddSubMenuItem("Sync insights", "Open local sync history and conflicts in browser")
 	c.mAbout = c.mAdvancedMenu.AddSubMenuItem("About GSBS", "Version, links, and credits")
 	c.mDiagnostics = c.mAdvancedMenu.AddSubMenuItem("Copy diagnostics", "Save logs + sanitized config to a zip for bug reports")
 	c.mAutostart = c.mAdvancedMenu.AddSubMenuItemCheckbox("Run at startup", "Start GSBS when the system starts", RunAtStartupEnabled())
@@ -626,6 +630,24 @@ func (c *TrayController) startClickHandlers() {
 			for range c.mLocalStatus.ClickedCh {
 				if url := GetSetupURL(); url != "" {
 					_ = openURL(url + "/dashboard")
+				}
+			}
+		}()
+	}
+	if c.mLocalSet != nil {
+		go func() {
+			for range c.mLocalSet.ClickedCh {
+				if url := GetSetupURL(); url != "" {
+					_ = openURL(url + "/settings")
+				}
+			}
+		}()
+	}
+	if c.mLocalIns != nil {
+		go func() {
+			for range c.mLocalIns.ClickedCh {
+				if url := GetSetupURL(); url != "" {
+					_ = openURL(url + "/insights")
 				}
 			}
 		}()

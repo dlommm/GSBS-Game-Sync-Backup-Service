@@ -1,7 +1,7 @@
 {{template "layout" .}}
 {{define "admin_user_detail_title"}}{{.TargetUsername}} — Admin — GSBS{{end}}
 {{define "admin_user_detail_content"}}
-<p class="breadcrumb"><a href="/admin/users">Users &amp; Clients</a> → <span aria-current="page">{{.TargetUsername}}</span></p>
+<p class="breadcrumb"><a href="/admin/users">Users &amp; Clients</a> <span class="crumb-sep" aria-hidden="true">/</span> <span aria-current="page">{{.TargetUsername}}</span></p>
 <div class="page-head">
   <div>
     <h1 class="page-title">{{.TargetUsername}}</h1>

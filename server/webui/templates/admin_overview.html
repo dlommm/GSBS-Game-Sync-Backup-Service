@@ -86,8 +86,8 @@
       {{else}}<span class="badge-success">Healthy</span>{{end}}
     </h2>
     <form method="POST" action="/admin/integrity/run">
-      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <button type="submit" class="btn btn-secondary btn-sm" {{if .IntegrityRunning}}disabled{{end}}>
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <button type="submit" class="btn-secondary-sm" {{if .IntegrityRunning}}disabled{{end}}>
         {{if .IntegrityRunning}}Verifying&hellip;{{else}}Verify now{{end}}
       </button>
     </form>
