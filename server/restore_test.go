@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/gsbs/gsbs/server/job"
@@ -73,7 +74,10 @@ func TestRestore_DisasterRecoveryDrill(t *testing.T) {
 	if err != nil || gotSeed != seed {
 		t.Fatalf("restored TOTP secret: %q err=%v (key file missing?)", gotSeed, err)
 	}
-	if fi, err := os.Stat(filepath.Join(destDir, "gsbs-keys")); err != nil || fi.Mode().Perm() != 0o700 {
-		t.Fatalf("gsbs-keys perms: %v err=%v", fi, err)
+	// Directory permission bits are a Unix concept; Windows doesn't model them.
+	if runtime.GOOS != "windows" {
+		if fi, err := os.Stat(filepath.Join(destDir, "gsbs-keys")); err != nil || fi.Mode().Perm() != 0o700 {
+			t.Fatalf("gsbs-keys perms: %v err=%v", fi, err)
+		}
 	}
 }

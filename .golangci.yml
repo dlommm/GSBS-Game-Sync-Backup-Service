@@ -49,13 +49,14 @@ linters:
       # material and queued payloads already use 0600/0700 explicitly.
       - linters: [gosec]
         text: "G30[126]"
-      # G703-G706 (experimental taint analysis) report non-deterministically
+      # G701-G706 (experimental taint analysis) report non-deterministically
       # and every hit here is a validated flow: paths go through pkg/savepath,
       # the covers proxy pins a fixed CDN host with numeric IDs, downloads are
-      # attachment/octet-stream, and "log injection" values come from our own
-      # server. Real injection surfaces are covered by CodeQL in CI.
+      # attachment/octet-stream, subprocess args come from our own config, and
+      # "log injection" values come from our own server. Real injection
+      # surfaces are covered by CodeQL in CI.
       - linters: [gosec]
-        text: "G70[3456]"
+        text: "G70[123456]"
       # G124: every cookie in session.go sets HttpOnly/SameSite; Secure is
       # conditional on TLS / X-Forwarded-Proto because reverse-proxy plain-HTTP
       # LAN deployments are supported (documented in SECURITY.md).
@@ -72,6 +73,15 @@ linters:
       - linters: [gosec]
         path: server/store/pcgw_(bundle|catalog)\.go
         text: "G20[12]"
+      # G204: the client's platform helpers launch a fixed OS utility
+      # (xdg-open / $EDITOR / open) on the user's OWN config, log, and data
+      # paths, or relaunch the freshly-updated GSBS executable — not attacker
+      # input. These are per-GOOS files, only linted on their matching CI
+      # runner (which is why they must be excluded by config, not a
+      # host-dependent nolint).
+      - linters: [gosec]
+        path: client/(tray_.*|setup_server|update_apply_.*)\.go
+        text: "G204"
       # Tests may take shortcuts (fixed creds, ignored errors)
       - linters: [gosec, errcheck]
         path: _test\.go

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -32,13 +33,13 @@ func TestLoadOrCreateSessionSecret(t *testing.T) {
 		t.Fatal("secret changed between calls; must be stable")
 	}
 
-	// Stored 0600 in gsbs-keys/.
+	// Stored 0600 in gsbs-keys/ (Unix permission bits; Windows doesn't model them).
 	keyPath := filepath.Join(dir, "gsbs-keys", "session.secret")
 	fi, err := os.Stat(keyPath)
 	if err != nil {
 		t.Fatalf("key file: %v", err)
 	}
-	if fi.Mode().Perm() != 0o600 {
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Fatalf("key file perms = %v, want 0600", fi.Mode().Perm())
 	}
 
