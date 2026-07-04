@@ -24,7 +24,10 @@ func newReconcileTestClient(t *testing.T, srvURL string) *Client {
 	return c
 }
 
-func TestReconcileLocalToServer_NilServerHashes_UploadsAll(t *testing.T) {
+// Nil server hashes mean the server state is UNKNOWN (fetch failed):
+// reconcile must refuse to upload anything rather than risk overwriting
+// newer server saves. An explicit empty map is a fresh account and uploads.
+func TestReconcileLocalToServer_NilServerHashes_RefusesBlindUpload(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "save1.sav"), []byte("data1"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "save2.sav"), []byte("data2"), 0644))
@@ -48,6 +51,11 @@ func TestReconcileLocalToServer_NilServerHashes_UploadsAll(t *testing.T) {
 	}}
 
 	n := ReconcileLocalToServer(context.Background(), wps, client, nil)
+	assert.Equal(t, 0, n, "nil map (unknown server state) must upload nothing")
+	assert.Equal(t, int32(0), pushCount.Load())
+
+	// Empty non-nil map = fresh account: everything uploads.
+	n = ReconcileLocalToServer(context.Background(), wps, client, map[string]string{})
 	assert.Equal(t, 2, n)
 	assert.Equal(t, int32(2), pushCount.Load())
 }
@@ -174,7 +182,7 @@ func TestReconcileLocalToServer_SkipsEmptyFiles(t *testing.T) {
 		SyncAll:   true,
 	}}
 
-	n := ReconcileLocalToServer(context.Background(), wps, client, nil)
+	n := ReconcileLocalToServer(context.Background(), wps, client, map[string]string{})
 	assert.Equal(t, 1, n)
 	assert.Equal(t, int32(1), pushCount.Load())
 }
@@ -200,7 +208,7 @@ func TestReconcileLocalToServer_ContextCancelled_StopsEarly(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
-	n := ReconcileLocalToServer(ctx, wps, client, nil)
+	n := ReconcileLocalToServer(ctx, wps, client, map[string]string{})
 	// With the context already cancelled the outer loop exits immediately at the select.
 	assert.Equal(t, 0, n)
 }

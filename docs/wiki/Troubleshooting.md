@@ -229,3 +229,7 @@ Since 4.0.0, 2FA secrets are encrypted with a key file kept next to the database
 ```bash
 sqlite3 /path/to/gsbs.db "UPDATE users SET totp_enabled = 0, totp_secret = '' WHERE username = 'NAME';"
 ```
+
+## Conflict on a new machine's first sync
+
+Expected since 4.0.0: a fresh device that pushes a save which already exists on the server with different content records a **conflict** instead of overwriting it. Resolve from the tray (Conflicts → Keep local / Use server) or the WebUI.

@@ -31,6 +31,7 @@ Major release: security & reliability audit fixes plus new flagship features.
 
 ### Fixed
 
+- **Multi-device correctness:** a new device's first sync can no longer overwrite another machine's save (safety precondition always on); clock differences within 2 minutes surface conflicts instead of silently picking a winner; startup reconciliation refuses to upload blindly when the server can't be reached; slow in-place game writes are re-checked before pushing so torn snapshots never upload.
 - A failed database transaction can no longer destroy a save file in filesystem storage mode (content is staged and only promoted after commit).
 - Client save writes (pulled saves, outbox, conflict records) are now fsynced before the atomic rename — durable across power loss.
 - Locked-file detection on Windows uses the OS error code, so it works on localized (non-English) Windows.

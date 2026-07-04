@@ -8,13 +8,21 @@ import (
 
 // ReconcileLocalToServer scans each watched path's resolved local files and uploads
 // any file that is not yet present on the server (missing from serverHashes map).
-// serverHashes maps "gameID\x00pathKey" -> content change hash (plaintext SHA-256). Pass nil to upload everything.
+// serverHashes maps "gameID\x00pathKey" -> content change hash (plaintext SHA-256).
+// A nil map means the server state is UNKNOWN and reconcile refuses to run —
+// pushing without the different-hash guard could overwrite newer server saves
+// after a transient fetch failure. An empty (non-nil) map is a legitimate fresh
+// account and uploads everything.
 // watchPaths must have resolved absolute directories (not templates).
 // Skips empty files and files that already match server hash.
 // When a slot key exists on the server with a different hash, it is skipped — pull/conflict
 // logic handles those cases.
 // Runs serially; intended for startup only. Respects ctx cancellation.
 func ReconcileLocalToServer(ctx context.Context, watchPaths []WatchPath, client *Client, serverHashes map[string]string) int {
+	if serverHashes == nil {
+		logSyncWarn("reconcile_skipped_no_server_state", "reason", "server hashes unavailable; refusing blind uploads")
+		return 0
+	}
 	uploaded := 0
 	seen := make(map[string]bool)
 	for _, wp := range watchPaths {

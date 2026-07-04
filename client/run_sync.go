@@ -181,10 +181,13 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	// Encryption write-format: follow the server's fleet-readiness signal
 	// unless the config pins it (crypto_v2 true/false).
 	client.SetCryptoV2Override(cfg.CryptoV2)
-	// Guard the first push of a slot against silently overwriting another
-	// machine's save — but only for conflict-aware policies. Under
-	// last_write_wins the user has opted into blind overwrite.
-	client.SetConflictGuard(cfg.effectiveConflictPolicy() != "last_write_wins")
+	// Always guard the first push of a slot: a fresh device (or one whose
+	// push-hash cache was cleared) must surface a conflict instead of
+	// silently overwriting another machine's save. last_write_wins still
+	// governs every SUBSEQUENT push (If-Hash) and all pull decisions — only
+	// the blind first overwrite is gone. Old servers ignore the precondition
+	// header, so behavior degrades gracefully there.
+	client.SetConflictGuard(true)
 	SetSyncClient(client)
 	setupTrayCallbacks()
 	wireSyncTrayHooks()
@@ -320,8 +323,13 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 			defer reconcileCancel()
 			serverHashes, sumErr := client.FetchServerHashes(reconcileCtx)
 			if sumErr != nil {
-				log.Printf("reconcile: failed to fetch server hashes: %v", sumErr)
-				serverHashes = nil
+				// Never reconcile blind: without the server's hashes we cannot
+				// tell "missing on server" from "server has a newer copy", and
+				// pushing everything could overwrite newer saves. The watcher
+				// still pushes real changes safely (If-Hash / If-Absent), and
+				// reconcile runs again on the next start.
+				log.Printf("reconcile: skipped — could not fetch server hashes after retries: %v", sumErr)
+				return
 			}
 			installRootsMu.RLock()
 			reconRoots := installRoots

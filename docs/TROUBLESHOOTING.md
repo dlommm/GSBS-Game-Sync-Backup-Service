@@ -150,3 +150,7 @@ sqlite3 /path/to/gsbs.db "UPDATE users SET totp_enabled = 0, totp_secret = '' WH
 ```
 
 Always back up `gsbs-keys/` together with the database (the built-in backup job includes it automatically).
+
+## "Conflict" notification on a brand-new machine's first sync
+
+Expected since 4.0.0: when a fresh device (or one after a reinstall) first pushes a save that already exists on the server with different content, GSBS records a **conflict** instead of silently overwriting the other machine's copy. Resolve it from the tray (**Conflicts → Keep local / Use server**) or the WebUI. Subsequent syncs behave per your conflict policy as usual.

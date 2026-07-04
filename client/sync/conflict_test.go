@@ -46,6 +46,48 @@ func TestDecidePull(t *testing.T) {
 	}
 }
 
+// Inside the skew window (|local − server| ≤ tolerance) the timestamps come
+// from different clocks and cannot decide a winner: last_write_wins surfaces
+// a conflict, keep_local skips, keep_server applies. Outside the window the
+// classic comparison holds.
+func TestDecidePull_SkewWindow(t *testing.T) {
+	serverTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name   string
+		delta  time.Duration // localMtime − serverTime
+		policy string
+		want   PullDecision
+	}{
+		{"lww exact equal", 0, "last_write_wins", PullConflict},
+		{"lww +30s inside window", 30 * time.Second, "last_write_wins", PullConflict},
+		{"lww -30s inside window", -30 * time.Second, "last_write_wins", PullConflict},
+		{"lww +3m outside window local wins", 3 * time.Minute, "last_write_wins", PullSkip},
+		{"lww -3m outside window server wins", -3 * time.Minute, "last_write_wins", PullApply},
+		{"keep_local exact equal", 0, "keep_local", PullSkip},
+		{"keep_local +30s", 30 * time.Second, "keep_local", PullSkip},
+		{"keep_local -30s", -30 * time.Second, "keep_local", PullSkip},
+		{"keep_local -3m", -3 * time.Minute, "keep_local", PullApply},
+		{"keep_local +3m", 3 * time.Minute, "keep_local", PullSkip},
+		{"keep_server exact equal", 0, "keep_server", PullApply},
+		{"keep_server +30s", 30 * time.Second, "keep_server", PullApply},
+		{"keep_server -30s", -30 * time.Second, "keep_server", PullApply},
+		{"keep_server -3m", -3 * time.Minute, "keep_server", PullApply},
+		{"keep_server +3m", 3 * time.Minute, "keep_server", PullConflict},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := DecidePull(true, "local-hash", serverTime.Add(tc.delta), "server-hash", serverTime, tc.policy)
+			if got != tc.want {
+				t.Fatalf("delta=%v policy=%s: got %v want %v", tc.delta, tc.policy, got, tc.want)
+			}
+		})
+	}
+	// Zero tolerance restores strict comparison (local newer → skip under LWW).
+	if got := DecidePullSkew(true, "a", serverTime.Add(time.Second), "b", serverTime, "last_write_wins", 0); got != PullSkip {
+		t.Fatalf("zero tolerance, local +1s: got %v want PullSkip", got)
+	}
+}
+
 func TestConflictPersistence(t *testing.T) {
 	dir := t.TempDir()
 	SetConflictsPathForTest(filepath.Join(dir, "conflicts.json"))

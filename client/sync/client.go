@@ -57,6 +57,37 @@ type Client struct {
 	// only then do we write it. A config override can force either format.
 	cryptoV2Ready    atomic.Bool
 	cryptoV2Override *bool
+
+	// serverClockSkew is the estimated (server clock − local clock) offset in
+	// nanoseconds, measured from response Date headers on fast round-trips.
+	// Pull decisions subtract it so mtime-vs-updated_at comparisons happen on
+	// one clock instead of two.
+	serverClockSkew atomic.Int64
+}
+
+// noteServerClock updates the clock-offset estimate from a response's Date
+// header. Only fast round-trips are trusted, and offsets inside the Date
+// header's ±5s noise floor (1-second granularity plus queuing) collapse to
+// zero so well-synced clocks are never "corrected".
+func (c *Client) noteServerClock(resp *http.Response, started time.Time) {
+	rtt := time.Since(started)
+	if rtt <= 0 || rtt > 30*time.Second {
+		return
+	}
+	d, err := http.ParseTime(resp.Header.Get("Date"))
+	if err != nil {
+		return
+	}
+	offset := d.Sub(started.Add(rtt / 2)) // compare against the request midpoint
+	if offset > -5*time.Second && offset < 5*time.Second {
+		offset = 0
+	}
+	c.serverClockSkew.Store(int64(offset))
+}
+
+// serverClockOffset returns the current (server − local) offset estimate.
+func (c *Client) serverClockOffset() time.Duration {
+	return time.Duration(c.serverClockSkew.Load())
 }
 
 // SetCryptoV2Override pins the save-encryption write format: true forces the
@@ -107,8 +138,10 @@ func (t *versionHeaderTransport) RoundTrip(req *http.Request) (*http.Response, e
 // SetConflictGuard enables the expect-new precondition on the first push of a
 // slot (when this client has no last-pushed hash for it). With it on, the server
 // rejects the push with 409 if a different save already exists, surfacing a
-// conflict instead of silently overwriting another machine's save. Leave off for
-// last-write-wins, where blind overwrite is the user's intended behavior.
+// conflict instead of silently overwriting another machine's save. Since 4.0.0
+// the client enables this under every conflict policy — last_write_wins still
+// governs subsequent pushes and pulls, but never a blind first overwrite. The
+// setter remains for tests.
 func (c *Client) SetConflictGuard(enabled bool) {
 	c.guardFirstPush = enabled
 }
@@ -265,6 +298,7 @@ func (c *Client) pullSummaries(ctx context.Context) (*SummaryResponse, error) {
 			return err
 		}
 		req.Header.Set("Authorization", "Bearer "+c.getToken())
+		started := time.Now()
 		resp, err := c.http.Do(req)
 		if err != nil {
 			return err
@@ -276,6 +310,7 @@ func (c *Client) pullSummaries(ctx context.Context) (*SummaryResponse, error) {
 			}
 			return fmt.Errorf("summaries: status %d", resp.StatusCode)
 		}
+		c.noteServerClock(resp, started)
 		var decoded SummaryResponse
 		if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 			return err
@@ -426,6 +461,9 @@ func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryRespo
 			}
 		}
 		serverTime, _ := time.Parse(time.RFC3339, s.UpdatedAt)
+		// Translate the server timestamp onto the local clock before the
+		// mtime comparison; DecidePull's skew window absorbs the residue.
+		serverTime = serverTime.Add(-c.serverClockOffset())
 		decision := DecidePull(localExists, localHash, localMtime, s.ContentHash, serverTime, opts.ConflictPolicy)
 		if decision == PullSkip {
 			continue
@@ -566,6 +604,8 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 		_ = data
 	}
 	serverTime, _ := time.Parse(time.RFC3339, updatedAt)
+	// Same one-clock translation as the summaries path.
+	serverTime = serverTime.Add(-c.serverClockOffset())
 	serverHash := FileHash(content)
 	decision := DecidePull(localExists, localHash, localMtime, serverHash, serverTime, opts.ConflictPolicy)
 	if decision == PullSkip {

@@ -52,5 +52,5 @@ Tracked hardening work, in rough priority order:
 
 - **CSP allows `'unsafe-inline'` scripts** — removing it requires refactoring the WebUI's inline scripts; XSS is currently mitigated by template escaping and CSRF tokens.
 - ~~TOTP secrets are stored unencrypted in the database~~ — **fixed in 4.0.0**: sealed with AES-256-GCM under `gsbs-keys/totp.key` (kept outside the DB; back it up with the database).
-- **First-push overwrite guard is inactive under the default `last_write_wins` policy** (by design); switch to `keep_local`/`keep_server` if multi-device first-push safety matters to you.
+- ~~First-push overwrite guard is inactive under the default `last_write_wins` policy~~ — **fixed in 4.0.0**: the guard is always on; a new device's first push surfaces a conflict instead of overwriting. Pre-4.0 clients can additionally be covered by the opt-in *Settings → Sync Safety* server check.
 - **Windows installers are not code-signed**; verify `SHA256SUMS` from GitHub Releases.

@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -170,6 +171,58 @@ func TestWatcherDebounce(t *testing.T) {
 
 	time.Sleep(150 * time.Millisecond)
 	assert.Equal(t, int32(1), pushCount.Load())
+}
+
+// The write-stability gate must never leave a mutating file in a torn state
+// on the server: whatever lands last is the settled final content, and a
+// constantly-changing file still gets pushed eventually (no starvation).
+func TestWatcherStabilityGate_PushesSettledContent(t *testing.T) {
+	dir := t.TempDir()
+	saveFile := filepath.Join(dir, "save.dat")
+	require.NoError(t, os.WriteFile(saveFile, []byte("v0"), 0644))
+
+	var lastBody atomic.Value
+	var pushCount atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/saves" && r.Method == http.MethodPost {
+			b := make([]byte, r.ContentLength)
+			_, _ = io.ReadFull(r.Body, b)
+			lastBody.Store(string(b))
+			pushCount.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	client := testSyncClient(t, srv.URL)
+	w, err := NewWatcher(paths.NewResolver(), paths.CurrentOS(), client)
+	require.NoError(t, err)
+	defer w.Close()
+
+	SetDebounceDelayForTest(30 * time.Millisecond)
+	t.Cleanup(func() { SetDebounceDelayForTest(0) })
+
+	require.NoError(t, w.AddPaths([]WatchPath{{
+		GameID: "g1", RuleKey: "pk1", Directory: dir, SyncAll: true,
+	}}))
+
+	ctx := context.Background()
+	ev := fsnotify.Event{Name: saveFile, Op: fsnotify.Write}
+	// Simulate a game writing in bursts: sizes change on every write so the
+	// gate's re-stat sees movement whenever a read races a write.
+	for i := 0; i < 6; i++ {
+		require.NoError(t, os.WriteFile(saveFile, []byte(strings.Repeat("x", 10+i*7)), 0644))
+		w.handleEvent(ctx, ev)
+		time.Sleep(15 * time.Millisecond)
+	}
+	final := "final-settled-content"
+	require.NoError(t, os.WriteFile(saveFile, []byte(final), 0644))
+	w.handleEvent(ctx, ev)
+
+	require.Eventually(t, func() bool {
+		v, _ := lastBody.Load().(string)
+		return pushCount.Load() >= 1 && v == final
+	}, 3*time.Second, 25*time.Millisecond, "final settled content must be the last push")
 }
 
 func TestWatcherDebounceSeparateFiles(t *testing.T) {

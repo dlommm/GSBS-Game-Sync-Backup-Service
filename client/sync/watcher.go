@@ -80,12 +80,18 @@ type Watcher struct {
 	timers          map[string]*time.Timer
 	pending         map[string]pendingPush
 	emptyRetries    map[string]bool     // filePath -> true when re-checking a previously-empty file
+	settleRetries   map[string]int      // filePath -> re-arm count while the file keeps changing mid-read
 	installRoots    map[string][]string // manifest game_id -> install folders for <game-install-folder>
 	consecErr       int
 	IsPaused        func() bool
 	ExcludePatterns []string
 	Verbose         bool
 }
+
+// maxSettleRetries caps how often an unstable (still-being-written) file is
+// re-queued before we push the latest snapshot anyway with a warning — a
+// constantly-written file must not starve forever.
+const maxSettleRetries = 5
 
 // SetInstallRoots updates per-game install roots used to resolve <game-install-folder>
 // templates. Safe to call concurrently with AddPaths/RemoveStalePaths.
@@ -102,14 +108,15 @@ func NewWatcher(resolver *paths.Resolver, currentOS paths.OS, client *Client) (*
 		return nil, err
 	}
 	return &Watcher{
-		resolver:     resolver,
-		currentOS:    currentOS,
-		client:       client,
-		fw:           fw,
-		pathMap:      make(map[string]pathEntry),
-		timers:       make(map[string]*time.Timer),
-		pending:      make(map[string]pendingPush),
-		emptyRetries: make(map[string]bool),
+		resolver:      resolver,
+		currentOS:     currentOS,
+		client:        client,
+		fw:            fw,
+		pathMap:       make(map[string]pathEntry),
+		timers:        make(map[string]*time.Timer),
+		pending:       make(map[string]pendingPush),
+		emptyRetries:  make(map[string]bool),
+		settleRetries: make(map[string]int),
 	}, nil
 }
 
@@ -639,6 +646,37 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 	}
 	if info == nil || content == nil {
 		return
+	}
+	// Write-stability gate: a game doing a slow in-place write can pause
+	// longer than the debounce interval, so the read above may have caught a
+	// half-written file. Re-stat after the read — any size/mtime movement
+	// means the writer is still active; re-arm the debounce instead of
+	// pushing a torn snapshot.
+	if after, statErr := os.Stat(filePath); statErr == nil &&
+		(after.Size() != info.Size() || !after.ModTime().Equal(info.ModTime())) {
+		w.mu.Lock()
+		retries := w.settleRetries[filePath]
+		if retries < maxSettleRetries {
+			w.settleRetries[filePath] = retries + 1
+			w.pending[filePath] = pendingPush{gameID: gameID, pathKey: pathKey, ruleKey: ruleKey, relPath: relPath, filePath: filePath}
+			w.timers[filePath] = time.AfterFunc(debounceDelay, func() {
+				w.pushDebounced(ctx, gameID, pathKey, ruleKey, relPath, filePath)
+			})
+			requeued = true
+			w.mu.Unlock()
+			logSyncDebug("push_unstable_requeue", "game_id", gameID, "file", filePath, "attempt", retries+1)
+			return
+		}
+		delete(w.settleRetries, filePath)
+		w.mu.Unlock()
+		// A later change event will push the final state; syncing a slightly
+		// stale snapshot now beats starving a hot file forever.
+		logSyncWarn("push_unstable_proceed", "game_id", gameID, "file", filePath,
+			"msg", "file kept changing during reads; pushing the captured snapshot")
+	} else {
+		w.mu.Lock()
+		delete(w.settleRetries, filePath)
+		w.mu.Unlock()
 	}
 	hash, err := w.client.ContentChangeHash(content)
 	if err != nil {
