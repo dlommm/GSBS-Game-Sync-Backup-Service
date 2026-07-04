@@ -42,12 +42,12 @@ func TestAdminJobsPartialAfterSync(t *testing.T) {
 func TestAdminPCGWJobStatusEmbedded(t *testing.T) {
 	tmpl := parseTemplates()
 	data := adminPCGWData{
-		PageData:           PageData{CSRFToken: "csrf", PageName: "admin_pcgw"},
-		JobRunning:         true,
-		JobProgressPages:   100,
-		JobProgressTotal:   500,
-		JobGamesSkipped:    2,
-		BundleSyncSource:   store.PCGWSyncSourceS3,
+		PageData:         PageData{CSRFToken: "csrf", PageName: "admin_pcgw"},
+		JobRunning:       true,
+		JobProgressPages: 100,
+		JobProgressTotal: 500,
+		JobGamesSkipped:  2,
+		BundleSyncSource: store.PCGWSyncSourceS3,
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "partials/admin_pcgw_job_status.html", data); err != nil {

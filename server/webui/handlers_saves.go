@@ -2,12 +2,27 @@ package webui
 
 import (
 	"fmt"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/gsbs/gsbs/server/logx"
 )
+
+// sanitizeFilenamePart keeps download filenames safe for a Content-Disposition
+// header: path separators, quotes, and control characters become underscores.
+func sanitizeFilenamePart(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '/' || r == '\\' || r == '"' || r == ';':
+			return '_'
+		case r < 0x20 || r == 0x7f:
+			return '_'
+		}
+		return r
+	}, s)
+}
 
 func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
 	userID, username, ok := h.requireSession(w, r)
@@ -119,8 +134,8 @@ func (h *WebHandler) serveSaveVersionDownload(w http.ResponseWriter, r *http.Req
 		http.Error(w, "Version not found", http.StatusNotFound)
 		return
 	}
-	filename := fmt.Sprintf("save-%s-v%d.bin", strings.ReplaceAll(gameID, "/", "_"), version)
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	filename := fmt.Sprintf("save-%s-v%d.bin", sanitizeFilenamePart(gameID), version)
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Write(blob.Content)
 }

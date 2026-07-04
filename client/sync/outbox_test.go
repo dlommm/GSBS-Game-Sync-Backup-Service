@@ -44,6 +44,38 @@ func TestEnqueueOutbox_RelativePathAndDedup(t *testing.T) {
 	_ = orig
 }
 
+func TestEnqueueOutbox_AtomicWriteNoResidue(t *testing.T) {
+	home := t.TempDir()
+	// Point os.UserConfigDir at the temp dir on every platform.
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("AppData", filepath.Join(home, "AppData"))
+
+	require.NoError(t, EnqueueOutbox("g1", "pk1", "/tmp/save.dat", "slot/save.dat", []byte("payload"), ""))
+	// Re-enqueue the same slot: dedup must leave exactly one entry.
+	require.NoError(t, EnqueueOutbox("g1", "pk1", "/tmp/save.dat", "slot/save.dat", []byte("payload2"), ""))
+
+	entries, err := os.ReadDir(outboxDir())
+	require.NoError(t, err)
+	var jsonFiles []string
+	for _, e := range entries {
+		switch filepath.Ext(e.Name()) {
+		case ".json":
+			jsonFiles = append(jsonFiles, e.Name())
+		default:
+			t.Fatalf("unexpected non-json residue in outbox dir: %s", e.Name())
+		}
+	}
+	require.Len(t, jsonFiles, 1)
+
+	raw, err := os.ReadFile(filepath.Join(outboxDir(), jsonFiles[0]))
+	require.NoError(t, err)
+	var decoded OutboxEntry
+	require.NoError(t, json.Unmarshal(raw, &decoded))
+	assert.Equal(t, "g1", decoded.GameID)
+	assert.Equal(t, "slot/save.dat", decoded.RelativePath)
+}
+
 func TestProcessOutbox_PassesRelativePath(t *testing.T) {
 	dir := t.TempDir()
 	saveFile := filepath.Join(dir, "save.dat")

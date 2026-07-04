@@ -27,8 +27,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
-      - name: Install Linux tray build deps
-        run: sudo apt-get update && sudo apt-get install -y libayatana-appindicator3-dev libgtk-3-dev pkg-config gcc
+      - name: Install build deps (cgo for go-sqlite3 and -race)
+        run: sudo apt-get update && sudo apt-get install -y gcc
       - name: Test
         run: go test -race -coverprofile=coverage.out ./server/... ./pkg/... ./client/...
       - name: Upload coverage profile
@@ -43,6 +43,11 @@ jobs:
         run: go build -o gsbs-server ./server
       - name: Build client
         run: go build -o gsbs-client ./client
+      - name: Build client (Flatpak parity)
+        # The Flatpak build runs with CGO_ENABLED=0 (pure-Go D-Bus tray) but its
+        # workflow only triggers on flatpak/** changes; this catches code changes
+        # that would break it.
+        run: CGO_ENABLED=0 GOOS=linux go build -o /dev/null ./client
       - name: govulncheck
         # Blocking: a reachable ("called") known-vulnerable symbol fails CI.
         # Pinned tool version keeps runs reproducible (no floating @latest).
@@ -60,7 +65,8 @@ jobs:
           go-version: "1.25"
           cache: true
       - name: Test
-        run: go test ./server/... ./pkg/... ./client/...
+        # windows-latest ships mingw gcc, so the race detector works here too.
+        run: go test -race ./server/... ./pkg/... ./client/...
 
   build-linux:
     needs: resolve-runner
@@ -71,8 +77,6 @@ jobs:
         with:
           go-version: "1.25"
           cache: true
-      - name: Install Linux tray build deps
-        run: sudo apt-get update && sudo apt-get install -y libayatana-appindicator3-dev
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
@@ -118,8 +122,8 @@ jobs:
         with:
           go-version: "1.25"
           cache: true
-      - name: Install Linux tray build deps
-        run: sudo apt-get update && sudo apt-get install -y libayatana-appindicator3-dev libgtk-3-dev pkg-config gcc
+      - name: Install build deps (cgo for go-sqlite3 typechecking)
+        run: sudo apt-get update && sudo apt-get install -y gcc
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:

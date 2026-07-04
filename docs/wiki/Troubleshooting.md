@@ -74,14 +74,35 @@ Clients receive 429 when they exceed per-user or per-IP rate limits. Defaults ar
 
 ### Tray icon missing (Linux)
 
-The tray requires AppIndicator / StatusNotifierItem support:
+The tray is pure-Go D-Bus (StatusNotifierItem) — no appindicator libraries are needed, but your desktop must run an SNI host:
 
-- **Debian/Ubuntu:** `sudo apt install libayatana-appindicator3-1 xdg-utils`
-- **Fedora:** `sudo dnf install libappindicator-gtk3 xdg-utils`
-- **GNOME:** Install the *AppIndicator and KStatusNotifierItem Support* extension.
+- **GNOME:** Install the *AppIndicator and KStatusNotifierItem Support* extension (GNOME has no built-in tray).
 - **KDE / Xfce / Cinnamon:** Usually works out of the box.
+- `xdg-utils` is used for opening links (`sudo apt install xdg-utils` / `sudo dnf install xdg-utils`).
 
 Run `gsbs-client --console` to verify the client starts correctly without a tray.
+
+### Flatpak: games on another drive aren't discovered or synced
+
+The sandbox grants home, the default Steam/Heroic/Lutris/Bottles data dirs, and `/run/media` (SD cards). A Steam library on another internal drive (e.g. `/mnt/games`) is invisible until you grant it:
+
+```bash
+flatpak override --user io.github.dlommm.GSBS --filesystem=/mnt/games
+```
+
+or add the path in **Flatseal → GSBS → Filesystem**, then restart the client. GSBS shows a one-time "limited access" notification when it detects a blocked save folder.
+
+### Flatpak: login token isn't remembered
+
+The client stores tokens in the Secret Service keyring. On systems without one, fall back to an on-disk token:
+
+```bash
+flatpak override --user io.github.dlommm.GSBS --env=GSBS_TOKEN_STORE=file
+```
+
+### Flatpak: no update option in the tray
+
+By design — sandboxed installs update via `flatpak update` or your software center, not the in-app updater.
 
 ### "Not logged in" / 401 errors
 

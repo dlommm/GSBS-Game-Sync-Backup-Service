@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -36,6 +37,20 @@ type serverApp struct {
 	startOnce    sync.Once
 	shutdownOnce sync.Once
 	shutdownErr  error
+}
+
+// checkSessionSecretStrength rejects secrets that are too short to resist
+// brute force or that match known placeholder values from example configs.
+// GSBS_INSECURE_DEV_SECRET=1 bypasses the check for local development only.
+func checkSessionSecretStrength(secret string) error {
+	if os.Getenv("GSBS_INSECURE_DEV_SECRET") == "1" {
+		logx.Logger().Warn().Msg("GSBS_INSECURE_DEV_SECRET=1: skipping session secret strength check — never use this in production")
+		return nil
+	}
+	if len(secret) < 32 || secret == "dev-change-me-in-production" || strings.Contains(secret, "change-me") {
+		return fmt.Errorf("GSBS_SESSION_SECRET is too weak (need >= 32 characters, not a placeholder); generate with: openssl rand -base64 32 (or set GSBS_INSECURE_DEV_SECRET=1 for local development)")
+	}
+	return nil
 }
 
 func newServerApp() (*serverApp, error) {
@@ -79,6 +94,12 @@ func newServerApp() (*serverApp, error) {
 		_ = st.Close()
 		return nil, fmt.Errorf("GSBS_SESSION_SECRET must be set; generate with: openssl rand -base64 32")
 	}
+	// This one secret signs sessions, CSRF tokens, and both TOTP step tokens;
+	// a guessable value makes all of them forgeable.
+	if err := checkSessionSecretStrength(sessionSecret); err != nil {
+		_ = st.Close()
+		return nil, err
+	}
 
 	hub := sse.NewHub()
 	authLimiter := rateLimiterFromEnv("GSBS_RATE_LIMIT_AUTH", 20, time.Minute)
@@ -120,7 +141,10 @@ func newServerApp() (*serverApp, error) {
 			if _, randErr := rand.Read(b); randErr == nil {
 				metricsToken = hex.EncodeToString(b)
 			}
-			logx.Logger().Warn().Str("token", metricsToken).Msg("metrics: GSBS_METRICS_TOKEN not set; using auto-generated token (set env var to persist)")
+			// Log only a fingerprint: /metrics is often scraped over plain HTTP
+			// on a LAN, but the token itself must never land in log files.
+			sum := sha256.Sum256([]byte(metricsToken))
+			logx.Logger().Warn().Str("token_sha256_prefix", hex.EncodeToString(sum[:4])).Msg("metrics: GSBS_METRICS_TOKEN not set; using an auto-generated token this run — set GSBS_METRICS_TOKEN explicitly to scrape /metrics")
 		}
 		metricsCollector = metrics.NewCollector(st, hub)
 		mux.Handle("/metrics", metricsAuth(metricsToken, metricsCollector))

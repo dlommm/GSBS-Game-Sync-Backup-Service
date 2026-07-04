@@ -10,8 +10,10 @@ description: |
   Requires a running GSBS server; configure via the tray menu after first launch.
 homepage: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-
 license: MIT
+# No appindicator library dependency: the tray is pure-Go D-Bus
+# (StatusNotifierItem). GNOME desktops need an SNI host such as the
+# AppIndicator extension for the icon to show — documented in INSTALL.md.
 depends:
-  - libayatana-appindicator3-1 | libappindicator3-1
   - xdg-utils
 scripts:
   postinstall: postinstall.sh

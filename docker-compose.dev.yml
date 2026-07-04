@@ -19,6 +19,8 @@ services:
       GSBS_DB: /app/data/gsbs.db
       GSBS_SAVE_ROOT: /app/data/gamesaves
       GSBS_SESSION_SECRET: ${GSBS_SESSION_SECRET:-dev-change-me-in-production}
+      # Dev only: the default secret above fails the production strength check.
+      GSBS_INSECURE_DEV_SECRET: "1"
       GSBS_ALLOW_REGISTER: "true"
       GSBS_PCGW_SYNC_SOURCE: github
       GSBS_PCGW_BUNDLE_CRON: "0 4 * * *"

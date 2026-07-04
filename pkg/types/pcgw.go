@@ -128,7 +128,7 @@ type PCGWSyncRun struct {
 	TargetedProcessed     int    `json:"targeted_processed"`
 	Phase1CompletedAt     string `json:"phase1_completed_at,omitempty"`
 	CatalogHash           string `json:"catalog_hash,omitempty"`
-	CheckpointPhase       string `json:"checkpoint_phase,omitempty"`       // "catalog" or "ingest"
+	CheckpointPhase       string `json:"checkpoint_phase,omitempty"` // "catalog" or "ingest"
 	CheckpointQueueCursor int    `json:"checkpoint_queue_cursor"`
 	// CatalogScanMode records how Phase 1 was executed: "full", "fast_probe", "tail", "skipped", or "resumed".
 	CatalogScanMode string `json:"catalog_scan_mode,omitempty"`
@@ -136,15 +136,15 @@ type PCGWSyncRun struct {
 
 // PCGWCatalogEntry is one row in pcgw_catalog (the full remote game-ID inventory).
 type PCGWCatalogEntry struct {
-	PageID          int64  `json:"page_id"`
-	Title           string `json:"title"`
-	FirstSeenAt     string `json:"first_seen_at"`
-	LastSeenAt      string `json:"last_seen_at"`
-	LastSeenRunID   string `json:"last_seen_run_id"`
-	LastSeenRevID   int64  `json:"last_seen_rev_id"`
-	DeadLetter      bool   `json:"dead_letter"`
+	PageID           int64  `json:"page_id"`
+	Title            string `json:"title"`
+	FirstSeenAt      string `json:"first_seen_at"`
+	LastSeenAt       string `json:"last_seen_at"`
+	LastSeenRunID    string `json:"last_seen_run_id"`
+	LastSeenRevID    int64  `json:"last_seen_rev_id"`
+	DeadLetter       bool   `json:"dead_letter"`
 	DeadLetterReason string `json:"dead_letter_reason,omitempty"`
-	RetryCount      int    `json:"retry_count"`
+	RetryCount       int    `json:"retry_count"`
 }
 
 // PCGWCatalogStats summarises counts derived from pcgw_catalog vs pcgw_games.
@@ -167,11 +167,11 @@ type Phase1Stats struct {
 
 // WipePreflightCounts summarises what a wipe would affect before executing it.
 type WipePreflightCounts struct {
-	PCGWGames        int `json:"pcgw_games"`
-	PCGWGameData     int `json:"pcgw_game_data"`
-	PCGWSections     int `json:"pcgw_sections"`
-	PCGWMetadata     int `json:"pcgw_metadata"`
-	PCGWCatalog      int `json:"pcgw_catalog"`
+	PCGWGames         int `json:"pcgw_games"`
+	PCGWGameData      int `json:"pcgw_game_data"`
+	PCGWSections      int `json:"pcgw_sections"`
+	PCGWMetadata      int `json:"pcgw_metadata"`
+	PCGWCatalog       int `json:"pcgw_catalog"`
 	GameSaveLocations int `json:"game_save_locations"` // pcgw-sourced rows (mirror_and_manifest only)
 }
 

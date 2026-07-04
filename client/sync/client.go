@@ -771,11 +771,11 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 			log.Printf("WARNING: push conflict detected for game=%s path=%s; server has hash=%s, local has hash=%s. Use 'gsbs conflicts' or the web UI to resolve.",
 				gameID, pathKey, conflictResp.CurrentHash, hash)
 			RecordConflict(ConflictRecord{
-				GameID:    gameID,
-				PathKey:   pathKey,
-				FilePath:  filePath,
-				LocalHash: hash,
-				ServerHash: conflictResp.CurrentHash,
+				GameID:        gameID,
+				PathKey:       pathKey,
+				FilePath:      filePath,
+				LocalHash:     hash,
+				ServerHash:    conflictResp.CurrentHash,
 				PolicyApplied: "push_conflict",
 			})
 			if OnConflictDetected != nil {

@@ -410,29 +410,29 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 				refreshResolver(cfg, resolver)
 				pullOpts.PullContext = buildPullContext(cfg)
 			}
-		activeIDs := activeGameIDSet()
-		wpMu.RLock()
-		oldWP := append([]watchPath(nil), effectiveWatchPaths...)
-		wpMu.RUnlock()
-		newInstallRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
-		installRootsMu.Lock()
-		installRoots = newInstallRoots
-		installRootsMu.Unlock()
-		manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, newInstallRoots)
-		newWP := mergeWatchPaths(manifestWP, cfg.WatchPaths)
-		added, removed := watchPathDiff(oldWP, newWP)
-		wpMu.Lock()
-		effectiveWatchPaths = newWP
-		wpMu.Unlock()
-		watcher.SetInstallRoots(newInstallRoots)
-		newSyncWP := getSyncWatchPaths()
-		_ = watcher.AddPaths(newSyncWP)
-		watcher.RemoveStalePaths(newSyncWP)
-		log.Printf("manifest refresh (%s): watch paths +%d -%d (now %d)", reason, added, removed, len(newWP))
-		if len(newWP) == 0 {
-			LogZeroWatchPathsSummary(wpStats)
-			logActiveGamesReadiness(activeIDs)
-		}
+			activeIDs := activeGameIDSet()
+			wpMu.RLock()
+			oldWP := append([]watchPath(nil), effectiveWatchPaths...)
+			wpMu.RUnlock()
+			newInstallRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
+			installRootsMu.Lock()
+			installRoots = newInstallRoots
+			installRootsMu.Unlock()
+			manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, newInstallRoots)
+			newWP := mergeWatchPaths(manifestWP, cfg.WatchPaths)
+			added, removed := watchPathDiff(oldWP, newWP)
+			wpMu.Lock()
+			effectiveWatchPaths = newWP
+			wpMu.Unlock()
+			watcher.SetInstallRoots(newInstallRoots)
+			newSyncWP := getSyncWatchPaths()
+			_ = watcher.AddPaths(newSyncWP)
+			watcher.RemoveStalePaths(newSyncWP)
+			log.Printf("manifest refresh (%s): watch paths +%d -%d (now %d)", reason, added, removed, len(newWP))
+			if len(newWP) == 0 {
+				LogZeroWatchPathsSummary(wpStats)
+				logActiveGamesReadiness(activeIDs)
+			}
 		} else {
 			log.Printf("manifest refresh (%s): fetch failed: %v", reason, err)
 		}
@@ -472,25 +472,25 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 				log.Printf("discovery: periodic scan found %d new game(s)", n)
 				doManifestRefresh("discovery")
 			} else {
-			// Rebuild watch paths in case save dirs appeared without new games
-			activeIDs := activeGameIDSet()
-			wpMu.RLock()
-			oldWP := append([]watchPath(nil), effectiveWatchPaths...)
-			wpMu.RUnlock()
-			periodicInstallRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
-			installRootsMu.Lock()
-			installRoots = periodicInstallRoots
-			installRootsMu.Unlock()
-			manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, periodicInstallRoots)
-			newWP := mergeWatchPaths(manifestWP, cfg.WatchPaths)
-			added, removed := watchPathDiff(oldWP, newWP)
-			wpMu.Lock()
-			effectiveWatchPaths = newWP
-			wpMu.Unlock()
-			watcher.SetInstallRoots(periodicInstallRoots)
-			newSyncWP := getSyncWatchPaths()
-			_ = watcher.AddPaths(newSyncWP)
-			watcher.RemoveStalePaths(newSyncWP)
+				// Rebuild watch paths in case save dirs appeared without new games
+				activeIDs := activeGameIDSet()
+				wpMu.RLock()
+				oldWP := append([]watchPath(nil), effectiveWatchPaths...)
+				wpMu.RUnlock()
+				periodicInstallRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
+				installRootsMu.Lock()
+				installRoots = periodicInstallRoots
+				installRootsMu.Unlock()
+				manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, periodicInstallRoots)
+				newWP := mergeWatchPaths(manifestWP, cfg.WatchPaths)
+				added, removed := watchPathDiff(oldWP, newWP)
+				wpMu.Lock()
+				effectiveWatchPaths = newWP
+				wpMu.Unlock()
+				watcher.SetInstallRoots(periodicInstallRoots)
+				newSyncWP := getSyncWatchPaths()
+				_ = watcher.AddPaths(newSyncWP)
+				watcher.RemoveStalePaths(newSyncWP)
 				if added > 0 || removed > 0 {
 					log.Printf("discovery rebuild: watch paths +%d -%d (now %d)", added, removed, len(newWP))
 				}

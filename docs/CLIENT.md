@@ -60,12 +60,9 @@ Only one tray instance runs at a time; a second launch shows a notification and 
 
 ### Linux requirements
 
-The tray uses [systray](https://github.com/getlantern/systray) (AppIndicator/status notifier). Install your desktop’s tray support, e.g.:
+The tray uses [fyne.io/systray](https://github.com/fyne-io/systray), a pure-Go StatusNotifierItem (AppIndicator) implementation over D-Bus — no GTK or appindicator libraries are required. `xdg-utils` is used for opening files/URLs.
 
-- **Debian/Ubuntu**: `libappindicator3-1` or `libayatana-appindicator3-1`, plus `xdg-utils` for opening files/URLs.
-- **Fedora**: `libappindicator-gtk3`, `xdg-utils`.
-
-If the icon does not appear, confirm a status notifier / AppIndicator host is running (GNOME may need an extension; KDE and most Xfce setups work out of the box).
+If the icon does not appear, confirm a status notifier / AppIndicator host is running: GNOME needs the *AppIndicator and KStatusNotifierItem Support* extension; KDE, Xfce, and Cinnamon work out of the box.
 
 ### Auto-update
 

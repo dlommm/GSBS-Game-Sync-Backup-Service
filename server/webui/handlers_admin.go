@@ -72,9 +72,9 @@ type jobsViewData struct {
 	JobPhaseLabel         string
 	AvgHistPagesPerSec    float64
 	// Idle ETA: how long to clear the remaining backlog when no job is running
-	IdleRunsNeeded   int
-	IdleTotalETASec  int
-	IdlePerRunETASec int
+	IdleRunsNeeded     int
+	IdleTotalETASec    int
+	IdlePerRunETASec   int
 	BundleSyncSource   string
 	BundleLastFetched  string
 	BundleLastExported string

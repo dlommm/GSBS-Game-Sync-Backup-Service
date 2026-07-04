@@ -31,7 +31,29 @@ Confirm `GSBS_DB` points to a writable volume path (e.g. `/app/data/gsbs.db`).
 
 ### Tray icon missing (Linux)
 
-Install AppIndicator support and `xdg-utils`. GNOME may need a tray extension; KDE and Xfce usually work out of the box. Details in [CLIENT.md](CLIENT.md).
+The tray is pure-Go D-Bus (StatusNotifierItem) — no libraries to install, but the desktop must host an SNI tray. GNOME needs the *AppIndicator and KStatusNotifierItem Support* extension; KDE, Xfce, and Cinnamon usually work out of the box. `xdg-utils` is needed for opening links. Details in [CLIENT.md](CLIENT.md).
+
+### Flatpak: games on another drive aren't discovered or synced
+
+The sandbox grants home, the default Steam/Heroic/Lutris/Bottles data dirs, and `/run/media` (SD cards). A Steam library on another internal drive (e.g. `/mnt/games`) is invisible until you grant it:
+
+```bash
+flatpak override --user io.github.dlommm.GSBS --filesystem=/mnt/games
+```
+
+or add the path in **Flatseal → GSBS → Filesystem**, then restart the client. GSBS shows a one-time "limited access" notification when it detects a blocked save folder. See [FLATPAK.md](FLATPAK.md).
+
+### Flatpak: login token isn't remembered
+
+The client stores tokens in the Secret Service keyring (`org.freedesktop.secrets`). On systems without one (some minimal/immutable setups), set `GSBS_TOKEN_STORE=file` to fall back to an on-disk token:
+
+```bash
+flatpak override --user io.github.dlommm.GSBS --env=GSBS_TOKEN_STORE=file
+```
+
+### Flatpak: no update option in the tray
+
+By design — sandboxed installs update via `flatpak update` or your software center, not the in-app updater.
 
 ### “Not logged in” or 401 errors
 

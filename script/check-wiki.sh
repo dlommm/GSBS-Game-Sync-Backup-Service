@@ -8,6 +8,8 @@
 #   4. Code blocks have a language specifier.
 #   5. No raw relative docs/ links remain (must be wiki links or full URLs).
 #   6. No duplicate upgrade procedure headings outside Upgrading.md.
+#   7. Sidebar lists all required pages.
+#   8. Wiki Changelog includes the newest CHANGELOG.md release (staleness gate).
 #
 # Exit codes:
 #   0  All checks passed.
@@ -183,6 +185,29 @@ else
       log_err "_Sidebar.md does not reference ${page}"
     fi
   done
+fi
+
+# ---------------------------------------------------------------------------
+# Check 8: Wiki Changelog is not stale
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "[check-wiki] Check 8: Wiki Changelog matches latest CHANGELOG.md release"
+
+REPO_CHANGELOG="${REPO_ROOT}/CHANGELOG.md"
+WIKI_CHANGELOG="${WIKI_SRC}/Changelog.md"
+if [[ -f "${REPO_CHANGELOG}" && -f "${WIKI_CHANGELOG}" ]]; then
+  # First "## [x.y.z]" heading in CHANGELOG.md, skipping [Unreleased].
+  latest=$(grep -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' "${REPO_CHANGELOG}" | head -1 | tr -d '#[] ')
+  if [[ -z "${latest}" ]]; then
+    log_warn "could not determine latest release from CHANGELOG.md"
+  elif grep -qF "[${latest}]" "${WIKI_CHANGELOG}"; then
+    log_ok "Changelog.md mentions latest release ${latest}"
+  else
+    log_err "Changelog.md is stale: latest release ${latest} (from CHANGELOG.md) is missing — add a summary entry"
+  fi
+else
+  log_warn "CHANGELOG.md or wiki Changelog.md missing; skipping staleness check"
 fi
 
 # ---------------------------------------------------------------------------

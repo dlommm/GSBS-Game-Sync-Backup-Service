@@ -96,16 +96,31 @@ Download client assets from the [latest GitHub Release](https://github.com/dlomm
 
 **Auto-update:** The tray menu checks GitHub Releases daily. Use **Install update…** to update without re-running the installer.
 
+### Linux — Flatpak (recommended for Steam Deck / immutable distros)
+
+```bash
+flatpak remote-add --if-not-exists gsbs \
+  https://dlommm.github.io/gsbs-flatpak/repo/gsbs.flatpakrepo
+flatpak install gsbs io.github.dlommm.GSBS
+flatpak run io.github.dlommm.GSBS
+```
+
+Updates arrive via `flatpak update` or your software center (the in-app self-updater is intentionally disabled in the sandbox). The sandbox grants access to the home folder, the default Steam/Heroic/Lutris/Bottles data locations, and SD cards under `/run/media`; for a Steam library on another internal drive, grant access with:
+
+```bash
+flatpak override --user io.github.dlommm.GSBS --filesystem=/path/to/SteamLibrary
+```
+
+See [FLATPAK.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/FLATPAK.md) for the Steam Deck Desktop-Mode walkthrough, the full permission list, and Flatseal guidance.
+
 ### Linux — Debian/Ubuntu (.deb)
 
 ```bash
-# Install tray dependencies first
-sudo apt install libayatana-appindicator3-1 xdg-utils
-# (or libappindicator3-1 on older systems)
-
-sudo dpkg -i gsbs-client_X.Y.Z_amd64.deb
+sudo apt install ./gsbs-client_X.Y.Z_amd64.deb   # resolves the xdg-utils dependency
 gsbs-client   # or launch from your application menu
 ```
+
+> **GNOME:** install the *AppIndicator and KStatusNotifierItem Support* extension so the tray icon shows. No appindicator libraries are needed — the tray is pure-Go D-Bus.
 
 ### Linux — AppImage (portable)
 

@@ -14,24 +14,24 @@ import (
 
 type adminSettingsData struct {
 	PageData
-	PCGWCron                   string
-	PCGWCronSource             string
-	PCGWCronDisabled           bool
-	PCGWCronEnvOverride        bool
-	PCGWCronNextRun            string
-	PCGWTitleExcludesJSON      string
-	PCGWPathExcludesJSON       string
-	AutoRunFirstStart          bool
-	PCGWSyncSource             string
-	PCGWBundleCron             string
-	PCGWBundleURL              string
-	PCGWBundleIncrementalFB    bool
-	PCGWSyncSourceEnvOverride  bool
-	PCGWBundleCronEnvOverride  bool
-	PCGWBundleCronNextRun      string
-	CoverCacheCount            int
-	CoverRoot                  string
-	CoversCleared              bool
+	PCGWCron                  string
+	PCGWCronSource            string
+	PCGWCronDisabled          bool
+	PCGWCronEnvOverride       bool
+	PCGWCronNextRun           string
+	PCGWTitleExcludesJSON     string
+	PCGWPathExcludesJSON      string
+	AutoRunFirstStart         bool
+	PCGWSyncSource            string
+	PCGWBundleCron            string
+	PCGWBundleURL             string
+	PCGWBundleIncrementalFB   bool
+	PCGWSyncSourceEnvOverride bool
+	PCGWBundleCronEnvOverride bool
+	PCGWBundleCronNextRun     string
+	CoverCacheCount           int
+	CoverRoot                 string
+	CoversCleared             bool
 }
 
 func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) {
@@ -43,12 +43,12 @@ func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) 
 	settings, _ := h.store.ListAdminSettings(ctx)
 
 	data := adminSettingsData{
-		PageData:              h.adminPageData(w, r, userID, username, "settings", "admin_settings"),
-		PCGWTitleExcludesJSON: settings[store.AdminSettingPCGWTitleExcludes],
-		PCGWPathExcludesJSON:  settings[store.AdminSettingPCGWPathExcludes],
-		PCGWSyncSource:        store.PCGWSyncSourceFromSettings(settings),
-		PCGWBundleCron:        store.PCGWBundleCronFromSettings(settings),
-		PCGWBundleURL:         store.PCGWBundleURLFromSettings(settings),
+		PageData:                h.adminPageData(w, r, userID, username, "settings", "admin_settings"),
+		PCGWTitleExcludesJSON:   settings[store.AdminSettingPCGWTitleExcludes],
+		PCGWPathExcludesJSON:    settings[store.AdminSettingPCGWPathExcludes],
+		PCGWSyncSource:          store.PCGWSyncSourceFromSettings(settings),
+		PCGWBundleCron:          store.PCGWBundleCronFromSettings(settings),
+		PCGWBundleURL:           store.PCGWBundleURLFromSettings(settings),
 		PCGWBundleIncrementalFB: store.PCGWBundleIncrementalFallbackFromSettings(settings),
 	}
 	if data.PCGWPathExcludesJSON == "" {

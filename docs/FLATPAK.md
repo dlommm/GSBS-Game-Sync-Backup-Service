@@ -67,7 +67,12 @@ GSBS can't see them, grant access with **Flatseal**:
 flatpak install flathub com.github.tchx84.Flatseal
 ```
 
-Open Flatseal → **GSBS** → **Filesystem** → add the extra path. GSBS surfaces a
+Open Flatseal → **GSBS** → **Filesystem** → add the extra path. Or from a terminal:
+
+```bash
+flatpak override --user io.github.dlommm.GSBS --filesystem=/path/to/SteamLibrary
+```
+ GSBS surfaces a
 tray warning when a configured save folder isn't accessible in the sandbox.
 
 ---

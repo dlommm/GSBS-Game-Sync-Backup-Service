@@ -16,6 +16,11 @@ services:
       GSBS_LOG_LEVEL: info
     volumes:
       - gsbs-data:/app/data
+    # Entrypoint drops root -> uid 1000 via su-exec, which no-new-privileges permits.
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 256
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
       interval: 30s
@@ -24,6 +29,8 @@ services:
       start_period: 15s
 
   caddy:
+    security_opt:
+      - no-new-privileges:true
     image: caddy:2-alpine
     container_name: gsbs-caddy
     restart: unless-stopped

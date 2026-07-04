@@ -10,7 +10,7 @@
 - Go 1.25+
 - Node.js (for WebUI CSS compilation via Tailwind)
 - CGO enabled (default; required for SQLite)
-- Linux build deps for the client: `libayatana-appindicator3-dev`, `libgtk-3-dev`, `pkg-config`, `gcc`
+- Linux build deps: `gcc` (cgo, for the SQLite server build — the tray client is pure Go)
 
 ```bash
 git clone https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-.git

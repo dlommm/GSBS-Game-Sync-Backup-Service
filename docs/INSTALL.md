@@ -71,8 +71,9 @@ permissions, and granting access to extra game folders with Flatseal.
 ### Linux — Debian/Ubuntu (.deb)
 
 ```bash
-sudo apt install libayatana-appindicator3-1 xdg-utils   # or libappindicator3-1
-sudo dpkg -i gsbs-client_X.Y.Z_amd64.deb
+sudo apt install ./gsbs-client_X.Y.Z_amd64.deb   # resolves the xdg-utils dependency
+# GNOME only: install the "AppIndicator and KStatusNotifierItem Support"
+# extension so the tray icon shows (no extra libraries are needed).
 gsbs-client   # or launch from your application menu
 ```
 

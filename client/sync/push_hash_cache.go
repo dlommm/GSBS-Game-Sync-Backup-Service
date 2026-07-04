@@ -147,12 +147,9 @@ func writePushHashCacheFile(m map[string]string) {
 	if err != nil {
 		return
 	}
-	tmp := pushHashCachePath() + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
+	if err := atomicWriteFile(pushHashCachePath(), data, 0600); err != nil {
 		logSyncWarn("push_cache_write_error", "path", pushHashCachePath(), "error", err)
-		return
 	}
-	_ = os.Rename(tmp, pushHashCachePath())
 }
 
 // StartHashCacheFlusher starts a background goroutine that persists the push

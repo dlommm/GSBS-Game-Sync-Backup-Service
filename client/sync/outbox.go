@@ -113,11 +113,7 @@ func EnqueueOutbox(gameID, pathKey, filePath, relativePath string, content []byt
 		return err
 	}
 	path := filepath.Join(dir, id+".json")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := atomicWriteFile(path, data, 0600); err != nil {
 		return err
 	}
 	logSyncInfo("outbox_enqueue", "game_id", gameID, "path_key", pathKey, "relative_path", relativePath,
@@ -257,9 +253,10 @@ func ProcessOutbox(ctx context.Context, client *Client) int {
 			entry.NextRetryAt = now.Add(bo.Current())
 			outboxMu.Lock()
 			if updated, err := json.Marshal(entry); err == nil {
-				tmp := path + ".tmp"
-				if writeErr := os.WriteFile(tmp, updated, 0600); writeErr == nil {
-					_ = os.Rename(tmp, path)
+				// Best-effort: a failed rewrite only loses the bumped retry
+				// counter, not the entry itself.
+				if writeErr := atomicWriteFile(path, updated, 0600); writeErr != nil {
+					logSyncWarn("outbox_rewrite_error", "path", path, "error", writeErr)
 				}
 			}
 			outboxMu.Unlock()

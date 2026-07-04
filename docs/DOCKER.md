@@ -81,7 +81,7 @@ There is no separate “manifest file” on disk: the manifest is stored in the 
 **Pre-built image:** The official image is published at [dendlomm/gsbs-server](https://hub.docker.com/r/dendlomm/gsbs-server) on Docker Hub. Releases are built for **linux/amd64** and **linux/arm64**. Anyone can run:
 ```bash
 docker pull dendlomm/gsbs-server:latest
-docker run -d -p 8080:8080 -e GSBS_SESSION_SECRET=xxx -v gsbs-data:/app/data -e GSBS_DB=/app/data/gsbs.db dendlomm/gsbs-server:latest
+docker run -d -p 8080:8080 -e GSBS_SESSION_SECRET="$(openssl rand -base64 32)" -v gsbs-data:/app/data -e GSBS_DB=/app/data/gsbs.db dendlomm/gsbs-server:latest
 ```
 If you see *no matching manifest for linux/amd64* (e.g. an older image was pushed only for one arch), build locally: `docker build -t gsbs-server:latest .` and use `gsbs-server:latest` in your compose or run command.
 
@@ -96,7 +96,7 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_SAVE_ROOT` | (unset) | When set, save file bytes are stored on disk under this directory (metadata stays in SQLite). Recommended: `/app/data/gamesaves` on the same volume as `GSBS_DB`. When unset, saves are stored as BLOBs in the database (legacy behavior). |
 | `GSBS_MIGRATE_BLOBS_TO_FS` | (unset) | Set to `1` on startup to export existing BLOB saves to files under `GSBS_SAVE_ROOT` (requires `GSBS_SAVE_ROOT`). |
 | `GSBS_DRY_RUN_MIGRATION` | (unset) | Set to `1` to preview the 2.0 schema migration (logs row counts and warnings) without writing any changes. Remove after previewing. |
-| `GSBS_SESSION_SECRET` | (insecure default) | Secret used to sign WebUI session cookies. **Set in production.** Expired browser sessions are purged automatically on startup and daily (no extra env var). |
+| `GSBS_SESSION_SECRET` | (required) | Secret used to sign WebUI session cookies, CSRF tokens, and TOTP login tokens. **Required — the server refuses to start if it is unset, shorter than 32 characters, or a placeholder** (generate: `openssl rand -base64 32`; `GSBS_INSECURE_DEV_SECRET=1` bypasses the strength check for local dev). Expired browser sessions are purged automatically on startup and daily. |
 | `GSBS_ADMIN_USERNAME` | (empty) | If set, only this user can access the `/admin` page (stats and revoke client tokens). |
 | `GSBS_MAX_STORAGE_BYTES` | (unlimited) | Global storage limit in bytes; 0 or unset = unlimited. |
 | `GSBS_READ_ONLY` | `false` | Set to `true` or `1` to disable push and delete (pull and read still work). |

@@ -92,14 +92,14 @@ type dashboardGamesData struct {
 // gameDetailData drives the individual game detail page.
 type gameDetailData struct {
 	PageData
-	GameID          string
-	Title           string
-	FileCount       int
-	TotalBytes      int64
-	LastSynced      string
-	Status          string
-	Encrypted       bool   // any of the game's saves are E2E-encrypted
-	EncryptionLabel string // "Encrypted" / "Standard"
+	GameID           string
+	Title            string
+	FileCount        int
+	TotalBytes       int64
+	LastSynced       string
+	Status           string
+	Encrypted        bool   // any of the game's saves are E2E-encrypted
+	EncryptionLabel  string // "Encrypted" / "Standard"
 	CategoryCount    int
 	Categories       []saveCategory // reused from saves_group.go
 	LargestFile      saveFileRow
@@ -246,8 +246,18 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 		"renderPageBlock": renderPageBlock(t),
 		"add":             func(a, b int) int { return a + b },
 		"sub":             func(a, b int) int { return a - b },
-		"div":             func(a, b int) int { if b == 0 { return 0 }; return a / b },
-		"mod":             func(a, b int) int { if b == 0 { return 0 }; return a % b },
+		"div": func(a, b int) int {
+			if b == 0 {
+				return 0
+			}
+			return a / b
+		},
+		"mod": func(a, b int) int {
+			if b == 0 {
+				return 0
+			}
+			return a % b
+		},
 		"join":            strings.Join,
 		"formatETASec":    formatETASec,
 		"gameIconSVG":     gameIconSVG,
@@ -391,21 +401,21 @@ func (h *WebHandler) render(w http.ResponseWriter, name string, data interface{}
 
 func auditLabel(action string) string {
 	labels := map[string]string{
-		"restore_version": "Restored save version",
-		"delete_save":     "Deleted save",
+		"restore_version":   "Restored save version",
+		"delete_save":       "Deleted save",
 		"delete_game_saves": "Deleted all saves for a game",
-		"revoke_client":   "Revoked client token",
-		"rename_client":   "Renamed a device",
+		"revoke_client":     "Revoked client token",
+		"rename_client":     "Renamed a device",
 		"clear_cover_cache": "Cleared the cover-art cache",
-		"push_manifest":   "Pushed manifest update",
-		"run_job":         "Started PCGW sync job",
-		"disable_user":    "Disabled user",
-		"enable_user":     "Enabled user",
-		"delete_user":     "Deleted user",
-		"set_quota":       "Updated storage quota",
-		"revoke_session":  "Revoked session",
-		"enable_2fa":      "Enabled two-factor auth",
-		"disable_2fa":     "Disabled two-factor auth",
+		"push_manifest":     "Pushed manifest update",
+		"run_job":           "Started PCGW sync job",
+		"disable_user":      "Disabled user",
+		"enable_user":       "Enabled user",
+		"delete_user":       "Deleted user",
+		"set_quota":         "Updated storage quota",
+		"revoke_session":    "Revoked session",
+		"enable_2fa":        "Enabled two-factor auth",
+		"disable_2fa":       "Disabled two-factor auth",
 	}
 	if l, ok := labels[action]; ok {
 		return l

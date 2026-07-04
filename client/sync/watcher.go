@@ -724,6 +724,11 @@ func isFileLockError(err error) bool {
 	if err == nil {
 		return false
 	}
+	if isFileLockErrno(err) {
+		return true
+	}
+	// Fallback for wrapped errors that lost the errno. The messages below are
+	// English-only, which is why the errno check above comes first.
 	s := strings.ToLower(err.Error())
 	return strings.Contains(s, "sharing violation") ||
 		strings.Contains(s, "process cannot access") ||

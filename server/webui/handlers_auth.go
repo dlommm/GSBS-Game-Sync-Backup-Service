@@ -121,6 +121,14 @@ func (h *WebHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		Redirect(w, r, "/login")
 		return
 	}
+	if h.loginLimiter != nil && !h.loginLimiter.Allow(clientIP(r)) {
+		csrfToken := SetCSRFToken(w, r, h.secret)
+		h.render(w, "login_totp.html", map[string]interface{}{
+			"Error":     "Too many attempts. Please wait and try again.",
+			"CSRFToken": csrfToken,
+		})
+		return
+	}
 	code := strings.TrimSpace(r.FormValue("code"))
 	if code == "" {
 		csrfToken := SetCSRFToken(w, r, h.secret)
@@ -175,6 +183,15 @@ func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ValidateCSRF(r, h.secret) {
 		http.Error(w, "Invalid security token. Please try again.", http.StatusBadRequest)
+		return
+	}
+	if h.loginLimiter != nil && !h.loginLimiter.Allow(clientIP(r)) {
+		csrfToken := SetCSRFToken(w, r, h.secret)
+		h.render(w, "register.html", map[string]interface{}{
+			"Error":         "Too many attempts. Please wait and try again.",
+			"AllowRegister": h.allowRegister,
+			"CSRFToken":     csrfToken,
+		})
 		return
 	}
 	username := strings.TrimSpace(r.FormValue("username"))

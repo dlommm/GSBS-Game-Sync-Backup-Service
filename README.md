@@ -55,6 +55,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 | Platform | Install |
 |----------|---------|
 | **Windows** | Run `gsbs-client-setup-X.Y.Z-windows-amd64.exe` |
+| **Linux (Flatpak — recommended for Steam Deck / immutable distros)** | `flatpak remote-add --if-not-exists gsbs https://dlommm.github.io/gsbs-flatpak/repo/gsbs.flatpakrepo && flatpak install gsbs io.github.dlommm.GSBS` |
 | **Linux (Debian/Ubuntu)** | `sudo dpkg -i gsbs-client_X.Y.Z_amd64.deb` |
 | **Linux (portable)** | `chmod +x gsbs-client-X.Y.Z-x86_64.AppImage && ./gsbs-client-*.AppImage` |
 

@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gsbs/gsbs/pkg/logview"
 	clientwebui "github.com/gsbs/gsbs/client/webui"
+	"github.com/gsbs/gsbs/pkg/logview"
 )
 
 func handleLogsPage(w http.ResponseWriter, r *http.Request) {

@@ -19,31 +19,31 @@ import (
 
 type adminPCGWData struct {
 	PageData
-	Stats            PCGWStatsView
-	CatalogStats     types.PCGWCatalogStats
-	LatestSyncRun    *types.PCGWSyncRun
-	ResumableSyncRun *types.PCGWSyncRun
-	Games            []types.PCGWGame
-	Query            string
-	FilterStatus     string
-	FilterPlatform   string
-	Page             int
-	PerPage          int
-	Total            int
-	TotalPages       int
-	Start            int
-	End              int
-	PrevPage         int
-	NextPage         int
-	JobRunning        bool
-	JobProgressPages  int
-	JobProgressTotal  int
-	JobGamesSkipped   int
-	JobPhase          string
-	JobAutoCatchUp    bool
-	MaxPagesPerRun    int
-	CapStatusText     string
-	CapReached        bool
+	Stats              PCGWStatsView
+	CatalogStats       types.PCGWCatalogStats
+	LatestSyncRun      *types.PCGWSyncRun
+	ResumableSyncRun   *types.PCGWSyncRun
+	Games              []types.PCGWGame
+	Query              string
+	FilterStatus       string
+	FilterPlatform     string
+	Page               int
+	PerPage            int
+	Total              int
+	TotalPages         int
+	Start              int
+	End                int
+	PrevPage           int
+	NextPage           int
+	JobRunning         bool
+	JobProgressPages   int
+	JobProgressTotal   int
+	JobGamesSkipped    int
+	JobPhase           string
+	JobAutoCatchUp     bool
+	MaxPagesPerRun     int
+	CapStatusText      string
+	CapReached         bool
 	JobElapsedSec      int
 	JobPagesPerSec     float64
 	JobETAMin          int
@@ -155,23 +155,23 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 	latestRun, _ := h.store.GetLatestPCGWSyncRun(ctx)
 	resumableRun, _ := h.store.GetResumablePCGWSyncRun(ctx, "incremental")
 	h.render(w, "admin_pcgw.html", adminPCGWData{
-		PageData:         h.adminPageData(w, r, userID, username, "pcgw", "admin_pcgw"),
-		Stats:            h.loadPCGWStats(ctx),
-		CatalogStats:     catalogStats,
-		LatestSyncRun:    latestRun,
-		ResumableSyncRun: resumableRun,
-		Games:            games,
-		Query:            q,
-		FilterStatus:     status,
-		FilterPlatform:   platform,
-		Page:             page,
-		PerPage:          perPage,
-		Total:            total,
-		TotalPages:       totalPages,
-		Start:            start,
-		End:              end,
-		PrevPage:         prevPage,
-		NextPage:         nextPage,
+		PageData:           h.adminPageData(w, r, userID, username, "pcgw", "admin_pcgw"),
+		Stats:              h.loadPCGWStats(ctx),
+		CatalogStats:       catalogStats,
+		LatestSyncRun:      latestRun,
+		ResumableSyncRun:   resumableRun,
+		Games:              games,
+		Query:              q,
+		FilterStatus:       status,
+		FilterPlatform:     platform,
+		Page:               page,
+		PerPage:            perPage,
+		Total:              total,
+		TotalPages:         totalPages,
+		Start:              start,
+		End:                end,
+		PrevPage:           prevPage,
+		NextPage:           nextPage,
 		JobRunning:         jobs.JobRunning,
 		JobProgressPages:   jobs.JobProgressPages,
 		JobProgressTotal:   jobs.JobProgressTotal,

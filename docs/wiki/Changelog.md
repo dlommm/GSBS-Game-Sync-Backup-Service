@@ -2,7 +2,69 @@
 
 > All notable changes to GSBS, newest first. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-For the complete machine-readable changelog, see [CHANGELOG.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/CHANGELOG.md) in the repository.
+For the complete machine-readable changelog, see [CHANGELOG.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/CHANGELOG.md) in the repository. This page summarizes the highlights of each release.
+
+---
+
+## [4.0.0] — Unreleased
+
+Major release: security & reliability audit fixes plus new flagship features.
+
+### Security
+
+- WebUI two-factor (TOTP) verification and registration are now rate-limited like password login.
+- `GSBS_SESSION_SECRET` must be at least 32 characters and not a placeholder — the server refuses to start otherwise (`GSBS_INSECURE_DEV_SECRET=1` bypasses for local development). See [Upgrading](Upgrading).
+- The auto-generated `/metrics` token is no longer logged in cleartext; compose files gained `no-new-privileges` and resource limits.
+
+### Fixed
+
+- Client save writes (pulled saves, outbox, conflict records) are now fsynced before the atomic rename — durable across power loss.
+- Locked-file detection on Windows uses the OS error code, so it works on localized (non-English) Windows.
+- Pulls for legacy server rows without a content hash now respect the conflict policy instead of overwriting the local file.
+
+### Changed
+
+- The `.deb` no longer depends on `libayatana-appindicator3` (the tray is pure-Go D-Bus). GNOME needs the AppIndicator extension for the tray icon.
+- CI: Windows race-detector tests, a Flatpak-parity client build check, pinned release tooling.
+
+## [3.2.3] — 2026-06-26
+
+- Cover art resolves for games whose Steam App ID lives only in the PCGW infobox (e.g. *The Witcher 3*).
+- "No art" results are no longer cached forever — the negative cache expires after 7 days and self-heals.
+
+## [3.2.2] — 2026-06-26
+
+- **Game cover art on My Games**: real Steam covers fetched server-side from Steam's CDN, cached on disk (`GSBS_COVER_ROOT`), served locally at `/covers/{game_id}`. Browsers never call Steam directly; games without art keep the generated icon tile.
+
+## [3.2.1] — 2026-06-25
+
+- Dashboard Recent Activity is now tabbed (All / Saves / Devices / Security); Admin overview opens with a branded About card; S3 sync history.
+
+## [3.2.0] — 2026-06-25
+
+- **My Games page** — grid/list browser with per-game health, search, filters, CSV/JSON export, and bulk delete.
+- **Game detail page** — metric cards, save-file explorer with inline text preview, insights sidebar.
+- **Insights page** — per-day sync-volume chart, top games by storage, device backup-health alerts.
+- **Devices page** — live online/offline status, rename, revoke. **Command palette** (`Ctrl`/`⌘`+`K`).
+- Schema migration (v21): save versions record the writing device and per-version byte change.
+
+## [3.1.x] — 2026-06-24
+
+- **3.1.7** — Linux/Proton: saves now actually upload (watch paths store the resolved `compatdata` path instead of the raw Windows template).
+- **3.1.6** — nested save files upload again; accurate Proton-aware readiness diagnostics.
+- **3.1.5** — Steam Windows games appear and resolve on Linux (server fills `steam_app_ids` from the PCGW infobox at serve time).
+- **3.1.4** — games that save directly in the home folder sync as specific named files, non-recursively; reconcile honors non-recursive rules.
+- **3.1.3** — **critical:** the client refuses to watch the home directory or top-level system roots; per-game "Delete all" added to purge accidental uploads.
+- **3.1.2** — Flatpak tray icon renders in the sandbox (pure-Go StatusNotifierItem tray); Flatpak moved to the Freedesktop 24.08 runtime.
+- **3.1.1** — Dashboard "Synced Saves" is a collapsible Game → category → files tree with real file names.
+
+## [3.0.x] — 2026-06-18
+
+- **Manifest bundle sync (GitHub mode)** — pre-built PCGW bundles with ETag skip, smart merge, deltas, and admin toggle; fresh installs default to `github`.
+- **Encrypted saves now dedup** — change detection keys off the plaintext hash, so unchanged encrypted saves are skipped instead of re-uploaded every cycle.
+- **Crash-safe server saves** — disk-backed writes use temp file + fsync + atomic rename.
+- **First-push overwrite guard** — fresh clients send `X-GSBS-If-Absent`; the server 409s instead of clobbering another machine's save (for `keep_local`/`keep_server` policies).
+- Client manifest v2 pagination fixes (full catalog downloads, truncated-cache recovery).
 
 ---
 

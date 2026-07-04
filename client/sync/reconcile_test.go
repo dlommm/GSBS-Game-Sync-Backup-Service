@@ -103,10 +103,10 @@ func TestReconcileLocalToServer_MissingSlotKey_Uploads(t *testing.T) {
 
 	client := newReconcileTestClient(t, srv.URL)
 	wps := []WatchPath{{
-		GameID:  "g1",
-		RuleKey: "rk1",
+		GameID:    "g1",
+		RuleKey:   "rk1",
 		Directory: dir,
-		SyncAll: true,
+		SyncAll:   true,
 	}}
 
 	// Server has saves for a completely different game — our slot key is absent.
@@ -135,10 +135,10 @@ func TestReconcileLocalToServer_ServerHasDifferentHash_Skips(t *testing.T) {
 
 	client := newReconcileTestClient(t, srv.URL)
 	wps := []WatchPath{{
-		GameID:  "g1",
-		RuleKey: "rk1",
+		GameID:    "g1",
+		RuleKey:   "rk1",
 		Directory: dir,
-		SyncAll: true,
+		SyncAll:   true,
 	}}
 
 	pathKey := pushPathKey("rk1", "save.sav", nil, true)

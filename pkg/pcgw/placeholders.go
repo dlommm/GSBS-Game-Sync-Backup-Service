@@ -58,7 +58,7 @@ var placeholderMap = map[string]string{
 	"xdgconfighome":                    "%APPDATA%",
 	// xdgcachehome uses an OS-aware token: on Linux resolves to $XDG_CACHE_HOME
 	// (default ~/.cache); on Windows resolves to %LOCALAPPDATA%\cache.
-	"xdgcachehome":                     "<xdg-cache-home>",
+	"xdgcachehome": "<xdg-cache-home>",
 }
 
 // NormalizePathTemplate converts PCGW {{p|...}} / {{Path|...}} placeholders to resolver-friendly form.

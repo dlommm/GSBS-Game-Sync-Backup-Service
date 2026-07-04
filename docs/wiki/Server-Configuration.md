@@ -10,7 +10,7 @@
 |---|---|---|
 | `GSBS_ADDR` | `:8080` | Listen address (e.g. `0.0.0.0:8080`) |
 | `GSBS_DB` | `gsbs.db` | Path to the SQLite database. Use a path in a mounted volume for persistence. |
-| `GSBS_SESSION_SECRET` | (insecure) | **Required in production.** Signs WebUI session cookies. Generate: `openssl rand -hex 32` |
+| `GSBS_SESSION_SECRET` | (required) | **Required — must be 32+ characters and not a placeholder or the server refuses to start** (since 4.0.0). Signs WebUI session cookies, CSRF tokens, and TOTP login tokens. Generate: `openssl rand -base64 32`. `GSBS_INSECURE_DEV_SECRET=1` bypasses the check for local dev only |
 | `GSBS_ADMIN_USERNAME` | (empty) | If set, only this username can access the `/admin` pages |
 | `GSBS_ALLOW_REGISTER` | `true` | Set `false` to block new user registrations in production |
 | `GSBS_SAVE_ROOT` | (unset) | When set, saves are stored as files on disk instead of SQLite BLOBs. Recommended: `/app/data/gamesaves` |

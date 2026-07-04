@@ -4,6 +4,34 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [4.0.0] - Unreleased
+
+Major release: full-project security & reliability audit fixes plus new flagship features. One startup behavior change (see **Upgrade note** below).
+
+### Security
+
+- **WebUI two-factor (TOTP) verification and registration are now rate-limited** with the same per-IP limiter as password login. Previously an attacker who knew the password could brute-force the 6-digit code without throttling, and open registration could be spammed.
+- **`GSBS_SESSION_SECRET` strength is now enforced at startup**: the server refuses to start with a secret shorter than 32 characters or a known placeholder value. For local development only, set `GSBS_INSECURE_DEV_SECRET=1` to bypass (the dev compose file does this automatically).
+- The auto-generated `/metrics` bearer token is no longer written to the log in cleartext — only a SHA-256 fingerprint prefix is logged. Set `GSBS_METRICS_TOKEN` explicitly to scrape metrics.
+- Version-download filenames are fully sanitized before being placed in the `Content-Disposition` header.
+- `docker-compose.yml` now sets `no-new-privileges`, a memory limit, and a PID limit on the server container.
+
+### Fixed
+
+- **Client save writes are now crash/power-loss durable**: pulled saves, conflict records, the offline outbox, and the push hash cache are fsynced before the atomic rename. Previously a power cut at the wrong moment could leave a truncated or empty file.
+- **Locked-file detection on Windows now checks the OS error code** (`ERROR_SHARING_VIOLATION`/`ERROR_LOCK_VIOLATION`) instead of matching English error text, so saves locked by a running game are correctly queued to the outbox on localized Windows installs.
+- Pulls for legacy server rows that lack a content hash now respect the configured conflict policy instead of silently overwriting the local file.
+
+### Changed
+
+- **The `.deb` package no longer depends on `libayatana-appindicator3`** — the tray has been pure-Go D-Bus (StatusNotifierItem) since the systray upgrade, so the library was never linked. On GNOME, install the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) to see the tray icon (this was already required; it is now documented).
+- CI: Windows tests now run with the race detector; a `CGO_ENABLED=0` client build check guards the Flatpak (pure-Go tray) configuration on every push; release tooling versions are pinned.
+- Docs: Flatpak install and troubleshooting coverage added to README/wiki; wiki changelog now has a freshness gate; SECURITY.md gained a deployment-hardening section.
+
+### Upgrade note
+
+- Deployments using a `GSBS_SESSION_SECRET` shorter than 32 characters will not start after upgrading until the secret is replaced (`openssl rand -base64 32`). Rotating the secret logs out active WebUI sessions; API clients are unaffected.
+
 ## [3.2.3] - 2026-06-26
 
 ### Fixed

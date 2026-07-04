@@ -19,9 +19,8 @@ func DecidePull(localExists bool, localHash string, localMtime time.Time, server
 	if serverHash != "" && localHash == serverHash {
 		return PullSkip
 	}
-	if serverHash == "" || localHash == serverHash {
-		return PullApply
-	}
+	// An empty serverHash (legacy row without a hash) must not blind-apply
+	// over an existing local file; fall through to the policy comparison.
 	switch policy {
 	case "keep_local":
 		if localMtime.After(serverTime) {

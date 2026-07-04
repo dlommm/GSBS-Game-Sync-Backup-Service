@@ -432,16 +432,16 @@ type PCGWSyncRunStats struct {
 
 // PCGWBundleMeta is the sidecar JSON published alongside manifest bundles.
 type PCGWBundleMeta struct {
-	SchemaVersion        int    `json:"schema_version"`
-	GSBSVersion          string `json:"gsbs_version"`
-	ExportedAt           string `json:"exported_at"`
-	FullExportedAt       string `json:"full_exported_at,omitempty"`
-	PreviousExportedAt   string `json:"previous_exported_at,omitempty"`
-	FullSHA256           string `json:"full_sha256,omitempty"`
-	DeltaSHA256          string `json:"delta_sha256,omitempty"`
-	FullBytes            int    `json:"full_bytes,omitempty"`
-	DeltaBytes           int    `json:"delta_bytes,omitempty"`
-	Counts               PCGWBundleMetaCounts `json:"counts,omitempty"`
+	SchemaVersion      int                  `json:"schema_version"`
+	GSBSVersion        string               `json:"gsbs_version"`
+	ExportedAt         string               `json:"exported_at"`
+	FullExportedAt     string               `json:"full_exported_at,omitempty"`
+	PreviousExportedAt string               `json:"previous_exported_at,omitempty"`
+	FullSHA256         string               `json:"full_sha256,omitempty"`
+	DeltaSHA256        string               `json:"delta_sha256,omitempty"`
+	FullBytes          int                  `json:"full_bytes,omitempty"`
+	DeltaBytes         int                  `json:"delta_bytes,omitempty"`
+	Counts             PCGWBundleMetaCounts `json:"counts,omitempty"`
 }
 
 type PCGWBundleMetaCounts struct {

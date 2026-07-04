@@ -29,6 +29,12 @@ func TestDecidePull(t *testing.T) {
 		{"keep_local older", true, "a", localOlder, "b", "keep_local", PullApply},
 		{"keep_server server wins", true, "a", localOlder, "b", "keep_server", PullApply},
 		{"keep_server local wins", true, "a", localNewer, "b", "keep_server", PullConflict},
+		// Legacy server rows without a hash must not blind-overwrite local files.
+		{"empty server hash no local", false, "", time.Time{}, "", "last_write_wins", PullApply},
+		{"empty server hash lww local newer", true, "a", localNewer, "", "last_write_wins", PullSkip},
+		{"empty server hash lww server newer", true, "a", localOlder, "", "last_write_wins", PullApply},
+		{"empty server hash keep_local newer", true, "a", localNewer, "", "keep_local", PullSkip},
+		{"empty server hash keep_server", true, "a", localOlder, "", "keep_server", PullApply},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

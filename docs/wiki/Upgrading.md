@@ -188,6 +188,9 @@ The server is always backward-compatible with older clients. Newer server featur
 
 | Version | Key changes | Action required |
 |---|---|---|
+| **4.0.0** | Session-secret strength is enforced at startup; TOTP/register rate limiting; client fsync durability; `.deb` drops the appindicator dependency. | **Replace `GSBS_SESSION_SECRET` if shorter than 32 characters** (`openssl rand -base64 32`) or the server will not start. Rotating it logs out WebUI sessions; API clients are unaffected. |
+| **3.2.0** | My Games / Insights / Devices pages; per-version device + byte-change tracking. | **Back up DB first.** Schema migration (v21) runs on startup. |
+| **3.0.0** | Manifest bundle sync (GitHub mode) for fresh installs; encrypted-save dedup via plaintext hashes; crash-safe disk-backed saves; first-push overwrite guard. | Encrypted saves re-upload once after upgrade, then converge. No action needed. |
 | **2.0.0** | Security headers; panic recovery; fail-closed quota; disabled-user session cutoff. `RevokeAllClientTokens` on password change / 2FA disable — re-login required after credential changes. Updater JSON tag fix (version checks were silently broken in production). Windows fsnotify overflow rescan + locked-file outbox enqueue. `ErrUnauthorized` sentinel stops outbox on 401. | **Back up DB first.** Schema migration runs on startup. Clients re-sync saves under new `path_key` scheme (one-time, no data loss). |
 | **1.6.0** | Startup reconciliation upload; local status dashboard (`http://127.0.0.1:41234`); tray browser login. | No migration needed. |
 | **1.5.0** | Cross-OS save sync (`path_key` now OS-neutral for PCGW-sourced games); Proton/compatdata resolution; versioned DB migrations (`PRAGMA user_version`); optimistic-concurrency push (409 on conflict). | **Back up DB.** Migration 16 merges per-OS save slots into OS-neutral keys. |
