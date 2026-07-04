@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 26
+const schemaVersion = 27
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -126,6 +126,7 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{24, stepClientAppVersion},
 		{25, stepClientStaleNotified},
 		{26, stepUserNotifySettings},
+		{27, stepUserLocale},
 	}
 }
 
@@ -137,6 +138,12 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 // recently-seen device reports a version that can read it.
 func stepClientAppVersion(tx *sql.Tx) error {
 	_, err := tx.Exec(`ALTER TABLE clients ADD COLUMN app_version TEXT`)
+	return err
+}
+
+// stepUserLocale stores each user's preferred UI language (i18n).
+func stepUserLocale(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE users ADD COLUMN locale TEXT`)
 	return err
 }
 

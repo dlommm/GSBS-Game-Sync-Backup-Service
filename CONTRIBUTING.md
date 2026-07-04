@@ -116,3 +116,13 @@ Fix the source in `docs/wiki/` and push to `main`. Or trigger `gh workflow run s
 ## API reference
 
 A short API reference for the server is in [docs/API.md](docs/API.md). Use it for integrating third-party clients or debugging requests.
+
+## Translations
+
+GSBS ships English as the source of truth in `pkg/i18n/locales/en.json`. To add a language:
+
+1. Copy `en.json` to `pkg/i18n/locales/<code>.json` (e.g. `de.json`, `fr.json`, `pt-BR.json`).
+2. Translate the string values, keeping the keys exactly as they are. You may translate a subset — any key you leave out falls back to English automatically, so a partial translation never shows a blank or a raw key.
+3. Build and run — the new language appears in **Settings → Language**. Placeholders like `{0}`, `{1}` must stay in place (they're filled in at runtime).
+
+`go test ./pkg/i18n/` enforces that every key in a translation exists in English (a translation may never introduce a key English lacks), so run it before opening your PR.

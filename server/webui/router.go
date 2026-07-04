@@ -235,6 +235,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleAdminNotifyTest(w, r)
 	case path == "/dashboard/settings/notifications" && r.Method == http.MethodPost:
 		h.handleUserNotifySave(w, r)
+	case path == "/dashboard/settings/language" && r.Method == http.MethodPost:
+		h.handleSetLocale(w, r)
 	case path == "/admin/pcgw/source" && r.Method == http.MethodPost:
 		h.handleAdminChooseSource(w, r)
 	case path == "/admin/analytics" && r.Method == http.MethodGet:

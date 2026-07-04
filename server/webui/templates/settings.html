@@ -62,6 +62,26 @@
     </div>
   </section>
 
+  {{if gt (len .Locales) 1}}
+  <section class="panel settings-card">
+    <div class="panel-header"><h2>Language</h2></div>
+    <div class="settings-card-body">
+      <form method="post" action="/dashboard/settings/language" class="auth-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <label for="locale">Interface language</label>
+        <select id="locale" name="locale" class="select-input" data-submit-on-change>
+          <option value=""{{if eq .Locale ""}} selected{{end}}>Automatic (browser)</option>
+          {{range .Locales}}
+          <option value="{{.}}"{{if eq . $.Locale}} selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+        <p class="form-hint">Untranslated text falls back to English.</p>
+        <noscript><button type="submit">Save language</button></noscript>
+      </form>
+    </div>
+  </section>
+  {{end}}
+
   <section class="panel settings-card">
     <div class="panel-header"><h2>My notifications</h2></div>
     <div class="settings-card-body">

@@ -211,3 +211,7 @@ We aim to acknowledge reports within 72 hours.
 - [API Reference](API-Reference)
 - [How It Works](How-It-Works)
 - [Upgrading](Upgrading)
+
+## Translations
+
+English is the source of truth in `pkg/i18n/locales/en.json`. Add a language by copying it to `pkg/i18n/locales/<code>.json`, translating the values (keys unchanged; missing keys fall back to English; keep `{0}`/`{1}` placeholders). The new language then appears in **Settings → Language**. Run `go test ./pkg/i18n/` — it fails if a translation defines a key that English doesn't have.

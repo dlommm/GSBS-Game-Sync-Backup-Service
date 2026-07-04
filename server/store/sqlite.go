@@ -200,6 +200,22 @@ func (s *sqliteStore) UserRole(ctx context.Context, userID string) (string, erro
 	return role, nil
 }
 
+// GetUserLocale returns the user's preferred UI language ("" if unset).
+func (s *sqliteStore) GetUserLocale(ctx context.Context, userID string) (string, error) {
+	var locale sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT locale FROM users WHERE id = ?`, userID).Scan(&locale)
+	if err != nil {
+		return "", err
+	}
+	return locale.String, nil
+}
+
+// SetUserLocale stores the user's preferred UI language.
+func (s *sqliteStore) SetUserLocale(ctx context.Context, userID, locale string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET locale = ? WHERE id = ?`, nullIfEmpty(locale), userID)
+	return err
+}
+
 // SetUserRole sets the role for a user ("user" or "admin").
 func (s *sqliteStore) SetUserRole(ctx context.Context, userID string, role string) error {
 	if role != "user" && role != "admin" {

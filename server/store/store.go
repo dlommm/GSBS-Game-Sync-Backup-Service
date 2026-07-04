@@ -33,6 +33,9 @@ type Store interface {
 	UserRole(ctx context.Context, userID string) (role string, err error)
 	// SetUserRole sets the role for a user (e.g. "admin"). Used for role-based access.
 	SetUserRole(ctx context.Context, userID string, role string) error
+	// GetUserLocale / SetUserLocale manage the user's preferred UI language.
+	GetUserLocale(ctx context.Context, userID string) (string, error)
+	SetUserLocale(ctx context.Context, userID, locale string) error
 	// EnsureAdminByUsername sets role to "admin" for the given username (for migration from GSBS_ADMIN_USERNAME).
 	EnsureAdminByUsername(ctx context.Context, username string) error
 	// IsUserDisabled returns true if the user is disabled (cannot log in).

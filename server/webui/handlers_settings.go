@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gsbs/gsbs/pkg/i18n"
 	"github.com/gsbs/gsbs/server/auth"
 	"github.com/gsbs/gsbs/server/logx"
 	"github.com/pquerna/otp/totp"
@@ -57,6 +58,7 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 	totpEnabled, _ := h.store.IsTOTPEnabled(r.Context(), userID)
 	encryptionEnabled, _ := h.store.IsEncryptionEnabled(r.Context(), userID)
 	notifySettings, _ := h.store.GetUserNotifySettings(r.Context(), userID)
+	userLocale, _ := h.store.GetUserLocale(r.Context(), userID)
 	h.render(w, "settings.html", settingsData{
 		PageData: PageData{
 			PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
@@ -65,7 +67,29 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 		Sessions: sessions, CurrentSessionID: GetSessionID(r, h.secret), TOTPEnabled: totpEnabled,
 		EncryptionEnabled: encryptionEnabled,
 		Notify:            notifySettings,
+		Locale:            userLocale,
+		Locales:           i18n.AvailableLocales(),
 	})
+}
+
+// handleSetLocale stores the user's preferred UI language.
+func (h *WebHandler) handleSetLocale(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, _, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+	locale := strings.TrimSpace(r.FormValue("locale"))
+	if locale != "" && !i18n.HasLocale(locale) {
+		locale = "" // ignore unknown; falls back to negotiation
+	}
+	if err := h.store.SetUserLocale(r.Context(), userID, locale); err != nil {
+		logx.Logger().Warn().Err(err).Msg("set user locale")
+	}
+	Redirect(w, r, "/dashboard/settings?updated=1")
 }
 
 func (h *WebHandler) handleSettings(w http.ResponseWriter, r *http.Request) {

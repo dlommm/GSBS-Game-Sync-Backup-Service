@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gsbs/gsbs/pkg/i18n"
 	"github.com/gsbs/gsbs/pkg/logview"
 	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/gsbs/gsbs/server/logx"
@@ -21,6 +22,7 @@ type PageData struct {
 	PageName  string // template prefix for layout blocks, e.g. "dashboard"
 	Username  string
 	IsAdmin   bool
+	Locale    string // negotiated UI locale ("" renders English); used by {{t .Locale ...}} and <html lang>
 	CSRFToken string
 	NavActive string // dashboard, settings, admin, admin-users, admin-manifest, admin-activity
 	BodyClass string
@@ -64,6 +66,8 @@ type settingsData struct {
 	TOTPEnabled       bool
 	EncryptionEnabled bool
 	Notify            store.UserNotifySettings
+	Locale            string
+	Locales           []string
 }
 
 // gameCard is one tile/row on the My Games page.
@@ -244,6 +248,7 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 		"truncate":        truncate,
 		"formatDuration":  formatDuration,
 		"urlquery":        url.QueryEscape,
+		"t":               i18n.T,
 		"auditLabel":      auditLabel,
 		"chartLineSVG":    chartLineSVG,
 		"percent":         percent,
