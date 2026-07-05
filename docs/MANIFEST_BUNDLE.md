@@ -86,7 +86,7 @@ go run ./cmd/pcgw-bundle-export -db gsbs.db -out . -full -lite -version 4.1.1
 |-----------|----------|
 | Fetch fails (network, 404) | Log error; keep serving existing SQL; show admin warning |
 | SHA256 mismatch on download | Import aborted; merged version unchanged; retried next cron |
-| Empty DB + first start + bundle fails | Falls back to incremental API sync (existing first-start path) |
+| Empty DB + first start + bundle fails | No API fallback (seeded gate); bundle retried on next cron |
 | Import validation fails | Import aborted; prior data retained |
 
 ## See also
