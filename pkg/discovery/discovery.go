@@ -110,9 +110,13 @@ func scanSteam() []InstalledGame {
 func scanEpic() []InstalledGame {
 	var out []InstalledGame
 	var manifestDirs []string
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		manifestDirs = append(manifestDirs, filepath.Join(os.Getenv("ProgramData"), "Epic", "UnrealEngineLauncher", "Data", "Manifests"))
-	} else {
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		manifestDirs = append(manifestDirs, filepath.Join(home, "Library", "Application Support", "Epic", "UnrealEngineLauncher", "Data", "Manifests"))
+	default:
 		home, _ := os.UserHomeDir()
 		manifestDirs = append(manifestDirs, filepath.Join(home, ".local", "share", "Epic", "UnrealEngineLauncher", "Data", "Manifests"))
 	}
@@ -218,11 +222,15 @@ func scanUbisoft() []InstalledGame {
 func scanHeroic() []InstalledGame {
 	var out []InstalledGame
 	home, _ := os.UserHomeDir()
-	configPath := filepath.Join(home, ".config", "heroic", "Games", "legendary", "library.json")
+	heroicRoot := filepath.Join(home, ".config", "heroic")
+	if runtime.GOOS == "darwin" {
+		heroicRoot = filepath.Join(home, "Library", "Application Support", "heroic")
+	}
+	configPath := filepath.Join(heroicRoot, "Games", "legendary", "library.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		// Also try games store
-		configPath = filepath.Join(home, ".config", "heroic", "store_cache", "legendary", "library.json")
+		configPath = filepath.Join(heroicRoot, "store_cache", "legendary", "library.json")
 		data, err = os.ReadFile(configPath)
 		if err != nil {
 			return out

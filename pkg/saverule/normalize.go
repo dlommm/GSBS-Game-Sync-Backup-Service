@@ -74,6 +74,40 @@ func ParseSaveRules(raw, platform string, isConfig bool, normalize NormalizeFunc
 	return out
 }
 
+// Templates returns one normalized template string per rule path in stable
+// order, preserving file include patterns as "directory/pattern" instead of
+// collapsing to the bare directory. Re-parsing such a template yields the same
+// directory + pattern rule, so a single-file save location never widens into a
+// sync-all rule on its parent directory.
+func Templates(rules []types.SaveRule) []string {
+	var out []string
+	seen := make(map[string]bool)
+	add := func(t string) {
+		if t == "" || seen[t] {
+			return
+		}
+		seen[t] = true
+		out = append(out, t)
+	}
+	for _, r := range rules {
+		if r.Directory == "" {
+			continue
+		}
+		if len(r.IncludePatterns) == 0 {
+			add(r.Directory)
+			continue
+		}
+		for _, p := range r.IncludePatterns {
+			if r.Directory == "." {
+				add(p)
+				continue
+			}
+			add(strings.TrimRight(r.Directory, "/") + "/" + p)
+		}
+	}
+	return out
+}
+
 // Directories returns unique directory paths from rules in stable order.
 func Directories(rules []types.SaveRule) []string {
 	var out []string

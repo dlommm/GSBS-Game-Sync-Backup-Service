@@ -27,6 +27,11 @@ func TestUnsafeWatchDir(t *testing.T) {
 		filepath.Join(home, ".steam"),       // all of Steam
 		filepath.Join(home, "Documents"),
 		filepath.Join(home, "Documents", "My Games"),
+		filepath.Join(home, "Library"),                        // macOS
+		filepath.Join(home, "Library", "Preferences"),         // macOS: system+app plists
+		filepath.Join(home, "Library", "Application Support"), // macOS app data root
+		filepath.Join(home, "Library", "Containers"),
+		filepath.Join(home, "Library", "Caches"),
 	}
 	for _, d := range unsafe {
 		if !r.UnsafeWatchDir(d) {
@@ -40,6 +45,8 @@ func TestUnsafeWatchDir(t *testing.T) {
 		filepath.Join(home, ".tesseract"), // a hidden game dir directly in home is fine
 		filepath.Join(home, "Documents", "My Games", "SomeGame"),
 		filepath.Join(home, ".steam", "steam", "steamapps", "compatdata", "1057090", "pfx", "drive_c"),
+		filepath.Join(home, "Library", "Application Support", "MyGame"),
+		filepath.Join(home, "Library", "Preferences", "unity3d", "MyGame"),
 	}
 	for _, d := range safe {
 		if r.UnsafeWatchDir(d) {

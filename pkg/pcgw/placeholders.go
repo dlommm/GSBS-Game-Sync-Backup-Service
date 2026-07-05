@@ -88,12 +88,14 @@ func ParseSaveRules(raw, platform string, isConfig bool) []types.SaveRule {
 }
 
 // SplitNormalizePathTemplates splits pipe-separated PCGW path strings, normalizes each
-// segment, strips trailing file globs (/*, /*.ext) to directory-only paths, deduplicates,
-// and returns non-empty results in stable order.
+// segment, deduplicates, and returns non-empty results in stable order. Paths that
+// end in a specific file or glob keep that component ("dir/save.dat"), so rebuilding
+// rules from the stored template preserves the include pattern instead of widening
+// to a sync-all rule on the parent directory.
 //
 // Alternate paths separated by <br>, <br/>, or <br /> inside one template argument
 // are normalized to the | separator before splitting.
 func SplitNormalizePathTemplates(raw string) []string {
 	raw = brTagRe.ReplaceAllString(raw, "|")
-	return saverule.Directories(ParseSaveRules(raw, "", false))
+	return saverule.Templates(ParseSaveRules(raw, "", false))
 }

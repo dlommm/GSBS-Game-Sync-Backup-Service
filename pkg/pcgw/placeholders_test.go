@@ -85,18 +85,34 @@ func TestSplitNormalizePathTemplates_PipeSeparatedRealPaths(t *testing.T) {
 }
 
 func TestSplitNormalizePathTemplates_WitcherPipeGlobs(t *testing.T) {
+	// Glob tails must survive normalization: re-parsing the stored template
+	// must yield directory + include pattern, never a sync-all directory rule.
 	raw := `%USERPROFILE%/Documents/The Witcher 3/gamesaves/*.png|` +
 		`%USERPROFILE%/Documents/The Witcher 3/gamesaves/*.sav`
 	got := SplitNormalizePathTemplates(raw)
-	want := `%USERPROFILE%/Documents/The Witcher 3/gamesaves`
-	if len(got) != 1 || got[0] != want {
-		t.Fatalf("SplitNormalizePathTemplates() = %v, want [%q]", got, want)
+	want := []string{
+		`%USERPROFILE%/Documents/The Witcher 3/gamesaves/*.png`,
+		`%USERPROFILE%/Documents/The Witcher 3/gamesaves/*.sav`,
+	}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("SplitNormalizePathTemplates() = %v, want %v", got, want)
 	}
 }
 
 func TestSplitNormalizePathTemplates_SingleGlob(t *testing.T) {
 	got := SplitNormalizePathTemplates(`%APPDATA%/Game/saves/*.dat`)
-	want := `%APPDATA%/Game/saves`
+	want := `%APPDATA%/Game/saves/*.dat`
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("got %v, want [%q]", got, want)
+	}
+}
+
+func TestSplitNormalizePathTemplates_SingleFileKeepsName(t *testing.T) {
+	// Regression: 12 Orbits (PCGW 51667) lists a single plist file; the stored
+	// template must keep the filename so the rebuilt rule never becomes
+	// sync-all on ~/Library/Preferences.
+	got := SplitNormalizePathTemplates(`{{p|linuxhome}}/Library/Preferences/unity.Roman Uhlig.12 orbits.plist`)
+	want := `%USERPROFILE%/Library/Preferences/unity.Roman Uhlig.12 orbits.plist`
 	if len(got) != 1 || got[0] != want {
 		t.Fatalf("got %v, want [%q]", got, want)
 	}

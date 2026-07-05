@@ -256,14 +256,21 @@ func gameTitleFor(gameID string) string {
 	return gameID
 }
 
-func ensureGameRow(gameID string) *GameRow {
+// ensureGameRow returns (creating if needed) the row for gameID. The caller
+// must hold globalTrayState.mu and must pass a pre-resolved title: calling
+// gameTitleFor here would re-enter the mutex and deadlock (RWMutex is not
+// reentrant), wedging the tray and the local WebUI /status endpoint forever.
+func ensureGameRow(gameID, title string) *GameRow {
+	if title == "" {
+		title = globalTrayState.titleCache[gameID]
+	}
 	row, ok := globalTrayState.games[gameID]
 	if !ok {
-		row = &GameRow{GameID: gameID, Title: gameTitleFor(gameID), Status: GameStatusOK}
+		row = &GameRow{GameID: gameID, Title: title, Status: GameStatusOK}
 		globalTrayState.games[gameID] = row
 	}
 	if row.Title == "" {
-		row.Title = gameTitleFor(gameID)
+		row.Title = title
 	}
 	return row
 }
@@ -357,8 +364,9 @@ func RecordSaveEvent(gameID, pathKey string, direction SaveDirection, err error)
 	if gameID == "" {
 		return
 	}
+	title := gameTitleFor(gameID) // resolve before locking: may hit disk and takes the lock itself
 	globalTrayState.mu.Lock()
-	row := ensureGameRow(gameID)
+	row := ensureGameRow(gameID, title)
 	row.LastSyncAt = time.Now()
 	row.LastDirection = direction
 	if pathKey != "" && row.FirstPathKey == "" {
@@ -384,8 +392,9 @@ func RecordGameConflict(gameID, pathKey string) {
 	if gameID == "" {
 		return
 	}
+	title := gameTitleFor(gameID) // resolve before locking
 	globalTrayState.mu.Lock()
-	row := ensureGameRow(gameID)
+	row := ensureGameRow(gameID, title)
 	row.HasConflict = true
 	row.Status = GameStatusConflict
 	if pathKey != "" {
@@ -398,10 +407,17 @@ func RecordGameConflict(gameID, pathKey string) {
 
 // RecordDiscovery updates discovered games from a scan.
 func RecordDiscovery(matched []discovery.MatchedGame, newCount int) {
-	// Compute sync readiness before taking the lock (it loads config/manifest/resolver).
+	// Compute sync readiness and titles before taking the lock: both load
+	// config/manifest from disk, and gameTitleFor takes the lock itself.
 	ids := make([]string, 0, len(matched))
+	titles := make(map[string]string, len(matched))
 	for _, g := range matched {
 		ids = append(ids, g.ManifestGameID)
+		title := g.Title
+		if title == "" {
+			title = gameTitleFor(g.ManifestGameID)
+		}
+		titles[g.ManifestGameID] = title
 	}
 	readiness := diagnoseGamesReadiness(ids)
 
@@ -410,10 +426,7 @@ func RecordDiscovery(matched []discovery.MatchedGame, newCount int) {
 	for _, g := range matched {
 		id := g.ManifestGameID
 		seen[id] = true
-		title := g.Title
-		if title == "" {
-			title = gameTitleFor(id)
-		}
+		title := titles[id]
 		globalTrayState.titleCache[id] = title
 		reason := string(readiness[id].Reason)
 		if _, synced := globalTrayState.games[id]; synced {
@@ -450,8 +463,9 @@ func RecordPendingUpload(gameID, pathKey string) {
 	if gameID == "" {
 		return
 	}
+	title := gameTitleFor(gameID) // resolve before locking
 	globalTrayState.mu.Lock()
-	row := ensureGameRow(gameID)
+	row := ensureGameRow(gameID, title)
 	row.Status = GameStatusPending
 	row.LastDirection = SaveDirPush
 	if pathKey != "" {

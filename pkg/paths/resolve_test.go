@@ -300,11 +300,19 @@ func TestEnsureDir(t *testing.T) {
 
 func TestCurrentOS(t *testing.T) {
 	got := CurrentOS()
-	if runtime.GOOS == "windows" && got != Windows {
-		t.Fatalf("got %q, want windows", got)
-	}
-	if runtime.GOOS != "windows" && got != Linux {
-		t.Fatalf("got %q, want linux", got)
+	switch runtime.GOOS {
+	case "windows":
+		if got != Windows {
+			t.Fatalf("got %q, want windows", got)
+		}
+	case "darwin":
+		if got != Darwin {
+			t.Fatalf("got %q, want macos", got)
+		}
+	default:
+		if got != Linux {
+			t.Fatalf("got %q, want linux", got)
+		}
 	}
 }
 

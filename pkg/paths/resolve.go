@@ -13,12 +13,16 @@ type OS string
 const (
 	Windows OS = "windows"
 	Linux   OS = "linux"
+	Darwin  OS = "macos" // matches the manifest "macos" platform label
 )
 
 // CurrentOS returns the current OS for path resolution.
 func CurrentOS() OS {
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		return Windows
+	case "darwin":
+		return Darwin
 	}
 	return Linux
 }
@@ -50,7 +54,8 @@ type Resolver struct {
 func NewResolver() *Resolver {
 	home, _ := os.UserHomeDir()
 	var localAppData, appData string
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		localAppData = os.Getenv("LOCALAPPDATA")
 		if localAppData == "" {
 			localAppData = filepath.Join(home, "AppData", "Local")
@@ -59,7 +64,10 @@ func NewResolver() *Resolver {
 		if appData == "" {
 			appData = filepath.Join(home, "AppData", "Roaming")
 		}
-	} else {
+	case "darwin":
+		localAppData = filepath.Join(home, "Library", "Application Support")
+		appData = filepath.Join(home, "Library", "Application Support")
+	default:
 		localAppData = filepath.Join(home, ".local", "share")
 		appData = filepath.Join(home, ".config")
 	}
@@ -134,9 +142,13 @@ func getDefaultXboxApp(localAppData string) string {
 // getXDGCacheHome returns the XDG cache directory.
 // On Linux: $XDG_CACHE_HOME if set, otherwise ~/.cache.
 // On Windows: %LOCALAPPDATA%\cache (mirrors common usage by ported Linux games).
+// On macOS: ~/Library/Caches.
 func getXDGCacheHome(home, localAppData string) string {
 	if runtime.GOOS == "windows" {
 		return filepath.Join(localAppData, "cache")
+	}
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Library", "Caches")
 	}
 	if v := os.Getenv("XDG_CACHE_HOME"); v != "" {
 		return v
@@ -151,10 +163,13 @@ func getSteamLibraryRoots(home string) []string {
 // GetSteamLibraryRoots returns default Steam library roots plus VDF-discovered libraries.
 func GetSteamLibraryRoots(home string) []string {
 	var roots []string
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		roots = append(roots, filepath.Join(os.Getenv("ProgramFiles(x86)"), "Steam"))
 		roots = append(roots, filepath.Join(os.Getenv("ProgramFiles"), "Steam"))
-	} else {
+	case "darwin":
+		roots = append(roots, filepath.Join(home, "Library", "Application Support", "Steam"))
+	default:
 		roots = append(roots, filepath.Join(home, ".steam", "steam"))
 		roots = append(roots, filepath.Join(home, ".local", "share", "Steam"))
 		flatpak := filepath.Join(home, ".var", "app", "com.valvesoftware.Steam", "data", "Steam")

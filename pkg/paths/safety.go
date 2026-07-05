@@ -102,6 +102,10 @@ func (r *Resolver) unsafeRoots() map[string]bool {
 			"Documents", "Downloads", "Desktop", "Music", "Pictures", "Videos",
 			"Documents/My Games", "Saved Games",
 			"AppData", "AppData/Local", "AppData/LocalLow", "AppData/Roaming",
+			"Library", "Library/Preferences", "Library/Application Support",
+			"Library/Containers", "Library/Group Containers", "Library/Caches",
+			"Library/Mobile Documents", "Library/Saved Application State",
+			"Library/Logs", "Library/LaunchAgents",
 		} {
 			add(filepath.Join(home, filepath.FromSlash(sub)))
 		}
