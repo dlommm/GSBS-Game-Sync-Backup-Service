@@ -30,11 +30,13 @@ type UpdateInfo struct {
 	AssetName   string
 	DownloadURL string
 	SHA256      string
+	Manual      bool // no auto-applicable asset: "install" opens the releases page instead
 }
 
 // UpdateCheckResult carries the outcome of CheckForUpdate.
-// Status values: "available", "up_to_date", "disabled", "metered_skip",
-// "network_error", "api_error", "manifest_mismatch", "unsupported_arch".
+// Status values: "available", "manual_download", "up_to_date", "disabled",
+// "metered_skip", "network_error", "api_error", "manifest_mismatch",
+// "unsupported_arch".
 type UpdateCheckResult struct {
 	Info    *UpdateInfo // non-nil only when Status == "available"
 	Status  string
@@ -102,7 +104,7 @@ func CheckForUpdate(repo string, manual bool) UpdateCheckResult {
 		}
 	}
 
-	if goos := goosForUpdate(); goos != "windows" && goos != "linux" {
+	if goos := goosForUpdate(); goos != "windows" && goos != "linux" && goos != "darwin" {
 		return UpdateCheckResult{
 			Status:  "unsupported_arch",
 			Message: fmt.Sprintf("auto-update not supported on %s/%s", runtime.GOOS, runtime.GOARCH),
@@ -264,9 +266,20 @@ func expectedClientAssetName() string {
 		return "gsbs-client-windows-amd64.exe"
 	case "linux":
 		return "gsbs-client-linux-amd64"
+	case "darwin":
+		return "gsbs-client-darwin-" + runtime.GOARCH
 	default:
 		return ""
 	}
+}
+
+// ReleasePageURL returns the GitHub releases page for the update repo, for
+// manual downloads when no auto-applicable asset exists for this platform.
+func ReleasePageURL(repo string) string {
+	if repo == "" {
+		repo = defaultUpdateRepo
+	}
+	return "https://github.com/" + repo + "/releases/latest"
 }
 
 func updateFromAssetNames(rel *ghRelease) UpdateCheckResult {
@@ -291,6 +304,20 @@ func updateFromAssetNames(rel *ghRelease) UpdateCheckResult {
 		}
 	}
 	log.Printf("update: asset %s not found in release %s", want, rel.TagName)
+	if goosForUpdate() == "darwin" {
+		// A newer release exists but carries no darwin binary (pre-4.2
+		// releases ship only DMGs). Offer a manual download: the tray opens
+		// the GitHub releases page instead of self-updating.
+		return UpdateCheckResult{
+			Status: "manual_download",
+			Info: &UpdateInfo{
+				Tag:     rel.TagName,
+				Version: strings.TrimPrefix(rel.TagName, "v"),
+				Manual:  true,
+			},
+			Message: fmt.Sprintf("no darwin asset in release %s; manual download from the releases page", rel.TagName),
+		}
+	}
 	return UpdateCheckResult{
 		Status:  "manifest_mismatch",
 		Message: fmt.Sprintf("asset %s not found in release %s", want, rel.TagName),

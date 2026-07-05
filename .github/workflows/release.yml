@@ -179,6 +179,8 @@ jobs:
           path: |
             dist/gsbs-client-*-darwin-*.dmg
             dist/gsbs-server-darwin-*.tar.gz
+            dist/gsbs-client-darwin-arm64
+            dist/gsbs-client-darwin-amd64
 
   build-windows:
     needs: [version, test, lint]
@@ -389,6 +391,8 @@ jobs:
             dist/gsbs-client-linux-arm64
             dist/gsbs-client-${{ needs.version.outputs.value }}-darwin-arm64.dmg
             dist/gsbs-client-${{ needs.version.outputs.value }}-darwin-amd64.dmg
+            dist/gsbs-client-darwin-arm64
+            dist/gsbs-client-darwin-amd64
             dist/gsbs-server-darwin-arm64.tar.gz
             dist/gsbs-server-darwin-amd64.tar.gz
             dist/gsbs-client-setup-*.exe

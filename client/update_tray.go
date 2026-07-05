@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -133,6 +134,10 @@ func (c *TrayController) runUpdateCheck(manual bool) {
 		} else {
 			_ = beeep.Notify("GSBS", fmt.Sprintf("Update available: %s — open tray to install", result.Info.Tag), "")
 		}
+	case "manual_download":
+		log.Printf("update: available %s (manual download only: %s)", result.Info.Tag, result.Message)
+		c.setUpdateMenuVisible(result.Info)
+		_ = beeep.Notify("GSBS", fmt.Sprintf("Update %s available — open tray to get it from GitHub", result.Info.Tag), "")
 	case "up_to_date":
 		c.setUpdateMenuVisible(nil)
 		if manual {
@@ -183,6 +188,10 @@ func (c *TrayController) runUpdateApply() {
 	if info == nil {
 		return
 	}
+	if info.Manual {
+		c.openReleasePage()
+		return
+	}
 	c.mApplyUpdate.SetTitle("Downloading update...")
 	c.mApplyUpdate.Disable()
 	path, err := DownloadUpdate(info)
@@ -190,15 +199,40 @@ func (c *TrayController) runUpdateApply() {
 		log.Printf("update: download failed: %v", err)
 		_ = beeep.Alert("GSBS", fmt.Sprintf("Update download failed: %v", err), "")
 		c.setUpdateMenuVisible(info)
+		c.offerManualFallback()
 		return
 	}
 	if err := ApplyUpdate(path); err != nil {
 		log.Printf("update: apply failed: %v", err)
 		_ = beeep.Alert("GSBS", fmt.Sprintf("Update failed: %v", err), "")
 		c.setUpdateMenuVisible(info)
+		c.offerManualFallback()
 		return
 	}
 	systray.Quit()
+}
+
+// openReleasePage opens the GitHub releases page in the default browser.
+func (c *TrayController) openReleasePage() {
+	repo := ""
+	if cfg := c.cfg(); cfg != nil {
+		repo = strings.TrimSpace(cfg.UpdateRepo)
+	}
+	url := ReleasePageURL(repo)
+	if err := openNative(url); err != nil {
+		log.Printf("update: open release page: %v", err)
+		_ = beeep.Notify("GSBS", "Get the latest release at "+url, "")
+	}
+}
+
+// offerManualFallback opens the releases page on macOS when a self-update
+// attempt fails, so the user can drag in the fresh DMG instead.
+func (c *TrayController) offerManualFallback() {
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	_ = beeep.Notify("GSBS", "Opening the GitHub releases page so you can update manually.", "")
+	c.openReleasePage()
 }
 
 func (c *TrayController) setUpdateMenuVisible(info *UpdateInfo) {
@@ -210,7 +244,11 @@ func (c *TrayController) setUpdateMenuVisible(info *UpdateInfo) {
 		c.mApplyUpdate.Disable()
 		return
 	}
-	c.mApplyUpdate.SetTitle(fmt.Sprintf("Install update %s...", info.Tag))
+	if info.Manual {
+		c.mApplyUpdate.SetTitle(fmt.Sprintf("Get update %s from GitHub...", info.Tag))
+	} else {
+		c.mApplyUpdate.SetTitle(fmt.Sprintf("Install update %s...", info.Tag))
+	}
 	c.mApplyUpdate.Show()
 	c.mApplyUpdate.Enable()
 }
