@@ -99,7 +99,7 @@ Register on the server WebUI, create an API token, and log in from the client. G
 
 See [CHANGELOG.md](CHANGELOG.md) for the full v4 release notes and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how conflict resolution and encryption work.
 
-The save-location manifest comes from PCGamingWiki — fresh installs pull a pre-built bundle (full ~40k-game catalog in one fetch); switch to live API sync anytime in **Admin → Settings**. See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
+The save-location manifest comes from PCGamingWiki — fresh installs pull a pre-built bundle (full ~40k-game catalog in one fetch); switch to live API sync anytime in **Admin → Settings**. The official bundle is published weekly by [VPS-Sync-GSBS](https://github.com/dlommm/VPS-Sync-GSBS). See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
 
 ## Documentation
 
