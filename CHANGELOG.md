@@ -4,6 +4,21 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-07-05
+
+macOS correctness release: the Mac client now understands it's a Mac, and can update itself.
+
+### Fixed
+
+- **The macOS client no longer treats itself as Linux.** Path resolution gained a real `macos` platform: the client now matches the manifest's macOS save rules (previously it applied *Linux* rules on the Mac), resolves against `~/Library/Application Support`/`~/Library/Caches`, and discovery scans the Mac locations for Steam, Epic, and Heroic — so installed games are actually detected. This fixes a serious bug where a mislabeled catalog entry ("12 Orbits") resolved to `~/Library/Preferences` on every Mac and synced hundreds of unrelated system `.plist` files to the server as game saves. If you ran the 4.0–4.1 macOS client, delete that game's saves on your server (My Games → per-game delete).
+- **The watch-safety guard now covers macOS.** `~/Library` and its key subfolders (Preferences, Application Support, Containers, Caches, …) join the home/XDG/Windows roots that GSBS refuses to watch wholesale, so bad catalog data can never again sweep up system files — regardless of what the manifest says.
+- **Catalog ingest no longer widens single-file save locations into whole-directory rules.** A PCGW path ending in a specific file (e.g. a `.plist`) previously lost its filename during normalization and became a sync-everything rule on the parent folder. Templates now keep the file/glob component. Run a full PCGW resync after upgrading the server so existing catalog entries regain their filenames; until then the new safety guard blocks the over-broad ones.
+- **Fixed a client deadlock that froze the tray and the local WebUI.** The first synced save for a game the tray hadn't seen before locked the tray state forever — the local dashboard then hung on "Checking status… Connecting to the local client.", the tray menu stopped updating, and watcher uploads stalled until restart.
+
+### Added
+
+- **macOS client auto-update.** Releases now ship raw `gsbs-client-darwin-arm64/amd64` binaries alongside the DMGs, and `latest-client.json` covers all four platforms (checksummed, enforced at release time). The Mac tray's "Install update" downloads the verified binary, swaps it inside `GSBS.app`, re-signs the bundle ad-hoc, and relaunches — the same one-click update Windows and Linux already had. If a release has no Mac binary (anything before 4.2.0) or a self-update ever fails, the tray opens the GitHub releases page instead so the DMG route is one click away.
+
 ## [4.1.1] - 2026-07-04
 
 Critical macOS fix plus tray polish.

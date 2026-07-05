@@ -6,6 +6,23 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [4.2.0] — 2026-07-05
+
+macOS correctness release: the Mac client now understands it's a Mac, and can update itself.
+
+### Fixed
+
+- **The macOS client no longer treats itself as Linux.** It now matches macOS save rules from the catalog (previously it applied Linux rules), resolves paths under `~/Library`, and detects installed Steam/Epic/Heroic games in their Mac locations. This fixes a serious bug where a mislabeled catalog entry synced hundreds of unrelated `~/Library/Preferences` `.plist` files to the server as "12 Orbits" saves — if you ran the 4.0–4.1 Mac client, delete that game's saves on your server.
+- **The watch-safety guard now covers macOS**: `~/Library` and its key subfolders can never be watched wholesale, no matter what the catalog says.
+- **Catalog ingest keeps filenames.** Single-file save locations no longer widen into whole-directory sync rules; run a full PCGW resync after upgrading the server.
+- **Fixed a client deadlock** that froze the tray and stuck the local dashboard on "Connecting to the local client." after the first sync of a newly-seen game.
+
+### Added
+
+- **macOS client auto-update.** The Mac tray's "Install update" now downloads the checksummed binary, updates `GSBS.app` in place, and relaunches — same as Windows/Linux. When that's not possible (older releases, or a failed update), the tray opens the GitHub releases page instead.
+
+---
+
 ## [4.1.1] — 2026-07-04
 
 Critical macOS fix plus tray polish.
