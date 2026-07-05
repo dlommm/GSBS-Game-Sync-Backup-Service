@@ -118,6 +118,21 @@ func (s *sqliteStore) GetPCGWCatalogStats(ctx context.Context) (types.PCGWCatalo
 	return st, nil
 }
 
+// GetPCGWCatalogPageIDByTitle returns the page ID for an exact catalog title,
+// or 0 when no such title exists. Used to resolve wiki deletion-log entries
+// that carry no page ID.
+func (s *sqliteStore) GetPCGWCatalogPageIDByTitle(ctx context.Context, title string) (int64, error) {
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT page_id FROM pcgw_catalog WHERE title = ? LIMIT 1`, title).Scan(&id)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 // ListPCGWCatalogMissing returns page IDs that are in pcgw_catalog but not in pcgw_games (excluding dead-letter).
 func (s *sqliteStore) ListPCGWCatalogMissing(ctx context.Context, limit, offset int) ([]int64, error) {
 	var (

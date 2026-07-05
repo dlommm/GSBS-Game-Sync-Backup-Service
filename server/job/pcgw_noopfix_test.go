@@ -76,6 +76,17 @@ func mockFullPCGWServer(pageIDs []int64) *httptest.Server {
 	}))
 }
 
+// seedMirrorForGate inserts a single placeholder game so the absolute
+// seeded gate (ErrPCGWMirrorNotSeeded) lets mock-wiki sync tests run.
+func seedMirrorForGate(t *testing.T, ctx context.Context, st store.Store) {
+	t.Helper()
+	if err := st.UpsertPCGWGame(ctx, &types.PCGWGame{
+		PageID: 1, PageName: "1", Title: "Gate Seed", ParseStatus: "ok",
+	}); err != nil {
+		t.Fatalf("seed mirror for gate: %v", err)
+	}
+}
+
 // seedPriorSuccessRun seeds a completed sync run with the given catalog hash so that
 // getPreviousCatalogHash returns that hash on the next incremental scan.
 func seedPriorSuccessRun(t *testing.T, ctx context.Context, st store.Store, catalogHash string) {
@@ -115,6 +126,7 @@ func TestNoOpFix_UnchangedHashWithMissingBacklog(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
+	seedMirrorForGate(t, ctx, st)
 
 	client := pcgw.NewClient()
 	client.BaseURL = srv.URL
@@ -181,6 +193,7 @@ func TestNoOpFix_UnchangedHashEmptyBacklog(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
+	seedMirrorForGate(t, ctx, st)
 
 	client := pcgw.NewClient()
 	client.BaseURL = srv.URL
@@ -261,6 +274,7 @@ func TestNoOpFix_ResumeDoesNotUseStaleHash(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
+	seedMirrorForGate(t, ctx, st)
 
 	client := pcgw.NewClient()
 	client.BaseURL = srv.URL
@@ -406,6 +420,7 @@ func TestFastPath_SkipsFullScan(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
+	seedMirrorForGate(t, ctx, st)
 
 	client := pcgw.NewClient()
 	client.BaseURL = srv.URL
@@ -466,6 +481,7 @@ func TestFastPath_SkipsBuildChangedQueue(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
+	seedMirrorForGate(t, ctx, st)
 
 	client := pcgw.NewClient()
 	client.BaseURL = srv.URL
@@ -586,6 +602,7 @@ func TestTargetedModes_SkipCatalogPhase(t *testing.T) {
 	}
 	defer st.Close()
 	ctx := context.Background()
+	seedMirrorForGate(t, ctx, st)
 
 	client := pcgw.NewClient()
 	client.BaseURL = srv.URL

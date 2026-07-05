@@ -595,9 +595,17 @@ func (r *Runner) runPCGWBundleFetch(parentCtx context.Context, jobName string, o
 	if status == JobFailed {
 		settings, _ := r.store.ListAdminSettings(jobCtx)
 		if store.PCGWSyncSourceFromSettings(settings) == store.PCGWSyncSourceS3 {
-			logx.Logger().Warn().Err(fetchErr).Msg("bundle fetch failed; falling back to API sync to keep data fresh")
-			if _, err := r.TryRunPCGWSync(jobCtx); err != nil && !errors.Is(err, ErrJobAlreadyRunning) {
-				logx.Logger().Warn().Err(err).Msg("bundle fetch: API fallback failed to start")
+			// Seeded gate: a fresh install whose first bundle fetch fails must
+			// NOT fall back to a full API crawl — a fleet of empty servers doing
+			// that would flood PCGamingWiki. Retry the bundle on the next cron.
+			if seeded, seedErr := r.store.IsPCGWBundleSeeded(jobCtx); seedErr == nil && !seeded {
+				logx.Logger().Warn().Err(fetchErr).
+					Msg("bundle fetch failed and PCGW mirror is empty — API fallback disabled; will retry bundle on next cron (or import a bundle file via Admin)")
+			} else {
+				logx.Logger().Warn().Err(fetchErr).Msg("bundle fetch failed; falling back to API sync to keep data fresh")
+				if _, err := r.TryRunPCGWSync(jobCtx); err != nil && !errors.Is(err, ErrJobAlreadyRunning) {
+					logx.Logger().Warn().Err(err).Msg("bundle fetch: API fallback failed to start")
+				}
 			}
 		}
 	}

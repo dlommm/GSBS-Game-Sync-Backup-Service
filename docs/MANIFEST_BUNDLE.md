@@ -15,6 +15,10 @@ End users never download the bundle manually — the server fetches it on a sche
 
 The legacy value `github` is accepted and normalized to `s3`. Switch source in **Admin → Settings**; changing source reschedules cron immediately.
 
+**Seeded gate (no override):** an API sync never runs against an empty mirror — fresh installs must seed from the S3 bundle first (switching to API mode seeds automatically; air-gapped hosts import a bundle file via **Admin → Import**). This guarantees a fleet of new installs can never fall back to full API crawls of PCGamingWiki.
+
+**API-mode change detection** uses the MediaWiki `recentchanges` feed (a handful of requests per sync) to find edited, new, and deleted pages, with already-known revisions reused during ingest. Windows older than the wiki's change-history retention fall back to a batched revision sweep (50 pages per request). Upstream deletions cascade locally (tombstoned) behind the same 25% safety valve as bundle imports.
+
 ## How updates work
 
 Publishing is **full-bundle-only** with a versioned index. Three layers avoid redundant work:

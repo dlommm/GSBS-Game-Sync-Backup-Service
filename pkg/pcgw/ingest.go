@@ -10,6 +10,12 @@ import (
 
 // IngestPage fetches and parses a PCGW game page with section-level resilience.
 func IngestPage(ctx context.Context, client *Client, pageID int64, pageInfo PageInfo) (*IngestResult, error) {
+	return IngestPageWithRevision(ctx, client, pageID, pageInfo, nil)
+}
+
+// IngestPageWithRevision is IngestPage with an optional already-known latest
+// revision (from change detection), saving one API request per page.
+func IngestPageWithRevision(ctx context.Context, client *Client, pageID int64, pageInfo PageInfo, knownRev *PageRevision) (*IngestResult, error) {
 	if client == nil {
 		return nil, fmt.Errorf("client is nil")
 	}
@@ -49,7 +55,10 @@ func IngestPage(ctx context.Context, client *Client, pageID int64, pageInfo Page
 		}
 	}
 
-	if rev, err := client.GetPageRevision(ctx, pageIDStr); err == nil {
+	if knownRev != nil && knownRev.RevID > 0 {
+		result.Bundle.RevisionID = knownRev.RevID
+		result.Bundle.RevisionTimestamp = knownRev.Timestamp
+	} else if rev, err := client.GetPageRevision(ctx, pageIDStr); err == nil {
 		result.Bundle.RevisionID = rev.RevID
 		result.Bundle.RevisionTimestamp = rev.Timestamp
 	} else {

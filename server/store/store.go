@@ -307,6 +307,8 @@ type Store interface {
 	ImportPCGWManifestBundle(ctx context.Context, data []byte, mode string) (PCGWImportResult, error)
 	ValidatePCGWImport(ctx context.Context) (PCGWImportValidation, error)
 	IsPCGWBundleSeeded(ctx context.Context) (bool, error)
+	DeletePCGWGameCascade(ctx context.Context, pageID int64) error
+	GetPCGWCatalogPageIDByTitle(ctx context.Context, title string) (int64, error)
 
 	// Admin settings (key/value, persisted cron and PCGW filters).
 	GetAdminSetting(ctx context.Context, key string) (string, error)

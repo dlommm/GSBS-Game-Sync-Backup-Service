@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -65,6 +66,11 @@ type ReportProgress func(pagesProcessed int)
 type ReportProgressEx func(PCGWSyncProgress)
 
 // PCGWSync runs PCGW ingest: list pages, incremental skip, persist full mirror, project manifest v1.
+// ErrPCGWMirrorNotSeeded is returned when an API sync is attempted against an
+// empty PCGW mirror. Seed from the S3 manifest bundle first (Admin -> PCGW ->
+// Fetch bundle now, or import a bundle file on air-gapped hosts).
+var ErrPCGWMirrorNotSeeded = errors.New("pcgw mirror is empty: fetch or import the manifest bundle before running an API sync (direct full crawls of PCGamingWiki are disabled)")
+
 func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client, reportProgress ReportProgress, opts PCGWSyncOptions) (int, error) {
 	return PCGWSyncEx(ctx, st, client, reportProgress, nil, opts)
 }
@@ -72,6 +78,17 @@ func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client, reportPr
 // PCGWSyncEx is PCGWSync with optional extended progress reporting.
 // It implements the two-phase pipeline: Phase 1 = catalog scan, Phase 2 = targeted ingest.
 func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, reportProgress ReportProgress, reportEx ReportProgressEx, opts PCGWSyncOptions) (int, error) {
+	// Absolute seeded gate: never crawl the PCGW API against an empty mirror.
+	// Fresh installs must seed from the prebuilt S3 bundle (or import a bundle
+	// file manually on air-gapped hosts). There is deliberately no override —
+	// a fleet of empty servers falling back to API crawls would flood
+	// PCGamingWiki with hundreds of thousands of requests.
+	if !opts.RebuildManifestOnly {
+		if seeded, err := st.IsPCGWBundleSeeded(ctx); err == nil && !seeded {
+			return 0, ErrPCGWMirrorNotSeeded
+		}
+	}
+
 	mode := "incremental"
 	if opts.Full {
 		mode = "full"
@@ -240,6 +257,7 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	// ─── Phase 2: Build targeted queue ───────────────────────────────────────
 	var queue []int64
 	titleHints := map[int64]string{}
+	revHints := map[int64]pcgw.PageRevision{}
 	inQueue := map[int64]bool{}
 	enqueue := func(id int64) {
 		if inQueue[id] {
@@ -333,11 +351,20 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		}
 		logRevCheckDecision(shouldRunRevCheck, revCheckReason, lastRevCheckAt, revCheckAge)
 		if shouldRunRevCheck {
-			var err error
-			changedIDs, err = buildChangedQueue(ctx, st, client, filters)
+			res, err := buildChangedQueue(ctx, st, client, runID, filters, lastRevCheckAt)
 			if err != nil {
 				logx.Logger().Error().Str("component", "pcgw").Err(err).Msg("pcgw sync: build changed queue")
 				changedIDs = nil
+			} else {
+				changedIDs = res.PageIDs
+				for id, rev := range res.RevHints {
+					revHints[id] = rev
+				}
+				for id, title := range res.TitleHints {
+					if strings.TrimSpace(titleHints[id]) == "" {
+						titleHints[id] = title
+					}
+				}
 			}
 			_ = st.SetLastRevCheckAt(ctx, time.Now())
 		}
@@ -415,8 +442,13 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 			pageInfo.Title = hint
 		}
 
+		var knownRev *pcgw.PageRevision
+		if rev, ok := revHints[pageID]; ok && rev.RevID > 0 {
+			knownRev = &rev
+		}
+
 		start := time.Now()
-		n, err := syncOnePage(ctx, st, client, runID, pageID, pageInfo, &stats, filters)
+		n, err := syncOnePageRev(ctx, st, client, runID, pageID, pageInfo, knownRev, &stats, filters)
 		parseMsTotal += int(time.Since(start).Milliseconds())
 		parseCount++
 		processed++
@@ -598,22 +630,235 @@ func getPreviousCatalogHash(ctx context.Context, st store.Store) (string, error)
 	return "", nil
 }
 
-// buildChangedQueue returns page IDs from the catalog that have changed rev IDs
-// or are not yet in pcgw_games (the "rev-check changed" set, priority 3).
-// This is the set where shouldSkipPage returns false — i.e. pages we do NOT skip.
-func buildChangedQueue(ctx context.Context, st store.Store, client *pcgw.Client, filters PCGWFilters) ([]int64, error) {
-	// We retrieve pages from the catalog that exist in pcgw_games but may have changed.
-	// Use an offset-based scan; for very large catalogs this is the slow path.
-	var changed []int64
+// rcWindowMax bounds how old a rev-check window may be for the cheap
+// recentchanges path. MediaWiki's recent-changes retention ($wgRCMaxAge) is
+// typically 30-90 days; staying well inside it guarantees no edit can fall
+// between the window and the feed. Older windows use the batched revision
+// sweep, which is correct for any gap size.
+const rcWindowMax = 30 * 24 * time.Hour
+
+// rcOverlap re-reads a little of the already-covered window so boundary
+// timestamps and clock skew can never drop an edit.
+const rcOverlap = 2 * time.Hour
+
+// changedQueueResult is the outcome of change detection: pages to re-ingest,
+// their already-known latest revisions (saves one API call each during
+// ingest), title hints for brand-new pages, and how many upstream deletions
+// were applied.
+type changedQueueResult struct {
+	PageIDs    []int64
+	RevHints   map[int64]pcgw.PageRevision
+	TitleHints map[int64]string
+	Deleted    int
+	Method     string // "recentchanges" or "sweep"
+}
+
+// buildChangedQueue finds catalog pages whose wiki content changed since the
+// last check. It prefers the recentchanges feed (a handful of requests for a
+// typical week) and falls back to the batched revision sweep when the window
+// is missing, stale beyond rcWindowMax, or the feed errors.
+func buildChangedQueue(ctx context.Context, st store.Store, client *pcgw.Client, runID string, filters PCGWFilters, lastRevCheckAt string) (changedQueueResult, error) {
+	since, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(lastRevCheckAt))
+	if strings.TrimSpace(lastRevCheckAt) == "" || parseErr != nil || time.Since(since) > rcWindowMax {
+		reason := "window_missing"
+		if parseErr == nil && strings.TrimSpace(lastRevCheckAt) != "" {
+			reason = "window_stale"
+		}
+		logx.Logger().Info().Str("component", "pcgw").Str("event", "pcgw.rev_check.method").
+			Str("method", "sweep").Str("reason", reason).
+			Msg("pcgw sync: change detection via batched revision sweep")
+		return buildChangedQueueSweep(ctx, st, client, filters)
+	}
+
+	changes, err := client.RecentChangesSince(ctx, since.Add(-rcOverlap))
+	if err != nil {
+		logx.Logger().Warn().Str("component", "pcgw").Err(err).
+			Msg("pcgw sync: recentchanges failed — falling back to batched revision sweep")
+		return buildChangedQueueSweep(ctx, st, client, filters)
+	}
+	logx.Logger().Info().Str("component", "pcgw").Str("event", "pcgw.rev_check.method").
+		Str("method", "recentchanges").Int("entries", len(changes)).
+		Str("since", since.Add(-rcOverlap).UTC().Format(time.RFC3339)).
+		Msg("pcgw sync: change detection via recentchanges feed")
+	return applyRecentChanges(ctx, st, runID, filters, changes)
+}
+
+// applyRecentChanges folds a recentchanges window into a change queue:
+// edits/creations/moves become re-ingest candidates (skipped when the stored
+// revision is already current), page creations gain a catalog row so exports
+// stay consistent, and wiki deletions cascade locally (tombstoned, so bundle
+// consumers delete too) behind the same safety valve as bundle imports.
+func applyRecentChanges(ctx context.Context, st store.Store, runID string, filters PCGWFilters, changes []pcgw.RecentChange) (changedQueueResult, error) {
+	res := changedQueueResult{
+		RevHints:   map[int64]pcgw.PageRevision{},
+		TitleHints: map[int64]string{},
+		Method:     "recentchanges",
+	}
+
+	// Latest state per page across the window (entries are oldest-first).
+	type pageState struct {
+		title   string
+		revID   int64
+		revTS   string
+		deleted bool
+	}
+	pages := map[int64]*pageState{}
+	deletedTitles := map[string]bool{}
+	stateFor := func(id int64) *pageState {
+		ps := pages[id]
+		if ps == nil {
+			ps = &pageState{}
+			pages[id] = ps
+		}
+		return ps
+	}
+	for _, rc := range changes {
+		switch rc.Type {
+		case "edit", "new":
+			if rc.PageID <= 0 {
+				continue
+			}
+			ps := stateFor(rc.PageID)
+			ps.title = rc.Title
+			ps.deleted = false
+			delete(deletedTitles, rc.Title)
+			if rc.RevID > 0 {
+				ps.revID = rc.RevID
+				ps.revTS = rc.Timestamp
+			}
+		case "log":
+			switch rc.LogType {
+			case "delete":
+				if rc.LogAction == "restore" || rc.LogAction == "undelete" {
+					continue
+				}
+				if rc.PageID > 0 {
+					ps := stateFor(rc.PageID)
+					ps.title = rc.Title
+					ps.deleted = true
+				} else if rc.Title != "" {
+					deletedTitles[rc.Title] = true
+				}
+			case "move":
+				// The moved page keeps its ID; re-ingest refreshes the title.
+				if rc.PageID > 0 {
+					ps := stateFor(rc.PageID)
+					ps.title = rc.Title
+					ps.deleted = false
+				}
+			}
+		}
+	}
+
+	// Resolve title-only deletions against the local catalog.
+	var deleteIDs []int64
+	for title := range deletedTitles {
+		id, err := st.GetPCGWCatalogPageIDByTitle(ctx, title)
+		if err != nil || id == 0 {
+			continue
+		}
+		if ps, ok := pages[id]; ok && !ps.deleted {
+			continue // page was edited/recreated after the deletion event
+		}
+		deleteIDs = append(deleteIDs, id)
+	}
+	for id, ps := range pages {
+		if ps.deleted {
+			deleteIDs = append(deleteIDs, id)
+		}
+	}
+
+	// Safety valve mirroring pcgwReconcileMaxDeleteFraction on import: a
+	// deletion burst larger than a quarter of the mirror means the feed (or
+	// our window) is suspect — skip deletions rather than gut the mirror.
+	if len(deleteIDs) > 0 {
+		catStats, statErr := st.GetPCGWCatalogStats(ctx)
+		if statErr == nil && catStats.RemoteTotal > 0 &&
+			float64(len(deleteIDs))/float64(catStats.RemoteTotal) > 0.25 {
+			logx.Logger().Warn().Str("component", "pcgw").
+				Int("would_delete", len(deleteIDs)).Int("catalog", catStats.RemoteTotal).
+				Msg("pcgw sync: skipping recentchanges deletions — removal set too large")
+			deleteIDs = nil
+		}
+	}
+	for _, id := range deleteIDs {
+		if err := st.DeletePCGWGameCascade(ctx, id); err != nil {
+			logx.Logger().Warn().Str("component", "pcgw").Int64("page_id", id).Err(err).
+				Msg("pcgw sync: delete upstream-removed game")
+			continue
+		}
+		res.Deleted++
+	}
+	if res.Deleted > 0 {
+		logx.Logger().Info().Str("component", "pcgw").Int("deleted", res.Deleted).
+			Msg("pcgw sync: propagated upstream wiki deletions")
+	}
+
+	// Changed/new pages -> queue (skip when stored revision already current).
+	var newCatalogEntries []types.PCGWCatalogEntry
+	now := time.Now().UTC().Format(time.RFC3339)
+	for id, ps := range pages {
+		if ps.deleted {
+			continue
+		}
+		if filters.ShouldSkipTitle(ps.title) {
+			continue
+		}
+		if g, err := st.GetPCGWGame(ctx, id); err == nil && g != nil &&
+			ps.revID > 0 && g.LastRevID == ps.revID && g.ParseStatus == "ok" {
+			continue
+		}
+		if catID, err := st.GetPCGWCatalogPageIDByTitle(ctx, ps.title); err == nil && catID == 0 {
+			// Brand-new page: give it a catalog row now so the exported
+			// catalog (which drives consumer-side deletion reconciliation)
+			// includes it from the first publish.
+			newCatalogEntries = append(newCatalogEntries, types.PCGWCatalogEntry{
+				PageID: id, Title: ps.title,
+				FirstSeenAt: now, LastSeenAt: now, LastSeenRunID: runID,
+			})
+		}
+		res.PageIDs = append(res.PageIDs, id)
+		if ps.revID > 0 {
+			res.RevHints[id] = pcgw.PageRevision{RevID: ps.revID, Timestamp: ps.revTS}
+		}
+		if strings.TrimSpace(ps.title) != "" {
+			res.TitleHints[id] = ps.title
+		}
+	}
+	if len(newCatalogEntries) > 0 {
+		if err := st.UpsertPCGWCatalogBatch(ctx, newCatalogEntries); err != nil {
+			logx.Logger().Warn().Str("component", "pcgw").Err(err).
+				Msg("pcgw sync: upsert catalog rows for new pages")
+		}
+	}
+	sort.Slice(res.PageIDs, func(i, j int) bool { return res.PageIDs[i] < res.PageIDs[j] })
+
+	logx.Logger().Info().Str("component", "pcgw").Str("event", "pcgw.rev_check.complete").
+		Int("games_checked", len(pages)).Int("changed_found", len(res.PageIDs)).
+		Int("deleted", res.Deleted).Str("method", res.Method).
+		Msg("pcgw sync: recentchanges change detection complete")
+	return res, nil
+}
+
+// buildChangedQueueSweep compares stored revision IDs against the wiki for
+// every OK game, 50 pages per request (the MediaWiki batch maximum). It is the
+// correctness fallback for windows older than the wiki's recent-changes
+// retention; ~55k games cost ~1100 requests instead of 55k.
+func buildChangedQueueSweep(ctx context.Context, st store.Store, client *pcgw.Client, filters PCGWFilters) (changedQueueResult, error) {
+	res := changedQueueResult{
+		RevHints:   map[int64]pcgw.PageRevision{},
+		TitleHints: map[int64]string{},
+		Method:     "sweep",
+	}
 	offset := 0
 	checked := 0
 	const chunkSize = 200
 	logx.Logger().Info().Str("component", "pcgw").Str("event", "pcgw.rev_check.start").
-		Msg("pcgw sync: revision check started — comparing wiki rev IDs for stored OK games")
+		Msg("pcgw sync: batched revision sweep started — comparing wiki rev IDs for stored OK games")
 	for {
 		select {
 		case <-ctx.Done():
-			return changed, ctx.Err()
+			return res, ctx.Err()
 		default:
 		}
 		rows, _, err := st.ListPCGWGames(ctx, store.PCGWGameListFilter{
@@ -622,21 +867,34 @@ func buildChangedQueue(ctx context.Context, st store.Store, client *pcgw.Client,
 			Offset:      offset,
 		})
 		if err != nil {
-			return changed, err
+			return res, err
 		}
 		if len(rows) == 0 {
 			break
 		}
+		var ids []int64
+		storedRev := map[int64]int64{}
 		for _, g := range rows {
 			if filters.ShouldSkipTitle(g.Title) {
 				continue
 			}
+			ids = append(ids, g.PageID)
+			storedRev[g.PageID] = g.LastRevID
+		}
+		revs, err := client.GetPageRevisionsBatch(ctx, ids)
+		if err != nil {
+			return res, err
+		}
+		for _, id := range ids {
 			checked++
-			skip, err := shouldSkipPage(ctx, st, client, g.PageID)
-			if err != nil || !skip {
-				changed = append(changed, g.PageID)
+			rev, ok := revs[id]
+			if !ok || rev.RevID != storedRev[id] {
+				res.PageIDs = append(res.PageIDs, id)
+				if ok {
+					res.RevHints[id] = rev
+				}
 			}
-			logRevCheckProgress(checked, len(changed))
+			logRevCheckProgress(checked, len(res.PageIDs))
 		}
 		if len(rows) < chunkSize {
 			break
@@ -644,9 +902,10 @@ func buildChangedQueue(ctx context.Context, st store.Store, client *pcgw.Client,
 		offset += len(rows)
 	}
 	logx.Logger().Info().Str("component", "pcgw").Str("event", "pcgw.rev_check.complete").
-		Int("games_checked", checked).Int("changed_found", len(changed)).
-		Msg("pcgw sync: revision check complete")
-	return changed, nil
+		Int("games_checked", checked).Int("changed_found", len(res.PageIDs)).
+		Str("method", res.Method).
+		Msg("pcgw sync: batched revision sweep complete")
+	return res, nil
 }
 
 func bumpManifestAndReturn(ctx context.Context, st store.Store, n int) (int, error) {
@@ -664,27 +923,14 @@ func bumpManifestAndReturn(ctx context.Context, st store.Store, n int) (int, err
 	return n, nil
 }
 
-func shouldSkipPage(ctx context.Context, st store.Store, client *pcgw.Client, pageID int64) (bool, error) {
-	g, err := st.GetPCGWGame(ctx, pageID)
-	if err != nil {
-		return false, nil
-	}
-	rev, err := client.GetPageRevision(ctx, strconv.FormatInt(pageID, 10))
-	if err != nil {
-		return false, err
-	}
-	if g.LastRevID == rev.RevID && g.ParseStatus == "ok" {
-		return true, nil
-	}
-	contentHash, _, _ := st.GetPCGWContentHash(ctx, pageID)
-	if contentHash != "" && rev.RevID == g.LastRevID {
-		return true, nil
-	}
-	return false, nil
+func syncOnePage(ctx context.Context, st store.Store, client *pcgw.Client, runID string, pageID int64, p pcgw.PageInfo, stats *store.PCGWSyncRunStats, filters PCGWFilters) (int, error) {
+	return syncOnePageRev(ctx, st, client, runID, pageID, p, nil, stats, filters)
 }
 
-func syncOnePage(ctx context.Context, st store.Store, client *pcgw.Client, runID string, pageID int64, p pcgw.PageInfo, stats *store.PCGWSyncRunStats, filters PCGWFilters) (int, error) {
-	result, err := pcgw.IngestPage(ctx, client, pageID, p)
+// syncOnePageRev is syncOnePage with an optional already-known latest revision
+// from change detection, saving one API request per page.
+func syncOnePageRev(ctx context.Context, st store.Store, client *pcgw.Client, runID string, pageID int64, p pcgw.PageInfo, knownRev *pcgw.PageRevision, stats *store.PCGWSyncRunStats, filters PCGWFilters) (int, error) {
+	result, err := pcgw.IngestPageWithRevision(ctx, client, pageID, p, knownRev)
 	if err != nil {
 		// IngestPage returns a non-nil partial result even on fetch error (PageID and
 		// ParseStatus="failed" are set). Persist the stub so the page moves from

@@ -530,6 +530,14 @@ func (s *sqliteStore) reconcilePCGWCatalogDeletions(ctx context.Context, catalog
 	return len(toDelete), nil
 }
 
+// DeletePCGWGameCascade removes one game and all of its dependent rows,
+// including the catalog row; the pcgw_games delete trigger records the
+// manifest-deletion tombstone. Used to propagate upstream wiki deletions
+// detected via recentchanges.
+func (s *sqliteStore) DeletePCGWGameCascade(ctx context.Context, pageID int64) error {
+	return s.deletePCGWGameByPageID(ctx, pageID)
+}
+
 // deletePCGWGameByPageID removes a single game and all of its dependent rows.
 func (s *sqliteStore) deletePCGWGameByPageID(ctx context.Context, pageID int64) error {
 	childTables := []string{
