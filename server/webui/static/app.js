@@ -442,12 +442,80 @@
         window.gsbs.toast(msg, 'info', 3000);
       }
     });
+    document.body.addEventListener('client-activity', onClientActivity);
 
     initActivityTabs();
     initBulkForm();
     initOnboardingTour();
     initSetupWizard();
   });
+
+  /* ---- Live Sync Pulse (v5.1): dashboard rail stream + per-device flash ---- */
+
+  var PULSE_MAX = 8;
+  var syncingTimers = {};
+
+  function onClientActivity(evt) {
+    var d = {};
+    try { d = JSON.parse((evt.detail && evt.detail.data) || '{}'); } catch (err) { return; }
+    if (!d.client_id) return;
+
+    // Flash "syncing now" on any device row/card for this client (~10s).
+    document.querySelectorAll('[data-client-id="' + d.client_id + '"]').forEach(function (el) {
+      el.classList.add('row-syncing');
+      if (syncingTimers[d.client_id]) clearTimeout(syncingTimers[d.client_id]);
+      syncingTimers[d.client_id] = setTimeout(function () {
+        document.querySelectorAll('[data-client-id="' + d.client_id + '"]').forEach(function (e2) {
+          e2.classList.remove('row-syncing');
+        });
+      }, 10000);
+    });
+
+    // Prepend to the Live activity stream when the panel exists (dashboard).
+    var list = document.getElementById('sync-pulse');
+    if (!list) return;
+    var empty = list.querySelector('.sync-pulse-empty');
+    if (empty) empty.remove();
+
+    var deviceEl = document.querySelector('[data-client-id="' + d.client_id + '"][data-client-name]');
+    var device = deviceEl ? deviceEl.getAttribute('data-client-name') : 'A device';
+    var game = d.game_title || d.game_id || 'a save';
+    var when = 'just now';
+    if (d.at) {
+      var t = new Date(d.at);
+      if (!isNaN(t)) when = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    var li = document.createElement('li');
+    li.className = 'sync-pulse-item';
+    var dot = document.createElement('span');
+    dot.className = 'pulse-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    var text = document.createElement('span');
+    text.className = 'sync-pulse-text';
+    var strongDev = document.createElement('strong');
+    strongDev.textContent = device;
+    text.appendChild(strongDev);
+    text.appendChild(document.createTextNode(' synced '));
+    var strongGame = document.createElement('strong');
+    strongGame.textContent = game;
+    text.appendChild(strongGame);
+    var meta = document.createElement('span');
+    meta.className = 'sync-pulse-when';
+    meta.textContent = when;
+    li.appendChild(dot);
+    li.appendChild(text);
+    li.appendChild(meta);
+    list.insertBefore(li, list.firstChild);
+    while (list.children.length > PULSE_MAX) list.removeChild(list.lastChild);
+
+    var indicator = document.getElementById('pulse-indicator');
+    if (indicator) {
+      indicator.hidden = false;
+      clearTimeout(indicator._t);
+      indicator._t = setTimeout(function () { indicator.hidden = true; }, 10000);
+    }
+  }
 
   /* ---- First-run setup wizard: stepped form (setup.html) ---- */
 

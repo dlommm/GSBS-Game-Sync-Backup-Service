@@ -57,6 +57,16 @@
     {{template "partials/loading_skeleton.html" .}}
   </div>
 </section>
+
+<section class="panel" aria-labelledby="pulse-heading">
+  <div class="panel-header-actions">
+    <h2 id="pulse-heading">Live activity</h2>
+    <span class="pulse-dot" id="pulse-indicator" hidden aria-hidden="true"></span>
+  </div>
+  <ul id="sync-pulse" class="sync-pulse" aria-live="polite" aria-label="Live sync activity">
+    <li class="sync-pulse-empty">Quiet right now — saves appear here the moment a device pushes them.</li>
+  </ul>
+</section>
 </aside>
 </div>
 {{end}}

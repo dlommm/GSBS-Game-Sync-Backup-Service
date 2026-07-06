@@ -83,6 +83,8 @@ type Store interface {
 	RegisterClient(ctx context.Context, userID, name, os string) (clientID string, err error)
 	ClientByToken(ctx context.Context, token string) (userID, clientID, name, os string, err error)
 	ListClientsByUserID(ctx context.Context, userID string) ([]ClientInfo, error)
+	// TitleForGame returns the manifest display title for a game ID, or "" when unknown.
+	TitleForGame(ctx context.Context, gameID string) (string, error)
 	// RegenerateClientToken issues a new token for the client; the old token is invalidated (client must re-login).
 	RegenerateClientToken(ctx context.Context, clientID string) error
 	// RevokeClient removes a client registration; its token stops working and it disappears from client lists.

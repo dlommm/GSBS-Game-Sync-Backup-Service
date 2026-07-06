@@ -581,6 +581,19 @@ func (s *sqliteStore) ListClientsByUserID(ctx context.Context, userID string) ([
 	return out, rows.Err()
 }
 
+// TitleForGame returns the manifest display title for a game ID ("" when the
+// manifest has no entry — e.g. manually-added games). Used to enrich the
+// client-activity SSE payload without joins on the hot push path.
+func (s *sqliteStore) TitleForGame(ctx context.Context, gameID string) (string, error) {
+	var title string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT game_title FROM game_save_locations WHERE game_id = ? LIMIT 1`, gameID).Scan(&title)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return title, err
+}
+
 // RegenerateClientToken assigns a new token for the client; the previous token stops working.
 // The client row is kept (e.g. after password or 2FA change via RevokeAllClientTokens).
 func (s *sqliteStore) RegenerateClientToken(ctx context.Context, clientID string) error {

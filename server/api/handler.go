@@ -1130,9 +1130,17 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			Data: fmt.Sprintf(`{"game_id":%q,"path_key":%q}`, gameID, pathKey),
 		})
 		if clientID != "" {
+			// Enriched for the dashboard Live Sync Pulse (v5.1): who pushed
+			// what, how big, when. Title lookup is one indexed point query;
+			// old clients ignore the extra fields.
+			title, _ := h.store.TitleForGame(r.Context(), gameID)
+			payload, _ := json.Marshal(map[string]interface{}{
+				"client_id": clientID, "game_id": gameID, "game_title": title,
+				"size_bytes": len(content), "at": time.Now().UTC().Format(time.RFC3339),
+			})
 			h.hub.BroadcastToUser(userID, sse.Event{
 				Type: "client-activity",
-				Data: fmt.Sprintf(`{"client_id":%q}`, clientID),
+				Data: string(payload),
 			})
 		}
 	}

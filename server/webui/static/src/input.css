@@ -1128,6 +1128,24 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 .pulse-dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: var(--sync); animation: pulse-dot 1.2s ease-in-out infinite; flex: none; }
 @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .pulse-dot { animation: none; } }
+/* Live Sync Pulse (v5.1): dashboard rail stream */
+.sync-pulse { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.sync-pulse-empty { font-size: 0.75rem; color: var(--text-muted); }
+.sync-pulse-item { display: flex; align-items: baseline; gap: 0.45rem; font-size: 0.75rem; color: var(--text-secondary); }
+.sync-pulse-item .pulse-dot { align-self: center; }
+.sync-pulse-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync-pulse-text strong { color: var(--text); font-weight: 600; }
+.sync-pulse-when { margin-left: auto; flex: none; color: var(--text-muted); font-size: 0.6875rem; }
+/* Per-device "syncing now" flash (added by app.js for ~10s on client-activity) */
+tr.row-syncing .cell-primary::after,
+.client-card.row-syncing .client-name::after {
+  content: ''; display: inline-block; width: 0.45rem; height: 0.45rem; margin-left: 0.4rem;
+  border-radius: 999px; background: var(--sync); vertical-align: middle;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  tr.row-syncing .cell-primary::after, .client-card.row-syncing .client-name::after { animation: none; }
+}
 .rename-dialog { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 0; max-width: min(24rem, 92vw); width: 100%; box-shadow: var(--shadow); }
 .rename-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 .rename-dialog .text-input { width: 100%; margin-top: 0.75rem; }

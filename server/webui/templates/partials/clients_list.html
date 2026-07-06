@@ -3,7 +3,7 @@
 <p class="clients-summary">{{.Online}} online · {{.Total}} device{{if ne .Total 1}}s{{end}}</p>
 <div class="clients-grid">
   {{range .Clients}}
-  <div class="client-card">
+  <div class="client-card" data-client-id="{{.ID}}" data-client-name="{{.Name}}">
     <div class="client-card-head">
       <span class="client-status {{if .Online}}online{{else}}offline{{end}}" title="{{if .Online}}Online{{else}}Offline{{end}}" aria-hidden="true"></span>
       <span class="client-name">{{.Name}}</span>
