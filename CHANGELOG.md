@@ -4,6 +4,8 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-07-06
+
 ### Changed — full UI redesign (v5 visual overhaul, phase 1: parity)
 - **New design language across the entire WebUI** (server and client), locked against the v5
   dashboard mockup: dark charcoal app shell floating on a mint→teal gradient backdrop, one

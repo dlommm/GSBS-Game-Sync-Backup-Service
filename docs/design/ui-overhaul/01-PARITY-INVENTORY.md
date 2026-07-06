@@ -18,6 +18,33 @@ Phase 1 must resolve.
 
 ---
 
+## Phase 1 verification record (v5.0.0, 2026-07-06)
+
+How each group was verified for the parity release; per-row checkboxes are considered ticked by
+the method listed unless a row is called out below.
+
+| Group | Verification method | Result |
+|-------|--------------------|--------|
+| API-1..17 | API handlers untouched except additive openapi version injection; full `server/api` test suite + openapi drift test green | pass |
+| WU (52) | all routes swept by `ui-smoke.sh` (41 checks incl. strict CSP); redesigned pages (dashboard, My Games, detail, versions, insights, settings, auth, wizard, errors) visually reviewed dark+light on a seeded live server; handlers untouched except the dashboard recent-games partial | pass — WU-9 relocated (devices panel → dashboard rail), WU-11 relocated (quick tiles → sidebar) |
+| XC (21) | toolkit JS untouched except additive sidebar toggle; template-name + CSP locks green on both surfaces; theme mechanism verified via dark+light screenshots; `check-contrast.py` 24/24 | pass |
+| AD (38) | admin routes swept by ui-smoke; overview/users/settings/pcgw visually reviewed on seeded data; handlers untouched | pass |
+| SW (5) | wizard completed live on a fresh instance (auto-login verified) + screenshot | pass |
+| TR (20) | tray code untouched except icon tint table; client package tests (incl. tray-state regression tests) green; cross-builds linux/windows/darwin | pass |
+| CW (13) | client route sweep test (now incl. `/logs/export.csv`) green with strict CSP; dashboard + add-game visually reviewed | pass — status-dot collision found & fixed (dots were invisible since 4.1.0) |
+| CB (13) | sync engine untouched this release; full `go test ./...` green | pass (unchanged code) |
+| CL (5) | untouched | pass (unchanged code) |
+| OPS (10) | untouched server-side; covered by existing tests | pass (unchanged code) |
+| FIX (6) | FIX-1 fixed (client CSV route); FIX-3 fixed (live openapi version); FIX-5 fixed (partial re-purposed for recent games) | FIX-2 (client token refresh) → Stage C as planned; FIX-4 (policy-override UI) → Stage D as planned; FIX-6 (WebUI update apply) → documented, Stage C candidate |
+
+**Performance budgets (07 §3):** app.css 14.8 KB gz (≤40); first-party JS 11.5 KB gz + htmx 16 KB
+gz + sse ext ≈ 30 KB gz total (≤40); fonts unchanged. **Accessibility:** contrast validated
+programmatically in both themes (24 pairings); landmarks/skip-link/focus-visible preserved and
+extended to the new shell (sidebar `<nav>` + labelled regions); reduced-motion support added.
+A full axe run remains open tooling-wise and is tracked for the Stage C cycle.
+
+---
+
 ## API — frozen compatibility surface (17 endpoints)
 
 These are the client contract (`server/api/handler.go:195-213`, `server/api/openapi.json`). The

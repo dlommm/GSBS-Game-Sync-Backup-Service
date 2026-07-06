@@ -6,6 +6,34 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.0.0] — 2026-07-06
+
+A complete visual redesign of every GSBS interface — the v5 look. Same features, new design
+language, plus two small bug fixes the redesign surfaced.
+
+### Changed
+
+- **New design language everywhere.** Dark charcoal app shell floating on a mint→teal gradient,
+  one disciplined teal accent, and green/amber/red reserved for status meaning — across the
+  server WebUI, the admin area, the setup wizard, and the client's local pages. The light theme
+  derives from the same palette and keeps the signature gradient backdrop.
+- **Sidebar navigation.** User pages get a left sidebar with icon pills — and **Devices** joins
+  the primary navigation. The top bar becomes a rounded search field (opens the command palette),
+  theme toggle, and account controls; on phones the sidebar is a slide-in drawer.
+- **Dashboard redesign.** A "Recent games" card grid (cover art, sync-status glyph, health badge,
+  "View Versions" button) with your devices in a side rail.
+- **Accessibility.** All filled teal elements use dark text (WCAG AA contrast), and the UI now
+  honors your system's reduced-motion preference.
+
+### Fixed
+
+- The client's logs page "Export CSV" button now works (the link previously went nowhere).
+- The client dashboard's connection/sync/watcher status dots now actually render in their cards
+  (a CSS collision had hidden them since 4.1.0).
+- `/api/openapi.json` reports the running server's real version.
+
+---
+
 ## [4.3.0] — 2026-07-05
 
 Login fix for admin-created accounts, a WebUI table overhaul, security dependency bumps, and saner sync-schedule defaults.
