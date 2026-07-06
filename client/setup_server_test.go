@@ -16,7 +16,7 @@ func TestSetupServerRoutes(t *testing.T) {
 	}
 	routes := []string{
 		"/", "/dashboard", "/games", "/insights", "/quick-actions",
-		"/settings", "/logs", "/help", "/about", "/status",
+		"/settings", "/logs", "/logs/export.csv", "/help", "/about", "/status",
 	}
 	for _, path := range routes {
 		t.Run(path, func(t *testing.T) {

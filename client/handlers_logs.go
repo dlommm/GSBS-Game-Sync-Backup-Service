@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	clientwebui "github.com/gsbs/gsbs/client/webui"
 	"github.com/gsbs/gsbs/pkg/logview"
@@ -59,6 +61,35 @@ func handleLogsPartial(w http.ResponseWriter, r *http.Request) {
 		LogSourceInfo:    sourceInfo,
 		Query:            q,
 	})
+}
+
+// handleLogsCSV exports the client log as CSV, mirroring the server admin
+// logs export (same column set). Honors the same filter query params as the
+// logs page; always exports from the newest entry.
+func handleLogsCSV(w http.ResponseWriter, r *http.Request) {
+	q := logview.ParseQuery(r)
+	if q.Limit < logview.MaxLimit {
+		q.Limit = logview.MaxLimit
+	}
+	q.Offset = 0
+	sourcePath, sourcePresent := resolveClientLogSource()
+	entries := []logview.Entry{}
+	if sourcePresent {
+		if loaded, err := loadClientLogEntries(sourcePath, q); err == nil {
+			entries = loaded
+		}
+	}
+
+	filename := "client-logs-" + time.Now().UTC().Format("2006-01-02T150405") + ".csv"
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"time", "app", "level", "event", "summary", "context", "raw"})
+	for _, e := range entries {
+		_ = cw.Write([]string{e.Timestamp, e.Component, e.Level, e.Event, e.Summary, e.Context, e.Raw})
+	}
+	cw.Flush()
 }
 
 func resolveClientLogSource() (path string, present bool) {
