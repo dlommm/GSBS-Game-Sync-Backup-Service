@@ -48,20 +48,26 @@
 </section>
 {{end}}
 
-{{if .ShowGettingStarted}}
 <section class="panel panel-compact">
-  <div class="panel-header"><h2>Getting Started</h2></div>
+  <div class="panel-header-actions">
+    <h2>Setup health</h2>
+    {{if .SetupHealthAllDone}}<span class="badge-success">All green</span>{{end}}
+  </div>
   <div class="panel-body">
-    <p class="cell-muted u-mb-sm">Fresh setup checklist for your first sync.</p>
-    <ol class="setup-checklist">
-      <li>Review server options in <a href="/admin/settings">Settings</a> (cron and first-start sync behavior).</li>
-      <li>Open <a href="/admin/pcgw">PCGW</a> and run <strong>Phase 1+2: Refresh IDs and Parse/Store Backlog</strong> to populate catalog and manifest entries.</li>
-      <li>Create client tokens and users in <a href="/admin/users">Users &amp; Clients</a>.</li>
-      <li>Install and log in from a client, then verify saves appear on <a href="/dashboard">Dashboard</a>.</li>
-    </ol>
+    {{if .ShowGettingStarted}}
+    <p class="cell-muted u-mb-sm">Fresh server — work through this checklist for a trustworthy setup. Populate the game catalog first: open <a href="/admin/pcgw">PCGW</a> and run <strong>Phase 1+2: Refresh IDs and Parse/Store Backlog</strong> (or fetch the S3 bundle).</p>
+    {{end}}
+    <ul class="setup-health">
+      {{range .SetupHealth}}
+      <li class="setup-health-item{{if .Done}} done{{end}}">
+        <span class="setup-health-icon" aria-hidden="true">{{if .Done}}{{iconSVG "check" 14}}{{else}}{{iconSVG "alert" 14}}{{end}}</span>
+        <span class="setup-health-label">{{.Label}}</span>
+        {{if not .Done}}<span class="setup-health-hint">{{.Hint}}</span><a class="btn-ghost-sm setup-health-fix" href="{{.Href}}">Fix →</a>{{end}}
+      </li>
+      {{end}}
+    </ul>
   </div>
 </section>
-{{end}}
 
 <section class="panel panel-compact">
   <div class="panel-header"><h2>Server Configuration</h2></div>

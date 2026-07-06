@@ -253,6 +253,50 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 	return data
 }
 
+// setupHealthItem is one row of the admin Setup Health checklist (v5.1) —
+// the live replacement for the static getting-started list.
+type setupHealthItem struct {
+	Done  bool
+	Label string
+	Hint  string // guidance shown while not done
+	Href  string
+}
+
+// buildSetupHealth computes the post-wizard checklist: each row is a live
+// check against real state, not a static instruction.
+func (h *WebHandler) buildSetupHealth(ctx context.Context, r *http.Request, userID string, stats adminStats) ([]setupHealthItem, bool) {
+	tlsOK := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	backupConfigured, backupAt, backupOK, _, _ := h.restoreConfidence(ctx)
+	backupDone := backupConfigured && (backupAt == "" || backupOK)
+	notifyTested := false
+	if n, err := h.store.CountAuditLog(ctx, store.AuditLogFilter{Action: "notify_test"}); err == nil && n > 0 {
+		notifyTested = true
+	}
+	totpOn, _ := h.store.IsTOTPEnabled(ctx, userID)
+	items := []setupHealthItem{
+		{Done: tlsOK, Label: "Served over HTTPS", Href: "/admin/settings",
+			Hint: "Put GSBS behind TLS (e.g. a Caddy/nginx reverse proxy) so passwords and saves travel encrypted."},
+		{Done: backupDone, Label: "Scheduled backups healthy", Href: "/admin/settings",
+			Hint: "Enable nightly server backups in Settings → Backups, then check the first run succeeds."},
+		{Done: stats.ClientCount > 0, Label: "First device connected", Href: "/dashboard/clients",
+			Hint: "Install the GSBS client on your gaming PC and log in."},
+		{Done: stats.SaveCount > 0, Label: "First save synced", Href: "/dashboard",
+			Hint: "Once a device is connected, discovery finds installed games and syncs their saves."},
+		{Done: notifyTested, Label: "Notifications tested", Href: "/admin/settings",
+			Hint: "Configure a webhook/Discord/ntfy channel and send a test in Settings → Notifications."},
+		{Done: totpOn, Label: "Two-factor auth on your admin account", Href: "/dashboard/settings",
+			Hint: "Enable TOTP for the admin account in your user Settings."},
+	}
+	allDone := true
+	for _, it := range items {
+		if !it.Done {
+			allDone = false
+			break
+		}
+	}
+	return items, allDone
+}
+
 func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) {
 	userID, username, ok := h.requireAdmin(w, r)
 	if !ok {
@@ -268,6 +312,7 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 	}
 	stats := h.loadAdminStats(ctx)
 	showGettingStarted := stats.UserCount <= 1 && stats.ClientCount == 0 && stats.SaveCount == 0
+	setupHealth, setupHealthAllDone := h.buildSetupHealth(ctx, r, userID, stats)
 	integrityCount, _ := h.store.CountIntegrityFindings(ctx)
 	var integrityFindings []store.IntegrityFinding
 	if integrityCount > 0 {
@@ -291,6 +336,8 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 		SSEClients:            sseClients,
 		AllowRegister:         h.allowRegister,
 		ShowGettingStarted:    showGettingStarted,
+		SetupHealth:           setupHealth,
+		SetupHealthAllDone:    setupHealthAllDone,
 		MaxStorageBytes:       h.maxStorageBytes,
 		ReadOnly:              h.readOnly,
 		RecentJobs:            recentJobs,

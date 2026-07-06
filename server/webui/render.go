@@ -130,7 +130,9 @@ type adminOverviewData struct {
 	StatsSnapshots        []store.StatsSnapshotRow
 	SSEClients            int
 	AllowRegister         bool
-	ShowGettingStarted    bool
+	ShowGettingStarted    bool // fresh-server hint: expand the checklist hints
+	SetupHealth           []setupHealthItem
+	SetupHealthAllDone    bool
 	MaxStorageBytes       int64
 	ReadOnly              bool
 	RecentJobs            []store.JobRun

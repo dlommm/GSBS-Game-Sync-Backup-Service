@@ -1493,6 +1493,15 @@ tr.row-syncing .cell-primary::after,
   padding: 0 1.25rem 1.25rem;
 }
 .protection-grid-2 { grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); }
+/* Setup Health checklist (admin overview, v5.1) */
+.setup-health { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.setup-health-item { display: flex; align-items: center; gap: 0.55rem; font-size: 0.8125rem; flex-wrap: wrap; }
+.setup-health-icon { display: inline-flex; color: var(--warning); flex: none; }
+.setup-health-item.done .setup-health-icon { color: var(--success); }
+.setup-health-label { font-weight: 600; }
+.setup-health-item.done .setup-health-label { color: var(--text-secondary); font-weight: 500; }
+.setup-health-hint { color: var(--text-muted); font-size: 0.75rem; flex-basis: 100%; padding-left: 1.45rem; }
+.setup-health-fix { margin-left: auto; flex: none; }
 .protection-item {
   display: flex; align-items: center; gap: 0.7rem; padding: 0.75rem 0.9rem;
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-raised);
