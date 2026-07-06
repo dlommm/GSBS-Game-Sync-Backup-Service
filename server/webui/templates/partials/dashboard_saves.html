@@ -1,74 +1,37 @@
 {{define "partials/dashboard_saves.html"}}
 {{if .Games}}
-<p class="saves-tree-caption">
-  {{len .Games}} game{{if ne (len .Games) 1}}s{{end}} · {{.TotalFiles}} file{{if ne .TotalFiles 1}}s{{end}}
-  {{if .Query}}matching “{{.Query}}”{{end}}
-</p>
-<div class="saves-tree">
+<div class="recent-games-grid">
   {{range .Games}}
-  {{$game := .}}
-  <details class="tree-game"{{if $.Expanded}} open{{end}}>
-    <summary class="tree-row tree-game-row">
-      <span class="tree-twisty" aria-hidden="true"></span>
-      <span class="tree-title">{{.Title}}</span>
-      <span class="tree-meta">
-        <span class="tree-pill">{{.FileCount}} file{{if ne .FileCount 1}}s{{end}}</span>
-        <span class="tree-size">{{formatBytes .TotalBytes}}</span>
-        <span class="tree-when">{{formatTime .LastSynced}}</span>
-        {{if not $.ReadOnly}}
-        <form method="post" action="/dashboard/game/delete" class="inline-form" data-stop-propagation
-              data-confirm="Delete ALL {{.FileCount}} saved file(s) for {{.Title}} from the server? This cannot be undone.">
-          <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-          <input type="hidden" name="game_id" value="{{.GameID}}">
-          <button type="submit" class="btn-danger-sm">Delete all</button>
-        </form>
-        {{end}}
+  <article class="game-row-card">
+    <a class="game-row-main" href="/dashboard/games/{{urlquery .GameID}}">
+      <span class="game-row-cover" aria-hidden="true">
+        {{gameIconSVG .Title 44}}
+        <img class="cover-img" src="/covers/{{urlquery .GameID}}" alt="" loading="lazy">
       </span>
-    </summary>
-    <div class="tree-children">
-      {{range .Categories}}
-      <details class="tree-cat"{{if or $.Expanded (le $game.FileCount $.SmallThreshold)}} open{{end}}>
-        <summary class="tree-row tree-cat-row">
-          <span class="tree-twisty" aria-hidden="true"></span>
-          <span class="tree-cat-name cat-{{.Name}}">{{.Name}}</span>
-          <span class="tree-meta">
-            <span class="tree-pill">{{len .Files}}</span>
-            <span class="tree-size">{{formatBytes .TotalBytes}}</span>
-          </span>
-        </summary>
-        <ul class="file-list">
-          {{range .Files}}
-          <li class="file-row">
-            <span class="file-name" title="{{if .Folder}}{{.Folder}}/{{end}}{{.Name}}">
-              <span class="file-base">{{.Name}}</span>
-              {{if .Folder}}<span class="file-folder">{{.Folder}}/</span>{{end}}
-              {{if .Encrypted}}<span class="file-badge" title="Encrypted">🔒</span>{{end}}
-            </span>
-            <span class="file-size">{{formatBytes .SizeBytes}}</span>
-            <span class="file-when">{{formatTime .UpdatedAt}}</span>
-            <span class="file-actions">
-              <a href="/dashboard/save/versions?game_id={{urlquery .GameID}}&path_key={{urlquery .PathKey}}" class="btn-ghost-sm">Versions</a>
-              {{if not $.ReadOnly}}
-              <form method="post" action="/dashboard/save/delete" class="inline-form" data-confirm="Delete this save from the server?">
-                <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-                <input type="hidden" name="game_id" value="{{.GameID}}">
-                <input type="hidden" name="path_key" value="{{.PathKey}}">
-                <button type="submit" class="btn-danger-sm">Delete</button>
-              </form>
-              {{end}}
-            </span>
-          </li>
-          {{end}}
-        </ul>
-      </details>
-      {{end}}
+      <span class="game-row-info">
+        <span class="game-row-title">{{.Title}}</span>
+        <span class="game-row-when">Last synced {{formatTime .LastSynced}}</span>
+        <span class="game-row-status">
+          {{if eq .Status "healthy"}}<span class="status-glyph status-glyph-ok" aria-hidden="true">{{iconSVG "check" 12}}</span>Synced
+          {{else if eq .Status "stale"}}<span class="status-glyph status-glyph-warn" aria-hidden="true">{{iconSVG "alert" 12}}</span>Stale
+          {{else}}<span class="status-glyph" aria-hidden="true">{{iconSVG "clock" 12}}</span>Unknown{{end}}
+          · {{.FileCount}} file{{if ne .FileCount 1}}s{{end}} · {{formatBytes .TotalBytes}}
+        </span>
+      </span>
+      {{if eq .Status "healthy"}}<span class="game-row-badge" title="Synced" aria-hidden="true">{{iconSVG "check" 12}}</span>{{end}}
+    </a>
+    <div class="game-row-actions">
+      <a class="btn-primary-sm" href="/dashboard/games/{{urlquery .GameID}}">View Versions</a>
     </div>
-  </details>
+  </article>
   {{end}}
 </div>
+{{if gt .TotalGames (len .Games)}}
+<p class="recent-games-more"><a href="/dashboard/games">View all {{.TotalGames}} games →</a></p>
+{{end}}
 {{else}}
 <div class="panel-empty">
-  <p>{{if .Query}}No saves match your search.{{else}}No saves synced yet.{{end}}</p>
+  <p>No games synced yet. Connect a client and your recently synced games appear here.</p>
 </div>
 {{end}}
 {{end}}

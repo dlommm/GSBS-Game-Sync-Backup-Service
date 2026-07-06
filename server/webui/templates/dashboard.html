@@ -2,6 +2,8 @@
 {{define "dashboard_title"}}Dashboard — GSBS{{end}}
 {{define "dashboard_content"}}
 <div id="gsbs-tour"></div>
+<div class="dash-grid">
+<div class="dash-main">
 <section id="dashboard-stats"
          hx-get="/dashboard/partial/stats"
          hx-trigger="load, save-updated from:body"
@@ -9,28 +11,13 @@
   {{template "partials/loading_skeleton.html" .}}
 </section>
 
-<nav class="quick-tiles" aria-label="Quick access">
-  <a class="quick-tile" href="/dashboard/games">
-    <span class="quick-tile-icon" aria-hidden="true">{{iconSVG "game" 22}}</span>
-    <span class="quick-tile-text"><span class="quick-tile-title">My Games</span><span class="quick-tile-sub">Browse synced saves</span></span>
-  </a>
-  <a class="quick-tile" href="/dashboard/clients">
-    <span class="quick-tile-icon" aria-hidden="true">{{iconSVG "device" 22}}</span>
-    <span class="quick-tile-text"><span class="quick-tile-title">Devices</span><span class="quick-tile-sub">Manage connected devices</span></span>
-  </a>
-  <a class="quick-tile" href="/dashboard/settings">
-    <span class="quick-tile-icon" aria-hidden="true">{{iconSVG "settings" 22}}</span>
-    <span class="quick-tile-text"><span class="quick-tile-title">Settings</span><span class="quick-tile-sub">Security &amp; account</span></span>
-  </a>
-</nav>
-
-<section class="panel" aria-labelledby="clients-heading">
+<section class="panel" aria-labelledby="recent-games-heading">
   <div class="panel-header-actions">
-    <h2 id="clients-heading">Your Devices</h2>
-    <a class="btn-ghost-sm" href="/dashboard/clients">Manage →</a>
+    <h2 id="recent-games-heading">Recent games</h2>
+    <a class="btn-ghost-sm" href="/dashboard/games">My Games →</a>
   </div>
-  <div id="clients-table"
-       hx-get="/dashboard/partial/clients"
+  <div id="recent-games"
+       hx-get="/dashboard/partial/saves"
        hx-trigger="load, save-updated from:body"
        hx-swap="innerHTML">
     {{template "partials/loading_skeleton.html" .}}
@@ -55,6 +42,23 @@
   </div>
   <p class="panel-empty tab-empty" id="activity-tab-empty" hidden>No recent activity in this category.</p>
 </section>
+</div>
+
+<aside class="dash-rail" aria-label="Contextual panels">
+<section class="panel" aria-labelledby="clients-heading">
+  <div class="panel-header-actions">
+    <h2 id="clients-heading">Your Devices</h2>
+    <a class="btn-ghost-sm" href="/dashboard/clients">Manage →</a>
+  </div>
+  <div id="clients-table"
+       hx-get="/dashboard/partial/clients"
+       hx-trigger="load, save-updated from:body"
+       hx-swap="innerHTML">
+    {{template "partials/loading_skeleton.html" .}}
+  </div>
+</section>
+</aside>
+</div>
 {{end}}
 {{define "dashboard_scripts"}}
 <div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>

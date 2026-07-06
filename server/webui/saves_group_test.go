@@ -75,17 +75,21 @@ func TestCategorize(t *testing.T) {
 
 func TestDashboardSavesPartialRenders(t *testing.T) {
 	tmpl := parseTemplates()
-	data := map[string]interface{}{
-		"Games": groupSaves(sampleSaves()), "TotalFiles": 604,
-		"CSRFToken": "x", "Query": "", "ReadOnly": false,
-		"Expanded": false, "SmallThreshold": smallGameThreshold,
+	var cards []gameCard
+	for _, g := range groupSaves(sampleSaves()) {
+		cards = append(cards, gameCard{
+			GameID: g.GameID, Title: g.Title, FileCount: g.FileCount,
+			TotalBytes: g.TotalBytes, LastSynced: g.LastSynced,
+			Status: gameSyncStatus(g.LastSynced),
+		})
 	}
+	data := map[string]interface{}{"Games": cards, "TotalGames": len(cards) + 3}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "partials/dashboard_saves.html", data); err != nil {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
-	for _, want := range []string{"Tesseract", "The Witcher 3", "slot_000.sav", "cat-Saves", "cat-Config", "602 files", "tree-game"} {
+	for _, want := range []string{"Tesseract", "The Witcher 3", "game-row-card", "View Versions", "View all"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("rendered HTML missing %q", want)
 		}

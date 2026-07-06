@@ -662,12 +662,10 @@ func templateTestData(name string) interface{} {
 		}
 	case "partials/dashboard_saves.html":
 		return map[string]interface{}{
-			"Saves": []store.SaveSummary{
-				{GameID: "730", PathKey: "save/main", GameTitle: "CS2", SizeBytes: 512, UpdatedAt: now},
+			"Games": []gameCard{
+				{GameID: "730", Title: "CS2", FileCount: 3, TotalBytes: 512, LastSynced: now, Status: "healthy"},
 			},
-			"CSRFToken": "csrf-test",
-			"Query":     "",
-			"ReadOnly":  false,
+			"TotalGames": 9,
 		}
 	case "partials/dashboard_activity.html":
 		return map[string]interface{}{

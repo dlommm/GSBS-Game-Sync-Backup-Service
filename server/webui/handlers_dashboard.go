@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gsbs/gsbs/server/logx"
-	"github.com/gsbs/gsbs/server/store"
 )
 
 func (h *WebHandler) serveDashboardEvents(w http.ResponseWriter, r *http.Request) {
@@ -164,33 +162,26 @@ func (h *WebHandler) serveDashboardClientsPartial(w http.ResponseWriter, r *http
 	})
 }
 
+// dashboardRecentGames caps the dashboard "Recent games" card strip.
+const dashboardRecentGames = 6
+
+// serveDashboardSavesPartial renders the dashboard "Recent games" cards: the
+// most recently synced games, reusing the My Games card builder (groupSaves
+// order is most-recent-first, which is the default sort).
 func (h *WebHandler) serveDashboardSavesPartial(w http.ResponseWriter, r *http.Request) {
 	userID, _, ok := h.requireSession(w, r)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	var saves []store.SaveSummary
-	var err error
-	if query != "" {
-		saves, err = h.store.ListSaveSummariesFiltered(r.Context(), userID, query)
-	} else {
-		saves, err = h.store.ListSaveSummaries(r.Context(), userID)
+	cards, _, _, _ := h.buildGameCards(r.Context(), userID, "", "all", "recent")
+	total := len(cards)
+	if len(cards) > dashboardRecentGames {
+		cards = cards[:dashboardRecentGames]
 	}
-	if err != nil {
-		http.Error(w, "Failed to load saves", http.StatusInternalServerError)
-		return
-	}
-	csrfToken := SetCSRFToken(w, r, h.secret)
 	h.renderPartial(w, "partials/dashboard_saves.html", map[string]interface{}{
-		"Games":          groupSaves(saves),
-		"TotalFiles":     len(saves),
-		"CSRFToken":      csrfToken,
-		"Query":          query,
-		"ReadOnly":       h.readOnly,
-		"Expanded":       query != "", // expand groups so search hits are visible
-		"SmallThreshold": smallGameThreshold,
+		"Games":      cards,
+		"TotalGames": total,
 	})
 }
 
