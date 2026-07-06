@@ -40,6 +40,54 @@
   </div>
 </section>
 
+<section class="panel protection-panel" aria-labelledby="restore-confidence-heading">
+  <div class="panel-header"><h2 id="restore-confidence-heading">Restore confidence</h2></div>
+  <div class="protection-grid protection-grid-2">
+    {{if not .Protection.ServerBackupConfigured}}
+    <div class="protection-item tone-warn">
+      <span class="protection-icon">{{iconSVG "shield" 18}}</span>
+      <span class="protection-text">
+        <span class="protection-title">Server backup</span>
+        <span class="protection-sub">Not configured — admins can enable scheduled backups in Admin → Settings.</span>
+      </span>
+    </div>
+    {{else if not .Protection.ServerBackupAt}}
+    <div class="protection-item tone-neutral">
+      <span class="protection-icon">{{iconSVG "shield" 18}}</span>
+      <span class="protection-text">
+        <span class="protection-title">Server backup</span>
+        <span class="protection-sub">Enabled — first scheduled run hasn't happened yet.</span>
+      </span>
+    </div>
+    {{else}}
+    <div class="protection-item {{if .Protection.ServerBackupOK}}tone-ok{{else}}tone-danger{{end}}">
+      <span class="protection-icon">{{iconSVG "shield" 18}}</span>
+      <span class="protection-text">
+        <span class="protection-title">Server backup</span>
+        <span class="protection-sub">{{if .Protection.ServerBackupOK}}Last backup succeeded{{else}}Last backup FAILED{{end}} · <span title="{{.Protection.ServerBackupAt}}">{{formatTime .Protection.ServerBackupAt}}</span></span>
+      </span>
+    </div>
+    {{end}}
+    {{if not .Protection.IntegrityAt}}
+    <div class="protection-item tone-neutral">
+      <span class="protection-icon">{{iconSVG "check" 18}}</span>
+      <span class="protection-text">
+        <span class="protection-title">Data integrity</span>
+        <span class="protection-sub">Weekly checksum verification hasn't run yet.</span>
+      </span>
+    </div>
+    {{else}}
+    <div class="protection-item {{if .Protection.IntegrityOK}}tone-ok{{else}}tone-danger{{end}}">
+      <span class="protection-icon">{{iconSVG "check" 18}}</span>
+      <span class="protection-text">
+        <span class="protection-title">Data integrity</span>
+        <span class="protection-sub">{{if .Protection.IntegrityOK}}All saves verified{{else}}Verification found problems{{end}} · <span title="{{.Protection.IntegrityAt}}">{{formatTime .Protection.IntegrityAt}}</span></span>
+      </span>
+    </div>
+    {{end}}
+  </div>
+</section>
+
 <div class="analytics-cols">
   <section class="panel" aria-labelledby="volume-heading">
     <div class="panel-header-actions">

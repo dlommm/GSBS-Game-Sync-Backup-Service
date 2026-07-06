@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/gsbs/gsbs/server/job"
 	"github.com/gsbs/gsbs/server/logx"
 	"github.com/gsbs/gsbs/server/store"
 )
@@ -88,6 +89,13 @@ type protectionInfo struct {
 	DevicesOnline  int
 	DeviceCount    int
 	BackupsHealthy bool
+	// Restore confidence (v5.1): server-wide backup + integrity truth,
+	// shown to every user as reassurance (admins manage both).
+	ServerBackupConfigured bool
+	ServerBackupAt         string // finished_at of the last backup run; "" = never
+	ServerBackupOK         bool
+	IntegrityAt            string // finished_at of the last integrity check; "" = never
+	IntegrityOK            bool
 }
 
 type analyticsData struct {
@@ -281,6 +289,8 @@ func (h *WebHandler) buildUserInsights(ctx context.Context, userID string, days 
 		encPct = encSaves * 100 / totalSaves
 	}
 
+	backupConfigured, backupAt, backupOK, integrityAt, integrityOK := h.restoreConfidence(ctx)
+
 	return userInsights{
 		GameCount:   len(groups),
 		SaveCount:   len(saves),
@@ -306,10 +316,30 @@ func (h *WebHandler) buildUserInsights(ctx context.Context, userID string, days 
 		Protection: protectionInfo{
 			EncryptedSaves: encSaves, TotalSaves: totalSaves, EncryptedPct: encPct,
 			TOTPEnabled: totpOn, DevicesOnline: online, DeviceCount: len(devices),
-			BackupsHealthy: healthy,
+			BackupsHealthy:         healthy,
+			ServerBackupConfigured: backupConfigured,
+			ServerBackupAt:         backupAt, ServerBackupOK: backupOK,
+			IntegrityAt: integrityAt, IntegrityOK: integrityOK,
 		},
 		HasActivity: syncTotal > 0,
 	}
+}
+
+// restoreConfidence gathers the server-wide backup + integrity status shown
+// in the user-facing "Restore confidence" panel (v5.1).
+func (h *WebHandler) restoreConfidence(ctx context.Context) (configured bool, backupAt string, backupOK bool, integrityAt string, integrityOK bool) {
+	if settings, err := h.store.ListAdminSettings(ctx); err == nil {
+		configured = job.BackupEnabled(settings)
+	}
+	if runs, err := h.store.ListJobRuns(ctx, "backup", 1); err == nil && len(runs) > 0 && runs[0].FinishedAt != "" {
+		backupAt = runs[0].FinishedAt
+		backupOK = runs[0].Status == "success"
+	}
+	if runs, err := h.store.ListJobRuns(ctx, "integrity_check", 1); err == nil && len(runs) > 0 && runs[0].FinishedAt != "" {
+		integrityAt = runs[0].FinishedAt
+		integrityOK = runs[0].Status == "success"
+	}
+	return
 }
 
 func (h *WebHandler) serveDashboardAnalytics(w http.ResponseWriter, r *http.Request) {
