@@ -38,12 +38,26 @@ func ReadRecentLines(path string, maxBytes int64) ([]string, error) {
 
 // LoadEntries reads recent lines from path, parses them, and returns newest-first matches.
 func LoadEntries(path string, q Query, parseFn ParseFunc) ([]Entry, error) {
+	out, _, err := LoadEntriesPage(path, q, parseFn)
+	return out, err
+}
+
+// LoadEntriesPage is LoadEntries plus paging support: it scans the whole
+// tail window, returns the matches in [q.Offset, q.Offset+q.Limit) newest
+// first, and the total number of matches in the window (so callers can
+// render Newer/Older paging controls).
+func LoadEntriesPage(path string, q Query, parseFn ParseFunc) ([]Entry, int, error) {
 	lines, err := ReadRecentLines(path, MaxReadBytes)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	offset := q.Offset
+	if offset < 0 {
+		offset = 0
 	}
 	out := make([]Entry, 0, q.Limit)
-	for i := len(lines) - 1; i >= 0 && len(out) < q.Limit; i-- {
+	total := 0
+	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
 		if line == "" {
 			continue
@@ -61,9 +75,12 @@ func LoadEntries(path string, q Query, parseFn ParseFunc) ([]Entry, error) {
 		if q.Text != "" && !MatchQuery(entry, q.Text) {
 			continue
 		}
-		out = append(out, entry)
+		if total >= offset && len(out) < q.Limit {
+			out = append(out, entry)
+		}
+		total++
 	}
-	return out, nil
+	return out, total, nil
 }
 
 // LoadEntriesLegacy is a thin wrapper for callers that only need level/text/limit filters.

@@ -1,0 +1,26 @@
+{{define "partials/admin_audit_table.html"}}
+{{if .Rows}}
+<div class="table-wrap table-wrap-sticky">
+  <table class="data-table" data-table-id="admin-audit">
+    <caption class="sr-only">Audit log</caption>
+    <thead><tr><th scope="col" data-sortable>Time</th><th scope="col" data-sortable>Actor</th><th scope="col" data-sortable>Action</th><th scope="col" data-sortable>Target</th><th scope="col">Details</th></tr></thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td class="cell-muted" title="{{.At}}">{{formatTime .At}}</td>
+        <td>{{.ActorUsername}}</td>
+        <td><span class="audit-dot tone-{{auditTone .Action}}" aria-hidden="true"></span>{{auditLabel .Action}}</td>
+        <td class="cell-muted">{{.TargetID}}</td>
+        <td class="cell-muted" {{if .Details}}title="{{.Details}}"{{end}}>{{truncate .Details 80}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{template "partials/table_pager.html" .Pager}}
+{{else if or .Filter.Action .Filter.Text}}
+<div class="panel-empty"><p>No audit entries match your filters.</p></div>
+{{else}}
+{{template "partials/empty-state.html" (dict "Icon" "shield" "Title" "No audit entries yet" "Sub" "Security-relevant actions (logins, deletions, setting changes) are recorded here.")}}
+{{end}}
+{{end}}

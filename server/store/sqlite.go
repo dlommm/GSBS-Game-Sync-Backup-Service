@@ -2033,13 +2033,16 @@ func (s *sqliteStore) ListAuditLog(ctx context.Context, limit int, sinceID strin
 	return out, rows.Err()
 }
 
-func (s *sqliteStore) ListAuditLogByUser(ctx context.Context, userID string, limit int) ([]AuditRow, error) {
+func (s *sqliteStore) ListAuditLogByUser(ctx context.Context, userID string, limit, offset int) ([]AuditRow, error) {
 	if limit <= 0 {
 		limit = 20
 	}
+	if offset < 0 {
+		offset = 0
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, at, actor_user_id, actor_username, action, COALESCE(target_id, ''), COALESCE(details, '')
-		 FROM audit_log WHERE actor_user_id = ? ORDER BY at DESC LIMIT ?`, userID, limit)
+		 FROM audit_log WHERE actor_user_id = ? ORDER BY at DESC LIMIT ? OFFSET ?`, userID, limit, offset)
 	if err != nil {
 		return nil, err
 	}

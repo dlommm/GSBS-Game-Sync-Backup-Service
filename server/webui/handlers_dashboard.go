@@ -194,19 +194,30 @@ func (h *WebHandler) serveDashboardSavesPartial(w http.ResponseWriter, r *http.R
 	})
 }
 
+const dashboardActivityPageSize = 20
+
 func (h *WebHandler) serveDashboardActivityPartial(w http.ResponseWriter, r *http.Request) {
 	userID, _, ok := h.requireSession(w, r)
 	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	entries, err := h.store.ListAuditLogByUser(r.Context(), userID, 20)
+	offset := parseNonNegativeInt(r.URL.Query().Get("offset"), 0)
+	// Fetch one extra row to know whether a "Load more" tail is needed.
+	entries, err := h.store.ListAuditLogByUser(r.Context(), userID, dashboardActivityPageSize+1, offset)
 	if err != nil {
 		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard activity: list audit log failed")
+	}
+	hasMore := len(entries) > dashboardActivityPageSize
+	if hasMore {
+		entries = entries[:dashboardActivityPageSize]
 	}
 	h.renderPartial(w, "partials/dashboard_activity.html", map[string]interface{}{
 		"Entries":    entries,
 		"StoreError": err != nil,
+		"Append":     offset > 0,
+		"HasMore":    hasMore,
+		"NextOffset": offset + len(entries),
 	})
 }
 

@@ -1,12 +1,32 @@
 {{define "partials/dashboard_activity.html"}}
 {{if .StoreError}}
+{{if .Append}}
+<li class="timeline-more"><span class="u-warn">Could not load more activity.</span>
+  <button type="button" class="btn-ghost-sm" hx-get="/dashboard/partial/activity?offset={{.NextOffset}}" hx-target="closest li" hx-swap="outerHTML">Retry</button>
+</li>
+{{else}}
 <p class="panel-empty u-warn" role="alert">Activity could not be loaded.
   <a href="" hx-get="/dashboard/partial/activity" hx-target="closest #activity-feed" hx-swap="innerHTML">Retry</a>
 </p>
+{{end}}
+{{else if .Append}}
+{{range .Entries}}
+{{template "partials/timeline_item.html" .}}
+{{end}}
+{{if .HasMore}}
+<li class="timeline-more">
+  <button type="button" class="btn-ghost-sm" hx-get="/dashboard/partial/activity?offset={{.NextOffset}}" hx-target="closest li" hx-swap="outerHTML">Load more</button>
+</li>
+{{end}}
 {{else if .Entries}}
 <ul class="timeline">
   {{range .Entries}}
   {{template "partials/timeline_item.html" .}}
+  {{end}}
+  {{if .HasMore}}
+  <li class="timeline-more">
+    <button type="button" class="btn-ghost-sm" hx-get="/dashboard/partial/activity?offset={{.NextOffset}}" hx-target="closest li" hx-swap="outerHTML">Load more</button>
+  </li>
   {{end}}
 </ul>
 {{else}}

@@ -69,9 +69,10 @@ linters:
         path: server/webui/render\.go
         text: "G203"
       # G201/G202: bundle import/export SQL is assembled from internal constant
-      # column lists, never request data.
+      # column lists, never request data. activity_pages.go concatenates only
+      # constant WHERE fragments; user values always go through ? placeholders.
       - linters: [gosec]
-        path: server/store/pcgw_(bundle|catalog)\.go
+        path: server/store/(pcgw_(bundle|catalog)|activity_pages)\.go
         text: "G20[12]"
       # G204: the client's platform helpers launch a fixed OS utility
       # (xdg-open / $EDITOR / open) on the user's OWN config, log, and data

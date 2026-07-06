@@ -177,6 +177,24 @@
     });
     if (refreshBtn) refreshBtn.addEventListener('click', refreshLogs);
 
+    // Newer/Older paging: buttons live inside the swapped table region, so
+    // delegate. The hidden offset input keeps the position across refreshes.
+    var offsetInput = document.getElementById('logs-offset');
+    function currentLimit() {
+      var sel = form.querySelector('select[name="limit"]');
+      return sel ? (parseInt(sel.value, 10) || 200) : 200;
+    }
+    document.addEventListener('click', function (evt) {
+      var btn = evt.target.closest('[data-logs-page]');
+      if (!btn || !offsetInput) return;
+      var cur = parseInt(offsetInput.value || '0', 10) || 0;
+      var next = btn.getAttribute('data-logs-page') === 'older'
+        ? cur + currentLimit()
+        : Math.max(0, cur - currentLimit());
+      offsetInput.value = String(next);
+      refreshLogs();
+    });
+
     var timer = null;
     function syncAutoRefresh() {
       if (timer) {
@@ -191,10 +209,30 @@
     form.addEventListener('change', function (evt) {
       syncAutoRefresh();
       updateCsvLink();
-      if (evt.target.name !== 'auto' && evt.target.name !== 'refresh') refreshLogs();
+      if (evt.target.name !== 'auto' && evt.target.name !== 'refresh') {
+        if (offsetInput) offsetInput.value = '0'; // filters changed: back to newest
+        refreshLogs();
+      }
     });
     syncAutoRefresh();
     updateCsvLink();
+  }
+
+  /* ---- Filter forms that feed a CSV export link (data-filter-csv) ---- */
+
+  function initFilterCsvLinks() {
+    document.querySelectorAll('form[data-filter-csv]').forEach(function (form) {
+      var link = document.querySelector(form.getAttribute('data-filter-csv'));
+      var base = form.getAttribute('data-csv-base');
+      if (!link || !base) return;
+      function update() {
+        var params = new URLSearchParams(new FormData(form));
+        link.href = base + '?' + params.toString();
+      }
+      form.addEventListener('change', update);
+      form.addEventListener('input', update);
+      update();
+    });
   }
 
   onReady(function () {
@@ -202,6 +240,7 @@
     initQuotaDialog();
     initActionMenus();
     initLogsPage();
+    initFilterCsvLinks();
     initDirtyTracking();
   });
 })();

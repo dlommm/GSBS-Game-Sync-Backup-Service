@@ -1,0 +1,23 @@
+{{define "partials/table_pager.html"}}
+{{if gt .Total 0}}
+<div class="table-pager">
+  <span class="table-pager-summary">{{.Start}}–{{.End}} of {{.Total}} {{.Label}}</span>
+  <div class="table-pager-controls">
+    <label class="table-pager-per">
+      <span class="sr-only">Rows per page</span>
+      <select class="filter-select filter-select-sm" data-pager-per data-pager-base="{{.BaseURL}}" data-pager-target="{{.Target}}" aria-label="Rows per page">
+        {{$per := .PerPage}}
+        {{range .Options}}<option value="{{.}}" {{if eq . $per}}selected{{end}}>{{.}} / page</option>{{end}}
+      </select>
+    </label>
+    {{if gt .TotalPages 1}}
+    <div class="table-pager-links">
+      {{if .PrevURL}}<a href="#" class="btn-ghost-sm" hx-get="{{.PrevURL}}" hx-target="{{.Target}}" hx-swap="innerHTML">← Prev</a>{{else}}<span class="btn-ghost-sm is-disabled" aria-disabled="true">← Prev</span>{{end}}
+      <span class="cell-muted table-pager-page">Page {{.Page}} / {{.TotalPages}}</span>
+      {{if .NextURL}}<a href="#" class="btn-ghost-sm" hx-get="{{.NextURL}}" hx-target="{{.Target}}" hx-swap="innerHTML">Next →</a>{{else}}<span class="btn-ghost-sm is-disabled" aria-disabled="true">Next →</span>{{end}}
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}
+{{end}}

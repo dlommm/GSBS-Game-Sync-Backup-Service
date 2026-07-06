@@ -3,7 +3,7 @@
 <div class="panel-empty" aria-live="polite"><p>{{.LogSourceInfo}}</p></div>
 {{else if .Entries}}
 <div class="table-wrap" aria-live="polite">
-  <table class="data-table log-table">
+  <table class="data-table log-table" data-table-id="admin-logs">
     <thead><tr><th scope="col">Time</th><th scope="col">App</th><th scope="col">Level</th><th scope="col">Event</th><th scope="col">Summary</th><th scope="col">Context</th><th scope="col">Details</th></tr></thead>
     <tbody>
       {{range .Entries}}
@@ -29,6 +29,17 @@
       {{end}}
     </tbody>
   </table>
+</div>
+<div class="table-pager">
+  <span class="table-pager-summary">{{add .Query.Offset 1}}–{{add .Query.Offset (len .Entries)}} of {{.Total}} matched, newest first</span>
+  <div class="table-pager-links">
+    <button type="button" class="btn-ghost-sm" data-logs-page="newer" {{if eq .Query.Offset 0}}disabled{{end}}>← Newer</button>
+    <button type="button" class="btn-ghost-sm" data-logs-page="older" {{if ge (add .Query.Offset (len .Entries)) .Total}}disabled{{end}}>Older →</button>
+  </div>
+</div>
+{{else if gt .Query.Offset 0}}
+<div class="panel-empty"><p>No more log lines this far back.</p>
+  <p class="hint"><button type="button" class="btn-ghost-sm" data-logs-page="newer">← Back to newest</button></p>
 </div>
 {{else}}
 <div class="panel-empty"><p>No matching log lines for the current filters.</p></div>

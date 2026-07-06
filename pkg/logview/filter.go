@@ -13,6 +13,7 @@ type Query struct {
 	Component      string
 	HideHTTPNoise  bool
 	Limit          int
+	Offset         int // matched entries to skip (newest-first) for paging
 	AutoRefresh    bool
 	RefreshSeconds int
 }
@@ -62,6 +63,11 @@ func ParseQuery(r *http.Request) Query {
 				n = MaxLimit
 			}
 			q.Limit = n
+		}
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("offset")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			q.Offset = n
 		}
 	}
 	q.AutoRefresh = r.URL.Query().Get("auto") == "1"

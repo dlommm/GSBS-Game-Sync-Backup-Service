@@ -203,6 +203,11 @@ type Store interface {
 	LogJobStart(ctx context.Context, jobName string) (runID string, err error)
 	LogJobFinish(ctx context.Context, runID, status, errorMsg string, entriesCount int) error
 	ListJobRuns(ctx context.Context, jobName string, limit int) ([]JobRun, error)
+	// ListJobRunsPage returns a page of job runs, optionally filtered by job name and status ("" = all).
+	ListJobRunsPage(ctx context.Context, jobName, status string, limit, offset int) ([]JobRun, error)
+	CountJobRuns(ctx context.Context, jobName, status string) (int, error)
+	// ListJobNames returns the distinct job names present in job_runs (for filter dropdowns).
+	ListJobNames(ctx context.Context) ([]string, error)
 	GetLatestJobRun(ctx context.Context, jobName string) (*JobRun, error)
 	GetLatestSuccessfulJobRun(ctx context.Context, jobName string) (*JobRun, error)
 	ReconcileStaleJobRuns(ctx context.Context) error
@@ -211,16 +216,25 @@ type Store interface {
 	// Manifest fetch tracking (admin manifest fetch log)
 	LogManifestFetch(ctx context.Context, clientID, clientName, username string, entriesCount int) error
 	ListManifestFetches(ctx context.Context, limit int) ([]ManifestFetchRow, error)
+	ListManifestFetchesPage(ctx context.Context, limit, offset int) ([]ManifestFetchRow, error)
+	CountManifestFetches(ctx context.Context) (int, error)
 
 	// Audit log (admin actions and sensitive user actions)
 	AppendAudit(ctx context.Context, actorUserID, actorUsername, action, targetID, details string) error
 	ListAuditLog(ctx context.Context, limit int, sinceID string) ([]AuditRow, error)
+	// ListAuditLogPage returns a filtered page of audit entries, newest first.
+	ListAuditLogPage(ctx context.Context, f AuditLogFilter, limit, offset int) ([]AuditRow, error)
+	CountAuditLog(ctx context.Context, f AuditLogFilter) (int, error)
+	// ListAuditActions returns the distinct actions present in audit_log (for filter dropdowns).
+	ListAuditActions(ctx context.Context) ([]string, error)
 	// ListAuditLogByUser returns recent audit entries for a specific actor username.
-	ListAuditLogByUser(ctx context.Context, userID string, limit int) ([]AuditRow, error)
+	ListAuditLogByUser(ctx context.Context, userID string, limit, offset int) ([]AuditRow, error)
 
 	// Stats snapshots (time-series for admin)
 	AppendStatsSnapshot(ctx context.Context) error
 	ListStatsSnapshots(ctx context.Context, limit int) ([]StatsSnapshotRow, error)
+	ListStatsSnapshotsPage(ctx context.Context, limit, offset int) ([]StatsSnapshotRow, error)
+	CountStatsSnapshots(ctx context.Context) (int, error)
 
 	// PCGW games (full mirror)
 	UpsertPCGWGame(ctx context.Context, g *types.PCGWGame) error
@@ -477,6 +491,12 @@ type ManifestFetchRow struct {
 	Username     string
 	EntriesCount int
 	FetchedAt    string
+}
+
+// AuditLogFilter narrows admin audit-log queries.
+type AuditLogFilter struct {
+	Action string // exact action name; "" = all
+	Text   string // case-insensitive substring across actor, action, target and details; "" = all
 }
 
 // AuditRow is one audit log entry.

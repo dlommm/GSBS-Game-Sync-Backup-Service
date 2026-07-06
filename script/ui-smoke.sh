@@ -72,6 +72,7 @@ for p in /dashboard /dashboard/games "/dashboard/games?view=list" \
          /dashboard/clients /dashboard/analytics "/dashboard/analytics?days=7" "/dashboard/analytics?days=90" \
          /dashboard/settings /dashboard/settings/2fa/enable \
          /dashboard/partial/stats /dashboard/partial/clients /dashboard/partial/activity \
+         "/dashboard/partial/activity?offset=20" \
          "/dashboard/partial/games?view=grid" /dashboard/partial/clients-list "/dashboard/partial/search?q=a"; do
   check "$p"
 done
@@ -80,6 +81,11 @@ echo "[ui-smoke] sweeping admin routes…"
 for p in /admin /admin/users /admin/manifest /admin/activity /admin/logs /admin/settings \
          "/admin/analytics?tab=overview" "/admin/analytics?tab=fleet" "/admin/analytics?tab=fleet&days=7" \
          "/admin/analytics?tab=pcgw" "/admin/analytics?tab=sync" "/admin/analytics?tab=overview&window=90" \
+         /admin/partial/audit "/admin/partial/audit?action=run_job&q=x&page=2&per=10" \
+         /admin/partial/fetches "/admin/partial/fetches?page=2" \
+         /admin/partial/snapshots "/admin/partial/snapshots?per=50" \
+         "/admin/partial/jobs?context=activity" "/admin/partial/jobs?context=activity&job=pcgw_sync&status=failed&page=2" \
+         "/admin/partial/logs?offset=200" \
          /admin/pcgw; do
   check "$p"
 done

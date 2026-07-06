@@ -1428,3 +1428,58 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 /* Help page */
 .help-steps { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.875rem; color: var(--text-secondary); }
 .help-steps a { color: var(--accent); }
+
+/* Shared table pager (partials/table_pager.html) */
+.table-pager {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 0.75rem 1.25rem 1rem; border-top: 1px solid var(--border);
+}
+.table-pager-summary { color: var(--text-secondary); font-size: 0.8125rem; }
+.table-pager-controls { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+.table-pager-links { display: flex; gap: 0.5rem; align-items: center; }
+.table-pager-page { font-size: 0.8125rem; white-space: nowrap; }
+.filter-select-sm { padding: 0.3rem 0.5rem; font-size: 0.75rem; }
+.btn-ghost-sm.is-disabled { opacity: 0.4; pointer-events: none; }
+
+/* Count badge in panel headers */
+.count-badge {
+  display: inline-block; margin-left: 0.4rem; padding: 0.1rem 0.55rem; vertical-align: middle;
+  font-size: 0.7rem; font-weight: 600; color: var(--text-secondary);
+  background: var(--bg-raised); border: 1px solid var(--border); border-radius: 9999px;
+}
+
+/* Audit table: action tone dot (mirrors timeline-dot tones) */
+.audit-dot {
+  display: inline-block; width: 0.5rem; height: 0.5rem; margin-right: 0.45rem;
+  border-radius: 9999px; background: var(--text-muted); vertical-align: middle;
+}
+.audit-dot.tone-success { background: var(--success); }
+.audit-dot.tone-danger { background: var(--error); }
+.audit-dot.tone-info { background: var(--info); }
+.audit-dot.tone-warn { background: var(--warning); }
+
+/* Dashboard activity: Load more tail */
+.timeline-more {
+  list-style: none; margin-left: 0.5rem; padding: 0.5rem 0 0 1.5rem;
+  border-left: 2px solid transparent; display: flex; gap: 0.5rem; align-items: center;
+}
+
+/* Table customization (app.js: table[data-table-id] gets a Table menu) */
+.data-table th.col-hidden, .data-table td.col-hidden { display: none; }
+.data-table.table-compact th, .data-table.table-compact td { padding: 0.3rem 1.25rem; }
+.data-table.table-zebra tbody tr:nth-child(even) td { background: var(--bg-raised); }
+.data-table.table-zebra tbody tr:hover td { background: var(--surface-hover); }
+.table-tools { display: flex; justify-content: flex-end; padding: 0.4rem 1.25rem 0; }
+.table-tools-menu .action-menu-panel {
+  min-width: 11rem; max-width: 14rem; max-height: 18rem; overflow-y: auto;
+}
+.table-tools-menu .checkbox-label {
+  display: flex; align-items: center; gap: 0.4rem; padding: 0.25rem 0.5rem;
+  font-size: 0.75rem; margin: 0; cursor: pointer; border-radius: var(--radius-xs);
+}
+.table-tools-menu .checkbox-label:hover { background: var(--surface-hover); }
+.table-tools-sep { border-top: 1px solid var(--border); margin: 0.25rem 0; }
+.table-tools-title {
+  padding: 0.25rem 0.5rem 0.1rem; font-size: 0.65rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted);
+}

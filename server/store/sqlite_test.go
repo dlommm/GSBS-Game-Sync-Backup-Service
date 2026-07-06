@@ -265,12 +265,17 @@ func TestSQLite_ListAuditLogByUser(t *testing.T) {
 	u2, _ := st.CreateUser(ctx, "bob", "h")
 	_ = st.AppendAudit(ctx, u1, "alice", "login", "", "")
 	_ = st.AppendAudit(ctx, u2, "bob", "login", "", "")
-	rows, err := st.ListAuditLogByUser(ctx, u1, 10)
+	rows, err := st.ListAuditLogByUser(ctx, u1, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(rows) != 1 || rows[0].ActorUsername != "alice" {
 		t.Errorf("ListAuditLogByUser: %+v", rows)
+	}
+	// Offset past the only row returns nothing.
+	rows, err = st.ListAuditLogByUser(ctx, u1, 10, 1)
+	if err != nil || len(rows) != 0 {
+		t.Errorf("ListAuditLogByUser offset=1: rows=%+v err=%v", rows, err)
 	}
 }
 

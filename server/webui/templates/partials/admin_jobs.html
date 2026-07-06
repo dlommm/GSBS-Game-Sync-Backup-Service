@@ -87,24 +87,53 @@
   {{template "partials/admin_pcgw_actions.html" .}}
 </div>
 {{end}}
+{{if .JobsTable.ShowFilters}}
+<span id="jobs-state" hidden>
+  <input type="hidden" name="page" value="{{.JobsTable.Pager.Page}}">
+  <input type="hidden" name="per" value="{{.JobsTable.Pager.PerPage}}">
+</span>
+<form class="filter-toolbar jobs-filter-toolbar"
+      hx-get="/admin/partial/jobs" hx-target="#admin-jobs-panel" hx-swap="innerHTML"
+      hx-trigger="change from:find select">
+  <input type="hidden" name="context" value="activity">
+  <select name="job" class="filter-select" aria-label="Job type">
+    <option value="">All jobs</option>
+    {{$job := .JobsTable.Job}}
+    {{range .JobsTable.JobNames}}<option value="{{.}}" {{if eq . $job}}selected{{end}}>{{.}}</option>{{end}}
+  </select>
+  <select name="status" class="filter-select" aria-label="Status">
+    {{$st := .JobsTable.Status}}
+    <option value="">All statuses</option>
+    <option value="running" {{if eq $st "running"}}selected{{end}}>running</option>
+    <option value="success" {{if eq $st "success"}}selected{{end}}>success</option>
+    <option value="failed" {{if eq $st "failed"}}selected{{end}}>failed</option>
+    <option value="canceled" {{if eq $st "canceled"}}selected{{end}}>canceled</option>
+    <option value="interrupted" {{if eq $st "interrupted"}}selected{{end}}>interrupted</option>
+  </select>
+</form>
+{{end}}
 {{if .RecentJobs}}
 <div class="table-wrap">
-  <table class="data-table">
-    <thead><tr><th scope="col">Job</th><th scope="col">Started</th><th scope="col">Duration</th><th scope="col">Status</th><th scope="col">Entries</th><th scope="col">Error</th></tr></thead>
+  <table class="data-table" data-table-id="admin-jobs">
+    <caption class="sr-only">Job runs</caption>
+    <thead><tr><th scope="col" data-sortable>Job</th><th scope="col" data-sortable>Started</th><th scope="col" data-sortable>Duration</th><th scope="col" data-sortable>Status</th><th scope="col" data-sortable data-sort-numeric>Entries</th><th scope="col">Error</th></tr></thead>
     <tbody>
       {{range .RecentJobs}}
       <tr>
         <td class="cell-primary">{{.JobName}}</td>
-        <td class="cell-muted">{{formatTime .StartedAt}}</td>
+        <td class="cell-muted" title="{{.StartedAt}}">{{formatTime .StartedAt}}</td>
         <td class="cell-muted">{{formatDuration .StartedAt .FinishedAt}}</td>
         <td>{{template "partials/job_status_badge.html" .Status}}</td>
         <td class="cell-size">{{.EntriesCount}}</td>
-        <td class="cell-muted">{{if .ErrorMessage}}{{truncate .ErrorMessage 80}}{{else}}—{{end}}</td>
+        <td class="cell-muted" {{if .ErrorMessage}}title="{{.ErrorMessage}}"{{end}}>{{if .ErrorMessage}}{{truncate .ErrorMessage 80}}{{else}}—{{end}}</td>
       </tr>
       {{end}}
     </tbody>
   </table>
 </div>
+{{if .JobsTable.ShowFilters}}{{template "partials/table_pager.html" .JobsTable.Pager}}{{end}}
+{{else if or .JobsTable.Job .JobsTable.Status}}
+<div class="panel-empty"><p>No job runs match your filters.</p></div>
 {{else}}
 <div class="panel-empty"><p>No job runs recorded yet.</p></div>
 {{end}}

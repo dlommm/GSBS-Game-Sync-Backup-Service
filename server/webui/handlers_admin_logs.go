@@ -22,18 +22,20 @@ func (h *WebHandler) serveAdminLogs(w http.ResponseWriter, r *http.Request) {
 	q := logview.ParseQuery(r)
 	sourcePath, sourceInfo, sourcePresent := resolveAdminLogSource()
 	entries := []logview.Entry{}
+	total := 0
 	if sourcePresent {
-		loaded, err := loadAdminLogEntries(sourcePath, q)
+		loaded, n, err := loadAdminLogEntriesPage(sourcePath, q)
 		if err != nil {
 			sourceInfo = fmt.Sprintf("Failed to read log source: %v", err)
 		} else {
-			entries = loaded
+			entries, total = loaded, n
 		}
 	}
 
 	h.render(w, "admin_logs.html", adminLogsData{
 		PageData:      h.adminPageData(w, r, userID, username, "logs", "admin_logs"),
 		Entries:       entries,
+		Total:         total,
 		LogSourcePath: sourcePath, LogSourceInfo: sourceInfo, LogSourcePresent: sourcePresent,
 		Query: q,
 	})
@@ -46,16 +48,18 @@ func (h *WebHandler) serveAdminLogsPartial(w http.ResponseWriter, r *http.Reques
 	q := logview.ParseQuery(r)
 	sourcePath, sourceInfo, sourcePresent := resolveAdminLogSource()
 	entries := []logview.Entry{}
+	total := 0
 	if sourcePresent {
-		loaded, err := loadAdminLogEntries(sourcePath, q)
+		loaded, n, err := loadAdminLogEntriesPage(sourcePath, q)
 		if err != nil {
 			sourceInfo = fmt.Sprintf("Failed to read log source: %v", err)
 		} else {
-			entries = loaded
+			entries, total = loaded, n
 		}
 	}
 	h.renderPartial(w, "partials/admin_logs_table.html", map[string]interface{}{
 		"Entries":          entries,
+		"Total":            total,
 		"LogSourcePath":    sourcePath,
 		"LogSourceInfo":    sourceInfo,
 		"LogSourcePresent": sourcePresent,
@@ -122,15 +126,20 @@ func loadAdminLogEntries(path string, q logview.Query) ([]logview.Entry, error) 
 	return logview.LoadEntries(path, q, logview.ParseZerologLine)
 }
 
+func loadAdminLogEntriesPage(path string, q logview.Query) ([]logview.Entry, int, error) {
+	return logview.LoadEntriesPage(path, q, logview.ParseZerologLine)
+}
+
 func (h *WebHandler) serveAdminLogsCSV(w http.ResponseWriter, r *http.Request) {
 	if _, _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
 	q := logview.ParseQuery(r)
-	// Allow larger exports
+	// Allow larger exports; always export from the newest entry.
 	if q.Limit < logview.MaxLimit {
 		q.Limit = logview.MaxLimit
 	}
+	q.Offset = 0
 	sourcePath, _, sourcePresent := resolveAdminLogSource()
 	entries := []logview.Entry{}
 	if sourcePresent {

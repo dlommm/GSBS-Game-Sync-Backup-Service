@@ -47,6 +47,9 @@ var handlerTemplates = []string{
 	"partials/admin_manifest_table.html",
 	"partials/admin_jobs.html",
 	"partials/admin_logs_table.html",
+	"partials/admin_audit_table.html",
+	"partials/admin_fetches_table.html",
+	"partials/admin_snapshots_table.html",
 	"partials/admin_pcgw_table.html",
 	"partials/admin_pcgw_job_status.html",
 	"partials/admin_analytics_pcgw_table.html",
@@ -65,6 +68,7 @@ var nestedTemplateRefs = []string{
 	"partials/metric-card.html",
 	"partials/empty-state.html",
 	"partials/insights_body.html",
+	"partials/table_pager.html",
 }
 
 // Page-specific layout blocks referenced via {{template (printf "%s_*" .PageName) .}}.
@@ -214,6 +218,10 @@ func TestNestedPartialsExecute(t *testing.T) {
 			}
 		})
 	}
+}
+
+func samplePager(path, target, label string) pagerView {
+	return newPager(path, nil, 1, 25, 42, target, label)
 }
 
 func sampleInsights(now string) userInsights {
@@ -468,14 +476,33 @@ func templateTestData(name string) interface{} {
 			PageData: PageData{
 				PageName: "admin_activity", Username: "admin", IsAdmin: true, CSRFToken: "csrf-test", AdminNav: "activity",
 			},
-			Fetches: []store.ManifestFetchRow{
-				{ClientName: "PC", Username: "alice", EntriesCount: 100, FetchedAt: now},
+			FetchesTable: fetchesTableView{
+				Rows: []store.ManifestFetchRow{
+					{ClientName: "PC", Username: "alice", EntriesCount: 100, FetchedAt: now},
+				},
+				Pager: samplePager("/admin/partial/fetches", "#fetches-table-region", "fetches"),
 			},
-			AuditLog: []store.AuditRow{
-				{At: now, ActorUsername: "admin", Action: "run_job", TargetID: "pcgw_sync"},
+			AuditTable: auditTableView{
+				Rows: []store.AuditRow{
+					{At: now, ActorUsername: "admin", Action: "run_job", TargetID: "pcgw_sync"},
+				},
+				Actions: []string{"run_job", "revoke_client"},
+				Filter:  store.AuditLogFilter{},
+				Pager:   samplePager("/admin/partial/audit", "#audit-table-region", "entries"),
 			},
-			StatsSnapshots: []store.StatsSnapshotRow{
-				{At: now, UserCount: 1, ClientCount: 1, SaveCount: 5, StorageBytes: 1024},
+			SnapshotsTable: snapshotsTableView{
+				Rows: []store.StatsSnapshotRow{
+					{At: now, UserCount: 1, ClientCount: 1, SaveCount: 5, StorageBytes: 1024},
+				},
+				Pager: samplePager("/admin/partial/snapshots", "#snapshots-table-region", "snapshots"),
+			},
+			JobsTable: jobsTableView{
+				Rows: []store.JobRun{
+					{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
+				},
+				Pager:       samplePager("/admin/partial/jobs", "#admin-jobs-panel", "runs"),
+				JobNames:    []string{"pcgw_sync", "backup"},
+				ShowFilters: true,
 			},
 			RecentJobs: []store.JobRun{
 				{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
@@ -643,6 +670,31 @@ func templateTestData(name string) interface{} {
 			"Entries": []store.AuditRow{
 				{At: now, Action: "restore_version", Details: "v2"},
 			},
+			"Append":     false,
+			"HasMore":    true,
+			"NextOffset": 20,
+		}
+	case "partials/admin_audit_table.html":
+		return auditTableView{
+			Rows: []store.AuditRow{
+				{At: now, ActorUsername: "admin", Action: "run_job", TargetID: "pcgw_sync"},
+			},
+			Actions: []string{"run_job"},
+			Pager:   samplePager("/admin/partial/audit", "#audit-table-region", "entries"),
+		}
+	case "partials/admin_fetches_table.html":
+		return fetchesTableView{
+			Rows: []store.ManifestFetchRow{
+				{ClientName: "PC", Username: "alice", EntriesCount: 100, FetchedAt: now},
+			},
+			Pager: samplePager("/admin/partial/fetches", "#fetches-table-region", "fetches"),
+		}
+	case "partials/admin_snapshots_table.html":
+		return snapshotsTableView{
+			Rows: []store.StatsSnapshotRow{
+				{At: now, UserCount: 1, ClientCount: 1, SaveCount: 5, StorageBytes: 1024},
+			},
+			Pager: samplePager("/admin/partial/snapshots", "#snapshots-table-region", "snapshots"),
 		}
 	case "partials/admin_manifest_table.html":
 		return map[string]interface{}{
@@ -679,6 +731,11 @@ func templateTestData(name string) interface{} {
 			"CSRFToken":            "csrf-test",
 			"ShowPCGWControls":     false,
 			"LastSuccessfulSyncAt": now,
+			"JobsTable": jobsTableView{
+				Pager:       samplePager("/admin/partial/jobs", "#admin-jobs-panel", "runs"),
+				JobNames:    []string{"pcgw_sync"},
+				ShowFilters: true,
+			},
 		}
 	case "partials/admin_logs_table.html":
 		return map[string]interface{}{
@@ -693,6 +750,8 @@ func templateTestData(name string) interface{} {
 					Raw: `{"level":"info","event":"http.request","message":"GET /api/manifest 200","method":"GET","path":"/api/manifest","status":200,"duration":12,"ip":"10.0.0.5","request_id":"abc123","user_id":"user-1"}`,
 				},
 			},
+			"Total":            1,
+			"Query":            logview.Query{Level: "all", Limit: 200, RefreshSeconds: 5, Component: "all", HideHTTPNoise: true},
 			"LogSourcePresent": true,
 		}
 	case "partials/admin_pcgw_table.html":

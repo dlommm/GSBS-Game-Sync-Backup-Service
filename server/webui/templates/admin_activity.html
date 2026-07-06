@@ -4,78 +4,56 @@
 <section class="panel" id="admin-jobs-panel"
          hx-get="/admin/partial/jobs?context=activity"
          hx-trigger="load, job-finished from:body, job-progress from:body"
+         hx-include="#jobs-state"
          hx-swap="innerHTML">
   {{template "partials/admin_jobs.html" .}}
 </section>
 
 <section class="panel">
-  <div class="panel-header"><h2>Recent Manifest Fetches</h2></div>
-  {{if .Fetches}}
-  <div class="table-wrap">
-    <table class="data-table">
-      <thead><tr><th scope="col" data-sortable>Client</th><th scope="col" data-sortable>User</th><th scope="col" data-sortable data-sort-numeric>Entries</th><th scope="col" data-sortable>Fetched</th></tr></thead>
-      <tbody>
-        {{range .Fetches}}
-        <tr>
-          <td class="cell-primary">{{if .ClientName}}{{.ClientName}}{{else}}<span class="cell-muted">anonymous</span>{{end}}</td>
-          <td>{{if .Username}}{{.Username}}{{else}}—{{end}}</td>
-          <td class="cell-size">{{.EntriesCount}}</td>
-          <td class="cell-muted" title="{{.FetchedAt}}">{{formatTime .FetchedAt}}</td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+  <div class="panel-header-actions">
+    <h2>Recent Manifest Fetches{{if .FetchesTable.Pager.Total}} <span class="count-badge">{{.FetchesTable.Pager.Total}}</span>{{end}}</h2>
   </div>
-  {{else}}{{template "partials/empty-state.html" (dict "Icon" "download" "Title" "No manifest fetches yet" "Sub" "Rows appear here whenever a client downloads the save-location manifest.")}}{{end}}
+  <div id="fetches-table-region">
+    {{template "partials/admin_fetches_table.html" .FetchesTable}}
+  </div>
 </section>
 
 <section class="panel" id="audit-log-panel">
-  <div class="panel-header"><h2>Audit log</h2></div>
-  {{if .AuditLog}}
-  <div class="table-wrap table-wrap-sticky">
-    <table class="data-table">
-      <thead><tr><th scope="col" data-sortable>Time</th><th scope="col" data-sortable>Actor</th><th scope="col" data-sortable>Action</th><th scope="col" data-sortable>Target</th><th scope="col">Details</th></tr></thead>
-      <tbody>
-        {{range .AuditLog}}
-        <tr>
-          <td class="cell-muted" title="{{.At}}">{{formatTime .At}}</td>
-          <td>{{.ActorUsername}}</td>
-          <td>{{auditLabel .Action}}</td>
-          <td class="cell-muted">{{.TargetID}}</td>
-          <td class="cell-muted" {{if .Details}}title="{{.Details}}"{{end}}>{{truncate .Details 80}}</td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+  <div class="panel-header-actions">
+    <h2>Audit log{{if .AuditTable.Pager.Total}} <span class="count-badge">{{.AuditTable.Pager.Total}}</span>{{end}}</h2>
+    <div class="panel-actions">
+      <a id="audit-csv-btn" class="btn-ghost-sm" href="/admin/audit/export.csv" download>Export CSV</a>
+    </div>
   </div>
-  {{else}}{{template "partials/empty-state.html" (dict "Icon" "shield" "Title" "No audit entries yet" "Sub" "Security-relevant actions (logins, deletions, setting changes) are recorded here.")}}{{end}}
+  <form id="audit-filters" class="filter-toolbar" data-filter-csv="#audit-csv-btn" data-csv-base="/admin/audit/export.csv"
+        hx-get="/admin/partial/audit" hx-target="#audit-table-region" hx-swap="innerHTML"
+        hx-trigger="submit, change from:find select, keyup changed delay:400ms from:find input[type='search']">
+    <select name="action" class="filter-select" aria-label="Action">
+      <option value="">All actions</option>
+      {{$sel := .AuditTable.Filter.Action}}
+      {{range .AuditTable.Actions}}<option value="{{.}}" {{if eq . $sel}}selected{{end}}>{{auditLabel .}}</option>{{end}}
+    </select>
+    <input type="search" class="search-input filter-search" name="q" value="{{.AuditTable.Filter.Text}}" placeholder="Search actor, action, target, details…">
+    <button type="submit" class="btn-ghost-sm">Apply</button>
+  </form>
+  <div id="audit-table-region">
+    {{template "partials/admin_audit_table.html" .AuditTable}}
+  </div>
 </section>
 
 <section class="panel">
-  <div class="panel-header"><h2>Stats snapshots</h2></div>
-  {{if .StatsSnapshots}}
-  <div class="table-wrap">
-    <table class="data-table">
-      <thead><tr><th scope="col" data-sortable>Time</th><th scope="col" data-sortable data-sort-numeric>Users</th><th scope="col" data-sortable data-sort-numeric>Clients</th><th scope="col" data-sortable data-sort-numeric>Saves</th><th scope="col" data-sortable>Storage</th></tr></thead>
-      <tbody>
-        {{range .StatsSnapshots}}
-        <tr>
-          <td class="cell-muted" title="{{.At}}">{{formatTime .At}}</td>
-          <td>{{.UserCount}}</td>
-          <td>{{.ClientCount}}</td>
-          <td>{{.SaveCount}}</td>
-          <td class="cell-size">{{formatBytes .StorageBytes}}</td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
+  <div class="panel-header-actions">
+    <h2>Stats snapshots{{if .SnapshotsTable.Pager.Total}} <span class="count-badge">{{.SnapshotsTable.Pager.Total}}</span>{{end}}</h2>
   </div>
-  {{else}}<div class="panel-empty"><p>No snapshots yet (recorded daily at midnight).</p></div>{{end}}
+  <div id="snapshots-table-region">
+    {{template "partials/admin_snapshots_table.html" .SnapshotsTable}}
+  </div>
 </section>
 {{end}}
 {{define "admin_activity_scripts"}}
 <div hidden
      sse-swap="job-finished,job-progress"
      hx-trigger="job-finished,job-progress from:body"
+     hx-include="#jobs-state"
      hx-get="/admin/partial/jobs?context=activity" hx-target="#admin-jobs-panel" hx-swap="innerHTML"></div>
 {{end}}

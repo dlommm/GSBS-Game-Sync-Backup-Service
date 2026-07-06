@@ -1,0 +1,23 @@
+{{define "partials/admin_fetches_table.html"}}
+{{if .Rows}}
+<div class="table-wrap">
+  <table class="data-table" data-table-id="admin-fetches">
+    <caption class="sr-only">Recent manifest fetches</caption>
+    <thead><tr><th scope="col" data-sortable>Client</th><th scope="col" data-sortable>User</th><th scope="col" data-sortable data-sort-numeric>Entries</th><th scope="col" data-sortable>Fetched</th></tr></thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td class="cell-primary">{{if .ClientName}}{{.ClientName}}{{else}}<span class="cell-muted">anonymous</span>{{end}}</td>
+        <td>{{if .Username}}{{.Username}}{{else}}—{{end}}</td>
+        <td class="cell-size">{{.EntriesCount}}</td>
+        <td class="cell-muted" title="{{.FetchedAt}}">{{formatTime .FetchedAt}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{template "partials/table_pager.html" .Pager}}
+{{else}}
+{{template "partials/empty-state.html" (dict "Icon" "download" "Title" "No manifest fetches yet" "Sub" "Rows appear here whenever a client downloads the save-location manifest.")}}
+{{end}}
+{{end}}

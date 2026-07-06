@@ -1,0 +1,24 @@
+{{define "partials/admin_snapshots_table.html"}}
+{{if .Rows}}
+<div class="table-wrap">
+  <table class="data-table" data-table-id="admin-snapshots">
+    <caption class="sr-only">Stats snapshots</caption>
+    <thead><tr><th scope="col" data-sortable>Time</th><th scope="col" data-sortable data-sort-numeric>Users</th><th scope="col" data-sortable data-sort-numeric>Clients</th><th scope="col" data-sortable data-sort-numeric>Saves</th><th scope="col" data-sortable>Storage</th></tr></thead>
+    <tbody>
+      {{range .Rows}}
+      <tr>
+        <td class="cell-muted" title="{{.At}}">{{formatTime .At}}</td>
+        <td>{{.UserCount}}</td>
+        <td>{{.ClientCount}}</td>
+        <td>{{.SaveCount}}</td>
+        <td class="cell-size">{{formatBytes .StorageBytes}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{template "partials/table_pager.html" .Pager}}
+{{else}}
+<div class="panel-empty"><p>No snapshots yet (recorded daily at midnight).</p></div>
+{{end}}
+{{end}}

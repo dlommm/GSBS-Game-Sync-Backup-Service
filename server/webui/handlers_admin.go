@@ -519,17 +519,15 @@ func (h *WebHandler) serveAdminActivity(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	ctx := r.Context()
-	fetches, _ := h.store.ListManifestFetches(ctx, 50)
-	auditLog, _ := h.store.ListAuditLog(ctx, 50, "")
-	statsSnapshots, _ := h.store.ListStatsSnapshots(ctx, 30)
-	recentJobs, _ := h.store.ListJobRuns(ctx, "pcgw_sync", 10)
+	jobsTable := h.buildJobsTableView(ctx, r)
 	jobsData := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret), true)
 	h.render(w, "admin_activity.html", adminActivityData{
 		PageData:              h.adminPageData(w, r, userID, username, "activity", "admin_activity"),
-		Fetches:               fetches,
-		AuditLog:              auditLog,
-		StatsSnapshots:        statsSnapshots,
-		RecentJobs:            recentJobs,
+		AuditTable:            h.buildAuditTableView(ctx, r),
+		FetchesTable:          h.buildFetchesTableView(ctx, r),
+		SnapshotsTable:        h.buildSnapshotsTableView(ctx, r),
+		JobsTable:             jobsTable,
+		RecentJobs:            jobsTable.Rows,
 		JobRunning:            jobsData.JobRunning,
 		JobProgressPages:      jobsData.JobProgressPages,
 		JobProgressTotal:      jobsData.JobProgressTotal,
@@ -571,8 +569,16 @@ func (h *WebHandler) serveAdminJobsPartial(w http.ResponseWriter, r *http.Reques
 	}
 	showPCGWControls := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("context")), "activity")
 	data := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret), showPCGWControls)
+	recentJobs := data.RecentJobs
+	var jobsTable jobsTableView
+	if showPCGWControls {
+		// Activity context: paged + filterable runs table.
+		jobsTable = h.buildJobsTableView(r.Context(), r)
+		recentJobs = jobsTable.Rows
+	}
 	h.renderPartial(w, "partials/admin_jobs.html", map[string]interface{}{
-		"RecentJobs":            data.RecentJobs,
+		"RecentJobs":            recentJobs,
+		"JobsTable":             jobsTable,
 		"CatalogStats":          data.CatalogStats,
 		"LatestSyncRun":         data.LatestSyncRun,
 		"JobRunning":            data.JobRunning,

@@ -276,9 +276,140 @@
     });
   }
 
+  /* ---- Table customization: <table data-table-id> gets a "Table" menu ----
+     Per-column show/hide + compact rows + zebra stripes, persisted per table
+     in localStorage. Menus are (re)built after HTMX swaps via initDynamic. */
+
+  function tablePrefs(id) {
+    try { return JSON.parse(localStorage.getItem('gsbs.table.' + id) || '{}') || {}; } catch (e) { return {}; }
+  }
+  function saveTablePrefs(id, p) {
+    try { localStorage.setItem('gsbs.table.' + id, JSON.stringify(p)); } catch (e) { /* private mode */ }
+  }
+
+  function applyTablePrefs(table) {
+    var id = table.getAttribute('data-table-id');
+    if (!id) return;
+    var p = tablePrefs(id);
+    var hidden = p.cols || [];
+    var rows = [];
+    if (table.tHead && table.tHead.rows[0]) rows.push(table.tHead.rows[0]);
+    if (table.tBodies[0]) rows = rows.concat(Array.prototype.slice.call(table.tBodies[0].rows));
+    rows.forEach(function (row) {
+      Array.prototype.forEach.call(row.cells, function (cell, i) {
+        cell.classList.toggle('col-hidden', hidden.indexOf(i) !== -1);
+      });
+    });
+    table.classList.toggle('table-compact', !!p.compact);
+    table.classList.toggle('table-zebra', !!p.zebra);
+  }
+
+  function buildTableMenu(table) {
+    var id = table.getAttribute('data-table-id');
+    var wrap = table.closest('.table-wrap');
+    if (!id || !wrap || !table.tHead || !table.tHead.rows[0]) return;
+    var parent = wrap.parentNode;
+    // Remove a stale menu from a previous render of this region.
+    var old = parent.querySelector('.table-tools[data-for="' + id + '"]');
+    if (old) old.remove();
+
+    var p = tablePrefs(id);
+    var tools = document.createElement('div');
+    tools.className = 'table-tools';
+    tools.setAttribute('data-for', id);
+    var menu = document.createElement('details');
+    menu.className = 'action-menu table-tools-menu';
+    var summary = document.createElement('summary');
+    summary.className = 'btn-ghost-sm';
+    summary.textContent = 'Table ⚙';
+    menu.appendChild(summary);
+    var panel = document.createElement('div');
+    panel.className = 'action-menu-panel';
+
+    function addCheckbox(label, checked, onChange) {
+      var lab = document.createElement('label');
+      lab.className = 'checkbox-label';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = checked;
+      cb.addEventListener('change', onChange);
+      lab.appendChild(cb);
+      lab.appendChild(document.createTextNode(' ' + label));
+      panel.appendChild(lab);
+      return cb;
+    }
+
+    var title = document.createElement('div');
+    title.className = 'table-tools-title';
+    title.textContent = 'Columns';
+    panel.appendChild(title);
+    Array.prototype.forEach.call(table.tHead.rows[0].cells, function (th, i) {
+      var name = (th.textContent || '').trim() || ('Column ' + (i + 1));
+      addCheckbox(name, (p.cols || []).indexOf(i) === -1, function () {
+        var cur = tablePrefs(id);
+        var cols = cur.cols || [];
+        var at = cols.indexOf(i);
+        if (at === -1) cols.push(i); else cols.splice(at, 1);
+        cur.cols = cols;
+        saveTablePrefs(id, cur);
+        applyTablePrefs(table);
+      });
+    });
+    var sep = document.createElement('div');
+    sep.className = 'table-tools-sep';
+    panel.appendChild(sep);
+    var title2 = document.createElement('div');
+    title2.className = 'table-tools-title';
+    title2.textContent = 'Display';
+    panel.appendChild(title2);
+    addCheckbox('Compact rows', !!p.compact, function () {
+      var cur = tablePrefs(id);
+      cur.compact = !cur.compact;
+      saveTablePrefs(id, cur);
+      applyTablePrefs(table);
+    });
+    addCheckbox('Zebra stripes', !!p.zebra, function () {
+      var cur = tablePrefs(id);
+      cur.zebra = !cur.zebra;
+      saveTablePrefs(id, cur);
+      applyTablePrefs(table);
+    });
+
+    menu.appendChild(panel);
+    tools.appendChild(menu);
+    parent.insertBefore(tools, wrap);
+  }
+
+  function initTables(root) {
+    var scope = root || document;
+    var tables = scope.querySelectorAll ? scope.querySelectorAll('table[data-table-id]') : [];
+    Array.prototype.forEach.call(tables, function (table) {
+      buildTableMenu(table);
+      applyTablePrefs(table);
+    });
+  }
+
+  // Close table menus when clicking elsewhere.
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('details.table-tools-menu')) return;
+    document.querySelectorAll('details.table-tools-menu[open]').forEach(function (m) { m.open = false; });
+  });
+
+  /* ---- Shared table pager: per-page select (partials/table_pager.html) ---- */
+
+  document.addEventListener('change', function (e) {
+    var sel = e.target.closest('[data-pager-per]');
+    if (!sel || !window.htmx) return;
+    var base = sel.getAttribute('data-pager-base') || '';
+    var target = sel.getAttribute('data-pager-target');
+    if (!target) return;
+    window.htmx.ajax('GET', base + 'per=' + encodeURIComponent(sel.value) + '&page=1', { target: target, swap: 'innerHTML' });
+  });
+
   function initDynamic(root) {
     bindStopPropagation(root);
     applyDataWidths(root);
+    initTables(root);
   }
 
   /* ---- HTMX wiring (moved from layout.html) ---- */

@@ -248,6 +248,14 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveAdminManifestPartial(w, r)
 	case path == "/admin/partial/jobs" && r.Method == http.MethodGet:
 		h.serveAdminJobsPartial(w, r)
+	case path == "/admin/partial/audit" && r.Method == http.MethodGet:
+		h.serveAdminAuditPartial(w, r)
+	case path == "/admin/partial/fetches" && r.Method == http.MethodGet:
+		h.serveAdminFetchesPartial(w, r)
+	case path == "/admin/partial/snapshots" && r.Method == http.MethodGet:
+		h.serveAdminSnapshotsPartial(w, r)
+	case path == "/admin/audit/export.csv" && r.Method == http.MethodGet:
+		h.serveAdminAuditCSV(w, r)
 	case path == "/admin/partial/logs" && r.Method == http.MethodGet:
 		h.serveAdminLogsPartial(w, r)
 	case path == "/admin/logs/export.csv" && r.Method == http.MethodGet:

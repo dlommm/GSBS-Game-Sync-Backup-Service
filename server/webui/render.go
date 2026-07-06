@@ -134,6 +134,7 @@ type adminOverviewData struct {
 	MaxStorageBytes       int64
 	ReadOnly              bool
 	RecentJobs            []store.JobRun
+	JobsTable             jobsTableView // zero on overview: legacy fixed table, no pager/filters
 	JobRunning            bool
 	JobProgressPages      int
 	JobProgressTotal      int
@@ -195,9 +196,10 @@ type adminManifestData struct {
 
 type adminActivityData struct {
 	PageData
-	Fetches               []store.ManifestFetchRow
-	AuditLog              []store.AuditRow
-	StatsSnapshots        []store.StatsSnapshotRow
+	AuditTable            auditTableView
+	FetchesTable          fetchesTableView
+	SnapshotsTable        snapshotsTableView
+	JobsTable             jobsTableView
 	RecentJobs            []store.JobRun
 	JobRunning            bool
 	JobProgressPages      int
@@ -236,6 +238,7 @@ type adminActivityData struct {
 type adminLogsData struct {
 	PageData
 	Entries          []logview.Entry
+	Total            int // matched entries in the tail window (for paging)
 	LogSourcePath    string
 	LogSourceInfo    string
 	LogSourcePresent bool
