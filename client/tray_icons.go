@@ -31,6 +31,21 @@ var (
 	iconPausedICO []byte
 )
 
+// Tray tint palette — mirrors the semantic design tokens in
+// server/webui/static/src/input.css (see docs/design/ui-overhaul/02-DESIGN-SYSTEM.md §1.8).
+// Update these together with the web palette; they are the only native-side copies.
+var (
+	tintSyncing    = [3]byte{0x2e, 0xc2, 0x7e} // --success
+	tintRecovering = [3]byte{0xea, 0xb5, 0x4e} // --warning
+	tintPaused     = [3]byte{0x9a, 0x9a, 0x9a} // neutral grey
+	tintError      = [3]byte{0xe5, 0x60, 0x5e} // --error
+	tintSetup      = [3]byte{0xea, 0xb5, 0x4e} // --warning (setup = attention)
+	tintFallback   = [3]byte{0xf1, 0x66, 0x63} // brand logo fallback
+)
+
+func solidICO(t [3]byte) []byte { return ico.EncodeSolid(16, t[0], t[1], t[2]) }
+func solidPNG(t [3]byte) []byte { return encodePNG(16, t[0], t[1], t[2]) }
+
 // IconIdle returns platform-appropriate idle tray icon bytes (ICO on Windows, PNG elsewhere).
 func IconIdle() []byte {
 	if runtime.GOOS == "windows" {
@@ -42,7 +57,7 @@ func IconIdle() []byte {
 	if len(iconPNG) > 0 {
 		return iconPNG
 	}
-	return encodePNG(16, 0xf1, 0x66, 0x63)
+	return solidPNG(tintFallback)
 }
 
 // IconSyncing returns platform-appropriate syncing icon (green GSBS logo).
@@ -52,12 +67,12 @@ func IconSyncing() []byte {
 		if len(iconSyncingICO) > 0 {
 			return iconSyncingICO
 		}
-		return ico.EncodeSolid(16, 0x2e, 0xc2, 0x7e)
+		return solidICO(tintSyncing)
 	}
 	if len(iconSyncingPNG) > 0 {
 		return iconSyncingPNG
 	}
-	return encodePNG(16, 0x2e, 0xc2, 0x7e)
+	return solidPNG(tintSyncing)
 }
 
 // IconRecovering returns platform-appropriate watcher recovery icon (yellow GSBS logo).
@@ -67,12 +82,12 @@ func IconRecovering() []byte {
 		if len(iconRecoveringICO) > 0 {
 			return iconRecoveringICO
 		}
-		return ico.EncodeSolid(16, 0xff, 0xc1, 0x07)
+		return solidICO(tintRecovering)
 	}
 	if len(iconRecoveringPNG) > 0 {
 		return iconRecoveringPNG
 	}
-	return encodePNG(16, 0xff, 0xc1, 0x07)
+	return solidPNG(tintRecovering)
 }
 
 // IconPaused returns platform-appropriate paused icon (muted grey GSBS logo).
@@ -82,37 +97,37 @@ func IconPaused() []byte {
 		if len(iconPausedICO) > 0 {
 			return iconPausedICO
 		}
-		return ico.EncodeSolid(16, 0x9a, 0x9a, 0x9a)
+		return solidICO(tintPaused)
 	}
 	if len(iconPausedPNG) > 0 {
 		return iconPausedPNG
 	}
-	return encodePNG(16, 0x9a, 0x9a, 0x9a)
+	return solidPNG(tintPaused)
 }
 
 // IconError returns platform-appropriate error icon (red).
 func IconError() []byte {
 	if runtime.GOOS == "windows" {
-		return ico.EncodeSolid(16, 0xe0, 0x40, 0x40)
+		return solidICO(tintError)
 	}
-	return encodePNG(16, 0xe0, 0x40, 0x40)
+	return solidPNG(tintError)
 }
 
 // IconSetup returns platform-appropriate setup/wizard icon (amber).
 func IconSetup() []byte {
 	if runtime.GOOS == "windows" {
-		return ico.EncodeSolid(16, 0xff, 0xbb, 0x33)
+		return solidICO(tintSetup)
 	}
-	return encodePNG(16, 0xff, 0xbb, 0x33)
+	return solidPNG(tintSetup)
 }
 
 func trayIconFromPNG() []byte {
 	if len(iconPNG) == 0 {
-		return ico.EncodeSolid(16, 0xf1, 0x66, 0x63)
+		return solidICO(tintFallback)
 	}
 	b, err := ico.EncodePNG(iconPNG)
 	if err != nil {
-		return ico.EncodeSolid(16, 0xf1, 0x66, 0x63)
+		return solidICO(tintFallback)
 	}
 	return b
 }
@@ -132,9 +147,9 @@ func encodePNG(size int, r, g, b byte) []byte {
 
 func initIconVariants() {
 	iconVariantsOnce.Do(func() {
-		iconSyncingPNG, iconSyncingICO = buildTintedVariants(0x2e, 0xc2, 0x7e)
-		iconRecoveringPNG, iconRecoveringICO = buildTintedVariants(0xff, 0xc1, 0x07)
-		iconPausedPNG, iconPausedICO = buildTintedVariants(0x9a, 0x9a, 0x9a)
+		iconSyncingPNG, iconSyncingICO = buildTintedVariants(tintSyncing[0], tintSyncing[1], tintSyncing[2])
+		iconRecoveringPNG, iconRecoveringICO = buildTintedVariants(tintRecovering[0], tintRecovering[1], tintRecovering[2])
+		iconPausedPNG, iconPausedICO = buildTintedVariants(tintPaused[0], tintPaused[1], tintPaused[2])
 	})
 }
 
