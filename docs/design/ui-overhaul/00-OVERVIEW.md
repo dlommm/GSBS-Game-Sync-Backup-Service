@@ -18,9 +18,9 @@ The dashboard mockup (charcoal shell floating on a mint→teal gradient; sidebar
 grid with status glyphs and inline `Restore`/`View Versions`; version-history right rail with a
 color-coded timeline; rounded search, bell, avatar chrome). Captured as *feel*, not literal
 content — its artifacts (duplicated nav item, placeholder titles, copyrighted art) are not
-reproduced. **Status:** the image itself is pending attachment; palette values derived from its
-written description are marked `←mockup` in 02/03 and will be confirmed in one isolated commit
-(02 §4) when it arrives.
+reproduced. **Status: image received and palette locked 2026-07-06** — values sampled into 02
+§1.1/§1.2, layout language confirmed in 03 ("per mockup" markers). One deliberate deviation:
+dark text on filled teal elements (the mockup's white-on-teal fails WCAG AA — see 02 notice).
 
 ## Reading order
 

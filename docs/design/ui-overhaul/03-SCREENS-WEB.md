@@ -1,14 +1,17 @@
 # Web Screen Specifications — GSBS UI/UX Overhaul
 
 Every screen uses the same template. "Parity rows" reference `01-PARITY-INVENTORY.md`. Layout
-descriptions marked `←mockup` will be refined against the mockup image (see 02 notice). Common
-behaviors are specified once in §0 and inherited — a screen spec only states deviations.
+language locked against the mockup image 2026-07-06 (marked "per mockup"). Common behaviors are
+specified once in §0 and inherited — a screen spec only states deviations.
 
 ## 0. Inherited behavior (applies to every screen unless overridden)
 
-- **Chrome:** app shell = left sidebar (nav pills, active = accent pill) + topbar (rounded search
-  field opening the command palette, theme toggle, future bell slot, account menu) floating on the
-  ambient gradient `←mockup`. Admin pages use the same shell with the admin nav group.
+- **Chrome (per mockup):** dark charcoal app shell floating on the bright mint→teal page gradient
+  (rounded `--radius-lg` corners + `--shadow-shell`); left sidebar: logo top, icon+label nav rows
+  as rounded pills, active item = filled teal pill; topbar: rounded pill search field (opens the
+  command palette) left-of-center, then bell slot + theme toggle + avatar-with-chevron account
+  menu at the right edge. Content column sits on `--bg`; cards step to `--surface`. Admin pages
+  use the same shell with the admin nav group.
 - **States:**
   - *Loading* — `loading_skeleton` blocks matching final layout (no spinners on full pages).
   - *Server unreachable* — browser-level; SSE reconnects automatically (htmx sse ext); a thin
@@ -89,12 +92,19 @@ behaviors are specified once in §0 and inherited — a screen spec only states 
 - **User & entry:** default post-login route; sidebar "Dashboard"; chord `g d`.
 - **Data:** `/dashboard` + partials `stats`/`clients`/`activity?offset=`; SSE `save-updated`,
   `client-activity`; storage from stats partial.
-- **Layout `←mockup`:** three-zone rhythm — content column: (1) status hero row: storage gauge
-  (WU-8) + protection strip; (2) **recent games strip**: game cards (02 §2 game-card) for the most
-  recently synced titles with status glyph, last-synced, `Restore`/`View Versions` actions;
-  (3) Recent Activity feed (tabs All/Saves/Devices/Security, Load more). Right rail: **Devices**
-  mini-panel (WU-9) + (Stage C) Live Sync Pulse stream slot; rail is a slot pattern — later
-  stages fill it without relayout.
+- **Layout (per mockup):** three-zone rhythm — content column: (1) status hero row: storage gauge
+  (WU-8) + protection strip; (2) **recent games grid** (3-wide on desktop): game cards with the
+  confirmed anatomy — artwork thumb top-left, title + subtitle, "Last synced <time>", status row
+  (glyph + label, amber when attention needed), action row with `Restore` (ghost) and a filled
+  teal `View Versions` pill on the active/hovered card; selected card = `--surface-active` tint +
+  green check badge top-right; (3) Recent Activity feed (tabs All/Saves/Devices/Security, Load
+  more). Right rail (per mockup): **Version History** contextual panel for the selected game —
+  identity row (thumb + name + health check), vertical timeline (nodes color-coded: success
+  check / accent / muted; left label = size or signed delta, right label = time), filled primary
+  `View Versions` action at the bottom; a small teal collapse toggle at the rail's top edge
+  collapses it. When no game is selected the rail shows the Devices mini-panel (WU-9); Stage C
+  adds the Live Sync Pulse slot. The rail is a slot pattern — later stages fill it without
+  relayout.
 - **States:** *empty* (new account) — hero empty-state with the three-step "connect a client"
   path + copyable client instructions; *loading* skeleton per zone; *over-quota / 80%* banners on
   the gauge (WU-8); *read-only* banner; *encrypted* unchanged (all metadata).
@@ -110,7 +120,7 @@ behaviors are specified once in §0 and inherited — a screen spec only states 
 - **User & entry:** sidebar "My Games"; chord `g g`; palette.
 - **Data:** `/dashboard/games` (+`?view=list`), partial `games`, covers `/covers/{id}.jpg`;
   exports `saves.csv/.json`, `archive.zip`; `POST games/import`, `games/bulk-delete`.
-- **Layout `←mockup`:** toolbar (search, status filter, sort, view toggle) above a cover-led card
+- **Layout (per mockup):** toolbar (search, status filter, sort, view toggle) above a cover-led card
   grid (poster ratio, monogram fallback); list view = dense rows with checkboxes + sticky bulk
   bar. Header actions: Export CSV/JSON, Export saves (.zip), Import archive….
 - **States:** *empty* — "no games yet" + link to client add-game flow; *no results* for filters;
@@ -129,7 +139,7 @@ behaviors are specified once in §0 and inherited — a screen spec only states 
 - **User & entry:** card click from U5/U6; palette game search; tray synced-game click lands on
   U8 (versions) with a breadcrumb up to U7.
 - **Data:** `/dashboard/games/{id}`; preview partial; per-game export/delete routes.
-- **Layout `←mockup`:** hero: large cover + title + status pill + metric cards (files, size,
+- **Layout (per mockup):** hero: large cover + title + status pill + metric cards (files, size,
   versions, **Encryption**); main: per-category save explorer (groupSaves) — file rows with lock
   badge, Preview (plaintext only), Versions link; right rail: insights panel (largest change +
   device, recent activity for this game) — the mockup's contextual-rail pattern.
@@ -148,7 +158,7 @@ behaviors are specified once in §0 and inherited — a screen spec only states 
 - **Purpose:** inspect and roll back a file's versions.
 - **User & entry:** Versions link in U7; tray synced-game click (TR-6 deep link).
 - **Data:** `/dashboard/save/versions?game_id&path_key`; download/restore/preview routes.
-- **Layout `←mockup`:** vertical timeline (rail nodes color-coded: current=accent,
+- **Layout (per mockup):** vertical timeline (rail nodes color-coded: current=accent,
   ok=success-muted, conflict-era=warning) — each node: version, exact+relative time, size,
   **signed byte delta**, **authoring device**; actions per node: Download, Restore (dialog with
   review step); bottom primary action = Restore latest backup semantics stay unchanged. (Stage D

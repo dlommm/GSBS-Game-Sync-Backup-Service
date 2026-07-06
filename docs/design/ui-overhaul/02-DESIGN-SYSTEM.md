@@ -1,11 +1,10 @@
 # Design System & Naming — GSBS UI/UX Overhaul
 
-> **PROVISIONAL PALETTE NOTICE:** exact accent hues and the gradient backdrop treatment below are
-> derived from the brief's written description of the dashboard mockup (charcoal shell on a soft
-> mint→teal gradient, one dominant teal/mint accent, green reserved for success, amber for
-> warnings). They will be sampled and finalized against the actual mockup image when it is
-> provided; every value marked `←mockup` is subject to that pass. Everything structural (token
-> names, scales, component inventory, motion, naming) is final.
+> **PALETTE FINALIZED 2026-07-06** against the dashboard mockup image. Values below are sampled
+> from it. One deliberate deviation, per our accessibility bar: the mockup renders light text on
+> the filled teal pills (≈2.3:1 — fails WCAG AA); we keep the mockup's teal hue but pair filled
+> accent elements with dark text (`--text-on-accent`, ≥6:1). The mockup's known AI artifacts
+> (duplicated nav item, garbled titles, copyrighted art) are not part of the reference.
 
 ## 0. Principles
 
@@ -37,44 +36,47 @@ block (currently lines 40–69). Native clients map tokens per §1.8.
 
 ```css
 :root {
-  /* Backdrop & surfaces — near-black charcoal ramp          ←mockup */
-  --bg:            #0b0f0e;  /* app backdrop (page)                  */
-  --bg-gradient-a: #10241f;  /* ambient gradient start (subtle)      */
-  --bg-gradient-b: #0b1512;  /* ambient gradient end                 */
-  --bg-raised:     #111615;  /* app shell (sidebar/topbar)           */
-  --surface:       #161c1a;  /* panels, cards                        */
-  --surface-hover: #1c2321;  /* hover state of interactive surfaces  */
-  --surface-active:#20302b;  /* selected card tint (teal-shifted)    */
-  --border:        #232b28;  /* hairlines                            */
-  --border-strong: #2e3835;  /* emphasized separators                */
+  /* Backdrop & surfaces — sampled from the mockup (2026-07-06)      */
+  --bg:            #101413;  /* content backdrop inside the shell    */
+  --bg-gradient-a: #93e2b3;  /* page gradient, mint (top-left)       */
+  --bg-gradient-b: #2fa693;  /* page gradient, teal (bottom-right)   */
+  --bg-raised:     #151917;  /* shell: sidebar + topbar              */
+  --surface:       #1e2321;  /* panels, cards (lighter than shell)   */
+  --surface-hover: #242a27;  /* hover state of interactive surfaces  */
+  --surface-active:#22332e;  /* selected card tint (teal-shifted)    */
+  --border:        #2a302d;  /* hairlines                            */
+  --border-strong: #364039;  /* emphasized separators                */
   --border-focus:  var(--accent);
   /* Text */
-  --text:          #e8edeb;  /* primary                              */
-  --text-secondary:#a7b3af;  /* labels, secondary copy               */
-  --text-muted:    #6d7a76;  /* timestamps, tertiary                 */
-  --text-on-accent:#06110e;  /* text on filled accent elements       */
+  --text:          #eef2f0;  /* primary                              */
+  --text-secondary:#a8b3ae;  /* labels, secondary copy               */
+  --text-muted:    #6f7b76;  /* timestamps, tertiary                 */
+  --text-on-accent:#08211d;  /* dark text on filled accent (AA note) */
 }
 ```
 
-The mockup's *mint→teal page gradient behind a floating charcoal shell* is implemented as a fixed,
-very-low-luminance radial/linear gradient on `body` from `--bg-gradient-a` to `--bg-gradient-b`
-(GPU-cheap, no image asset). The shell (`--bg-raised`) floats on it with `--radius-lg` and
-`--shadow-shell`. On phones the gradient margin collapses and the shell becomes edge-to-edge.
+The mockup's page backdrop is a **bright** diagonal mint→teal gradient (`--bg-gradient-a` top-left
+→ `--bg-gradient-b` bottom-right, fixed, GPU-cheap, no image asset) with the dark charcoal shell
+(`--bg-raised`) floating on it: `--radius-lg` corners + `--shadow-shell`. The gradient is only
+visible as the frame around the shell on desktop; on phones the frame collapses and the shell is
+edge-to-edge. Inside the shell, the content column sits on `--bg` and cards step up to
+`--surface` — three visible luminance steps, exactly as in the mockup.
 
 ### 1.2 Color — accent & semantics
 
 ```css
 :root {
-  /* Dominant accent: teal/mint                              ←mockup */
-  --accent:        #2dd4a7;
-  --accent-hover:  #4be0ba;
-  --accent-press:  #23b58e;
-  --accent-muted:  rgba(45, 212, 167, 0.14);  /* tints, selected nav pill  */
-  --accent-line:   rgba(45, 212, 167, 0.35);  /* focus rings, chart lines  */
+  /* Dominant accent: teal — sampled from the mockup's pills/active nav */
+  --accent:        #3fbfae;
+  --accent-hover:  #55cdbc;
+  --accent-press:  #2fa091;
+  --accent-muted:  rgba(63, 191, 174, 0.16);  /* tints, selected nav pill  */
+  --accent-line:   rgba(63, 191, 174, 0.40);  /* focus rings, chart lines  */
 
-  /* Semantics (dark) */
-  --success:       #34c979;   --success-muted: rgba(52, 201, 121, 0.14);
-  --warning:       #e8b04a;   --warning-muted: rgba(232, 176, 74, 0.14);
+  /* Semantics (dark) — success matches the mockup's check badge AND the
+     existing tray "syncing" green (2ec27e): tray icons keep their hue.   */
+  --success:       #2ec27e;   --success-muted: rgba(46, 194, 126, 0.14);
+  --warning:       #eab54e;   --warning-muted: rgba(234, 181, 78, 0.14);
   --error:         #e5605e;   --error-muted:   rgba(229, 96, 94, 0.14);
   --info:          #4cc3e0;   --info-muted:    rgba(76, 195, 224, 0.14);
   /* Live sync activity (pulse dots, progress shimmer) */
@@ -164,7 +166,7 @@ Light is generated from dark by rule, not redesigned. `:root[data-theme="light"]
 
 | Token family | Rule |
 |---|---|
-| `--bg*` / `--surface*` | invert ramp: page `#f2f6f4`, gradient barely-visible mint wash, shell `#ffffff`, surface `#ffffff`, hover `#f2f6f5`, active = accent-muted |
+| `--bg*` / `--surface*` | invert ramp: shell `#ffffff`, content `#f4f8f6`, surface `#ffffff`, hover `#eef4f1`, active = accent-muted. **The mint→teal page gradient stays in light theme** (softened ~20% toward white) — it reads naturally behind a white shell, giving both themes the same signature backdrop |
 | `--border*` | `#dfe6e3` / `#c9d3cf` |
 | `--text*` | `#17201d` / `#4d5a56` / `#7d8a86`; `--text-on-accent` stays dark |
 | Accent + semantics | same hues, darkened one step for AA on white (`--accent: #149571` etc. — final values from the contrast validator during B1) |
