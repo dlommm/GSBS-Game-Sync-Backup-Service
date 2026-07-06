@@ -1,6 +1,6 @@
 # GSBS Server — Docker image
 # Multi-stage: build the Go binary (CGO for SQLite), then run in a minimal image.
-FROM golang:1.26-alpine3.23 AS builder
+FROM golang:1.26-alpine3.24 AS builder
 WORKDIR /app
 
 # SQLite driver needs CGO and Alpine build deps
@@ -24,8 +24,10 @@ RUN CGO_ENABLED=1 go build \
   -ldflags "-X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.Commit=${COMMIT}" \
   -o /gsbs-server ./server
 
-# Runtime: pinned Alpine 3.23.x for current security patches (see Docker Scout / Alpine releases).
-FROM alpine:3.23.4
+# Runtime: pinned Alpine for current security patches (see Docker Scout / Alpine
+# releases). 3.24 ships sqlite-libs 3.53.x and busybox 1.37.0-r31, clearing the
+# sqlite 3.51.x and busybox CVEs still unpatched on the 3.23 branch.
+FROM alpine:3.24.1
 RUN apk add --no-cache ca-certificates sqlite-libs su-exec \
   && apk upgrade --no-cache \
   && addgroup -S gsbs -g 1000 \
