@@ -4,6 +4,32 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+### Changed — full UI redesign (v5 visual overhaul, phase 1: parity)
+- **New design language across the entire WebUI** (server and client), locked against the v5
+  dashboard mockup: dark charcoal app shell floating on a mint→teal gradient backdrop, one
+  disciplined teal accent, green/amber/red/cyan reserved for status meaning. Light theme derives
+  from the same tokens (the gradient backdrop is the signature look in both themes).
+- **New app shell**: user pages get a left sidebar with icon nav pills (Dashboard, My Games,
+  **Devices** — now in primary navigation, Insights, Settings, Admin); the topbar becomes a
+  rounded search pill (command palette), theme toggle, and account controls. On phones the
+  sidebar is an off-canvas drawer.
+- **Dashboard redesign**: a "Recent games" card grid (cover art, sync-status glyph, green health
+  check badge, teal "View Versions" pill) with the Devices panel in a contextual right rail;
+  quick-access tiles retired in favor of the sidebar.
+- **Accessibility**: every filled teal element uses dark text (WCAG AA ≥6:1 — the mockup's
+  white-on-teal fails contrast and was deliberately corrected); new `prefers-reduced-motion`
+  support collapses all animation; new `script/check-contrast.py` validates 24 token pairings in
+  both themes.
+- **Tray icons** re-tinted from a single palette table that mirrors the web design tokens.
+- Design blueprint (parity inventory, per-screen specs, flows, architecture, roadmap) lives in
+  `docs/design/ui-overhaul/`.
+
+### Fixed
+- Client local WebUI: the logs page "Export CSV" button now works (`/logs/export.csv` was never
+  registered as a route).
+- `/api/openapi.json` now reports the running server's version instead of a stale hardcoded
+  string.
+
 ## [4.3.0] - 2026-07-05
 
 Login fix for admin-created accounts, a full table overhaul across the WebUI, security dependency bumps, and saner sync-schedule defaults.
