@@ -3,7 +3,6 @@ package sse
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/gsbs/gsbs/server/logx"
 )
@@ -26,16 +25,21 @@ func (e Event) Format() string {
 
 // subscriber is one SSE client connection.
 type subscriber struct {
-	ch        chan Event
-	clientID  string
-	userID    string
-	createdAt time.Time
+	ch       chan Event
+	clientID string
+	userID   string
+	// seq orders subscriptions for cap eviction. A counter (not a
+	// timestamp): wall-clock resolution is coarse enough on some
+	// platforms that back-to-back subscribes tie, making "oldest"
+	// nondeterministic.
+	seq uint64
 }
 
 // Hub manages SSE client connections and broadcasts events.
 type Hub struct {
 	mu          sync.RWMutex
 	subscribers map[*subscriber]struct{}
+	nextSeq     uint64
 	closed      bool
 }
 
@@ -75,7 +79,7 @@ func (h *Hub) SubscribeCapped(userID string, maxPerUser int) (<-chan Event, func
 		for len(userSubs) >= maxPerUser {
 			oldest := userSubs[0]
 			for _, s := range userSubs[1:] {
-				if s.createdAt.Before(oldest.createdAt) {
+				if s.seq < oldest.seq {
 					oldest = s
 				}
 			}
@@ -93,11 +97,12 @@ func (h *Hub) SubscribeCapped(userID string, maxPerUser int) (<-chan Event, func
 		}
 	}
 
+	h.nextSeq++
 	sub := &subscriber{
-		ch:        make(chan Event, 16),
-		clientID:  userID,
-		userID:    userID,
-		createdAt: time.Now(),
+		ch:       make(chan Event, 16),
+		clientID: userID,
+		userID:   userID,
+		seq:      h.nextSeq,
 	}
 	h.subscribers[sub] = struct{}{}
 	h.mu.Unlock()
