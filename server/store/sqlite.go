@@ -581,6 +581,67 @@ func (s *sqliteStore) ListClientsByUserID(ctx context.Context, userID string) ([
 	return out, rows.Err()
 }
 
+// VersionStorageByGame reports how many stored versions each of the user's
+// games has and how many bytes they occupy (Storage Explorer, v5.1).
+func (s *sqliteStore) VersionStorageByGame(ctx context.Context, userID string) ([]GameVersionStorage, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT game_id, COUNT(*), COALESCE(SUM(LENGTH(content)), 0)
+		 FROM save_versions WHERE user_id = ? GROUP BY game_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []GameVersionStorage
+	for rows.Next() {
+		var g GameVersionStorage
+		if err := rows.Scan(&g.GameID, &g.Versions, &g.Bytes); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// RetentionForGame exposes the effective per-game version retention.
+func (s *sqliteStore) RetentionForGame(ctx context.Context, gameID string) int {
+	return s.retentionForGame(ctx, gameID)
+}
+
+// PruneVersionsForGame deletes a game's version history beyond the newest K
+// versions per file, where K is the effective retention for the game. Returns
+// rows deleted and bytes freed. Rank is computed from newest (highest version).
+func (s *sqliteStore) PruneVersionsForGame(ctx context.Context, userID, gameID string) (int, int64, error) {
+	keep := s.retentionForGame(ctx, gameID)
+	if keep < 1 {
+		keep = 1
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	const rankPredicate = `user_id = ?1 AND game_id = ?2 AND (
+		SELECT COUNT(*) FROM save_versions v2
+		WHERE v2.user_id = save_versions.user_id AND v2.game_id = save_versions.game_id
+		  AND v2.path_key = save_versions.path_key AND v2.version >= save_versions.version
+	) > ?3`
+	var freed int64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(LENGTH(content)), 0) FROM save_versions WHERE `+rankPredicate,
+		userID, gameID, keep).Scan(&freed); err != nil {
+		return 0, 0, err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM save_versions WHERE `+rankPredicate, userID, gameID, keep)
+	if err != nil {
+		return 0, 0, err
+	}
+	n, _ := res.RowsAffected()
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return int(n), freed, nil
+}
+
 // TitleForGame returns the manifest display title for a game ID ("" when the
 // manifest has no entry — e.g. manually-added games). Used to enrich the
 // client-activity SSE payload without joins on the hot push path.

@@ -243,6 +243,50 @@
   </section>
 </div>
 
+{{if and .LinkGames .Storage}}
+<section class="panel" aria-labelledby="storage-explorer-heading">
+  <div class="panel-header"><h2 id="storage-explorer-heading">Storage breakdown</h2></div>
+  <div class="panel-body">
+    <p class="cell-muted u-mb-sm">Where your quota goes, per game. Pruning trims a game's history down to its retention policy — the newest versions always stay.</p>
+    <div class="table-wrap">
+      <table class="data-table" data-table-id="storage-explorer">
+        <thead>
+          <tr>
+            <th scope="col">Game</th>
+            <th scope="col">Current</th>
+            <th scope="col">History</th>
+            <th scope="col">Keeps</th>
+            <th scope="col" class="th-action">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Storage}}
+          <tr>
+            <td class="cell-primary"><a class="game-list-name" href="/dashboard/games/{{urlquery .GameID}}">{{.Title}}</a></td>
+            <td class="cell-size">{{formatBytes .CurrentBytes}}</td>
+            <td class="cell-size">{{formatBytes .HistoryBytes}} <span class="cell-muted">({{.Versions}} version{{if ne .Versions 1}}s{{end}})</span></td>
+            <td class="cell-muted">last {{.Keep}} per file</td>
+            <td class="cell-action">
+              {{if and .Prunable (not $.ReadOnly)}}
+              <form method="post" action="/dashboard/storage/prune" class="inline-form"
+                    data-confirm="Trim {{.Title}}'s history to the newest {{.Keep}} versions per file? Older versions are deleted permanently.">
+                <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+                <input type="hidden" name="game_id" value="{{.GameID}}">
+                <button type="submit" class="btn-ghost-sm">Prune</button>
+              </form>
+              {{else}}
+              <span class="cell-muted">{{if .Prunable}}—{{else}}at policy{{end}}</span>
+              {{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{{end}}
+
 <section class="panel" aria-labelledby="devices-heading">
   <div class="panel-header"><h2 id="devices-heading">Devices</h2></div>
   {{if .Devices}}

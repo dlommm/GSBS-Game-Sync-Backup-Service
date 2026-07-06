@@ -188,6 +188,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleImportSaves(w, r)
 	case path == "/dashboard/games/bulk-delete" && r.Method == http.MethodPost:
 		h.handleBulkDeleteGames(w, r)
+	case path == "/dashboard/storage/prune" && r.Method == http.MethodPost:
+		h.handlePruneVersions(w, r)
 	case path == "/dashboard/clients" && r.Method == http.MethodGet:
 		h.serveDashboardClientsPage(w, r)
 	case path == "/dashboard/partial/clients-list" && r.Method == http.MethodGet:

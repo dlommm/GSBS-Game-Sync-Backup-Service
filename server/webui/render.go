@@ -465,7 +465,7 @@ func monthsToDays(months []store.MonthCount) []store.DayCount {
 // auditCategory groups an audit action for the dashboard activity tabs.
 func auditCategory(action string) string {
 	switch action {
-	case "restore_version", "delete_save", "delete_game_saves":
+	case "restore_version", "delete_save", "delete_game_saves", "prune_versions":
 		return "saves"
 	case "revoke_client", "rename_client":
 		return "devices"
@@ -562,6 +562,7 @@ func auditLabel(action string) string {
 		"restore_version":           "Restored save version",
 		"delete_save":               "Deleted save",
 		"delete_game_saves":         "Deleted all saves for a game",
+		"prune_versions":            "Pruned version history",
 		"revoke_client":             "Revoked client token",
 		"rename_client":             "Renamed a device",
 		"clear_cover_cache":         "Cleared the cover-art cache",

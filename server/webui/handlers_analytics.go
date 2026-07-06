@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gsbs/gsbs/server/job"
@@ -60,6 +61,8 @@ type userInsights struct {
 	Depth         store.SlotDepthStats // all-time
 	CategoryBars  []labelBar           // Saves/Config/Other storage split (all-time)
 	Protection    protectionInfo       // all-time
+	Storage       []storageRow         // Storage Explorer (v5.1): per-game history footprint
+	ReadOnly      bool                 // hides the prune action
 	HasActivity   bool                 // any version writes in the window
 }
 
@@ -78,6 +81,17 @@ type activeGameRow struct {
 	Versions int
 	Bytes    int64
 	Pct      int
+}
+
+// storageRow is one game's storage footprint in the Storage Explorer panel.
+type storageRow struct {
+	GameID       string
+	Title        string
+	CurrentBytes int64 // live save files
+	Versions     int   // retained history versions
+	HistoryBytes int64 // bytes held by version history
+	Keep         int   // effective retention (versions kept per file)
+	Prunable     bool  // more versions retained than policy keeps
 }
 
 // protectionInfo backs the "how safe are my saves" panel.
@@ -291,6 +305,39 @@ func (h *WebHandler) buildUserInsights(ctx context.Context, userID string, days 
 
 	backupConfigured, backupAt, backupOK, integrityAt, integrityOK := h.restoreConfidence(ctx)
 
+	// Storage Explorer (v5.1): per-game history footprint, biggest first.
+	var storageRows []storageRow
+	if perGame, err := h.store.VersionStorageByGame(ctx, userID); err == nil && len(perGame) > 0 {
+		type gameRef struct {
+			Title string
+			Bytes int64
+		}
+		titles := make(map[string]gameRef, len(groups))
+		for _, g := range groups {
+			titles[g.GameID] = gameRef{Title: g.Title, Bytes: g.TotalBytes}
+		}
+		for _, vs := range perGame {
+			if vs.Versions == 0 {
+				continue
+			}
+			ref := titles[vs.GameID]
+			title := ref.Title
+			if title == "" {
+				title = vs.GameID
+			}
+			keep := h.store.RetentionForGame(ctx, vs.GameID)
+			storageRows = append(storageRows, storageRow{
+				GameID: vs.GameID, Title: title, CurrentBytes: ref.Bytes,
+				Versions: vs.Versions, HistoryBytes: vs.Bytes, Keep: keep,
+				Prunable: vs.Versions > keep,
+			})
+		}
+		sort.SliceStable(storageRows, func(i, j int) bool { return storageRows[i].HistoryBytes > storageRows[j].HistoryBytes })
+		if len(storageRows) > 12 {
+			storageRows = storageRows[:12]
+		}
+	}
+
 	return userInsights{
 		GameCount:   len(groups),
 		SaveCount:   len(saves),
@@ -321,8 +368,42 @@ func (h *WebHandler) buildUserInsights(ctx context.Context, userID string, days 
 			ServerBackupAt:         backupAt, ServerBackupOK: backupOK,
 			IntegrityAt: integrityAt, IntegrityOK: integrityOK,
 		},
+		Storage:     storageRows,
+		ReadOnly:    h.readOnly,
 		HasActivity: syncTotal > 0,
 	}
+}
+
+// handlePruneVersions trims one game's version history down to its effective
+// retention (Storage Explorer, v5.1). Session-authenticated, CSRF-checked,
+// audited; blocked in read-only mode.
+func (h *WebHandler) handlePruneVersions(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	if h.readOnly {
+		Redirect(w, r, "/dashboard/analytics?error=read_only")
+		return
+	}
+	userID, username, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+	gameID := strings.TrimSpace(r.FormValue("game_id"))
+	if gameID == "" {
+		Redirect(w, r, "/dashboard/analytics")
+		return
+	}
+	deleted, freed, err := h.store.PruneVersionsForGame(r.Context(), userID, gameID)
+	if err != nil {
+		logx.Logger().Error().Str("user_id", userID).Str("game_id", gameID).Err(err).Msg("prune versions failed")
+		Redirect(w, r, "/dashboard/analytics?error=prune_failed")
+		return
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "prune_versions", gameID,
+		fmt.Sprintf("versions=%d freed=%d", deleted, freed))
+	Redirect(w, r, "/dashboard/analytics?ok=pruned")
 }
 
 // restoreConfidence gathers the server-wide backup + integrity status shown

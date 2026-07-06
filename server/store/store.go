@@ -85,6 +85,14 @@ type Store interface {
 	ListClientsByUserID(ctx context.Context, userID string) ([]ClientInfo, error)
 	// TitleForGame returns the manifest display title for a game ID, or "" when unknown.
 	TitleForGame(ctx context.Context, gameID string) (string, error)
+	// VersionStorageByGame reports per-game version-history footprint for a user (Storage Explorer).
+	VersionStorageByGame(ctx context.Context, userID string) ([]GameVersionStorage, error)
+	// PruneVersionsForGame trims a game's version history down to the effective
+	// per-game retention (newest K per file), returning rows deleted and bytes freed.
+	PruneVersionsForGame(ctx context.Context, userID, gameID string) (deleted int, freed int64, err error)
+	// RetentionForGame returns the effective version-history retention for a game
+	// (default or admin per-game override).
+	RetentionForGame(ctx context.Context, gameID string) int
 	// RegenerateClientToken issues a new token for the client; the old token is invalidated (client must re-login).
 	RegenerateClientToken(ctx context.Context, clientID string) error
 	// RevokeClient removes a client registration; its token stops working and it disappears from client lists.
@@ -405,6 +413,13 @@ type SaveMeta struct {
 	// ErrGlobalLimitExceeded and roll the write back.
 	QuotaBytes       int64
 	GlobalLimitBytes int64
+}
+
+// GameVersionStorage is one game's version-history footprint (Storage Explorer, v5.1).
+type GameVersionStorage struct {
+	GameID   string
+	Versions int
+	Bytes    int64
 }
 
 type ClientInfo struct {
