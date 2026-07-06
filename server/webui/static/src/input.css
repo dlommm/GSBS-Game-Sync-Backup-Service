@@ -1027,9 +1027,14 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 }
 .game-card-ring .progress-ring { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); }
 
-/* ── Status indicators ── */
-.status-dot { position: absolute; top: 0.4rem; left: 0.4rem; width: 0.6rem; height: 0.6rem; border-radius: 999px; box-shadow: 0 0 0 2px var(--surface); }
-.status-dot.status-healthy { background: var(--success); box-shadow: 0 0 0 2px var(--surface), 0 0 8px var(--success); }
+/* ── Status indicators ──
+   The absolute overlay variant is scoped to game-card covers; the bare class
+   is a plain inline dot (also used by the client WebUI stat lines — an
+   unscoped absolute rule here once stacked those dots at the viewport corner). */
+.status-dot { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 999px; flex-shrink: 0; }
+.game-card-cover .status-dot { position: absolute; top: 0.4rem; left: 0.4rem; box-shadow: 0 0 0 2px var(--surface); }
+.game-card-cover .status-dot.status-healthy { box-shadow: 0 0 0 2px var(--surface), 0 0 8px var(--success); }
+.status-dot.status-healthy { background: var(--success); }
 .status-dot.status-stale { background: var(--warning); }
 .status-dot.status-unknown { background: var(--text-muted); }
 .status-pill { display: inline-block; padding: 0.1rem 0.5rem; font-size: 0.6875rem; font-weight: 600; text-transform: capitalize; border-radius: var(--radius-xs); }
@@ -1503,7 +1508,7 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 /* Status cards */
 .client-stats-row { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
 .stat-line { display: flex; align-items: center; gap: 0.4rem; margin: 0.25rem 0; }
-.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+.stat-line .status-dot { width: 8px; height: 8px; background: var(--text-muted); }
 .status-dot.dot-ok { background: var(--success); }
 .status-dot.dot-error { background: var(--error); }
 .status-dot.dot-muted { background: var(--text-muted); }
