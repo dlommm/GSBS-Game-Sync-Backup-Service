@@ -85,7 +85,7 @@ Mount a volume at `/app/data` and set `GSBS_DB=/app/data/gsbs.db`. All state (us
 | `GSBS_PCGW_SYNC_SOURCE` | `s3` (default, manifest bundle) or `api` (direct PCGW crawl). |
 | `GSBS_PCGW_BUNDLE_URL` | Full bundle URL (default: official CDN). |
 | `GSBS_PCGW_BUNDLE_INDEX_URL` | Version index URL (auto-derived from bundle URL if unset). |
-| `GSBS_PCGW_BUNDLE_CRON` | Bundle fetch schedule when source is `s3` (default daily 04:00). |
+| `GSBS_PCGW_BUNDLE_CRON` | Bundle fetch schedule when source is `s3` (default weekly Monday 03:00). |
 | `GSBS_ADMIN_USERNAME` | Restrict `/admin` to one user. |
 | `GSBS_READ_ONLY` | Set to `true` to disable push and delete. |
 | `GSBS_MAX_STORAGE_BYTES` | Optional global storage cap. |

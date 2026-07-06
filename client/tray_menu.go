@@ -184,7 +184,7 @@ func (c *TrayController) buildMenu(cfg *config) {
 	c.mAccountMenu = systray.AddMenuItem("Account & Setup", "Server connection and login")
 	c.mServer = c.mAccountMenu.AddSubMenuItem("Server: (not set)", "Current server URL")
 	c.mServer.Disable()
-	c.mInterval = c.mAccountMenu.AddSubMenuItem("Sync every 5m", "Current sync interval")
+	c.mInterval = c.mAccountMenu.AddSubMenuItem("Sync every 6h", "Current sync interval")
 	c.mInterval.Disable()
 	c.mLogin = c.mAccountMenu.AddSubMenuItem("Login...", "Connect to server")
 	if c.platform.HasNativeLogin {

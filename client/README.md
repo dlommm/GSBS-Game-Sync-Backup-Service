@@ -86,7 +86,7 @@ Example for Assassin's Creed Rogue (Ubisoft Connect, Windows):
 {
   "server_url": "http://localhost:8080",
   "token": "<from login>",
-  "sync_interval": "5m",
+  "sync_interval": "6h",
   "ubisoft_connect_folder": "C:\\Program Files (x86)\\Ubisoft\\Ubisoft Game Launcher",
   "launcher_user_id": "your-ubisoft-user-id",
   "watch_paths": [
@@ -113,7 +113,7 @@ Example for Assassin's Creed Rogue (Ubisoft Connect, Windows):
    ```
    - Pulls all saves and writes only where the target folder exists (game installed).
    - Watches configured paths and uploads on file change.
-   - Periodically pulls again (default every 5 minutes).
+   - Periodically pulls again (default every 6 hours).
 
 ## Building
 

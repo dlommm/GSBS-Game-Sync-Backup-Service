@@ -20,7 +20,7 @@ You must set the resolver’s `UbisoftConnect` and optionally `UserID` (or rely 
   "server_url": "https://your-gsbs-server.example.com",
   "token": "YOUR_TOKEN_FROM_LOGIN",
   "client_name": "My-Linux-PC",
-  "sync_interval": "5m",
+  "sync_interval": "6h",
   "auto_watch_mode": "discovered",
   "conflict_policy": "last_write_wins",
   "encryption_passphrase": "your-local-passphrase-if-e2e-enabled",
@@ -107,7 +107,7 @@ User overrides take priority over wiki hints and discovered paths.
   "server_url": "https://your-gsbs-server.example.com",
   "token": "YOUR_TOKEN_FROM_LOGIN",
   "client_name": "My-Desktop",
-  "sync_interval": "5m",
+  "sync_interval": "6h",
   "watch_paths": [
     {
       "game_id": "311560",

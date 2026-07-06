@@ -43,7 +43,9 @@ const (
 	// via the GSBS_PCGW_BUNDLE_*_URL env vars or Admin → Settings (e.g. to self-host).
 	DefaultPCGWBundleURL      = "https://gsbs.ohhcloud.com/manifest/manifest.json.gz"
 	DefaultPCGWBundleIndexURL = "https://gsbs.ohhcloud.com/manifest/index.json"
-	DefaultPCGWBundleCron     = "0 4 * * *"
+	// Monday 03:00 — the public bundle is published by the VPS job Sunday
+	// 03:00 UTC, so fetching Monday morning always picks up a finished run.
+	DefaultPCGWBundleCron = "0 3 * * 1"
 )
 
 // Env var names (override admin_settings when set).

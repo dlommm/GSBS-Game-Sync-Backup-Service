@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+// defaultSyncInterval is the periodic pull interval when none is configured.
+// File changes are pushed immediately regardless, so this only bounds how
+// stale a pull-only client can get.
+const defaultSyncInterval = 6 * time.Hour
+
 // Duration wraps time.Duration with human-friendly JSON marshaling.
 // Serializes as a string like "5m", "30s", "1h". Accepts strings ("5m") or
 // numbers (nanoseconds, for backward compatibility) when unmarshaling.
@@ -163,7 +168,7 @@ func blankConfig() *config {
 	return &config{
 		ServerURL:      "",
 		Token:          "",
-		SyncInterval:   Duration(5 * time.Minute),
+		SyncInterval:   Duration(defaultSyncInterval),
 		AutoWatchMode:  "discovered",
 		ConflictPolicy: "last_write_wins",
 		BackupOnPull:   true,
@@ -174,7 +179,7 @@ func blankConfig() *config {
 func defaultConfig(_ string) *config {
 	return &config{
 		ServerURL:    "http://localhost:8080",
-		SyncInterval: Duration(5 * time.Minute),
+		SyncInterval: Duration(defaultSyncInterval),
 		WatchPaths:   []watchPath{},
 	}
 }

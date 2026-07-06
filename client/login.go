@@ -146,7 +146,7 @@ func DoLoginWithTOTP(serverURL, username, password, clientName, totpCode string)
 	cfg.Token = token
 	cfg.ClientName = clientName
 	if cfg.SyncInterval == 0 {
-		cfg.SyncInterval = Duration(5 * time.Minute)
+		cfg.SyncInterval = Duration(defaultSyncInterval)
 	}
 	if err := saveConfig(cfg); err != nil {
 		log.Printf("client login: save config failed server=%s username=%q: %v", serverURL, username, err)

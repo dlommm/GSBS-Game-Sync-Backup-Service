@@ -416,7 +416,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 
 	interval := cfg.SyncInterval.Duration()
 	if interval <= 0 {
-		interval = 5 * time.Minute
+		interval = defaultSyncInterval
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

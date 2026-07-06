@@ -110,7 +110,7 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_TRUST_PROXY` | (unset) | When set, trust `X-Forwarded-For` / `X-Real-IP` for client IP. |
 | `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token age (90 days). |
 | `GSBS_METRICS_TOKEN` | (unset) | Bearer token required for `/metrics` when set. |
-| `GSBS_PCGW_CRON` | `0 3 * * 0` | Cron expression for PCGW incremental sync. **Overrides** admin Settings when set (including `""` to disable). When unset, schedule comes from admin Settings (`pcgw_cron`, default weekly Sunday 03:00). |
+| `GSBS_PCGW_CRON` | `0 3 * * 1` | Cron expression for PCGW incremental sync. **Overrides** admin Settings when set (including `""` to disable). When unset, schedule comes from admin Settings (`pcgw_cron`, default weekly Monday 03:00). |
 | `GSBS_PCGW_FULL_CRON` | (unset) | Cron expression for a scheduled full PCGW catalog rescan (now implemented). Schedules `RunPCGWSyncFull` in addition to the normal incremental cron. |
 | `GSBS_PCGW_FULL_CATALOG_DAYS` | `7` | Days between forced full catalog scans during incremental sync. Set to `0` to disable. |
 | `GSBS_PCGW_RATE_LIMIT` | `2s` | Delay between PCGW HTTP requests. |
@@ -120,7 +120,7 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_PCGW_SYNC_SOURCE` | (from DB) | `github` (manifest bundle fetch) or `api` (direct PCGW sync). Fresh installs default to `github`; existing DBs with games default to `api`. Overrides admin Settings when set. |
 | `GSBS_PCGW_BUNDLE_URL` | Official gsbs-manifest raw URL | Full manifest bundle URL when sync source is `github`. |
 | `GSBS_PCGW_BUNDLE_DELTA_URL` | Official gsbs-manifest delta URL | Delta bundle URL for seeded servers. |
-| `GSBS_PCGW_BUNDLE_CRON` | `0 4 * * *` | Cron for bundle fetch when sync source is `github`. Set to `""` to disable. Overrides admin Settings when set (including empty). |
+| `GSBS_PCGW_BUNDLE_CRON` | `0 3 * * 1` | Cron for bundle fetch when sync source is `github`. Set to `""` to disable. Overrides admin Settings when set (including empty). |
 
 See [MANIFEST_BUNDLE.md](MANIFEST_BUNDLE.md) for bundle sync details.
 

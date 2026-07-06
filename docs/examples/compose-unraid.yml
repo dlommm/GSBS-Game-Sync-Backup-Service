@@ -27,7 +27,7 @@ services:
       GSBS_DB: /app/data/gsbs.db
       GSBS_SAVE_ROOT: /app/data/gamesaves
       GSBS_SESSION_SECRET: "REPLACE_ME_openssl_rand_hex_32"
-      GSBS_PCGW_CRON: "0 3 * * 0"
+      GSBS_PCGW_CRON: "0 3 * * 1"
       GSBS_LOG_LEVEL: info
       GSBS_ALLOW_REGISTER: "true"
       # GSBS_MIGRATE_BLOBS_TO_FS: "1"  # one-time: export BLOB saves to gamesaves/; remove after success

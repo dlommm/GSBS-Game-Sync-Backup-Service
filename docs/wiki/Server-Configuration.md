@@ -51,7 +51,7 @@
 
 | Variable | Default | Description |
 |---|---|---|
-| `GSBS_PCGW_CRON` | `0 3 * * 0` | Cron expression for incremental PCGW sync (weekly Sunday 03:00). **Overrides** admin Settings when set; use `""` to disable via env. When unset, schedule is configurable from admin Settings. |
+| `GSBS_PCGW_CRON` | `0 3 * * 1` | Cron expression for incremental PCGW sync (weekly Monday 03:00). **Overrides** admin Settings when set; use `""` to disable via env. When unset, schedule is configurable from admin Settings. |
 | `GSBS_PCGW_FULL_CRON` | (unset) | Optional cron for a full PCGW resync |
 | `GSBS_PCGW_RATE_LIMIT` | `2s` | Delay between PCGW HTTP requests |
 | `GSBS_PCGW_MAX_PAGES_PER_RUN` | `5000` | Max pages to ingest per sync run. Interrupted runs resume from checkpoint. |
@@ -65,7 +65,7 @@
 | `GSBS_PCGW_SYNC_SOURCE` | (from DB) | `github` or `api`. Fresh installs default to GitHub bundle fetch. |
 | `GSBS_PCGW_BUNDLE_URL` | Official gsbs-manifest URL | Full bundle URL |
 | `GSBS_PCGW_BUNDLE_DELTA_URL` | Official delta URL | Delta bundle for seeded servers |
-| `GSBS_PCGW_BUNDLE_CRON` | `0 4 * * *` | Bundle fetch schedule when source is `github` |
+| `GSBS_PCGW_BUNDLE_CRON` | `0 3 * * 1` | Bundle fetch schedule when source is `github` |
 
 See [MANIFEST_BUNDLE.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/MANIFEST_BUNDLE.md) in the main repo.
 

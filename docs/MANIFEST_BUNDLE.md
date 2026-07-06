@@ -10,7 +10,7 @@ End users never download the bundle manually — the server fetches it on a sche
 
 | Mode | Setting / env | Scheduled job | Manual fallback |
 |------|---------------|---------------|-----------------|
-| **S3 bundle** (default for fresh installs) | `pcgw_sync_source=s3` or `GSBS_PCGW_SYNC_SOURCE=s3` | `pcgw_bundle_fetch` on `pcgw_bundle_cron` (default daily 04:00) | Incremental Sync / Auto Catch-Up on **Admin → PCGW** |
+| **S3 bundle** (default for fresh installs) | `pcgw_sync_source=s3` or `GSBS_PCGW_SYNC_SOURCE=s3` | `pcgw_bundle_fetch` on `pcgw_bundle_cron` (default weekly Monday 03:00) | Incremental Sync / Auto Catch-Up on **Admin → PCGW** |
 | **PCGW API** (default for existing DBs with games) | `pcgw_sync_source=api` | Existing incremental PCGW sync cron | Same admin actions |
 
 The legacy value `github` is accepted and normalized to `s3`. Switch source in **Admin → Settings**; changing source reschedules cron immediately.
@@ -40,7 +40,7 @@ Optional: enable **incremental API fallback** in Settings to run a lightweight P
 | `GSBS_PCGW_SYNC_SOURCE` | (from DB) | `s3` or `api` (`github` = legacy alias for `s3`). Overrides admin Settings when set. |
 | `GSBS_PCGW_BUNDLE_URL` | Official public URL | Full bundle URL |
 | `GSBS_PCGW_BUNDLE_INDEX_URL` | Derived from official URL | `index.json` URL (set when self-hosting a custom bundle) |
-| `GSBS_PCGW_BUNDLE_CRON` | `0 4 * * *` | Bundle fetch cron when source is `s3`. Set to `""` to disable. |
+| `GSBS_PCGW_BUNDLE_CRON` | `0 3 * * 1` | Bundle fetch cron when source is `s3`. Set to `""` to disable. |
 
 Default URLs (Cloudflare R2 behind a custom domain; read-only, no credentials):
 

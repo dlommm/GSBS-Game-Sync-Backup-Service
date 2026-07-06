@@ -100,7 +100,7 @@ func pauseResumeMenuTitle(paused bool) string {
 func updateSyncIntervalLabel(m *systray.MenuItem, d Duration) {
 	interval := d.Duration()
 	if interval <= 0 {
-		interval = 5 * time.Minute
+		interval = defaultSyncInterval
 	}
 	m.SetTitle("Sync every " + interval.String())
 }

@@ -39,7 +39,7 @@ func LegacyPushProtectionFromSettings(settings map[string]string) bool {
 }
 
 const (
-	DefaultPCGWCron             = "0 3 * * 0"
+	DefaultPCGWCron             = "0 3 * * 1"
 	DefaultPCGWPathExcludesJSON = `["home",".exe",".dll","steamapps","common"]`
 )
 
