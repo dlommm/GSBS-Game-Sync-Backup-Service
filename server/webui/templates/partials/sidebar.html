@@ -1,0 +1,32 @@
+{{define "partials/sidebar.html"}}
+<aside class="sidebar" id="app-sidebar" aria-label="Main navigation">
+  <div class="sidebar-brand">
+    <img src="/static/favicon.png" alt="" class="topbar-icon" aria-hidden="true">
+    <span class="topbar-brand">GSBS</span>
+  </div>
+  <nav class="sidebar-nav" role="navigation" aria-label="Main">
+    <a href="/dashboard" {{if eq .NavActive "dashboard"}}class="active" aria-current="page"{{end}}>
+      <span class="sidebar-icon" aria-hidden="true">{{iconSVG "grid" 16}}</span>Dashboard
+    </a>
+    <a href="/dashboard/games" {{if eq .NavActive "games"}}class="active" aria-current="page"{{end}}>
+      <span class="sidebar-icon" aria-hidden="true">{{iconSVG "game" 16}}</span>My Games
+    </a>
+    <a href="/dashboard/clients" {{if eq .NavActive "clients"}}class="active" aria-current="page"{{end}}>
+      <span class="sidebar-icon" aria-hidden="true">{{iconSVG "device" 16}}</span>Devices
+    </a>
+    <a href="/dashboard/analytics" {{if eq .NavActive "analytics"}}class="active" aria-current="page"{{end}}>
+      <span class="sidebar-icon" aria-hidden="true">{{iconSVG "chart" 16}}</span>Insights
+    </a>
+    <a href="/dashboard/settings" {{if eq .NavActive "settings"}}class="active" aria-current="page"{{end}}>
+      <span class="sidebar-icon" aria-hidden="true">{{iconSVG "settings" 16}}</span>Settings
+    </a>
+    {{if .IsAdmin}}
+    <hr class="sidebar-divider">
+    <a href="/admin" {{if eq .NavActive "admin"}}class="active" aria-current="page"{{end}}>
+      <span class="sidebar-icon" aria-hidden="true">{{iconSVG "shield" 16}}</span>Admin
+    </a>
+    {{end}}
+  </nav>
+</aside>
+<button type="button" class="sidebar-backdrop" data-action="toggle-sidebar" aria-label="Close navigation" tabindex="-1"></button>
+{{end}}

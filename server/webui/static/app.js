@@ -8,7 +8,7 @@
   /* ---- Delegated actions (replacements for inline on*= handlers) ---- */
 
   document.addEventListener('click', function (e) {
-    var el = e.target.closest('[data-open-dialog],[data-close-dialog],[data-set-input],[data-view-value],[data-action="toggle-theme"]');
+    var el = e.target.closest('[data-open-dialog],[data-close-dialog],[data-set-input],[data-view-value],[data-action="toggle-theme"],[data-action="toggle-sidebar"]');
     if (!el) return;
 
     if (el.hasAttribute('data-open-dialog')) {
@@ -42,13 +42,21 @@
       try { localStorage.setItem('gsbs.theme', next); } catch (err) { /* private mode */ }
       syncThemeColorMeta();
     }
+    if (el.getAttribute('data-action') === 'toggle-sidebar') {
+      document.body.classList.toggle('sidebar-open');
+    }
+  });
+
+  // Off-canvas sidebar closes on Escape (mobile drawer).
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') document.body.classList.remove('sidebar-open');
   });
 
   // Keep the browser-chrome color in step with the active theme.
   function syncThemeColorMeta() {
     var light = document.documentElement.getAttribute('data-theme') === 'light';
     document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
-      m.setAttribute('content', light ? '#f5f5f7' : '#09090b');
+      m.setAttribute('content', light ? '#6cc7b8' : '#2fa693');
       m.removeAttribute('media');
     });
   }

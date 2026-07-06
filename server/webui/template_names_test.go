@@ -60,6 +60,7 @@ var handlerTemplates = []string{
 var nestedTemplateRefs = []string{
 	"partials/alerts.html",
 	"partials/topbar.html",
+	"partials/sidebar.html",
 	"partials/admin_shell.html",
 	"partials/job_status_badge.html",
 	"partials/timeline_item.html",
@@ -201,6 +202,9 @@ func TestNestedPartialsExecute(t *testing.T) {
 			PageData: PageData{PageName: "dashboard", Error: "test error", Success: "ok", Restored: true, Deleted: true},
 		}},
 		{"partials/topbar.html", PageData{
+			PageName: "dashboard", Username: "testuser", IsAdmin: true, CSRFToken: "csrf", NavActive: "dashboard",
+		}},
+		{"partials/sidebar.html", PageData{
 			PageName: "dashboard", Username: "testuser", IsAdmin: true, CSRFToken: "csrf", NavActive: "dashboard",
 		}},
 		{"partials/admin_shell.html", adminOverviewData{

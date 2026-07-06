@@ -1,24 +1,16 @@
 {{define "partials/topbar.html"}}
 <header class="topbar" role="banner">
-  <div class="topbar-left">
-    <img src="/static/favicon.png" alt="" class="topbar-icon" aria-hidden="true">
-    <span class="topbar-brand">GSBS</span>
-  </div>
-  <nav class="topbar-nav" role="navigation" aria-label="Main">
-    <div class="topbar-nav-scroll">
-      <a href="/dashboard" {{if eq .NavActive "dashboard"}}class="active" aria-current="page"{{end}}>Dashboard</a>
-      <a href="/dashboard/games" {{if eq .NavActive "games"}}class="active" aria-current="page"{{end}}>My Games</a>
-      <a href="/dashboard/analytics" {{if eq .NavActive "analytics"}}class="active" aria-current="page"{{end}}>Insights</a>
-      {{if .IsAdmin}}<a href="/admin" {{if eq .NavActive "admin"}}class="active" aria-current="page"{{end}}>Admin</a>{{end}}
-      <a href="/dashboard/settings" {{if eq .NavActive "settings"}}class="active" aria-current="page"{{end}}>Settings</a>
-    </div>
-  </nav>
+  <button type="button" class="btn-ghost nav-burger" data-action="toggle-sidebar"
+          aria-label="Open navigation" aria-controls="app-sidebar">
+    <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+  </button>
+  <button type="button" class="cmdk-trigger topbar-search" data-cmdk-open aria-label="Search (Ctrl+K)">
+    <span class="cmdk-trigger-icon" aria-hidden="true">{{iconSVG "search" 14}}</span>
+    <span class="cmdk-trigger-text">Search games, pages…</span>
+    <kbd class="cmdk-trigger-kbd">⌘K</kbd>
+  </button>
   <div class="topbar-right">
-    <button type="button" class="cmdk-trigger" data-cmdk-open aria-label="Search (Ctrl+K)">
-      <span class="cmdk-trigger-icon" aria-hidden="true">{{iconSVG "search" 14}}</span>
-      <span class="cmdk-trigger-text">Search</span>
-      <kbd class="cmdk-trigger-kbd">⌘K</kbd>
-    </button>
+    <span class="topbar-slot" data-slot="bell"></span>
     <button type="button" class="btn-ghost theme-toggle" data-action="toggle-theme" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
       <span class="theme-toggle-dark" aria-hidden="true">{{iconSVG "moon" 15}}</span>
       <span class="theme-toggle-light" aria-hidden="true">{{iconSVG "sun" 15}}</span>

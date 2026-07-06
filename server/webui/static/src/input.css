@@ -165,7 +165,7 @@
 @layer components {
   .skip-link {
     position: absolute; left: -9999px; top: 0.5rem; z-index: 9999;
-    padding: 0.5rem 1rem; background: var(--accent); color: #fff; font-weight: 600;
+    padding: 0.5rem 1rem; background: var(--accent); color: var(--text-on-accent); font-weight: 600;
     border-radius: var(--radius-sm); text-decoration: none;
   }
   .skip-link:focus { left: 0.5rem; outline: 2px solid var(--accent-hover); outline-offset: 2px; }
@@ -180,7 +180,7 @@
 
   .auth-page {
     display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1.5rem;
-    background: radial-gradient(ellipse 80% 50% at 50% -10%, var(--accent-muted) 0%, transparent 60%);
+    background: linear-gradient(135deg, var(--bg-gradient-a), var(--bg-gradient-b)) fixed;
   }
   .auth-card {
     width: 100%; max-width: 24rem; padding: 2.5rem; background: var(--surface);
@@ -201,7 +201,7 @@
   .auth-form input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-muted); }
   .auth-form input::placeholder { color: var(--text-muted); }
   .auth-form button {
-    width: 100%; margin-top: 1.5rem; padding: 0.75rem 1rem; background: var(--accent); color: #fff;
+    width: 100%; margin-top: 1.5rem; padding: 0.75rem 1rem; background: var(--accent); color: var(--text-on-accent);
     border: none; border-radius: var(--radius-sm); font-size: 0.9375rem; font-weight: 600; cursor: pointer;
     transition: background var(--transition), transform 50ms;
   }
@@ -223,8 +223,40 @@
     color: var(--error); border-radius: var(--radius-sm); font-size: 0.875rem; text-align: center;
   }
 
-  .app-shell { display: flex; flex-direction: column; min-height: 100vh; }
-  .admin-shell { display: flex; min-height: 100vh; }
+  /* Floating shell on the mint→teal gradient (02 §1.1, mockup-locked).
+     body carries the gradient frame; .shell is the dark app surface. */
+  .app-shell, .admin-shell {
+    display: flex; min-height: 100vh;
+    background: linear-gradient(135deg, var(--bg-gradient-a), var(--bg-gradient-b)) fixed;
+    padding: 1.25rem;
+  }
+  .shell {
+    flex: 1; display: flex; min-width: 0; width: 100%; max-width: 100rem; margin: 0 auto;
+    background: var(--bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-shell);
+    overflow: clip;
+  }
+
+  /* User sidebar — nav pills, active = filled accent (mockup) */
+  .sidebar {
+    width: 14.5rem; flex-shrink: 0; background: var(--bg-raised);
+    border-right: 1px solid var(--border); padding: 1.25rem 0.875rem;
+    display: flex; flex-direction: column; gap: 1.25rem;
+  }
+  .sidebar-brand { display: flex; align-items: center; gap: 0.5rem; padding: 0 0.75rem; }
+  .sidebar-nav { display: flex; flex-direction: column; gap: 0.3rem; }
+  .sidebar-nav a {
+    display: flex; align-items: center; gap: 0.65rem; padding: 0.55rem 1rem;
+    border-radius: var(--radius-full); color: var(--text-secondary); text-decoration: none;
+    font-size: 0.875rem; font-weight: 500;
+    transition: color var(--transition), background var(--transition);
+  }
+  .sidebar-nav a:hover { color: var(--text); background: var(--surface-hover); }
+  .sidebar-nav a.active { color: var(--text-on-accent); background: var(--accent); }
+  .sidebar-icon { display: inline-flex; flex-shrink: 0; }
+  .sidebar-divider { border: 0; border-top: 1px solid var(--border); margin: 0.5rem 0; }
+  .sidebar-backdrop { display: none; }
+  .app-main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+  .nav-burger { display: none; }
   .admin-sidebar {
     width: 14rem; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border);
     padding: 1rem; display: flex; flex-direction: column; gap: 0.25rem;
@@ -249,8 +281,15 @@
 
   .topbar {
     display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.5rem;
-    background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0;
+    background: var(--bg-raised); border-bottom: 1px solid var(--border); flex-shrink: 0;
   }
+  /* Server topbar variant: search pill + actions (nav lives in the sidebar).
+     .topbar-nav rules below remain for the client loopback WebUI. */
+  .topbar .cmdk-trigger.topbar-search {
+    flex: 0 1 24rem; justify-content: flex-start; border-radius: var(--radius-full);
+    padding: 0.5rem 1rem;
+  }
+  .topbar-slot { display: inline-flex; }
   .topbar-left { display: flex; align-items: center; gap: 0.5rem; }
   .topbar-icon { width: 24px; height: 24px; }
   .topbar-brand { font-size: 1.125rem; font-weight: 700; letter-spacing: -0.02em; }
@@ -281,14 +320,14 @@
   .btn-primary {
     display: inline-flex; align-items: center; justify-content: center;
     padding: 0.625rem 1.25rem; font-size: 0.875rem; font-weight: 600; font-family: inherit;
-    border-radius: var(--radius-sm); background: var(--accent); color: #fff; border: none;
+    border-radius: var(--radius-sm); background: var(--accent); color: var(--text-on-accent); border: none;
     cursor: pointer; transition: background var(--transition), transform 50ms;
   }
   .btn-primary:hover { background: var(--accent-hover); }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-primary-sm {
     padding: 0.3rem 0.75rem; font-size: 0.75rem; font-weight: 600; border-radius: var(--radius-xs);
-    background: var(--accent); color: #fff; border: none; cursor: pointer;
+    background: var(--accent); color: var(--text-on-accent); border: none; cursor: pointer;
     transition: background var(--transition), transform 50ms;
   }
   .btn-primary-sm:hover { background: var(--accent-hover); }
@@ -664,11 +703,11 @@
 
   .wizard-steps { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; font-weight: 500; margin-bottom: 1.25rem; }
   .wizard-step { border-radius: 9999px; padding: 0.2rem 0.7rem; }
-  .wizard-step-active { background: var(--accent); color: #fff; }
+  .wizard-step-active { background: var(--accent); color: var(--text-on-accent); }
   .wizard-step-done { background: var(--success-muted); color: var(--success); }
   .wizard-step-pending { background: var(--surface-hover); color: var(--text-muted); }
   .wizard-sep { color: var(--text-muted); }
-  .discovery-panel { margin-bottom: 1.25rem; padding: 1rem; background: var(--success-muted); border: 1px solid rgba(34,197,94,.25); border-radius: var(--radius-sm); }
+  .discovery-panel { margin-bottom: 1.25rem; padding: 1rem; background: var(--success-muted); border: 1px solid var(--success-line); border-radius: var(--radius-sm); }
   .discovery-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
   .discovery-icon { width: 1.125rem; height: 1.125rem; color: var(--success); flex-shrink: 0; }
   .discovery-status { font-size: 0.875rem; color: var(--success); margin: 0 0 0.5rem; }
@@ -817,7 +856,22 @@
 @media (max-width: 900px) {
   .stats-row { grid-template-columns: repeat(2, 1fr); }
   .stats-row-5, .stats-row-6 { grid-template-columns: repeat(3, 1fr); }
-  .admin-shell { flex-direction: column; }
+  /* Gradient frame collapses; shell goes edge-to-edge (02 §1.1). */
+  .app-shell, .admin-shell { padding: 0; }
+  .shell { flex-direction: column; border-radius: 0; box-shadow: none; max-width: none; }
+  /* User sidebar becomes an off-canvas drawer toggled by the topbar burger. */
+  .sidebar {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 60; width: 16rem;
+    border-right: 1px solid var(--border-strong);
+    transform: translateX(-100%); transition: transform var(--dur) var(--ease);
+  }
+  body.sidebar-open .sidebar { transform: none; }
+  body.sidebar-open .sidebar-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 50;
+    background: rgba(0, 0, 0, 0.5); border: 0; padding: 0; cursor: default;
+  }
+  .nav-burger { display: inline-flex; }
+  .topbar .cmdk-trigger.topbar-search { flex: 1 1 auto; }
   .admin-sidebar { display: none; }
   .admin-mobile-nav {
     display: flex; position: sticky; top: 0; z-index: 20; flex-shrink: 0;
