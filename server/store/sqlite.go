@@ -145,6 +145,10 @@ func isTokenHashed(token string) bool {
 	return true
 }
 
+// TokenMaxAge exposes the device-token lifetime (default 90 days, overridable
+// via GSBS_TOKEN_MAX_AGE) so the WebUI can render truthful expiry countdowns.
+func TokenMaxAge() time.Duration { return tokenMaxAge() }
+
 func tokenMaxAge() time.Duration {
 	d := 90 * 24 * time.Hour
 	if s := os.Getenv("GSBS_TOKEN_MAX_AGE"); s != "" {
@@ -561,7 +565,7 @@ func (s *sqliteStore) ClientByToken(ctx context.Context, token string) (userID, 
 
 func (s *sqliteStore) ListClientsByUserID(ctx context.Context, userID string) ([]ClientInfo, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, os, COALESCE(last_seen, created_at), COALESCE(app_version, '') FROM clients WHERE user_id = ? ORDER BY name`, userID)
+		`SELECT id, name, os, COALESCE(last_seen, created_at), COALESCE(app_version, ''), COALESCE(token_created_at, created_at) FROM clients WHERE user_id = ? ORDER BY name`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -569,7 +573,7 @@ func (s *sqliteStore) ListClientsByUserID(ctx context.Context, userID string) ([
 	var out []ClientInfo
 	for rows.Next() {
 		var c ClientInfo
-		if err := rows.Scan(&c.ID, &c.Name, &c.OS, &c.LastSeen, &c.AppVersion); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.OS, &c.LastSeen, &c.AppVersion, &c.TokenCreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

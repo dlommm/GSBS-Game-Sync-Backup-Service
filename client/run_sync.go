@@ -83,6 +83,9 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 	log.Printf("client sync: starting server=%s", cfg.ServerURL)
 	warnPlainHTTP(cfg.ServerURL)
+	// Rotate the device token if due (monthly, against the 90-day server
+	// expiry) so long-lived installs never hit silent token expiry.
+	maybeRefreshToken(ctx, cfg)
 
 	// Startup order (single goroutine until the select loop):
 	//  1. Restore discovery cache → filter manifest watch paths in discovered mode
@@ -420,6 +423,10 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	// Daily check for the monthly token rotation (long-running installs never
+	// restart; mid-run rotation is safe via the 401 → TokenReload path).
+	tokenTicker := time.NewTicker(24 * time.Hour)
+	defer tokenTicker.Stop()
 
 	doManifestRefresh := func(reason string) {
 		log.Printf("manifest refresh (%s): starting", reason)
@@ -495,6 +502,8 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 			return nil
 		case <-ticker.C:
 			doPull("periodic pull")
+		case <-tokenTicker.C:
+			maybeRefreshToken(ctx, cfg)
 		case <-syncNowCh:
 			doPull("sync now")
 		case <-ssePullCh:

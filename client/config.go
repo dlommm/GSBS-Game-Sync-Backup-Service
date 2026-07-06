@@ -65,7 +65,8 @@ func (d Duration) String() string {
 type config struct {
 	ServerURL                   string            `json:"server_url"`
 	Token                       string            `json:"token"`
-	ClientName                  string            `json:"client_name,omitempty"` // name shown on server for this machine
+	TokenRefreshedAt            string            `json:"token_refreshed_at,omitempty"` // last proactive /api/token/refresh rotation (RFC3339)
+	ClientName                  string            `json:"client_name,omitempty"`        // name shown on server for this machine
 	SyncInterval                Duration          `json:"sync_interval"`
 	UbisoftConnectFolder        string            `json:"ubisoft_connect_folder,omitempty"`          // e.g. C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher
 	GOGGalaxyFolder             string            `json:"gog_galaxy_folder,omitempty"`               // e.g. C:\Program Files (x86)\GOG Galaxy

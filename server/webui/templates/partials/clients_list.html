@@ -8,8 +8,21 @@
       <span class="client-status {{if .Online}}online{{else}}offline{{end}}" title="{{if .Online}}Online{{else}}Offline{{end}}" aria-hidden="true"></span>
       <span class="client-name">{{.Name}}</span>
       <span class="os-badge os-{{.OS}}">{{.OS}}</span>
+      {{if .AppVersion}}<span class="client-version" title="Client app version">v{{.AppVersion}}</span>{{end}}
     </div>
     <div class="client-card-meta">{{if .Online}}Online now{{else}}Last seen <span title="{{.LastSeen}}">{{formatTime .LastSeen}}</span>{{end}}</div>
+    {{if gt .StaleDays 0}}
+    <div class="client-callout client-callout-warn">
+      <span aria-hidden="true">{{iconSVG "alert" 12}}</span>
+      Hasn't synced in {{.StaleDays}} days — check that GSBS is running on this device.
+    </div>
+    {{end}}
+    {{if ge .TokenExpiresDays 0}}
+    <div class="client-token-line{{if .TokenExpirySoon}} client-callout-warn{{end}}"
+         title="Devices renew their access token automatically whenever they sync.">
+      {{if .TokenExpirySoon}}Access token expires in {{.TokenExpiresDays}}d — the device must come online to renew, or re-login.{{else}}Token renews automatically · expires in {{.TokenExpiresDays}}d{{end}}
+    </div>
+    {{end}}
     {{if not $.ReadOnly}}
     <div class="client-card-actions">
       <button type="button" class="btn-ghost-sm" data-open-dialog="rename-{{.ID}}">Rename</button>

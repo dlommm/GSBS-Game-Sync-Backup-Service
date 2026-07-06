@@ -15,9 +15,38 @@ import (
 // online; the clients list polls every 30s to keep this fresh.
 const clientOnlineWindow = 5 * time.Minute
 
+// staleAfter: a device that hasn't been seen for this long gets a "hasn't
+// synced in N days" callout on the Devices page (matches the stale-device
+// notification default of 14 days).
+const staleAfter = 14 * 24 * time.Hour
+
 type clientRow struct {
 	store.ClientInfo
 	Online bool
+	// Device Health (v5.1): computed presentation fields.
+	StaleDays        int  // days since last_seen when past staleAfter; 0 when fresh
+	TokenExpiresDays int  // whole days until the device token expires (floor 0)
+	TokenExpirySoon  bool // under 7 days — the device must come online to auto-renew
+}
+
+func buildClientHealth(row *clientRow, now time.Time) {
+	if !row.Online {
+		if t, err := time.Parse(time.RFC3339, row.LastSeen); err == nil {
+			if age := now.Sub(t); age >= staleAfter {
+				row.StaleDays = int(age.Hours() / 24)
+			}
+		}
+	}
+	if t, err := time.Parse(time.RFC3339, row.TokenCreatedAt); err == nil {
+		left := store.TokenMaxAge() - now.Sub(t)
+		if left < 0 {
+			left = 0
+		}
+		row.TokenExpiresDays = int(left.Hours() / 24)
+		row.TokenExpirySoon = left < 7*24*time.Hour
+	} else {
+		row.TokenExpiresDays = -1 // unknown; template hides the line
+	}
 }
 
 type dashboardClientsData struct {
@@ -43,12 +72,15 @@ func (h *WebHandler) loadClientRows(ctx context.Context, userID string) (rows []
 		return nil, 0
 	}
 	rows = make([]clientRow, 0, len(clients))
+	now := time.Now().UTC()
 	for _, c := range clients {
 		on := clientIsOnline(c.LastSeen)
 		if on {
 			online++
 		}
-		rows = append(rows, clientRow{ClientInfo: c, Online: on})
+		row := clientRow{ClientInfo: c, Online: on}
+		buildClientHealth(&row, now)
+		rows = append(rows, row)
 	}
 	return rows, online
 }

@@ -406,11 +406,12 @@ type SaveMeta struct {
 }
 
 type ClientInfo struct {
-	ID         string
-	Name       string
-	OS         string
-	LastSeen   string
-	AppVersion string // reported via X-GSBS-Client-Version; empty for pre-4.0 clients
+	ID             string
+	Name           string
+	OS             string
+	LastSeen       string
+	AppVersion     string // reported via X-GSBS-Client-Version; empty for pre-4.0 clients
+	TokenCreatedAt string // when the device token was minted/refreshed; drives expiry display
 }
 
 // SaveSummary is a lightweight save entry for dashboard display (no content blob).

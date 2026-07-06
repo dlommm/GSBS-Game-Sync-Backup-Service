@@ -378,8 +378,8 @@ func templateTestData(name string) interface{} {
 				CSRFToken: pd.CSRFToken, NavActive: "clients",
 			},
 			Clients: []clientRow{
-				{ClientInfo: store.ClientInfo{ID: "c1", Name: "Gaming PC", OS: "windows", LastSeen: now}, Online: true},
-				{ClientInfo: store.ClientInfo{ID: "c2", Name: "Steam Deck", OS: "linux", LastSeen: now}, Online: false},
+				{ClientInfo: store.ClientInfo{ID: "c1", Name: "Gaming PC", OS: "windows", LastSeen: now, AppVersion: "5.1.0"}, Online: true, TokenExpiresDays: 84},
+				{ClientInfo: store.ClientInfo{ID: "c2", Name: "Steam Deck", OS: "linux", LastSeen: now}, Online: false, StaleDays: 21, TokenExpiresDays: 3, TokenExpirySoon: true},
 			},
 			Online: 1, Total: 2,
 		}
