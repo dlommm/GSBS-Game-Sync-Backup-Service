@@ -5,8 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#2fa693" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#6cc7b8" media="(prefers-color-scheme: light)">
   <title>GSBS — {{.Title}}</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/app.css">
@@ -14,11 +14,15 @@
 </head>
 <body class="app-shell">
   <a href="#main-content" class="skip-link">Skip to main content</a>
-  {{template "partials/topbar.html" .}}
-  <main id="main-content" class="page-content" role="main">
-    {{template "partials/alerts.html" .}}
-    {{pageBlock .PageName "content" .}}
-  </main>
+  <div class="shell">
+    <div class="app-main">
+      {{template "partials/topbar.html" .}}
+      <main id="main-content" class="page-content" role="main">
+        {{template "partials/alerts.html" .}}
+        {{pageBlock .PageName "content" .}}
+      </main>
+    </div>
+  </div>
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
   <script src="/static/toast.js"></script>
   <script src="/static/app.js" defer></script>
