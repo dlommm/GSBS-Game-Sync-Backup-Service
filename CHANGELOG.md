@@ -4,6 +4,31 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-07-05
+
+Login fix for admin-created accounts, a full table overhaul across the WebUI, security dependency bumps, and saner sync-schedule defaults.
+
+### Fixed
+
+- **Users created from Admin → Users can now log in from the desktop client.** That form was the only account-creation path without password rules, while both login endpoints rejected passwords under 8 characters before even checking them — so admin-created accounts with short passwords could never sign in anywhere (it looked like "only admins can log in"). The create-user form now enforces the same 8–72 character rule as the setup wizard, and login itself no longer applies a minimum length (only the bcrypt 72-byte ceiling), so **existing short-password accounts start working immediately — no reset needed**.
+- **The client no longer trims whitespace off passwords**, which made passwords with leading/trailing spaces work on the web but silently fail in the client. Login failures now show the server's actual reason ("bad credentials", …) instead of a bare HTTP status.
+- **SSE connection-cap eviction is deterministic.** Eviction ordered connections by wall-clock time; on Windows, back-to-back connections could tie and a random one was evicted. A monotonic sequence number now decides.
+
+### Added
+
+- **Every WebUI table grew up.** Activity & Jobs, Server Logs, and dashboard Recent Activity now paginate instead of truncating: shared Prev/Next pager with per-page selector (10/25/50/100), header count badges, and sortable columns. The Jobs table shows *all* job types (not just PCGW sync) with job and status filters that survive live refreshes; the audit log gets an action filter, debounced search, and a filtered CSV export; Server Logs page back through history with Newer/Older and a total-match count; Recent Activity gets a Load more button that respects the category tabs.
+- **Per-table customization.** Each table has a "Table ⚙" menu: show/hide individual columns, compact row density, zebra stripes — remembered per table in your browser.
+
+### Changed
+
+- **Default schedules moved to weekly Monday 03:00** for both the S3 bundle fetch (was daily 04:00) and the PCGW API sync (was Sunday 03:00), timed after the public manifest publisher's Sunday run so a fetch always picks up a finished publish. Existing saved settings are untouched.
+- **The client's default pull interval is now 6 hours** (was 5 minutes). File changes still push immediately; the interval only bounds how stale a pull-only client can get. Existing client configs keep their value.
+
+### Security
+
+- **Fixed CVE-2026-39821 (9.6 critical) and five medium CVEs** by bumping `golang.org/x/net` to v0.56.0 (plus patch releases of x/crypto, x/sys, x/mod, x/time). `govulncheck` is clean.
+- **Docker image moves to Alpine 3.24.1**, picking up sqlite-libs 3.53.2 and busybox 1.37.0-r31 — clearing CVE-2026-11822/11824 and CVE-2025-60876, which remain unpatched on the 3.23 branch.
+
 ## [4.2.0] - 2026-07-05
 
 macOS correctness release: the Mac client now understands it's a Mac, and can update itself.

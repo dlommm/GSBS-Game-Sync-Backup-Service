@@ -6,6 +6,28 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [4.3.0] — 2026-07-05
+
+Login fix for admin-created accounts, a WebUI table overhaul, security dependency bumps, and saner sync-schedule defaults.
+
+### Fixed
+
+- **Users created from Admin → Users can now log in from the desktop client.** The admin create-user form skipped the 8-character password minimum that login enforced, so admin-created accounts with short passwords could never sign in — it looked like only admins could use the client. Creation now enforces 8–72 characters, login no longer applies a minimum (existing short-password accounts work immediately, no reset needed), the client stops trimming whitespace off passwords, and login errors show the real reason instead of a bare HTTP status.
+
+### Added
+
+- **Paginated, filterable tables everywhere.** Activity & Jobs (all job types + job/status filters), audit log (action filter, search, CSV export), Server Logs (Newer/Older paging with match counts), and dashboard Recent Activity (Load more) — plus a per-table "Table ⚙" menu with column show/hide, compact density, and zebra stripes, remembered per browser.
+
+### Changed
+
+- **Default sync schedules are now weekly Monday 03:00** (bundle fetch and API sync), timed after the public manifest publisher's Sunday run; the client's default pull interval is now 6 hours (file changes still push immediately). Existing settings are untouched.
+
+### Security
+
+- **CVE-2026-39821 (9.6 critical) and five medium CVEs fixed** via `golang.org/x/net` v0.56.0; the Docker image moves to Alpine 3.24.1, clearing the sqlite (CVE-2026-11822/11824) and busybox (CVE-2025-60876) advisories still unpatched on Alpine 3.23.
+
+---
+
 ## [4.2.0] — 2026-07-05
 
 macOS correctness release: the Mac client now understands it's a Mac, and can update itself.
