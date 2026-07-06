@@ -642,7 +642,7 @@ func chartLineSVG(snapshots []store.StatsSnapshotRow, field string, width, heigh
 			fmt.Fprintf(&path, " L%.1f,%.1f", x, y)
 		}
 	}
-	svg := fmt.Sprintf(`<svg class="chart-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" aria-hidden="true"><path d="%s" fill="none" stroke="#6366f1" stroke-width="2"/></svg>`,
+	svg := fmt.Sprintf(`<svg class="chart-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" aria-hidden="true"><path class="chart-line" d="%s" fill="none" stroke-width="2"/></svg>`,
 		width, height, path.String())
 	return template.HTML(svg) //nolint:gosec // G203: SVG markup built entirely from server-computed numbers, no user input
 }
