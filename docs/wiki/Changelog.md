@@ -6,6 +6,20 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.1.0] — 2026-07-06
+
+Phase 2 of the v5 overhaul: the redesigned surfaces come alive with real-time and self-care features.
+
+### Added
+
+- **Live Sync Pulse** — watch saves arrive in real time on the dashboard rail; device rows pulse while syncing.
+- **Device Health** — app versions, stale-device callouts, and an honest token-expiry countdown; clients now auto-rotate their tokens monthly so they never silently expire.
+- **Setup Health** — the admin overview checklist is now live: HTTPS, backups, first device/sync, notifications, and 2FA are each checked against real state with fix links.
+- **Restore confidence** — Insights shows everyone whether server backups and integrity checks are passing.
+- **Storage breakdown** — see each game's version-history footprint and prune it to policy with one audited click.
+
+---
+
 ## [5.0.0] — 2026-07-06
 
 A complete visual redesign of every GSBS interface — the v5 look. Same features, new design

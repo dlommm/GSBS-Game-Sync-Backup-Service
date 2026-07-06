@@ -4,6 +4,26 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-07-06
+
+### Added — live insight & self-care features (v5 overhaul, phase 2)
+- **Live Sync Pulse**: the dashboard's right rail now streams sync activity in real time —
+  "<device> synced <game>" entries appear the moment a push lands, and device rows flash a
+  "syncing now" pulse. The `client-activity` SSE event now carries device, game title, size,
+  and timestamp (old clients are unaffected).
+- **Device Health**: the Devices page shows each client's app version, a "hasn't synced in
+  N days" callout for stale devices, and a truthful token-expiry countdown. The client now
+  **rotates its device token automatically every month** (against the 90-day server expiry),
+  so long-lived installs never silently expire into a forced re-login.
+- **Setup Health**: the admin overview's static getting-started list is now a live checklist —
+  HTTPS detected, backup health, first device, first sync, notifications tested, admin 2FA —
+  each with a fix link.
+- **Restore confidence**: Insights shows every user the server-backup and integrity-check
+  status (last run, success/failure, or "not configured") — proof your saves are recoverable.
+- **Storage breakdown**: Insights lists each game's live-save vs version-history footprint and
+  its retention policy, with a one-click **Prune** that trims history down to policy (audited;
+  newest versions always kept).
+
 ## [5.0.0] - 2026-07-06
 
 ### Changed — full UI redesign (v5 visual overhaul, phase 1: parity)
