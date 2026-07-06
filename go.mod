@@ -4,11 +4,11 @@ go 1.25.0
 
 require (
 	fyne.io/systray v1.12.2
-	github.com/fsnotify/fsnotify v1.7.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gen2brain/beeep v0.11.2
-	github.com/klauspost/compress v1.18.6
+	github.com/klauspost/compress v1.19.0
 	github.com/lxn/walk v0.0.0-20210112085537-c389da54e794
-	github.com/mattn/go-sqlite3 v1.14.22
+	github.com/mattn/go-sqlite3 v1.14.47
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/pquerna/otp v1.5.0
 	github.com/robfig/cron/v3 v3.0.1
