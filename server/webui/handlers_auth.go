@@ -58,7 +58,9 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if len(password) < 8 || len(password) > 72 {
+	// Login only checks the bcrypt 72-byte ceiling; a minimum here would
+	// lock out accounts created before creation-time rules were enforced.
+	if len(password) > 72 {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
 			"Error":         "Invalid password length",
@@ -389,6 +391,8 @@ func adminQueryError(r *http.Request) string {
 		return "Username and password are required."
 	case "password_mismatch":
 		return "Passwords do not match."
+	case "password_too_short":
+		return "Password must be 8–72 characters."
 	case "username_taken":
 		return "That username is already taken."
 	case "create_user_failed":

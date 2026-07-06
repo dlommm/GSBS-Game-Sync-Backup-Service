@@ -103,14 +103,14 @@
         <div class="form-group">
           <label for="new_password">Password</label>
           <div class="password-wrap">
-            <input id="new_password" name="password" type="password" class="text-input" required autocomplete="new-password">
+            <input id="new_password" name="password" type="password" class="text-input" required minlength="8" maxlength="72" autocomplete="new-password">
             <button type="button" class="password-toggle-btn" data-password-toggle="new_password" aria-label="Show password" aria-pressed="false"><span class="icon-eye">{{iconSVG "eye" 15}}</span><span class="icon-eye-off">{{iconSVG "eye-off" 15}}</span></button>
           </div>
           <div class="strength-meter" data-strength-for="new_password" data-score="0" aria-hidden="true"><div class="strength-track"><div class="strength-fill"></div></div><span class="strength-label"></span></div>
         </div>
         <div class="form-group">
           <label for="new_confirm_password">Confirm password</label>
-          <input id="new_confirm_password" name="confirm_password" type="password" class="text-input" required autocomplete="new-password" data-match-of="new_password">
+          <input id="new_confirm_password" name="confirm_password" type="password" class="text-input" required minlength="8" maxlength="72" autocomplete="new-password" data-match-of="new_password">
         </div>
       </div>
     </div>

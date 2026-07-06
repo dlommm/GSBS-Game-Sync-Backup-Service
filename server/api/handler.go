@@ -398,7 +398,10 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username too long"})
 		return
 	}
-	if len(req.Password) < 8 || len(req.Password) > 72 {
+	// Only the bcrypt 72-byte ceiling is checked at login time. A minimum
+	// here adds no security (the hash comparison does the work) and locks
+	// out accounts created before creation-time rules were enforced.
+	if len(req.Password) > 72 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid password length"})
 		return
 	}

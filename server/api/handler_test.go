@@ -93,6 +93,52 @@ func TestHandler_Register_Login_Pull(t *testing.T) {
 	}
 }
 
+// Accounts created before creation-time password rules (e.g. via the old
+// admin create-user form) may have short passwords; login must still work —
+// only the bcrypt 72-byte ceiling is enforced at login time.
+func TestHandler_Login_LegacyShortPassword(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	authSvc := auth.NewService(st)
+	h := NewHandler(st, authSvc, true, sse.NewHub(), nil, nil, nil, nil, nil, 0, false, "", "")
+
+	// Simulate a legacy account with a 5-char password (bypasses register rules).
+	if _, err := authSvc.RegisterUser(t.Context(), "legacy", "abc12"); err != nil {
+		t.Fatal(err)
+	}
+
+	loginBody, _ := json.Marshal(map[string]string{"username": "legacy", "password": "abc12", "client_name": "test", "client_os": "linux"})
+	req := httptest.NewRequest(http.MethodPost, "/api/login", bytes.NewReader(loginBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("legacy short-password login status: %d body: %s", rec.Code, rec.Body.String())
+	}
+	var loginResp struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&loginResp); err != nil {
+		t.Fatal(err)
+	}
+	if loginResp.Token == "" {
+		t.Fatal("empty token")
+	}
+
+	// Wrong short password must still be rejected.
+	badBody, _ := json.Marshal(map[string]string{"username": "legacy", "password": "wrong", "client_name": "test", "client_os": "linux"})
+	req = httptest.NewRequest(http.MethodPost, "/api/login", bytes.NewReader(badBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong password status: %d body: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandler_RegisterDisabled(t *testing.T) {
 	st, _ := store.NewSQLite(":memory:")
 	defer st.Close()

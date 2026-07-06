@@ -728,6 +728,13 @@ func (h *WebHandler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		Redirect(w, r, "/admin/users?error=password_mismatch")
 		return
 	}
+	// Same rule as the setup wizard and self-registration — without it,
+	// admin-created accounts with short passwords are rejected by the
+	// login endpoints and can never sign in from a client.
+	if len(password) < 8 || len(password) > 72 {
+		Redirect(w, r, "/admin/users?error=password_too_short")
+		return
+	}
 	if _, err := h.auth.RegisterUser(r.Context(), newUsername, password); err != nil {
 		if strings.Contains(err.Error(), "exists") || strings.Contains(err.Error(), "duplicate") {
 			Redirect(w, r, "/admin/users?error=username_taken")

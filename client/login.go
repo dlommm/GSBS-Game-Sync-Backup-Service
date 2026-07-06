@@ -54,7 +54,8 @@ func DoLogin(serverURL, username, password, clientName string) (*config, error) 
 func DoLoginWithTOTP(serverURL, username, password, clientName, totpCode string) (*config, error) {
 	serverURL = strings.TrimSpace(serverURL)
 	username = strings.TrimSpace(username)
-	password = strings.TrimSpace(password)
+	// Never trim the password: whitespace can be part of it, and trimming
+	// here made such passwords work on the web UI but fail in the client.
 	clientName = strings.TrimSpace(clientName)
 	if serverURL == "" {
 		return nil, fmt.Errorf("server URL is required")
@@ -88,8 +89,18 @@ func DoLoginWithTOTP(serverURL, username, password, clientName, totpCode string)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("client login: failed server=%s username=%q: %s", serverURL, username, resp.Status)
-		return nil, fmt.Errorf("login failed: %s", resp.Status)
+		// Surface the server's reason ("bad credentials", "invalid password
+		// length", …) — a bare HTTP status makes login failures undiagnosable.
+		var apiErr struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&apiErr)
+		reason := strings.TrimSpace(apiErr.Error)
+		if reason == "" {
+			reason = resp.Status
+		}
+		log.Printf("client login: failed server=%s username=%q: %s (%s)", serverURL, username, reason, resp.Status)
+		return nil, fmt.Errorf("login failed: %s", reason)
 	}
 	var out struct {
 		Token        string `json:"token"`
