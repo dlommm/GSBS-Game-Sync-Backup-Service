@@ -12,6 +12,24 @@
   <p class="panel-subtitle">Manage PCGamingWiki game data synchronization. Browse the games catalog, trigger sync jobs, and manage the save location manifest served to GSBS clients.</p>
 </div>
 
+<section class="panel pcgw-hero pcgw-hero-{{.Recommend.Tone}}" aria-labelledby="pcgw-recommend-heading">
+  <div class="pcgw-hero-main">
+    <span class="pcgw-hero-icon" aria-hidden="true">
+      {{if eq .Recommend.Tone "ok"}}{{iconSVG "check" 20}}{{else if eq .Recommend.Tone "warn"}}{{iconSVG "alert" 20}}{{else}}{{iconSVG "refresh" 20}}{{end}}
+    </span>
+    <div>
+      <h2 id="pcgw-recommend-heading" class="pcgw-hero-title">{{.Recommend.Title}}</h2>
+      <p class="pcgw-hero-detail">{{.Recommend.Detail}}</p>
+    </div>
+  </div>
+  {{if .Recommend.Action}}
+  <form method="post" action="{{.Recommend.Action}}" class="inline-form">
+    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+    <button type="submit" class="btn-primary">{{.Recommend.Button}}</button>
+  </form>
+  {{end}}
+</section>
+
 <section class="stats-row stats-row-6" aria-label="PCGW statistics">
   <div class="stat-card"><div class="stat-value">{{.Stats.TotalGames}}</div><div class="stat-label">Total games</div></div>
   <div class="stat-card"><div class="stat-value">{{.Stats.OK}}</div><div class="stat-label">Parse OK</div></div>

@@ -1544,6 +1544,15 @@ a.inbox-title:hover { color: var(--accent); }
 .crypto-status.tone-ok-text { color: var(--text-secondary); }
 .crypto-devices { list-style: none; margin: 0 0 0.75rem; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 .crypto-device { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; }
+/* PCGW guided hero (v5.2): status → recommended action */
+.pcgw-hero { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; flex-wrap: wrap; }
+.pcgw-hero-main { display: flex; align-items: center; gap: 0.9rem; min-width: 0; }
+.pcgw-hero-icon { display: inline-flex; padding: 0.55rem; border-radius: 50%; flex-shrink: 0; background: var(--surface-hover); color: var(--text-muted); }
+.pcgw-hero-ok .pcgw-hero-icon { background: var(--success-muted); color: var(--success); }
+.pcgw-hero-warn .pcgw-hero-icon { background: var(--warning-muted); color: var(--warning); }
+.pcgw-hero-info .pcgw-hero-icon { background: var(--info-muted); color: var(--info); }
+.pcgw-hero-title { margin: 0; font-size: 1rem; font-weight: 600; }
+.pcgw-hero-detail { margin: 0.15rem 0 0; font-size: 0.8125rem; color: var(--text-secondary); }
 .protection-item {
   display: flex; align-items: center; gap: 0.7rem; padding: 0.75rem 0.9rem;
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-raised);

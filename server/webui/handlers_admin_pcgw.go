@@ -17,8 +17,60 @@ import (
 	"github.com/gsbs/gsbs/server/store"
 )
 
+// pcgwRecommendation is the guided next-action hero (v5.2): one plain-language
+// status line and, when something needs doing, the single button that does it.
+type pcgwRecommendation struct {
+	Tone   string // "ok" | "warn" | "info"
+	Title  string
+	Detail string
+	Action string // POST form action; "" renders no button
+	Button string
+}
+
+// buildPCGWRecommendation turns catalog/job state into one recommended action,
+// in priority order: running job → empty catalog → dead-letter → backlog →
+// bundle fetch error → healthy.
+func buildPCGWRecommendation(d *adminPCGWData) pcgwRecommendation {
+	switch {
+	case d.JobRunning || d.BundleJobRunning:
+		return pcgwRecommendation{Tone: "info", Title: "Sync in progress",
+			Detail: "A sync job is running — live progress below. No action needed."}
+	case d.Stats.TotalGames == 0 && d.BundleSyncSource != "api":
+		return pcgwRecommendation{Tone: "warn", Title: "Catalog is empty",
+			Detail: "Fetch the prebuilt manifest bundle to populate game save locations in one step.",
+			Action: "/admin/pcgw/bundle/fetch", Button: "Fetch manifest bundle"}
+	case d.Stats.TotalGames == 0:
+		return pcgwRecommendation{Tone: "warn", Title: "Catalog is empty",
+			Detail: "Run a full sync to crawl PCGamingWiki and populate the catalog (this takes a while).",
+			Action: "/admin/pcgw/sync", Button: "Run full sync"}
+	case d.CatalogStats.DeadLetter > 0:
+		return pcgwRecommendation{Tone: "warn",
+			Title:  fmt.Sprintf("%d page(s) permanently failed", d.CatalogStats.DeadLetter),
+			Detail: "These pages exhausted their retries (dead-letter). Retrying re-queues just them — new wiki fixes often resolve old parse failures.",
+			Action: "/admin/pcgw/sync/retry-failed", Button: "Retry failed pages"}
+	case d.CatalogStats.MissingLocal > 0:
+		return pcgwRecommendation{Tone: "warn",
+			Title:  fmt.Sprintf("Catalog is behind — %d game(s) missing locally", d.CatalogStats.MissingLocal),
+			Detail: "Auto Catch-Up repeats sync cycles until the backlog drains, then stops by itself.",
+			Action: "/admin/pcgw/sync/auto-catch-up", Button: "Run Auto Catch-Up"}
+	case d.BundleLastError != "":
+		return pcgwRecommendation{Tone: "warn", Title: "Last bundle fetch failed",
+			Detail: d.BundleLastError,
+			Action: "/admin/pcgw/bundle/fetch", Button: "Retry bundle fetch"}
+	default:
+		detail := "Scheduled syncs keep it fresh automatically."
+		if d.LatestSyncRun != nil {
+			detail = "Last sync " + d.LatestSyncRun.StartedAt + ". " + detail
+		}
+		return pcgwRecommendation{Tone: "ok",
+			Title:  fmt.Sprintf("Catalog healthy — %d games", d.Stats.TotalGames),
+			Detail: detail}
+	}
+}
+
 type adminPCGWData struct {
 	PageData
+	Recommend          pcgwRecommendation
 	Stats              PCGWStatsView
 	CatalogStats       types.PCGWCatalogStats
 	LatestSyncRun      *types.PCGWSyncRun
@@ -154,7 +206,7 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 	catalogStats, _ := h.store.GetPCGWCatalogStats(ctx)
 	latestRun, _ := h.store.GetLatestPCGWSyncRun(ctx)
 	resumableRun, _ := h.store.GetResumablePCGWSyncRun(ctx, "incremental")
-	h.render(w, "admin_pcgw.html", adminPCGWData{
+	data := adminPCGWData{
 		PageData:           h.adminPageData(w, r, userID, username, "pcgw", "admin_pcgw"),
 		Stats:              h.loadPCGWStats(ctx),
 		CatalogStats:       catalogStats,
@@ -194,7 +246,9 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 		BundleLastETag:     jobs.BundleLastETag,
 		BundleLastError:    jobs.BundleLastError,
 		BundleJobRunning:   jobs.BundleJobRunning,
-	})
+	}
+	data.Recommend = buildPCGWRecommendation(&data)
+	h.render(w, "admin_pcgw.html", data)
 }
 
 func (h *WebHandler) serveAdminPCGWPartial(w http.ResponseWriter, r *http.Request) {
