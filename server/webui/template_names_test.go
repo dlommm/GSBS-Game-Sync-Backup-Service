@@ -27,6 +27,7 @@ var handlerTemplates = []string{
 	"game_detail.html",
 	"partials/game_cards.html",
 	"dashboard_clients.html",
+	"dashboard_conflicts.html",
 	"partials/clients_list.html",
 	"partials/cmdk_results.html",
 	"dashboard_analytics.html",
@@ -42,6 +43,8 @@ var handlerTemplates = []string{
 	"admin_analytics.html",
 	"partials/dashboard_stats.html",
 	"partials/dashboard_clients.html",
+	"partials/conflicts_list.html",
+	"partials/conflict_badge.html",
 	"partials/dashboard_saves.html",
 	"partials/dashboard_activity.html",
 	"partials/admin_manifest_table.html",
@@ -82,6 +85,7 @@ var pageBlockTemplates = []string{
 	"dashboard_games_title", "dashboard_games_content", "dashboard_games_scripts",
 	"game_detail_title", "game_detail_content", "game_detail_scripts",
 	"dashboard_clients_title", "dashboard_clients_content", "dashboard_clients_scripts",
+	"dashboard_conflicts_title", "dashboard_conflicts_content", "dashboard_conflicts_scripts",
 	"dashboard_analytics_title", "dashboard_analytics_content", "dashboard_analytics_scripts",
 	"admin_user_detail_title", "admin_user_detail_content",
 	"admin_overview_title", "admin_overview_content", "admin_overview_scripts",
@@ -371,6 +375,17 @@ func templateTestData(name string) interface{} {
 			HasLargestChange: true,
 			LargestChange:    store.SaveChangeRow{ChangeBytes: 256, ClientName: "Gaming PC", PathKey: "save/main", UpdatedAt: now},
 		}
+	case "dashboard_conflicts.html", "partials/conflicts_list.html":
+		return conflictsPageData{
+			PageData: PageData{PageName: "dashboard_conflicts", Username: pd.Username, CSRFToken: pd.CSRFToken, NavActive: "conflicts"},
+			Conflicts: []store.ConflictRow{
+				{ID: "c1", GameID: "730", GameTitle: "Counter-Strike 2", PathKey: "pk1", RelativePath: "cfg/config.cfg",
+					ClientID: "cl1", ClientName: "Gaming-PC", Kind: "if_hash", ServerVersion: 3, DetectedAt: now, Occurrences: 2},
+				{ID: "c2", GameID: "292030", PathKey: "pk2", Kind: "if_absent", ServerVersion: 1, DetectedAt: now, Occurrences: 1},
+			},
+		}
+	case "partials/conflict_badge.html":
+		return 3
 	case "dashboard_clients.html", "partials/clients_list.html":
 		return dashboardClientsData{
 			PageData: PageData{

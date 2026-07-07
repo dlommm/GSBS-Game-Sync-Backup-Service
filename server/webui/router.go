@@ -190,6 +190,14 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleBulkDeleteGames(w, r)
 	case path == "/dashboard/storage/prune" && r.Method == http.MethodPost:
 		h.handlePruneVersions(w, r)
+	case path == "/dashboard/conflicts" && r.Method == http.MethodGet:
+		h.serveConflictsPage(w, r)
+	case path == "/dashboard/partial/conflicts" && r.Method == http.MethodGet:
+		h.serveConflictsPartial(w, r)
+	case path == "/dashboard/partial/conflict-badge" && r.Method == http.MethodGet:
+		h.serveConflictBadge(w, r)
+	case path == "/dashboard/conflicts/resolve" && r.Method == http.MethodPost:
+		h.handleResolveConflictWeb(w, r)
 	case path == "/dashboard/clients" && r.Method == http.MethodGet:
 		h.serveDashboardClientsPage(w, r)
 	case path == "/dashboard/partial/clients-list" && r.Method == http.MethodGet:

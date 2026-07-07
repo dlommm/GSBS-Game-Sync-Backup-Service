@@ -1,0 +1,30 @@
+{{template "layout" .}}
+{{define "dashboard_conflicts_title"}}Conflicts — GSBS{{end}}
+{{define "dashboard_conflicts_content"}}
+<div class="page-head">
+  <div>
+    <h1>Sync Conflicts</h1>
+    <p class="page-sub">Two devices changed the same save. Nothing is lost — the server kept its copy and every version stays in history.</p>
+  </div>
+</div>
+
+<div id="conflicts-list"
+     hx-get="/dashboard/partial/conflicts"
+     hx-trigger="conflict-recorded from:body, conflict-resolved from:body"
+     hx-swap="innerHTML">
+  {{template "partials/conflicts_list.html" .}}
+</div>
+
+<section class="panel panel-compact u-mt-md" aria-labelledby="conflict-help-heading">
+  <div class="panel-header"><h2 id="conflict-help-heading">How resolution works</h2></div>
+  <div class="panel-body">
+    <ul class="setup-checklist">
+      <li><strong>Keep server version</strong> (here) dismisses the conflict — the server's copy stands, and the device will pick it up according to its conflict policy.</li>
+      <li><strong>Keep the device's copy instead:</strong> on that device, open the tray → <em>⚠ Resolve conflicts</em> → <em>Keep all local files</em>. Its push then supersedes this conflict automatically.</li>
+      <li><strong>Rescue any version:</strong> nothing is deleted — open the file's version history to download or restore an older copy.</li>
+      <li><strong>Prevent repeats:</strong> set a per-game conflict policy (last-write-wins, keep local, keep server) in the client's Settings on each device.</li>
+    </ul>
+  </div>
+</section>
+{{end}}
+{{define "dashboard_conflicts_scripts"}}{{end}}

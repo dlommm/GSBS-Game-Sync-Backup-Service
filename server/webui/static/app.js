@@ -182,7 +182,7 @@
 
   /* ---- Keyboard shortcuts + "?" help overlay ---- */
 
-  var NAV_CHORDS = { d: '/dashboard', g: '/dashboard/games', i: '/dashboard/analytics', s: '/dashboard/settings', v: '/dashboard/clients' };
+  var NAV_CHORDS = { d: '/dashboard', g: '/dashboard/games', i: '/dashboard/analytics', s: '/dashboard/settings', v: '/dashboard/clients', c: '/dashboard/conflicts' };
   var chordArmed = false;
   var chordTimer = null;
 

@@ -22,6 +22,10 @@ var ErrQuotaExceeded = errors.New("storage quota exceeded")
 // enforced against SaveMeta.GlobalLimitBytes.
 var ErrGlobalLimitExceeded = errors.New("global storage limit exceeded")
 
+// ErrNotFound is returned when a row targeted by ID does not exist (or is not
+// visible to the requesting user).
+var ErrNotFound = errors.New("not found")
+
 // Store is the persistence layer for users, clients, and saves.
 type Store interface {
 	// User
@@ -93,6 +97,12 @@ type Store interface {
 	// RetentionForGame returns the effective version-history retention for a game
 	// (default or admin per-game override).
 	RetentionForGame(ctx context.Context, gameID string) int
+	// Conflict Center (v5.2): server-side persistence of push 409s.
+	RecordConflict(ctx context.Context, c ConflictRecord) (string, error)
+	ListOpenConflicts(ctx context.Context, userID string) ([]ConflictRow, error)
+	CountOpenConflicts(ctx context.Context, userID string) (int, error)
+	ResolveConflict(ctx context.Context, userID, id, resolution string) error
+	ResolveConflictsForSlot(ctx context.Context, userID, gameID, pathKey, resolution string) (int, error)
 	// RegenerateClientToken issues a new token for the client; the old token is invalidated (client must re-login).
 	RegenerateClientToken(ctx context.Context, clientID string) error
 	// RevokeClient removes a client registration; its token stops working and it disappears from client lists.

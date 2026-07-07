@@ -210,6 +210,8 @@ func Routes() []RouteDef {
 		{"POST", "/api/change-password", true},
 		{"POST", "/api/token/refresh", true},
 		{"GET", "/api/account", true},
+		{"GET", "/api/conflicts", true},
+		{"POST", "/api/conflicts/resolve", true},
 		{"GET", "/api/openapi.json", false},
 	}
 }
@@ -258,6 +260,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.withAuth(h.handleTokenRefresh)(w, r)
 	case r.URL.Path == "/api/account" && r.Method == http.MethodGet:
 		h.withAuth(h.handleAccount)(w, r)
+	case r.URL.Path == "/api/conflicts" && r.Method == http.MethodGet:
+		h.withAuth(h.handleListConflicts)(w, r)
+	case r.URL.Path == "/api/conflicts/resolve" && r.Method == http.MethodPost:
+		h.withAuth(h.handleResolveConflict)(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -1001,6 +1007,8 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 				Title: "Sync conflict detected",
 				Body:  fmt.Sprintf("Two devices changed the same save for %s. Resolve it from the tray or the web dashboard.", gameID),
 			})
+			h.recordConflict(r, userID, gameID, pathKey, "if_hash",
+				strings.TrimSpace(r.Header.Get("X-Content-Hash")), serverHash, serverVer)
 			writeJSON(w, http.StatusConflict, map[string]interface{}{
 				"error":           "conflict",
 				"current_hash":    serverHash,
@@ -1031,6 +1039,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 				Title: "Sync conflict on a new device",
 				Body:  fmt.Sprintf("A device pushed %s for the first time but the server already holds a different save. Resolve it from the tray or the web dashboard.", gameID),
 			})
+			h.recordConflict(r, userID, gameID, pathKey, "if_absent", incoming, serverHash, serverVer)
 			writeJSON(w, http.StatusConflict, map[string]interface{}{
 				"error":           "conflict",
 				"current_hash":    serverHash,
@@ -1060,6 +1069,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 					Title: "Sync conflict (older client, strict mode)",
 					Body:  fmt.Sprintf("An older client tried to overwrite %s last written by another device.", gameID),
 				})
+				h.recordConflict(r, userID, gameID, pathKey, "legacy_strict", incoming, serverHash, serverVer)
 				writeJSON(w, http.StatusConflict, map[string]interface{}{
 					"error":           "conflict",
 					"current_hash":    serverHash,
@@ -1124,6 +1134,8 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		writeJSON(w, http.StatusOK, map[string]string{"status": "unchanged"})
 		return
 	}
+	// A successful push supersedes any open conflicts on this slot.
+	h.resolveSupersededConflicts(r, userID, gameID, pathKey)
 	if h.hub != nil {
 		h.hub.BroadcastToUser(userID, sse.Event{
 			Type: "save-updated",

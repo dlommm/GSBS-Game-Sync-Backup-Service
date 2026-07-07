@@ -1,0 +1,35 @@
+{{define "partials/conflicts_list.html"}}
+{{if .Conflicts}}
+<div class="conflict-list">
+  {{range .Conflicts}}
+  <article class="panel conflict-card">
+    <div class="conflict-head">
+      <span class="status-glyph status-glyph-warn" aria-hidden="true">{{iconSVG "alert" 16}}</span>
+      <span class="conflict-title">{{if .GameTitle}}{{.GameTitle}}{{else}}{{.GameID}}{{end}}</span>
+      {{if .RelativePath}}<code class="conflict-path">{{.RelativePath}}</code>{{end}}
+      <span class="conflict-when cell-muted" title="{{.DetectedAt}}">{{formatTime .DetectedAt}}</span>
+    </div>
+    <p class="conflict-desc">
+      {{if .ClientName}}<strong>{{.ClientName}}</strong>{{else}}A device{{end}}
+      {{if eq .Kind "if_absent"}}pushed this save for the first time, but the server already holds a different copy{{else if eq .Kind "legacy_strict"}}(an older client) tried to overwrite a save last written by another device{{else}}changed this save while another device had already updated it{{end}}.
+      The server kept version v{{.ServerVersion}}.
+      {{if gt .Occurrences 1}}<span class="cell-muted">Retried {{.Occurrences}} times.</span>{{end}}
+    </p>
+    <div class="conflict-actions">
+      <a class="btn-ghost-sm" href="/dashboard/save/versions?game_id={{urlquery .GameID}}&path_key={{urlquery .PathKey}}">View versions</a>
+      {{if not $.ReadOnly}}
+      <form method="post" action="/dashboard/conflicts/resolve" class="inline-form"
+            data-confirm="Keep the server's copy and dismiss this conflict? The device can still push its version later (which reopens it).">
+        <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+        <input type="hidden" name="conflict_id" value="{{.ID}}">
+        <button type="submit" class="btn-primary-sm">Keep server version</button>
+      </form>
+      {{end}}
+    </div>
+  </article>
+  {{end}}
+</div>
+{{else}}
+{{template "partials/empty-state.html" (dict "Icon" "check" "Title" "No conflicts" "Sub" "Your devices are in agreement. When two machines change the same save, it shows up here for review.")}}
+{{end}}
+{{end}}

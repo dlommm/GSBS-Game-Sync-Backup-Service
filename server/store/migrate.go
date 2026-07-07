@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 29
+const schemaVersion = 30
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -129,10 +129,37 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{27, stepUserLocale},
 		{28, stepTOTPRecoveryCodes},
 		{29, stepAnalyticsIndexes},
+		{30, stepConflicts},
 	}
 }
 
 // ── Step implementations ──────────────────────────────────────────────────────
+
+// stepConflicts persists push conflicts (HTTP 409) server-side for the web
+// Conflict Center (v5.2). Previously conflicts were visible only on the
+// device that hit them (tray + client insights).
+func stepConflicts(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS conflicts (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			game_id TEXT NOT NULL,
+			path_key TEXT NOT NULL,
+			client_id TEXT,
+			kind TEXT NOT NULL,
+			incoming_hash TEXT,
+			server_hash TEXT,
+			server_version INTEGER NOT NULL DEFAULT 0,
+			detected_at TEXT NOT NULL,
+			resolved_at TEXT,
+			resolution TEXT,
+			occurrences INTEGER NOT NULL DEFAULT 1,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_conflicts_user_open ON conflicts(user_id, resolved_at);
+	`)
+	return err
+}
 
 // stepClientAppVersion records each device's reported app version
 // (X-GSBS-Client-Version). Drives crypto-v2 fleet auto-negotiation: a user's

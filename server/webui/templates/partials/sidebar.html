@@ -17,6 +17,12 @@
     <a href="/dashboard/analytics" {{if eq .NavActive "analytics"}}class="active" aria-current="page"{{end}}>
       <span class="sidebar-icon" aria-hidden="true">{{iconSVG "chart" 16}}</span>Insights
     </a>
+    <a href="/dashboard/conflicts" {{if eq .NavActive "conflicts"}}class="active" aria-current="page"{{end}}>
+      <span class="sidebar-icon" aria-hidden="true">{{iconSVG "alert" 16}}</span>Conflicts
+      <span class="nav-badge-slot" hx-get="/dashboard/partial/conflict-badge"
+            hx-trigger="load, conflict-recorded from:body, conflict-resolved from:body"
+            hx-swap="innerHTML"></span>
+    </a>
     <a href="/dashboard/settings" {{if eq .NavActive "settings"}}class="active" aria-current="page"{{end}}>
       <span class="sidebar-icon" aria-hidden="true">{{iconSVG "settings" 16}}</span>Settings
     </a>
