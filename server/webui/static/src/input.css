@@ -1518,6 +1518,27 @@ tr.row-syncing .cell-primary::after,
 .conflict-when { margin-left: auto; font-size: 0.75rem; }
 .conflict-desc { margin: 0; font-size: 0.8125rem; color: var(--text-secondary); }
 .conflict-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+/* Notification Inbox (v5.2): topbar bell + dropdown */
+.inbox-bell { position: relative; display: inline-flex; align-items: center; }
+.inbox-badge-slot { position: absolute; top: -0.35rem; right: -0.35rem; display: inline-flex; }
+.inbox-dialog {
+  position: fixed; top: 3.4rem; right: 1.5rem; left: auto; margin: 0;
+  width: min(24rem, calc(100vw - 2rem)); max-height: 70vh; overflow-y: auto;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: 1rem;
+}
+.inbox-dialog::backdrop { background: transparent; }
+.inbox-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
+.inbox-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.inbox-item { display: flex; gap: 0.5rem; align-items: flex-start; }
+.inbox-dot { width: 0.45rem; height: 0.45rem; border-radius: 999px; background: transparent; margin-top: 0.4rem; flex: none; }
+.inbox-item.unread .inbox-dot { background: var(--accent); }
+.inbox-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.inbox-title { font-size: 0.8125rem; font-weight: 600; color: var(--text); text-decoration: none; }
+a.inbox-title:hover { color: var(--accent); }
+.inbox-item:not(.unread) .inbox-title { font-weight: 500; color: var(--text-secondary); }
+.inbox-text { font-size: 0.75rem; color: var(--text-secondary); }
+.inbox-when { font-size: 0.6875rem; color: var(--text-muted); }
 .protection-item {
   display: flex; align-items: center; gap: 0.7rem; padding: 0.75rem 0.9rem;
   border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-raised);

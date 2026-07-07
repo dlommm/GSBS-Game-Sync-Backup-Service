@@ -97,6 +97,12 @@ type Store interface {
 	// RetentionForGame returns the effective version-history retention for a game
 	// (default or admin per-game override).
 	RetentionForGame(ctx context.Context, gameID string) int
+	// Notification Inbox (v5.2): in-app mirror of notification events.
+	AddInboxItem(ctx context.Context, userID, eventType, title, body, link string) (string, error)
+	ListInbox(ctx context.Context, userID string, limit int) ([]InboxItem, error)
+	CountUnreadInbox(ctx context.Context, userID string) (int, error)
+	MarkInboxRead(ctx context.Context, userID, id string) error
+	ListAdminUserIDs(ctx context.Context) ([]string, error)
 	// Conflict Center (v5.2): server-side persistence of push 409s.
 	RecordConflict(ctx context.Context, c ConflictRecord) (string, error)
 	ListOpenConflicts(ctx context.Context, userID string) ([]ConflictRow, error)

@@ -1,0 +1,25 @@
+{{define "partials/inbox_panel.html"}}
+<div class="inbox-head">
+  <h3 class="u-m0">Notifications</h3>
+  <form class="inline-form" hx-post="/dashboard/inbox/read-all" hx-target="#inbox-panel" hx-swap="innerHTML">
+    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+    <button type="submit" class="btn-ghost-sm">Mark all read</button>
+  </form>
+</div>
+{{if .Items}}
+<ul class="inbox-list">
+  {{range .Items}}
+  <li class="inbox-item{{if not .Read}} unread{{end}}">
+    <span class="inbox-dot" aria-hidden="true"></span>
+    <span class="inbox-body">
+      {{if .Link}}<a href="{{.Link}}" class="inbox-title">{{.Title}}</a>{{else}}<span class="inbox-title">{{.Title}}</span>{{end}}
+      {{if .Body}}<span class="inbox-text">{{.Body}}</span>{{end}}
+      <span class="inbox-when" title="{{.CreatedAt}}">{{formatTime .CreatedAt}}</span>
+    </span>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="panel-empty">Nothing yet — conflicts, quota warnings, new devices, logins, and backup results appear here.</p>
+{{end}}
+{{end}}

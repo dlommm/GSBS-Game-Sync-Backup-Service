@@ -45,6 +45,7 @@ var handlerTemplates = []string{
 	"partials/dashboard_clients.html",
 	"partials/conflicts_list.html",
 	"partials/conflict_badge.html",
+	"partials/inbox_panel.html",
 	"partials/dashboard_saves.html",
 	"partials/dashboard_activity.html",
 	"partials/admin_manifest_table.html",
@@ -386,6 +387,14 @@ func templateTestData(name string) interface{} {
 		}
 	case "partials/conflict_badge.html":
 		return 3
+	case "partials/inbox_panel.html":
+		return inboxPanelData{
+			PageData: PageData{CSRFToken: pd.CSRFToken},
+			Items: []store.InboxItem{
+				{ID: "i1", EventType: "conflict", Title: "Sync conflict detected", Body: "Two devices changed the same save.", Link: "/dashboard/conflicts", CreatedAt: now},
+				{ID: "i2", EventType: "backup", Title: "GSBS backup completed", CreatedAt: now, Read: true},
+			},
+		}
 	case "dashboard_clients.html", "partials/clients_list.html":
 		return dashboardClientsData{
 			PageData: PageData{

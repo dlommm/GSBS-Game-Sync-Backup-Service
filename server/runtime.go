@@ -199,14 +199,21 @@ func newServerApp() (*serverApp, error) {
 			}
 		},
 	)
-	apiHandler.SetNotifier(notifier.Notify)
-	webHandler.SetNotifier(notifier.Notify)
+	// v5.2: every notification event is also mirrored into the in-app inbox
+	// (topbar bell) — user-scoped events to that user, global events to all
+	// admins — and announced over SSE so open pages refresh their badge.
+	dispatchNotify := func(ev notify.Event) {
+		notifier.Notify(ev)
+		go mirrorEventToInbox(st, hub, ev)
+	}
+	apiHandler.SetNotifier(dispatchNotify)
+	webHandler.SetNotifier(dispatchNotify)
 	job.OnBackupFinished = func(success bool, detail string) {
 		title := "GSBS backup completed"
 		if !success {
 			title = "GSBS backup FAILED"
 		}
-		notifier.Notify(notify.Event{Type: notify.EventBackup, Title: title, Body: detail})
+		dispatchNotify(notify.Event{Type: notify.EventBackup, Title: title, Body: detail})
 	}
 
 	// Daily stale-device check (07:15): alerts once per stale period.
@@ -231,7 +238,7 @@ func newServerApp() (*serverApp, error) {
 			return
 		}
 		for _, sc := range stale {
-			notifier.Notify(notify.Event{
+			dispatchNotify(notify.Event{
 				Type:   notify.EventStaleDevice,
 				Title:  "Device has stopped syncing",
 				Body:   fmt.Sprintf("%s (%s) last synced %s — its saves are no longer being backed up.", sc.Name, sc.Username, sc.LastSeen),
@@ -544,4 +551,48 @@ func shouldAutoRunPCGWOnFirstStart(ctx context.Context, st store.Store) bool {
 	}
 	auto, _ := st.GetAdminSetting(ctx, store.AdminSettingPCGWAutoRunFirstStart)
 	return auto == "true" || auto == "1"
+}
+
+// inboxLinkFor maps a notification event type to its in-app deep link.
+func inboxLinkFor(eventType string) string {
+	switch eventType {
+	case notify.EventConflict:
+		return "/dashboard/conflicts"
+	case notify.EventQuota:
+		return "/dashboard/analytics"
+	case notify.EventDeviceRegistered, notify.EventStaleDevice:
+		return "/dashboard/clients"
+	case notify.EventLogin:
+		return "/dashboard/settings"
+	case notify.EventBackup:
+		return "/admin/settings"
+	default:
+		return ""
+	}
+}
+
+// mirrorEventToInbox writes a notification event into the in-app inbox
+// (v5.2): user-scoped events go to that user, global events fan out to all
+// admins. Best-effort — failures only log.
+func mirrorEventToInbox(st store.Store, hub *sse.Hub, ev notify.Event) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	targets := []string{ev.UserID}
+	if ev.UserID == "" {
+		admins, err := st.ListAdminUserIDs(ctx)
+		if err != nil || len(admins) == 0 {
+			return
+		}
+		targets = admins
+	}
+	link := inboxLinkFor(ev.Type)
+	for _, uid := range targets {
+		if _, err := st.AddInboxItem(ctx, uid, ev.Type, ev.Title, ev.Body, link); err != nil {
+			logx.Logger().Error().Str("user_id", uid).Str("event", ev.Type).Err(err).Msg("inbox mirror failed")
+			continue
+		}
+		if hub != nil {
+			hub.BroadcastToUser(uid, sse.Event{Type: "inbox-updated", Data: `{}`})
+		}
+	}
 }

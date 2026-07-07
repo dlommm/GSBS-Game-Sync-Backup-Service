@@ -72,7 +72,7 @@ for p in /dashboard /dashboard/games "/dashboard/games?view=list" \
          /dashboard/clients /dashboard/analytics "/dashboard/analytics?days=7" "/dashboard/analytics?days=90" \
          /dashboard/settings /dashboard/settings/2fa/enable /dashboard/conflicts \
          /dashboard/partial/stats /dashboard/partial/clients /dashboard/partial/activity \
-         "/dashboard/partial/activity?offset=20" /dashboard/partial/conflicts /dashboard/partial/conflict-badge \
+         "/dashboard/partial/activity?offset=20" /dashboard/partial/conflicts /dashboard/partial/conflict-badge /dashboard/partial/inbox /dashboard/partial/inbox-badge \
          "/dashboard/partial/games?view=grid" /dashboard/partial/clients-list "/dashboard/partial/search?q=a"; do
   check "$p"
 done

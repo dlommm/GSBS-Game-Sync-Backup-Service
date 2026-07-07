@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 30
+const schemaVersion = 31
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -130,10 +130,32 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{28, stepTOTPRecoveryCodes},
 		{29, stepAnalyticsIndexes},
 		{30, stepConflicts},
+		{31, stepInboxItems},
 	}
 }
 
 // ── Step implementations ──────────────────────────────────────────────────────
+
+// stepInboxItems stores the in-app notification inbox (v5.2): every
+// notification event (webhook/Discord/ntfy or not) also lands here, behind
+// the topbar bell. Capped per user at write time; read_at marks seen items.
+func stepInboxItems(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS inbox_items (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			event_type TEXT NOT NULL,
+			title TEXT NOT NULL,
+			body TEXT NOT NULL DEFAULT '',
+			link TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			read_at TEXT,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_inbox_user ON inbox_items(user_id, read_at, created_at);
+	`)
+	return err
+}
 
 // stepConflicts persists push conflicts (HTTP 409) server-side for the web
 // Conflict Center (v5.2). Previously conflicts were visible only on the

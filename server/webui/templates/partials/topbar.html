@@ -10,7 +10,19 @@
     <kbd class="cmdk-trigger-kbd">⌘K</kbd>
   </button>
   <div class="topbar-right">
-    <span class="topbar-slot" data-slot="bell"></span>
+    <span class="topbar-slot" data-slot="bell">
+      <button type="button" class="btn-ghost inbox-bell" data-open-dialog="inbox-dialog" aria-label="Notifications">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2a4 4 0 0 0-4 4v2.5L2.5 11h11L12 8.5V6a4 4 0 0 0-4-4Z"/><path d="M6.5 13.5a1.5 1.5 0 0 0 3 0"/></svg>
+        <span class="inbox-badge-slot" hx-get="/dashboard/partial/inbox-badge"
+              hx-trigger="load, inbox-updated from:body" hx-swap="innerHTML" aria-hidden="true"></span>
+      </button>
+      <dialog id="inbox-dialog" class="inbox-dialog" aria-label="Notifications">
+        <div id="inbox-panel" hx-get="/dashboard/partial/inbox"
+             hx-trigger="load, inbox-updated from:body" hx-swap="innerHTML">
+          <p class="panel-empty">Loading…</p>
+        </div>
+      </dialog>
+    </span>
     <button type="button" class="btn-ghost theme-toggle" data-action="toggle-theme" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
       <span class="theme-toggle-dark" aria-hidden="true">{{iconSVG "moon" 15}}</span>
       <span class="theme-toggle-light" aria-hidden="true">{{iconSVG "sun" 15}}</span>

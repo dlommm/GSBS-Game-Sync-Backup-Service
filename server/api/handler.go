@@ -212,6 +212,8 @@ func Routes() []RouteDef {
 		{"GET", "/api/account", true},
 		{"GET", "/api/conflicts", true},
 		{"POST", "/api/conflicts/resolve", true},
+		{"GET", "/api/inbox", true},
+		{"POST", "/api/inbox/read", true},
 		{"GET", "/api/openapi.json", false},
 	}
 }
@@ -264,6 +266,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.withAuth(h.handleListConflicts)(w, r)
 	case r.URL.Path == "/api/conflicts/resolve" && r.Method == http.MethodPost:
 		h.withAuth(h.handleResolveConflict)(w, r)
+	case r.URL.Path == "/api/inbox" && r.Method == http.MethodGet:
+		h.withAuth(h.handleListInbox)(w, r)
+	case r.URL.Path == "/api/inbox/read" && r.Method == http.MethodPost:
+		h.withAuth(h.handleMarkInboxRead)(w, r)
 	default:
 		http.NotFound(w, r)
 	}

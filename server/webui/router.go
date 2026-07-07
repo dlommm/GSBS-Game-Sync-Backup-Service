@@ -198,6 +198,12 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveConflictBadge(w, r)
 	case path == "/dashboard/conflicts/resolve" && r.Method == http.MethodPost:
 		h.handleResolveConflictWeb(w, r)
+	case path == "/dashboard/partial/inbox" && r.Method == http.MethodGet:
+		h.serveInboxPanel(w, r)
+	case path == "/dashboard/partial/inbox-badge" && r.Method == http.MethodGet:
+		h.serveInboxBadge(w, r)
+	case path == "/dashboard/inbox/read-all" && r.Method == http.MethodPost:
+		h.handleInboxReadAll(w, r)
 	case path == "/dashboard/clients" && r.Method == http.MethodGet:
 		h.serveDashboardClientsPage(w, r)
 	case path == "/dashboard/partial/clients-list" && r.Method == http.MethodGet:
