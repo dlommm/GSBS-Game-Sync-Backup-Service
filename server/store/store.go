@@ -97,6 +97,9 @@ type Store interface {
 	// RetentionForGame returns the effective version-history retention for a game
 	// (default or admin per-game override).
 	RetentionForGame(ctx context.Context, gameID string) int
+	// EncryptedCountsByGame reports per-game encrypted-vs-total save counts
+	// for the Encryption Center (v5.2).
+	EncryptedCountsByGame(ctx context.Context, userID string) ([]GameEncryptedCounts, error)
 	// Notification Inbox (v5.2): in-app mirror of notification events.
 	AddInboxItem(ctx context.Context, userID, eventType, title, body, link string) (string, error)
 	ListInbox(ctx context.Context, userID string, limit int) ([]InboxItem, error)
@@ -429,6 +432,14 @@ type SaveMeta struct {
 	// ErrGlobalLimitExceeded and roll the write back.
 	QuotaBytes       int64
 	GlobalLimitBytes int64
+}
+
+// GameEncryptedCounts is per-game encrypted coverage (Encryption Center, v5.2).
+type GameEncryptedCounts struct {
+	GameID    string
+	GameTitle string
+	Total     int
+	Encrypted int
 }
 
 // GameVersionStorage is one game's version-history footprint (Storage Explorer, v5.1).

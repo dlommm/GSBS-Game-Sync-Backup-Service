@@ -2,6 +2,7 @@ package webui
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -9,6 +10,7 @@ import (
 	"fmt"
 	"image/png"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gsbs/gsbs/pkg/i18n"
@@ -69,7 +71,7 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 	encryptionEnabled, _ := h.store.IsEncryptionEnabled(r.Context(), userID)
 	notifySettings, _ := h.store.GetUserNotifySettings(r.Context(), userID)
 	userLocale, _ := h.store.GetUserLocale(r.Context(), userID)
-	h.render(w, "settings.html", settingsData{
+	data := settingsData{
 		PageData: PageData{
 			PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken, NavActive: "settings", Success: success, Error: errorMsg,
@@ -80,7 +82,64 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 		Notify:            notifySettings,
 		Locale:            userLocale,
 		Locales:           i18n.AvailableLocales(),
-	})
+	}
+	h.buildEncryptionCenter(r.Context(), userID, &data)
+	h.render(w, "settings.html", data)
+}
+
+// buildEncryptionCenter fills the Encryption Center fields (v5.2): fleet
+// crypto readiness with blocker names, device capability, and per-game
+// encrypted coverage. Best-effort — failures leave zero values.
+func (h *WebHandler) buildEncryptionCenter(ctx context.Context, userID string, data *settingsData) {
+	data.CryptoV2Ready, _ = h.store.CryptoV2Ready(ctx, userID)
+	if clients, err := h.store.ListClientsByUserID(ctx, userID); err == nil {
+		for _, c := range clients {
+			capable := appVersionMajor(c.AppVersion) >= 4
+			data.CryptoDevices = append(data.CryptoDevices, cryptoDeviceRow{
+				Name: c.Name, Version: c.AppVersion, V2Capable: capable, Online: clientIsOnline(c.LastSeen),
+			})
+			if !capable {
+				data.CryptoBlockers = append(data.CryptoBlockers, c.Name)
+			}
+		}
+	}
+	if games, err := h.store.EncryptedCountsByGame(ctx, userID); err == nil {
+		for _, g := range games {
+			title := g.GameTitle
+			if title == "" {
+				title = g.GameID
+			}
+			data.CryptoGames = append(data.CryptoGames, cryptoGameRow{
+				GameID: g.GameID, Title: title, Total: g.Total, Encrypted: g.Encrypted,
+			})
+			data.TotalSaves += g.Total
+			data.EncryptedSaves += g.Encrypted
+		}
+		if len(data.CryptoGames) > 12 {
+			data.CryptoGames = data.CryptoGames[:12]
+		}
+	}
+	if data.TotalSaves > 0 {
+		data.EncryptedPct = data.EncryptedSaves * 100 / data.TotalSaves
+	}
+}
+
+// appVersionMajor parses the leading integer of a version string ("4.3.0" →
+// 4); 0 for empty/unparseable (pre-4.0 clients don't report a version).
+func appVersionMajor(v string) int {
+	v = strings.TrimSpace(v)
+	end := 0
+	for end < len(v) && v[end] >= '0' && v[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(v[:end])
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // handleSetLocale stores the user's preferred UI language.

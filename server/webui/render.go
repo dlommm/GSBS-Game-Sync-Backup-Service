@@ -59,6 +59,22 @@ type saveVersionsData struct {
 	CurrentVersion int
 }
 
+// cryptoDeviceRow is one device in the Encryption Center capability list (v5.2).
+type cryptoDeviceRow struct {
+	Name      string
+	Version   string // reported app version; "" for pre-4.0 clients
+	V2Capable bool   // can read/write the modern gsbs2 (Argon2id) format
+	Online    bool
+}
+
+// cryptoGameRow is per-game encrypted coverage in the Encryption Center.
+type cryptoGameRow struct {
+	GameID    string
+	Title     string
+	Total     int
+	Encrypted int
+}
+
 type settingsData struct {
 	PageData
 	Sessions          []store.SessionRow
@@ -69,6 +85,14 @@ type settingsData struct {
 	Notify            store.UserNotifySettings
 	Locale            string
 	Locales           []string
+	// Encryption Center (v5.2): fleet + coverage truth behind the toggle.
+	CryptoV2Ready  bool
+	CryptoDevices  []cryptoDeviceRow
+	CryptoBlockers []string // names of devices holding the fleet on legacy crypto
+	CryptoGames    []cryptoGameRow
+	EncryptedSaves int
+	TotalSaves     int
+	EncryptedPct   int
 }
 
 // gameCard is one tile/row on the My Games page.

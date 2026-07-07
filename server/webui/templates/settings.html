@@ -80,6 +80,50 @@
         </label>
         <button type="submit">Save encryption setting</button>
       </form>
+
+      <h3 class="cell-muted u-title-sm u-mt-sm">Encryption format</h3>
+      {{if .CryptoV2Ready}}
+      <p class="crypto-status tone-ok-text"><span class="status-glyph status-glyph-ok">{{iconSVG "check" 13}}</span>
+        Your whole fleet supports modern encryption — new encrypted saves use the Argon2id (gsbs2) format.</p>
+      {{else if .CryptoBlockers}}
+      <p class="crypto-status"><span class="status-glyph status-glyph-warn">{{iconSVG "alert" 13}}</span>
+        Encrypted saves stay on the legacy format until every device is on v4+.
+        Waiting on: <strong>{{range $i, $n := .CryptoBlockers}}{{if $i}}, {{end}}{{$n}}{{end}}</strong> — update those clients and the switch happens automatically.</p>
+      {{else}}
+      <p class="crypto-status cell-muted">Connect a device to determine the fleet's encryption format.</p>
+      {{end}}
+
+      {{if .CryptoDevices}}
+      <ul class="crypto-devices">
+        {{range .CryptoDevices}}
+        <li class="crypto-device">
+          <span class="client-status {{if .Online}}online{{else}}offline{{end}}" aria-hidden="true"></span>
+          <span>{{.Name}}</span>
+          {{if .Version}}<span class="client-version">v{{.Version}}</span>{{end}}
+          {{if .V2Capable}}<span class="pill-yes">modern crypto</span>{{else}}<span class="pill-no">legacy only</span>{{end}}
+        </li>
+        {{end}}
+      </ul>
+      {{end}}
+
+      {{if gt .TotalSaves 0}}
+      <h3 class="cell-muted u-title-sm u-mt-sm">Coverage</h3>
+      <p class="cell-muted">{{.EncryptedSaves}} of {{.TotalSaves}} saves encrypted ({{.EncryptedPct}}%).
+        {{if and .EncryptionEnabled (lt .EncryptedPct 100)}}Plaintext saves convert automatically the next time each one changes and syncs.{{end}}</p>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th scope="col">Game</th><th scope="col">Encrypted</th></tr></thead>
+          <tbody>
+            {{range .CryptoGames}}
+            <tr>
+              <td class="cell-primary"><a class="game-list-name" href="/dashboard/games/{{urlquery .GameID}}">{{.Title}}</a></td>
+              <td>{{if eq .Encrypted .Total}}<span class="pill-yes">all {{.Total}}</span>{{else}}{{.Encrypted}} / {{.Total}}{{end}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{end}}
     </div>
   </section>
 

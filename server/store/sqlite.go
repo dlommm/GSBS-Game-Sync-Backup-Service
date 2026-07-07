@@ -602,6 +602,31 @@ func (s *sqliteStore) VersionStorageByGame(ctx context.Context, userID string) (
 	return out, rows.Err()
 }
 
+// EncryptedCountsByGame reports encrypted-vs-total save counts per game for
+// the Encryption Center (v5.2), games with plaintext saves first.
+func (s *sqliteStore) EncryptedCountsByGame(ctx context.Context, userID string) ([]GameEncryptedCounts, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT s.game_id,
+		        COALESCE((SELECT gsl.game_title FROM game_save_locations gsl WHERE gsl.game_id = s.game_id LIMIT 1), ''),
+		        COUNT(*), COALESCE(SUM(COALESCE(s.encrypted, 0)), 0)
+		 FROM saves s WHERE s.user_id = ?
+		 GROUP BY s.game_id
+		 ORDER BY (COUNT(*) - COALESCE(SUM(COALESCE(s.encrypted, 0)), 0)) DESC, s.game_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []GameEncryptedCounts
+	for rows.Next() {
+		var g GameEncryptedCounts
+		if err := rows.Scan(&g.GameID, &g.GameTitle, &g.Total, &g.Encrypted); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
 // RetentionForGame exposes the effective per-game version retention.
 func (s *sqliteStore) RetentionForGame(ctx context.Context, gameID string) int {
 	return s.retentionForGame(ctx, gameID)
