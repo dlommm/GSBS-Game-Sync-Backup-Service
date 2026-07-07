@@ -57,6 +57,7 @@ type saveVersionsData struct {
 	GameTitle      string
 	Versions       []store.SaveVersionInfo
 	CurrentVersion int
+	SessionNotes   map[int]string // version → play-session annotation (v5.2)
 }
 
 // cryptoDeviceRow is one device in the Encryption Center capability list (v5.2).

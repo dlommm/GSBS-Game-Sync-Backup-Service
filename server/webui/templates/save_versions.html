@@ -18,7 +18,7 @@
             v{{.Version}}
             {{if eq .Version $.CurrentVersion}}<span class="badge-success">current</span>{{end}}
           </td>
-          <td class="cell-muted">{{formatTime .UpdatedAt}}</td>
+          <td class="cell-muted">{{formatTime .UpdatedAt}}{{with index $.SessionNotes .Version}}<span class="session-note">{{.}}</span>{{end}}</td>
           <td class="cell-size">{{formatBytes .SizeBytes}}</td>
           <td class="cell-size {{if gt .ChangeBytes 0}}change-up{{else if lt .ChangeBytes 0}}change-down{{end}}">{{signedBytes .ChangeBytes}}</td>
           <td class="cell-muted">{{if .ClientName}}{{.ClientName}}{{else}}—{{end}}</td>

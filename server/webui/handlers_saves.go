@@ -1,13 +1,16 @@
 package webui
 
 import (
+	"context"
 	"fmt"
 	"mime"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/gsbs/gsbs/server/logx"
+	"github.com/gsbs/gsbs/server/store"
 )
 
 // sanitizeFilenamePart keeps download filenames safe for a Content-Disposition
@@ -73,7 +76,58 @@ func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
 		},
 		GameID: gameID, PathKey: pathKey, GameTitle: gameTitle,
 		Versions: versions, CurrentVersion: currentVersion,
+		SessionNotes: h.buildSessionNotes(r.Context(), userID, gameID, versions),
 	})
+}
+
+// buildSessionNotes maps version numbers to play-session annotations (v5.2):
+// a version written during a session, or within 15 minutes after it ended,
+// gets "during/after a <duration> session on <device>".
+func (h *WebHandler) buildSessionNotes(ctx context.Context, userID, gameID string, versions []store.SaveVersionInfo) map[int]string {
+	sessions, err := h.store.ListGameSessions(ctx, userID, gameID, 50)
+	if err != nil || len(sessions) == 0 {
+		return nil
+	}
+	notes := map[int]string{}
+	for _, v := range versions {
+		t, err := time.Parse(time.RFC3339, v.UpdatedAt)
+		if err != nil {
+			continue
+		}
+		for _, gs := range sessions {
+			start, err1 := time.Parse(time.RFC3339, gs.StartedAt)
+			end, err2 := time.Parse(time.RFC3339, gs.EndedAt)
+			if err1 != nil || err2 != nil {
+				continue
+			}
+			device := gs.ClientName
+			if device == "" {
+				device = "a device"
+			}
+			dur := end.Sub(start).Round(time.Minute)
+			switch {
+			case !t.Before(start) && !t.After(end):
+				notes[v.Version] = fmt.Sprintf("during a %s session on %s", formatSessionDur(dur), device)
+			case t.After(end) && t.Sub(end) <= 15*time.Minute:
+				notes[v.Version] = fmt.Sprintf("after a %s session on %s", formatSessionDur(dur), device)
+			default:
+				continue
+			}
+			break
+		}
+	}
+	if len(notes) == 0 {
+		return nil
+	}
+	return notes
+}
+
+// formatSessionDur renders a session length compactly: "47m", "2h05m".
+func formatSessionDur(d time.Duration) string {
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
 func (h *WebHandler) handleRestoreVersion(w http.ResponseWriter, r *http.Request) {

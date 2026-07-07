@@ -106,6 +106,10 @@ type Store interface {
 	CountUnreadInbox(ctx context.Context, userID string) (int, error)
 	MarkInboxRead(ctx context.Context, userID, id string) error
 	ListAdminUserIDs(ctx context.Context) ([]string, error)
+	// Play sessions (v5.2): reported by game-aware clients, rendered on the
+	// version timeline.
+	RecordGameSession(ctx context.Context, userID, clientID, gameID, startedAt, endedAt string) (string, error)
+	ListGameSessions(ctx context.Context, userID, gameID string, limit int) ([]GameSession, error)
 	// Conflict Center (v5.2): server-side persistence of push 409s.
 	RecordConflict(ctx context.Context, c ConflictRecord) (string, error)
 	ListOpenConflicts(ctx context.Context, userID string) ([]ConflictRow, error)

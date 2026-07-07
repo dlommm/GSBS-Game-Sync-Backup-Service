@@ -1048,6 +1048,68 @@
           }
         }
       }
+    },
+    "/api/sessions": {
+      "post": {
+        "summary": "Report a finished play session",
+        "description": "Game-aware clients report each play session (launch to quit) so the web version timeline can show which saves followed which sessions. Bounds: 1 minute to 24 hours.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "game_id",
+                  "started_at",
+                  "ended_at"
+                ],
+                "properties": {
+                  "game_id": {
+                    "type": "string"
+                  },
+                  "started_at": {
+                    "type": "string",
+                    "description": "RFC3339"
+                  },
+                  "ended_at": {
+                    "type": "string",
+                    "description": "RFC3339"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing fields or implausible bounds"
+          }
+        }
+      }
     }
   }
 }

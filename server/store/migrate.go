@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 31
+const schemaVersion = 32
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -131,10 +131,30 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{29, stepAnalyticsIndexes},
 		{30, stepConflicts},
 		{31, stepInboxItems},
+		{32, stepGameSessions},
 	}
 }
 
 // ── Step implementations ──────────────────────────────────────────────────────
+
+// stepGameSessions stores play sessions reported by game-aware clients
+// (v5.2): rendered as markers on the save version timeline ("saved after a
+// 2h session on Steam Deck").
+func stepGameSessions(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS game_sessions (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			client_id TEXT,
+			game_id TEXT NOT NULL,
+			started_at TEXT NOT NULL,
+			ended_at TEXT NOT NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_game_sessions_slot ON game_sessions(user_id, game_id, ended_at);
+	`)
+	return err
+}
 
 // stepInboxItems stores the in-app notification inbox (v5.2): every
 // notification event (webhook/Discord/ntfy or not) also lands here, behind
