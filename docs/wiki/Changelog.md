@@ -6,6 +6,23 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.2.0] — 2026-07-06
+
+Phase 3 of the v5 overhaul: the connected features. Conflicts, notifications, encryption state, and play sessions all become visible where you are — not just on the machine where they happened.
+
+### Added
+
+- **Conflict Center** — see and resolve sync conflicts from any browser; the tray flow still works, and a successful push clears things automatically.
+- **Notification bell** — every event lands in an in-app inbox with deep links, webhooks optional.
+- **Encryption Center** — know exactly which device is keeping your fleet on legacy crypto, and how much of each game is encrypted.
+- **Play-session markers** — the version timeline shows which saves came from which play session.
+- **Per-game conflict policies** — now editable in the client's Settings.
+- **PCGW guided status** — the admin sync page tells you the one thing worth doing next.
+
+Migrations 30–32 run automatically on first start (back up first, as always).
+
+---
+
 ## [5.1.0] — 2026-07-06
 
 Phase 2 of the v5 overhaul: the redesigned surfaces come alive with real-time and self-care features.

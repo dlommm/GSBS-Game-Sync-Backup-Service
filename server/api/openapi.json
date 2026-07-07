@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "GSBS Server API",
-    "version": "5.1.0",
+    "version": "5.2.0",
     "description": "HTTP API for GSBS sync clients. Saves are pushed and pulled as whole files. Encrypted saves are AES-256-GCM ciphertext produced client-side; the server stores opaque bytes. All authenticated endpoints use a bearer token issued by /api/login."
   },
   "servers": [

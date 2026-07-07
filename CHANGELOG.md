@@ -4,6 +4,32 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [5.2.0] - 2026-07-06
+
+### Added — connected features (v5 overhaul, phase 3; migrations 30–32)
+- **Web Conflict Center** (`/dashboard/conflicts`, chord `g c`): push conflicts are now recorded
+  server-side and visible across all devices — plain-language cards explain who collided on what,
+  with "Keep server version", a version-history escape hatch, and guidance for keeping the
+  device's copy from the tray. Outbox retries collapse into one entry; a successful push
+  auto-resolves the slot's conflicts. New API: `GET /api/conflicts`, `POST /api/conflicts/resolve`.
+- **In-app Notification Inbox**: the topbar bell. Every notification event (conflicts, quota,
+  new devices, logins, backups, stale devices) lands in a per-user inbox with live unread badge
+  and deep links — no webhook required. Global events fan out to admins. New API:
+  `GET /api/inbox`, `POST /api/inbox/read`.
+- **Encryption Center** (Settings): see whether your fleet has switched to modern Argon2id
+  encryption — and which device by name is holding it back — plus per-device capability and
+  per-game encrypted coverage.
+- **Play-session markers**: game-aware clients report play sessions (`POST /api/sessions`);
+  the version timeline annotates saves — "during a 1h34m session on Steam-Deck".
+- **Per-game conflict policies get a UI**: edit, remove, and add per-game overrides in the
+  client's Settings (previously config.json only).
+- **PCGW guided status**: the admin PCGW page opens with one plain-language recommendation and
+  the single button that fixes it (empty catalog / failed pages / backlog / bundle errors).
+
+### Changed
+- First database schema change since 4.1 (migrations 30–32: conflicts, inbox, sessions).
+  Migrations run automatically on first start; back up before upgrading as always.
+
 ## [5.1.0] - 2026-07-06
 
 ### Added — live insight & self-care features (v5 overhaul, phase 2)
