@@ -1,6 +1,7 @@
 {{template "layout" .}}
 {{define "admin_users_title"}}Admin Users — GSBS{{end}}
 {{define "admin_users_content"}}
+<h1 class="sr-only">Users & Clients</h1>
 <section class="panel panel-users">
   <div class="panel-header-actions">
     <h2>Users</h2>
@@ -67,7 +68,7 @@
   {{if .Clients}}
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th scope="col" data-sortable>User</th><th scope="col" data-sortable>Name</th><th scope="col" data-sortable>Platform</th><th scope="col" data-sortable>Last active</th><th scope="col" class="th-action"></th></tr></thead>
+      <thead><tr><th scope="col" data-sortable>User</th><th scope="col" data-sortable>Name</th><th scope="col" data-sortable>Platform</th><th scope="col" data-sortable>Last active</th><th scope="col" class="th-action"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>
         {{range .Clients}}
         <tr>

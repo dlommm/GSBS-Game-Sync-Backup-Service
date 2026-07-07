@@ -52,7 +52,7 @@
     --border-focus: var(--accent);
     --text: #eef2f0;
     --text-secondary: #a8b3ae;
-    --text-muted: #6f7b76;
+    --text-muted: #8a948f;  /* AA 4.5:1 on surface AND shell (axe-audited) */
     --text-on-accent: #08211d; /* dark text on filled accent (AA)   */
     --accent: #3fbfae;
     --accent-hover: #55cdbc;
@@ -106,7 +106,7 @@
     --border-strong: #c9d3cf;
     --text: #17201d;
     --text-secondary: #4d5a56;
-    --text-muted: #7d8a86;
+    --text-muted: #66736f;
     --text-on-accent: #ffffff; /* darker light-theme accent carries white at ≥5:1 */
     --accent: #117a63;
     --accent-hover: #0f6b57;
@@ -1528,6 +1528,7 @@ tr.row-syncing .cell-primary::after,
   border-radius: var(--radius); box-shadow: var(--shadow); padding: 1rem;
 }
 .inbox-dialog::backdrop { background: transparent; }
+.inbox-heading { font-size: 0.9375rem; }
 .inbox-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
 .inbox-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
 .inbox-item { display: flex; gap: 0.5rem; align-items: flex-start; }

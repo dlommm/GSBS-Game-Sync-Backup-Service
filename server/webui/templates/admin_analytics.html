@@ -1,6 +1,7 @@
 {{template "layout" .}}
 {{define "admin_analytics_title"}}Analytics — GSBS Admin{{end}}
 {{define "admin_analytics_content"}}
+<h1 class="sr-only">Server Analytics</h1>
 <nav class="analytics-tabs" aria-label="Analytics sections">
   <a href="/admin/analytics?tab=overview" class="analytics-tab{{if eq .Tab "overview"}} active{{end}}">Overview</a>
   <a href="/admin/analytics?tab=fleet" class="analytics-tab{{if eq .Tab "fleet"}} active{{end}}">Fleet Activity</a>

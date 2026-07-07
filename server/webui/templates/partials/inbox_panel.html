@@ -1,6 +1,6 @@
 {{define "partials/inbox_panel.html"}}
 <div class="inbox-head">
-  <h3 class="u-m0">Notifications</h3>
+  <h2 class="u-m0 inbox-heading">Notifications</h2>
   <form class="inline-form" hx-post="/dashboard/inbox/read-all" hx-target="#inbox-panel" hx-swap="innerHTML">
     <input type="hidden" name="csrf" value="{{.CSRFToken}}">
     <button type="submit" class="btn-ghost-sm">Mark all read</button>

@@ -1,6 +1,7 @@
 {{template "layout" .}}
 {{define "admin_activity_title"}}Admin Activity — GSBS{{end}}
 {{define "admin_activity_content"}}
+<h1 class="sr-only">Activity & Jobs</h1>
 <section class="panel" id="admin-jobs-panel"
          hx-get="/admin/partial/jobs?context=activity"
          hx-trigger="load, job-finished from:body, job-progress from:body"

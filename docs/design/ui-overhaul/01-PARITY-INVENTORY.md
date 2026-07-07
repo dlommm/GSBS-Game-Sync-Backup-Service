@@ -39,9 +39,14 @@ the method listed unless a row is called out below.
 
 **Performance budgets (07 §3):** app.css 14.8 KB gz (≤40); first-party JS 11.5 KB gz + htmx 16 KB
 gz + sse ext ≈ 30 KB gz total (≤40); fonts unchanged. **Accessibility:** contrast validated
-programmatically in both themes (24 pairings); landmarks/skip-link/focus-visible preserved and
-extended to the new shell (sidebar `<nav>` + labelled regions); reduced-motion support added.
-A full axe run remains open tooling-wise and is tracked for the Stage C cycle.
+programmatically in both themes; landmarks/skip-link/focus-visible preserved and extended to the
+new shell; reduced-motion support added. **axe-core audit (v5.2.x): 0 violations across all 8
+audited pages** (login, dashboard, devices, insights, settings, conflicts, my-games, admin
+overview) after fixes: `--text-muted` raised to AA 4.5:1 in both themes (the 3:1 large-text bar
+was wrong — muted renders at small sizes; `check-contrast.py` now enforces 4.5 on surface AND
+shell), sr-only h1 landmarks on every page, sr-only "Actions" labels on empty action columns,
+empty-state title demoted from h3 to a styled paragraph, inbox panel heading level corrected.
+Recipe: static page dumps + injected axe.min.js + headless-Chrome `--dump-dom`.
 
 ---
 
