@@ -128,7 +128,7 @@
         fetch('/status').then(function (r) { return r.json(); }).then(function (s) {
           btn.disabled = false;
           label.textContent = original;
-          if (s.update_status === 'available') toast('Update available: ' + (s.update_available_tag || '') + ' — install from the tray menu', 'warn', 6000);
+          if (s.update_status === 'available') toast('Update available: ' + (s.update_available_tag || '') + ' — Install now on the Status page', 'warn', 6000);
           else if (s.update_status === 'checking') toast('Still checking — result will appear on the Status page', 'info');
           else toast('You are up to date', 'success');
         }).catch(function () { btn.disabled = false; label.textContent = original; });
@@ -136,6 +136,35 @@
     }).catch(function () {
       btn.disabled = false;
       label.textContent = original;
+      toast('Could not reach the local client', 'error');
+    });
+  });
+
+  /* ---- Install update from the WebUI (v5.2): same flow as the tray ---- */
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-apply-update]');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = 'Installing…';
+    fetch('/api/apply-update', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.manual_url) {
+        toast('Automatic install unavailable here — opening the releases page', 'info', 6000);
+        window.open(d.manual_url, '_blank', 'noopener');
+        btn.disabled = false;
+        btn.textContent = 'Install now';
+      } else if (d.status === 'installing') {
+        var hint = document.getElementById('updateCardHint');
+        if (hint) hint.textContent = 'Installing ' + (d.tag || 'the update') + ' — GSBS restarts itself when done.';
+        toast('Installing update — GSBS will restart shortly', 'info', 8000);
+      } else {
+        toast(d.error || 'Could not start the update', 'warn', 6000);
+        btn.disabled = false;
+        btn.textContent = 'Install now';
+      }
+    }).catch(function () {
+      btn.disabled = false;
+      btn.textContent = 'Install now';
       toast('Could not reach the local client', 'error');
     });
   });
