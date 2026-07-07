@@ -23,7 +23,42 @@
           <option value="keep_local" {{if eq .ConflictPolicy "keep_local"}}selected{{end}}>Keep local copy</option>
           <option value="keep_server" {{if eq .ConflictPolicy "keep_server"}}selected{{end}}>Keep server copy</option>
         </select>
-        <p class="form-hint">What happens when the same save changed on two PCs. Per-game overrides live in config.json.</p>
+        <p class="form-hint">What happens when the same save changed on two PCs.</p>
+      </div>
+      <div class="form-group">
+        <label>Per-game policy overrides</label>
+        {{if .PolicyOverrides}}
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th scope="col">Game</th><th scope="col">Policy</th></tr></thead>
+            <tbody>
+              {{range .PolicyOverrides}}
+              <tr>
+                <td class="cell-primary">{{if .Title}}{{.Title}} <span class="cell-muted">({{.GameID}})</span>{{else}}{{.GameID}}{{end}}</td>
+                <td>
+                  <select name="override_policy::{{.GameID}}" class="filter-select input-medium" aria-label="Policy for {{if .Title}}{{.Title}}{{else}}{{.GameID}}{{end}}">
+                    <option value="last_write_wins" {{if eq .Policy "last_write_wins"}}selected{{end}}>Last write wins</option>
+                    <option value="keep_local" {{if eq .Policy "keep_local"}}selected{{end}}>Keep local copy</option>
+                    <option value="keep_server" {{if eq .Policy "keep_server"}}selected{{end}}>Keep server copy</option>
+                    <option value="remove">— Remove override —</option>
+                  </select>
+                </td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        {{end}}
+        <div class="override-add">
+          <input type="text" name="override_add_game" class="text-input input-medium" placeholder="game id (e.g. 292030)" spellcheck="false" aria-label="Game ID for new override">
+          <select name="override_add_policy" class="filter-select input-medium" aria-label="Policy for new override">
+            <option value="">— add override: pick policy —</option>
+            <option value="last_write_wins">Last write wins</option>
+            <option value="keep_local">Keep local copy</option>
+            <option value="keep_server">Keep server copy</option>
+          </select>
+        </div>
+        <p class="form-hint">Overrides beat the global policy for one game. Find a game's ID on the server's game page or the Insights per-game table.</p>
       </div>
       <div class="form-group">
         <label for="manifest_include">Sync content</label>

@@ -29,6 +29,13 @@ type PageData struct {
 	LogPath         string
 }
 
+// PolicyOverride is one per-game conflict-policy override row (v5.2, FIX-4).
+type PolicyOverride struct {
+	GameID string
+	Title  string // display title when known; the UI falls back to GameID
+	Policy string
+}
+
 // SettingsPageData holds the editable client settings shown on the Settings page.
 type SettingsPageData struct {
 	PageData
@@ -39,6 +46,7 @@ type SettingsPageData struct {
 	BackupOnPull        bool
 	UseCompression      bool
 	SkipSyncWhenMetered bool
+	PolicyOverrides     []PolicyOverride
 }
 
 // LogsPageData holds data for the client logs viewer.

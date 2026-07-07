@@ -1534,6 +1534,7 @@ tr.row-syncing .cell-primary::after,
 .rhythm-axis { display: flex; justify-content: space-between; font-size: 0.625rem; color: var(--text-muted); margin-top: 0.2rem; }
 
 /* ══════════ Client (loopback) WebUI components ══════════ */
+.override-add { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
 
 /* Status hero */
 .status-hero {

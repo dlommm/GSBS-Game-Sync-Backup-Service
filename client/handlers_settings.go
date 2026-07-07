@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,22 @@ func manifestIncludeOrDefault(cfg *config) string {
 // settingsPageData builds the Settings form state from the current config.
 // Secrets (token, encryption passphrase) are never exposed here.
 func settingsPageData(cfg *config) clientwebui.SettingsPageData {
+	overrides := make([]clientwebui.PolicyOverride, 0, len(cfg.ConflictPolicyOverrides))
+	for gameID, policy := range cfg.ConflictPolicyOverrides {
+		overrides = append(overrides, clientwebui.PolicyOverride{
+			GameID: gameID, Title: gameTitleFor(gameID), Policy: policy,
+		})
+	}
+	sort.Slice(overrides, func(i, j int) bool {
+		an, bn := overrides[i].Title, overrides[j].Title
+		if an == "" {
+			an = overrides[i].GameID
+		}
+		if bn == "" {
+			bn = overrides[j].GameID
+		}
+		return strings.ToLower(an) < strings.ToLower(bn)
+	})
 	return clientwebui.SettingsPageData{
 		PageData: clientwebui.PageData{
 			NavActive: "settings",
@@ -37,6 +54,52 @@ func settingsPageData(cfg *config) clientwebui.SettingsPageData {
 		BackupOnPull:        cfg.BackupOnPull,
 		UseCompression:      cfg.UseCompression,
 		SkipSyncWhenMetered: cfg.SkipSyncWhenMetered,
+		PolicyOverrides:     overrides,
+	}
+}
+
+// validConflictPolicy reports whether p is a supported conflict policy.
+func validConflictPolicy(p string) bool {
+	return p == "last_write_wins" || p == "keep_local" || p == "keep_server"
+}
+
+// applyPolicyOverrideForm mutates cfg.ConflictPolicyOverrides from the
+// Settings form (v5.2): existing rows post `override_policy::<gameID>`
+// (value "remove" deletes the override); a new row posts
+// override_add_game + override_add_policy.
+func applyPolicyOverrideForm(cfg *config, form map[string][]string) {
+	const prefix = "override_policy::"
+	for key, vals := range form {
+		if !strings.HasPrefix(key, prefix) || len(vals) == 0 {
+			continue
+		}
+		gameID := strings.TrimSpace(strings.TrimPrefix(key, prefix))
+		if gameID == "" {
+			continue
+		}
+		switch v := vals[0]; {
+		case v == "remove":
+			delete(cfg.ConflictPolicyOverrides, gameID)
+		case validConflictPolicy(v):
+			if cfg.ConflictPolicyOverrides == nil {
+				cfg.ConflictPolicyOverrides = map[string]string{}
+			}
+			cfg.ConflictPolicyOverrides[gameID] = v
+		}
+	}
+	addGame := ""
+	if vals := form["override_add_game"]; len(vals) > 0 {
+		addGame = strings.TrimSpace(vals[0])
+	}
+	addPolicy := ""
+	if vals := form["override_add_policy"]; len(vals) > 0 {
+		addPolicy = vals[0]
+	}
+	if addGame != "" && validConflictPolicy(addPolicy) {
+		if cfg.ConflictPolicyOverrides == nil {
+			cfg.ConflictPolicyOverrides = map[string]string{}
+		}
+		cfg.ConflictPolicyOverrides[addGame] = addPolicy
 	}
 }
 
@@ -107,6 +170,9 @@ func handleSettingsSave(w http.ResponseWriter, r *http.Request) {
 	cfg.BackupOnPull = r.Form.Get("backup_on_pull") != ""
 	cfg.UseCompression = r.Form.Get("use_compression") != ""
 	cfg.SkipSyncWhenMetered = r.Form.Get("skip_sync_when_metered") != ""
+
+	// Per-game conflict-policy overrides (v5.2).
+	applyPolicyOverrideForm(cfg, r.Form)
 
 	if err := saveConfig(cfg); err != nil {
 		data := settingsPageData(cfg)
