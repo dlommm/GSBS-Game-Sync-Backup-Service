@@ -6,6 +6,20 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.2.1] — 2026-07-06
+
+Accessibility polish and one convenience: updates now install straight from the client's Status page.
+
+### Added
+
+- **"Install now"** on the client update card — same safe download-verify-restart flow as the tray.
+
+### Fixed
+
+- Muted text everywhere now meets WCAG AA contrast in both themes, and every page has a proper screen-reader heading — a full axe-core audit passes with zero violations.
+
+---
+
 ## [5.2.0] — 2026-07-06
 
 Phase 3 of the v5 overhaul: the connected features. Conflicts, notifications, encryption state, and play sessions all become visible where you are — not just on the machine where they happened.

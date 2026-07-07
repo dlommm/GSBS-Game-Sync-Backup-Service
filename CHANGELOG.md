@@ -4,6 +4,19 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [5.2.1] - 2026-07-06
+
+### Added
+- **Install updates from the client's Status page**: the update card now has an "Install now"
+  button driving the same verified download-and-restart flow as the tray (Flatpak and
+  manual-download platforms get honest answers instead).
+
+### Fixed — accessibility (axe-core audit: 0 violations on all audited pages)
+- Muted text (timestamps, labels, hints) now meets WCAG AA 4.5:1 contrast in both themes; the
+  palette gate enforces the stricter bar going forward.
+- Every page has a proper level-one heading for screen readers; action columns are labelled;
+  empty-state and notification-panel heading levels corrected.
+
 ## [5.2.0] - 2026-07-06
 
 ### Added — connected features (v5 overhaul, phase 3; migrations 30–32)
