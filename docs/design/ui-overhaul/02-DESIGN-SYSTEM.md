@@ -55,12 +55,12 @@ block (currently lines 40–69). Native clients map tokens per §1.8.
 }
 ```
 
-The mockup's page backdrop is a **bright** diagonal mint→teal gradient (`--bg-gradient-a` top-left
-→ `--bg-gradient-b` bottom-right, fixed, GPU-cheap, no image asset) with the dark charcoal shell
-(`--bg-raised`) floating on it: `--radius-lg` corners + `--shadow-shell`. The gradient is only
-visible as the frame around the shell on desktop; on phones the frame collapses and the shell is
-edge-to-edge. Inside the shell, the content column sits on `--bg` and cards step up to
-`--surface` — three visible luminance steps, exactly as in the mockup.
+**Revised v5.2.2 (owner preference):** the mockup's floating-shell-on-gradient frame was dropped —
+the app shell is full-bleed at every viewport size. The mint→teal gradient
+(`--bg-gradient-a`/`--bg-gradient-b`) survives only as the auth pages' backdrop (login, register,
+TOTP, setup wizard). Inside the shell, the content column sits on `--bg` and cards step up to
+`--surface`; the sidebar/topbar chrome uses `--bg-raised` — the three luminance steps remain the
+design's depth mechanism.
 
 ### 1.2 Color — accent & semantics
 

@@ -223,16 +223,15 @@
     color: var(--error); border-radius: var(--radius-sm); font-size: 0.875rem; text-align: center;
   }
 
-  /* Floating shell on the mint→teal gradient (02 §1.1, mockup-locked).
-     body carries the gradient frame; .shell is the dark app surface. */
+  /* Full-bleed app shell (v5.2.2: the mockup's floating-frame treatment was
+     dropped by owner preference — the gradient survives only on auth pages). */
   .app-shell, .admin-shell {
     display: flex; min-height: 100vh;
-    background: linear-gradient(135deg, var(--bg-gradient-a), var(--bg-gradient-b)) fixed;
-    padding: 1.25rem;
+    background: var(--bg);
   }
   .shell {
-    flex: 1; display: flex; min-width: 0; width: 100%; max-width: 100rem; margin: 0 auto;
-    background: var(--bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-shell);
+    flex: 1; display: flex; min-width: 0; width: 100%;
+    background: var(--bg);
     overflow: clip;
   }
 
@@ -856,9 +855,7 @@
 @media (max-width: 900px) {
   .stats-row { grid-template-columns: repeat(2, 1fr); }
   .stats-row-5, .stats-row-6 { grid-template-columns: repeat(3, 1fr); }
-  /* Gradient frame collapses; shell goes edge-to-edge (02 §1.1). */
-  .app-shell, .admin-shell { padding: 0; }
-  .shell { flex-direction: column; border-radius: 0; box-shadow: none; max-width: none; }
+  .shell { flex-direction: column; }
   /* User sidebar becomes an off-canvas drawer toggled by the topbar burger. */
   .sidebar {
     position: fixed; top: 0; bottom: 0; left: 0; z-index: 60; width: 16rem;

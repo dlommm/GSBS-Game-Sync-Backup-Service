@@ -56,7 +56,7 @@
   function syncThemeColorMeta() {
     var light = document.documentElement.getAttribute('data-theme') === 'light';
     document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
-      m.setAttribute('content', light ? '#6cc7b8' : '#2fa693');
+      m.setAttribute('content', light ? '#ffffff' : '#151917');
       m.removeAttribute('media');
     });
   }

@@ -4,6 +4,13 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [5.2.2] - 2026-07-07
+
+### Changed
+- **The green gradient frame around the WebUI is gone** — the app shell now fills the window
+  edge-to-edge on both the server dashboard and the client's local pages. The mint→teal
+  gradient remains only on the login and setup screens.
+
 ## [5.2.1] - 2026-07-06
 
 ### Added

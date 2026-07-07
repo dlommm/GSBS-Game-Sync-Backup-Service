@@ -6,6 +6,14 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.2.2] — 2026-07-07
+
+### Changed
+
+- The WebUI's green gradient border is gone — the app now fills the window edge-to-edge (server and client). The gradient look remains only on the login and setup screens.
+
+---
+
 ## [5.2.1] — 2026-07-06
 
 Accessibility polish and one convenience: updates now install straight from the client's Status page.
