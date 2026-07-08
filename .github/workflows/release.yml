@@ -274,6 +274,8 @@ jobs:
         run: |
           appstreamcli validate --no-net flatpak/io.github.dlommm.GSBS.metainfo.xml
           desktop-file-validate flatpak/io.github.dlommm.GSBS.desktop
+      - name: Seed ostree repo with published history (delta updates)
+        run: flatpak/seed-repo.sh
       - name: Build Flatpak
         run: flatpak/build-flatpak.sh "${{ needs.version.outputs.tag }}"
       - name: Import GPG signing key
@@ -295,12 +297,21 @@ jobs:
           git clone --depth 1 --branch gh-pages git@github.com:dlommm/gsbs-flatpak.git pages
           rm -rf pages/repo
           cp -r flatpak/repo pages/repo
+          # Remote icon referenced by gsbs.flatpakrepo; .nojekyll stops GitHub
+          # Pages' Jekyll pass, which drops underscore-prefixed paths (static
+          # delta directories can start with one).
+          cp flatpak/icons/256x256/io.github.dlommm.GSBS.png pages/io.github.dlommm.GSBS.png
+          touch pages/.nojekyll
           cd pages
           git config user.name "gsbs-ci"
           git config user.email "ci@users.noreply.github.com"
+          # Publish as a single orphan commit: every snapshot is reproducible
+          # from a release tag, and keeping gh-pages history grows the repo
+          # by ~6 MB per release forever.
+          git checkout --orphan publish
           git add -A
-          git commit -m "Update Flatpak repo for ${{ needs.version.outputs.tag }}" || echo "no changes"
-          git push origin HEAD:gh-pages
+          git commit -m "Update Flatpak repo for ${{ needs.version.outputs.tag }}"
+          git push --force origin publish:gh-pages
 
   docker:
     needs: [version, resolve-runner, test, lint, build-linux, build-windows]

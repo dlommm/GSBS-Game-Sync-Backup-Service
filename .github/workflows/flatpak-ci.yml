@@ -51,6 +51,8 @@ jobs:
           V="${{ github.event.inputs.version }}"
           [ -n "$V" ] || V="$(git describe --tags --abbrev=0 2>/dev/null || echo 0.0.0-dev)"
           echo "tag=$V" >> "$GITHUB_OUTPUT"
+      - name: Seed ostree repo with published history (delta updates)
+        run: flatpak/seed-repo.sh
       - name: Build Flatpak
         run: flatpak/build-flatpak.sh "${{ steps.ver.outputs.tag }}"
       # --- signed publish: manual runs only ---
@@ -73,9 +75,18 @@ jobs:
           git clone --depth 1 --branch gh-pages git@github.com:dlommm/gsbs-flatpak.git pages
           rm -rf pages/repo
           cp -r flatpak/repo pages/repo
+          # Remote icon referenced by gsbs.flatpakrepo; .nojekyll stops GitHub
+          # Pages' Jekyll pass, which drops underscore-prefixed paths (static
+          # delta directories can start with one).
+          cp flatpak/icons/256x256/io.github.dlommm.GSBS.png pages/io.github.dlommm.GSBS.png
+          touch pages/.nojekyll
           cd pages
           git config user.name "gsbs-ci"
           git config user.email "ci@users.noreply.github.com"
+          # Publish as a single orphan commit: every snapshot is reproducible
+          # from a release tag, and keeping gh-pages history grows the repo
+          # by ~6 MB per release forever.
+          git checkout --orphan publish
           git add -A
-          git commit -m "Republish signed Flatpak repo for ${{ steps.ver.outputs.tag }}" || echo "no changes"
-          git push origin HEAD:gh-pages
+          git commit -m "Republish signed Flatpak repo for ${{ steps.ver.outputs.tag }}"
+          git push --force origin publish:gh-pages

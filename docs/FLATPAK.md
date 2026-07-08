@@ -127,6 +127,8 @@ sudo apt-get install -y flatpak-builder   # or your distro's package
 ### Build locally
 
 ```bash
+flatpak/seed-repo.sh                   # optional: start from the published repo
+                                       # so the build appends to its history
 flatpak/build-flatpak.sh v3.0.4        # vendors deps, builds into flatpak/repo
 # quick test install of the result:
 flatpak --user install flatpak/repo io.github.dlommm.GSBS
@@ -146,6 +148,12 @@ export GSBS_GPG_KEY=<your-key-id>          # sign the repo (strongly recommended
 export GSBS_REPO_URL=https://dlommm.github.io/gsbs-flatpak/repo
 flatpak/update-repo.sh                      # static deltas, summary, .flatpakrepo
 ```
+
+`update-repo.sh` signs only commits that aren't signed yet (seeded history
+already is), generates static deltas, and prunes history to each ref's last
+three generations (`--prune-depth=2`). When the build was seeded with
+`seed-repo.sh`, the previous release stays in the repo, so clients get an
+old→new **delta** instead of re-downloading the whole app.
 
 Then publish the `flatpak/repo` directory to your static host. The recommended
 setup is a dedicated **GitHub Pages** repo:
@@ -168,8 +176,12 @@ repo is just files.
 
 ### CI
 
-The release workflow builds the Flatpak, signs the repo, and pushes it to the
-GitHub Pages repo. See the `build-flatpak` job in `.github/workflows/release.yml`.
+The release workflow seeds the build with the published repo (for delta
+updates), builds the Flatpak, signs the repo, and pushes it to the GitHub
+Pages repo as a **single orphan commit** (`git push --force`) — gh-pages keeps
+no history, since every snapshot is reproducible from a release tag, and
+accumulated snapshots would grow the git repo indefinitely. See the
+`build-flatpak` job in `.github/workflows/release.yml`.
 
 **Provisioned setup** (already configured):
 

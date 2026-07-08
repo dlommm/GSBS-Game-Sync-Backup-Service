@@ -47,12 +47,23 @@ if [ -n "${GSBS_GPG_KEY:-}" ]; then
   echo "==> Signing commits"
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
+    # Commits seeded from the published repo are already signed (their
+    # detached .commitmeta exists) and ostree refuses to sign twice with the
+    # same key — only sign commits produced by this build.
+    rev="$(cat "$REPO_DIR/refs/heads/$ref")"
+    if [ -e "$REPO_DIR/objects/${rev:0:2}/${rev:2}.commitmeta" ]; then
+      echo "    $ref @ ${rev:0:8} already signed — skipping"
+      continue
+    fi
     ostree gpg-sign --repo="$REPO_DIR" --gpg-homedir="$GPG_HOME" "$ref" "$GSBS_GPG_KEY"
   done < <(cd "$REPO_DIR/refs/heads" && find . -type f | sed 's|^\./||')
 fi
 
+# --prune-depth=2 keeps each ref's commit plus two parents: enough history for
+# a previous-version→new static delta while the repo stays ~3 releases big.
 echo "==> Generating static deltas + summary"
-flatpak build-update-repo --generate-static-deltas "${SIGN_ARGS[@]}" "$REPO_DIR"
+flatpak build-update-repo --generate-static-deltas --prune --prune-depth=2 \
+  "${SIGN_ARGS[@]}" "$REPO_DIR"
 
 echo "==> Writing $REPO_DIR/gsbs.flatpakrepo"
 {
