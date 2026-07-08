@@ -274,8 +274,8 @@ func (h *WebHandler) buildSetupHealth(ctx context.Context, r *http.Request, user
 	}
 	totpOn, _ := h.store.IsTOTPEnabled(ctx, userID)
 	items := []setupHealthItem{
-		{Done: tlsOK, Label: "Served over HTTPS", Href: "/admin/settings",
-			Hint: "Put GSBS behind TLS (e.g. a Caddy/nginx reverse proxy) so passwords and saves travel encrypted."},
+		{Done: tlsOK, Label: "Served over HTTPS", Href: "/admin/settings#section-https",
+			Hint: "Enable TLS via the bundled Caddy reverse proxy or GSBS_TLS_CERT/GSBS_TLS_KEY — see Settings → HTTPS for both recipes."},
 		{Done: backupDone, Label: "Scheduled backups healthy", Href: "/admin/settings",
 			Hint: "Enable nightly server backups in Settings → Backups, then check the first run succeeds."},
 		{Done: stats.ClientCount > 0, Label: "First device connected", Href: "/dashboard/clients",

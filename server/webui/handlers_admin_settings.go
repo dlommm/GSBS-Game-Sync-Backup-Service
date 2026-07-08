@@ -17,6 +17,8 @@ import (
 
 type adminSettingsData struct {
 	PageData
+	TLSActive                 bool // this request arrived over TLS (native or via reverse proxy)
+	NativeTLS                 bool // GSBS_TLS_CERT/GSBS_TLS_KEY are set on this process
 	PCGWCron                  string
 	PCGWCronSource            string
 	PCGWCronDisabled          bool
@@ -141,6 +143,8 @@ func (h *WebHandler) serveAdminSettings(w http.ResponseWriter, r *http.Request) 
 	data.CoverRoot = h.coverRoot
 	data.CoversCleared = r.URL.Query().Get("ok") == "covers_cleared"
 
+	data.TLSActive = r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	data.NativeTLS = strings.TrimSpace(os.Getenv("GSBS_TLS_CERT")) != ""
 	h.render(w, "admin_settings.html", data)
 }
 

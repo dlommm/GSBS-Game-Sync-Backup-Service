@@ -414,9 +414,19 @@ func (a *serverApp) Start(ctx context.Context) {
 		}
 
 		a.cron.Start()
-		logx.Logger().Info().Str("addr", a.srv.Addr).Msg("listening")
+		certFile, keyFile, useTLS := tlsFilesFromEnv()
+		if useTLS {
+			logx.Logger().Info().Str("addr", a.srv.Addr).Str("cert", certFile).Msg("listening (HTTPS)")
+		} else {
+			logx.Logger().Info().Str("addr", a.srv.Addr).Msg("listening")
+		}
 		go func() {
-			err := a.srv.ListenAndServe()
+			var err error
+			if useTLS {
+				err = a.srv.ListenAndServeTLS(certFile, keyFile)
+			} else {
+				err = a.srv.ListenAndServe()
+			}
 			if err != nil && err != http.ErrServerClosed {
 				a.listenErrCh <- err
 				return
@@ -424,6 +434,23 @@ func (a *serverApp) Start(ctx context.Context) {
 			a.listenErrCh <- nil
 		}()
 	})
+}
+
+// tlsFilesFromEnv enables native HTTPS when both GSBS_TLS_CERT and
+// GSBS_TLS_KEY point at PEM files. A reverse proxy (docs/Caddyfile) remains
+// the recommended TLS path; this covers proxy-less LAN setups with
+// self-signed or internal-CA certificates. Setting only one of the two is a
+// misconfiguration and refuses to start rather than silently serving HTTP.
+func tlsFilesFromEnv() (certFile, keyFile string, ok bool) {
+	certFile = strings.TrimSpace(os.Getenv("GSBS_TLS_CERT"))
+	keyFile = strings.TrimSpace(os.Getenv("GSBS_TLS_KEY"))
+	if certFile == "" && keyFile == "" {
+		return "", "", false
+	}
+	if certFile == "" || keyFile == "" {
+		logx.Logger().Fatal().Msg("GSBS_TLS_CERT and GSBS_TLS_KEY must be set together (both PEM file paths)")
+	}
+	return certFile, keyFile, true
 }
 
 func (a *serverApp) Errors() <-chan error {

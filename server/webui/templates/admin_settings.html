@@ -13,6 +13,7 @@
     <a href="#section-retention">Retention</a>
     <a href="#section-safety">Sync safety</a>
     <a href="#section-filters">Filters</a>
+    <a href="#section-https">HTTPS</a>
   </nav>
   <form method="post" action="/admin/settings/save" class="settings-form" data-dirty-track>
     <input type="hidden" name="csrf" value="{{.CSRFToken}}">
@@ -202,6 +203,27 @@
       <button type="submit" class="btn-primary">Save settings</button>
     </div>
   </form>
+</section>
+
+<section class="panel" id="section-https">
+  <div class="panel-header-actions">
+    <h2>HTTPS</h2>
+    {{if .TLSActive}}<span class="badge-success">Active on this connection</span>{{else}}<span class="badge-warn">Not detected</span>{{end}}
+  </div>
+  <div class="panel-body">
+    {{if .TLSActive}}
+    <p class="cell-muted u-mb-sm">This page was served over HTTPS{{if .NativeTLS}} by GSBS's built-in TLS listener{{else}} (via your reverse proxy){{end}}. Passwords, tokens, and saves travel encrypted.</p>
+    {{else}}
+    <p class="cell-muted u-mb-sm">GSBS is currently reached over plain HTTP — passwords and sync tokens travel unencrypted on your network. There are two ways to enable HTTPS; both are server-side (no toggle here, because GSBS can't issue certificates for itself):</p>
+    {{end}}
+    <ul class="setup-checklist">
+      <li><strong>Reverse proxy (recommended):</strong> the bundled Docker Compose ships a Caddy proxy that terminates TLS — including automatic Let's Encrypt certificates when you have a public domain. See <code>docs/COMPOSE.md</code> and <code>docs/Caddyfile</code> in the repository.</li>
+      <li><strong>Built-in TLS (LAN / self-signed):</strong> point GSBS at a PEM certificate and key, then restart:
+        <br><code>GSBS_TLS_CERT=/path/fullchain.pem GSBS_TLS_KEY=/path/privkey.pem</code>
+        <br><span class="cell-muted">For a LAN address, generate a self-signed cert (<code>openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -keyout key.pem -out cert.pem -days 825 -nodes -subj "/CN=gsbs.lan" -addext "subjectAltName=IP:YOUR.SERVER.IP"</code>) — clients and browsers must then trust it.</span></li>
+    </ul>
+    <p class="cell-muted u-m0">After switching, update every client's server URL to <code>https://…</code> (tray → Account &amp; Setup → Login).</p>
+  </div>
 </section>
 
 <section class="panel">

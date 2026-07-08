@@ -4,6 +4,16 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [5.2.4] - 2026-07-07
+
+### Added
+- **Native HTTPS**: set `GSBS_TLS_CERT` and `GSBS_TLS_KEY` (PEM paths) and the server serves TLS
+  directly — for proxy-less LAN setups with self-signed or internal-CA certificates. The bundled
+  Caddy reverse proxy remains the recommended path for public deployments.
+- **Admin → Settings → HTTPS**: a new section shows whether your connection is encrypted and
+  walks through both setup options (reverse proxy and native TLS, with a self-signed cert
+  recipe). The Setup Health checklist's HTTPS "Fix" link now lands there instead of a dead end.
+
 ## [5.2.3] - 2026-07-07
 
 ### Fixed — noisy, slow client restarts

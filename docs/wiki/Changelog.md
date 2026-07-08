@@ -6,6 +6,14 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.2.4] — 2026-07-07
+
+### Added
+
+- **HTTPS without a proxy**: set `GSBS_TLS_CERT`/`GSBS_TLS_KEY` and GSBS serves TLS itself — handy on a LAN. And Admin → Settings gained an HTTPS section that shows your current status and both setup recipes (the Setup Health "Fix" link now actually leads somewhere).
+
+---
+
 ## [5.2.3] — 2026-07-07
 
 ### Fixed
