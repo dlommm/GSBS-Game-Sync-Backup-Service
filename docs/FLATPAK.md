@@ -133,7 +133,11 @@ flatpak --user install flatpak/repo io.github.dlommm.GSBS
 ```
 
 `build-flatpak.sh` runs `go mod vendor` for an offline, reproducible build and
-injects the version/date/commit into a generated manifest.
+injects the version/date/commit into a generated manifest. It also prepends a
+`<release>` entry for the version being built to the AppStream metainfo if the
+committed list lags behind, so software centers never show a stale version —
+though keeping `flatpak/io.github.dlommm.GSBS.metainfo.xml` current by hand is
+still preferred (release notes can only come from the committed file).
 
 ### Publish / update the repo
 

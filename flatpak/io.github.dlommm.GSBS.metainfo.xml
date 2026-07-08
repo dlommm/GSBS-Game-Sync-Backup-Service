@@ -63,7 +63,25 @@
 
   <content_rating type="oars-1.1"/>
 
+  <!-- build-flatpak.sh prepends the release being built if it is missing
+       here, so published builds never ship a stale version. Keeping this
+       list current is still preferred: it is what software centers show. -->
   <releases>
+    <release version="5.2.3" date="2026-07-07"/>
+    <release version="5.2.2" date="2026-07-07"/>
+    <release version="5.2.1" date="2026-07-06"/>
+    <release version="5.2.0" date="2026-07-06"/>
+    <release version="5.1.0" date="2026-07-06"/>
+    <release version="5.0.0" date="2026-07-06"/>
+    <release version="4.3.0" date="2026-07-05"/>
+    <release version="4.2.0" date="2026-07-05"/>
+    <release version="4.1.1" date="2026-07-04"/>
+    <release version="4.1.0" date="2026-07-04"/>
+    <release version="4.0.0" date="2026-07-04"/>
+    <release version="3.2.3" date="2026-06-26"/>
+    <release version="3.2.2" date="2026-06-26"/>
+    <release version="3.2.1" date="2026-06-25"/>
+    <release version="3.2.0" date="2026-06-25"/>
     <release version="3.1.7" date="2026-06-25"/>
     <release version="3.1.6" date="2026-06-24"/>
     <release version="3.1.5" date="2026-06-24"/>
