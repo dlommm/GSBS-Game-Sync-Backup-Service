@@ -39,8 +39,9 @@ fi
 
 if [ -d "$PAGES_DIR/repo/objects" ] && [ -f "$PAGES_DIR/repo/config" ]; then
   cp -R "$PAGES_DIR/repo" "$REPO_DIR"
-  # git does not track empty dirs; ostree expects tmp/ when opening for writes.
-  mkdir -p "$REPO_DIR/tmp"
+  # git does not track empty dirs; recreate the ones `ostree init` makes, or
+  # writes fail (e.g. build-update-repo: "opendir(refs/remotes)").
+  mkdir -p "$REPO_DIR"/{tmp,state,extensions,refs/remotes,refs/mirrors}
   echo "==> Seeded refs:"
   (cd "$REPO_DIR/refs/heads" && find . -type f | sed 's|^\./|    |')
 else
