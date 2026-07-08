@@ -202,7 +202,11 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	installRoots := BuildInstallRootsByGame(cfg, loadDiscoveryCache())
 	manifestWP, wpStats := ManifestToWatchPaths(manifestEntries, resolver, currentOS, includeConfig, activeIDs, watchMode, installRoots)
 	effectiveWatchPaths := mergeWatchPaths(manifestWP, cfg.WatchPaths)
-	log.Printf("sync: %d active watch paths (mode=%s)", len(effectiveWatchPaths), watchMode)
+	log.Printf("sync: %d active watch paths (mode=%s; manifest skipped: platform=%d missing_dir=%d unsafe=%d)",
+		len(effectiveWatchPaths), watchMode, wpStats.SkippedPlatform, wpStats.SkippedMissingDir, wpStats.SkippedUnsafe)
+	if wpStats.SkippedUnsafe > 0 {
+		log.Printf("sync: %d manifest save paths resolve to home/system roots and are not watched (safety guard; details at debug level)", wpStats.SkippedUnsafe)
+	}
 	// One-time notice if any resolved save folder is blocked (e.g. Flatpak
 	// sandbox not granted). Runs on a snapshot off the startup path.
 	go warnInaccessibleWatchPaths(effectiveWatchPaths)

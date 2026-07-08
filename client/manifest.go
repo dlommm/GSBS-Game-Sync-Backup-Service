@@ -107,8 +107,15 @@ func FetchManifestFull(ctx context.Context, baseURL, token, since, include strin
 	if err != nil {
 		return manifestFetchResult{}, err
 	}
+	// A since= fetch returns only changed entries; merge them into the cached
+	// catalog for the on-disk file instead of clobbering it with the delta.
+	// (Callers still receive the raw delta and merge in memory themselves.)
+	fileEntries := entries
+	if since != "" && len(cached.Entries) > 0 {
+		fileEntries = MergeManifestDelta(cached.Entries, entries)
+	}
 	f := manifestFile{
-		Entries:       entries,
+		Entries:       fileEntries,
 		LastFetchedAt: time.Now().UTC().Format(time.RFC3339),
 		Source:        "v1",
 	}
@@ -369,7 +376,14 @@ func manifestCacheComplete(f manifestFile) bool {
 		if f.GamesTotal > 0 {
 			return len(f.Games) >= f.GamesTotal && len(f.Entries) > 0
 		}
-		return false
+		if len(f.Games) > 0 {
+			// Games present but no recorded total: cannot verify — refetch.
+			return false
+		}
+		// "v2" stamp with no game bookkeeping at all: a v1-shaped catalog
+		// mislabeled by pre-5.2.3 delta merges. The entries are still the
+		// full catalog — judge by them instead of re-downloading forever.
+		return len(f.Entries) > 0
 	}
 	return len(f.Entries) > 0
 }
@@ -407,13 +421,13 @@ func LoadManifestFile() manifestFile {
 func mergeManifestFetch(cached manifestFile, res manifestFetchResult) manifestFile {
 	out := cached
 	out.ETag = res.ETag
-	out.Source = "v2"
 	out.LastFetchedAt = time.Now().UTC().Format(time.RFC3339)
 	if res.GamesTotal > 0 {
 		out.GamesTotal = res.GamesTotal
 	}
 
 	if !res.DeltaOnly {
+		out.Source = "v2"
 		out.Entries = res.Entries
 		out.Games = res.Games
 		out.ManifestComplete = res.Complete
@@ -433,6 +447,14 @@ func mergeManifestFetch(cached manifestFile, res manifestFetchResult) manifestFi
 	}
 	if len(res.Games) > 0 {
 		out.Games = mergeV2Games(cached.Games, res.Games, res.DeletedIDs)
+	}
+	// Only claim the v2 shape when a verifiably complete game set backs it.
+	// A delta applied over a v1-era cache must NOT be relabeled "v2":
+	// manifestCacheComplete would then judge it by game bookkeeping it never
+	// had and force a full re-download on every start (or distrust a partial
+	// delta game set). Deltas over a real v2 cache keep Source via out=cached.
+	if out.GamesTotal > 0 && len(out.Games) >= out.GamesTotal {
+		out.Source = "v2"
 	}
 	return out
 }
@@ -873,9 +895,12 @@ func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Reso
 				if resolver.UnsafeWatchTarget(abs, rule.SyncAll, rule.Recursive, rule.IncludePatterns) {
 					// A save folder must be game-specific. Refuse home/XDG/system
 					// roots unless the rule targets specific named files there, so
-					// we never recursively sync dotfiles, caches, etc.
+					// we never recursively sync dotfiles, caches, etc. This fires
+					// for ~a hundred manifest games with over-broad upstream paths
+					// on every rebuild — debug-level, with one summary line in the
+					// build stats (a warning per game buried real errors).
 					stats.SkippedUnsafe++
-					clientlogx.EventWarn("watch_path_unsafe", "game_id", e.GameID, "dir", abs, "template", rule.Directory)
+					clientlogx.EventDebug("watch_path_unsafe", "game_id", e.GameID, "dir", abs, "template", rule.Directory)
 					continue
 				}
 				if !paths.WatchDirExists(abs) {

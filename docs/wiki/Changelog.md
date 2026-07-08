@@ -6,6 +6,14 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.2.3] — 2026-07-07
+
+### Fixed
+
+- Client restarts (including after self-updates) no longer look alarming: a cache-labeling bug forced a full manifest re-download on every start, and the save-path safety guard logged ~120 warnings per rebuild. The cache now heals itself and the guard logs one summary line instead.
+
+---
+
 ## [5.2.2] — 2026-07-07
 
 ### Changed

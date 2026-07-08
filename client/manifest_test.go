@@ -417,3 +417,57 @@ func TestBuildInstallRootsByGame_MergesSources(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Equal(t, []string{"/custom/override", "/wiki/hint", "/steam/common/game"}, got["42"])
 }
+
+// Regression (v5.2.3): a v2 delta merged over a v1-era cache (entries only,
+// no game set) must not relabel the cache "v2" — that made
+// manifestCacheComplete judge it by game bookkeeping it never had, forcing a
+// full manifest re-download on every startup, forever.
+func TestMergeManifestFetch_DeltaOverV1CacheKeepsSource(t *testing.T) {
+	cached := manifestFile{
+		Source: "v1",
+		Entries: []types.GameSaveLocation{
+			{GameID: "1", Platform: "macos", PathTemplate: "/a"},
+			{GameID: "2", Platform: "macos", PathTemplate: "/b"},
+		},
+	}
+	res := manifestFetchResult{DeltaOnly: true, ETag: "e2"} // "nothing changed" delta
+	merged := mergeManifestFetch(cached, res)
+	assert.Equal(t, "v1", merged.Source, "delta over v1 cache must not claim v2")
+	assert.Len(t, merged.Entries, 2, "catalog preserved")
+	assert.True(t, manifestCacheComplete(merged), "merged cache stays usable")
+
+	// A delta carrying a PARTIAL game set (no verifiable total) must also
+	// stay v1 — the partial set can't be trusted as a v2 catalog.
+	res2 := manifestFetchResult{DeltaOnly: true, Games: []types.ManifestV2Game{{GameID: "1"}}}
+	merged2 := mergeManifestFetch(cached, res2)
+	assert.Equal(t, "v1", merged2.Source)
+	assert.True(t, manifestCacheComplete(merged2))
+
+	// Full fetches always stamp v2 (unchanged behavior).
+	full := manifestFetchResult{Entries: cached.Entries, Games: []types.ManifestV2Game{{GameID: "1"}, {GameID: "2"}}, GamesTotal: 2, Complete: true}
+	merged3 := mergeManifestFetch(cached, full)
+	assert.Equal(t, "v2", merged3.Source)
+	assert.True(t, merged3.ManifestComplete)
+}
+
+// Regression (v5.2.3): caches already poisoned in the wild — Source "v2",
+// entries present, but zero games and zero total — must be judged complete
+// by their entries so existing installs heal without a re-download.
+func TestManifestCacheComplete_MislabeledV2Cache(t *testing.T) {
+	poisoned := manifestFile{
+		Source:  "v2",
+		Entries: []types.GameSaveLocation{{GameID: "1", Platform: "macos", PathTemplate: "/a"}},
+	}
+	assert.True(t, manifestCacheComplete(poisoned))
+
+	// Real v2 semantics unchanged: a partial game set is still incomplete...
+	partial := manifestFile{
+		Source:     "v2",
+		GamesTotal: 5,
+		Games:      []types.ManifestV2Game{{GameID: "1"}},
+		Entries:    []types.GameSaveLocation{{GameID: "1", Platform: "macos", PathTemplate: "/a"}},
+	}
+	assert.False(t, manifestCacheComplete(partial))
+	// ...and an empty cache is incomplete.
+	assert.False(t, manifestCacheComplete(manifestFile{Source: "v2"}))
+}

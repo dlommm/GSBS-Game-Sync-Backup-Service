@@ -4,6 +4,19 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [5.2.3] - 2026-07-07
+
+### Fixed — noisy, slow client restarts
+- **The client no longer re-downloads the full manifest on every startup.** A v2 delta merged
+  over a v1-era cache mislabeled the cache as "v2", which the completeness check then judged by
+  game bookkeeping it never had — forcing a full re-download forever after. Delta merges now keep
+  the cache's true shape, already-mislabeled caches heal in place, and a v1 delta fetch no longer
+  overwrites the cached catalog with just the changed entries.
+- **Restarts are quiet.** The safety guard that refuses to watch home/system-root save paths
+  (~120 games with over-broad upstream paths) logged a warning per game on every watch-path
+  rebuild — every restart and every 15-minute refresh. It's now one summary line
+  ("N manifest save paths … not watched"), with per-game detail at debug level.
+
 ## [5.2.2] - 2026-07-07
 
 ### Changed
