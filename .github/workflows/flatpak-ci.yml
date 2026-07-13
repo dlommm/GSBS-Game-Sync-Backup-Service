@@ -26,7 +26,7 @@ jobs:
       HAS_GPG: ${{ secrets.GSBS_GPG_PRIVATE != '' }}
       HAS_DEPLOY: ${{ secrets.GSBS_FLATPAK_DEPLOY_KEY != '' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # tags needed to resolve the version
       - uses: actions/setup-go@v6
