@@ -22,6 +22,7 @@ cd "$DIR"
 CLIENT_ASSETS=(
   "gsbs-client-windows-amd64.exe"
   "gsbs-client-linux-amd64"
+  "gsbs-client-linux-arm64"
   "gsbs-client-darwin-arm64"
   "gsbs-client-darwin-amd64"
 )
@@ -31,6 +32,7 @@ ALL_ASSETS=(
   "gsbs-client-windows-amd64.exe"
   "gsbs-server-linux-amd64"
   "gsbs-client-linux-amd64"
+  "gsbs-client-linux-arm64"
   "gsbs-client-darwin-arm64"
   "gsbs-client-darwin-amd64"
 )
@@ -39,8 +41,11 @@ ALL_ASSETS=(
 OPTIONAL_ASSETS=(
   "gsbs-server-setup-${VERSION_VALUE}-windows-amd64.exe"
   "gsbs-client-setup-${VERSION_VALUE}-windows-amd64.exe"
+  "gsbs-server-linux-arm64"
   "gsbs-client_${VERSION_VALUE}_amd64.deb"
+  "gsbs-client_${VERSION_VALUE}_arm64.deb"
   "gsbs-client-${VERSION_VALUE}-x86_64.AppImage"
+  "gsbs-client-${VERSION_VALUE}-aarch64.AppImage"
   "gsbs-client-${VERSION_VALUE}-darwin-arm64.dmg"
   "gsbs-client-${VERSION_VALUE}-darwin-amd64.dmg"
 )
@@ -75,10 +80,12 @@ echo "Wrote SHA256SUMS (${FOUND} files)"
 # Build latest-client.json
 win_sha=""
 lin_sha=""
+lin_arm_sha=""
 mac_arm_sha=""
 mac_amd_sha=""
 win_name=""
 lin_name=""
+lin_arm_name=""
 mac_arm_name=""
 mac_amd_name=""
 
@@ -96,6 +103,10 @@ for f in "${CLIENT_ASSETS[@]}"; do
       lin_sha="$sum"
       lin_name="$f"
       ;;
+    gsbs-client-linux-arm64)
+      lin_arm_sha="$sum"
+      lin_arm_name="$f"
+      ;;
     gsbs-client-darwin-arm64)
       mac_arm_sha="$sum"
       mac_arm_name="$f"
@@ -110,17 +121,18 @@ done
 # In per-platform build jobs only some binaries are present; the final release job
 # sets REQUIRE_COMPLETE_MANIFEST=1 after downloading all artifacts, so it enforces all.
 if [ "${REQUIRE_COMPLETE_MANIFEST:-0}" = "1" ]; then
-  if [ -z "$win_sha" ] || [ -z "$lin_sha" ] || [ -z "$mac_arm_sha" ] || [ -z "$mac_amd_sha" ]; then
+  if [ -z "$win_sha" ] || [ -z "$lin_sha" ] || [ -z "$lin_arm_sha" ] || [ -z "$mac_arm_sha" ] || [ -z "$mac_amd_sha" ]; then
     echo "ERROR: one or more client platform assets are missing; latest-client.json would be incomplete." >&2
     echo "  windows sha:      ${win_sha:-(empty)}" >&2
     echo "  linux sha:        ${lin_sha:-(empty)}" >&2
+    echo "  linux-arm64 sha:  ${lin_arm_sha:-(empty)}" >&2
     echo "  darwin-arm64 sha: ${mac_arm_sha:-(empty)}" >&2
     echo "  darwin-amd64 sha: ${mac_amd_sha:-(empty)}" >&2
     exit 1
   fi
 fi
 
-if [ -z "$win_sha" ] || [ -z "$lin_sha" ] || [ -z "$mac_arm_sha" ] || [ -z "$mac_amd_sha" ]; then
+if [ -z "$win_sha" ] || [ -z "$lin_sha" ] || [ -z "$lin_arm_sha" ] || [ -z "$mac_arm_sha" ] || [ -z "$mac_amd_sha" ]; then
   echo "Skipping latest-client.json (partial build: not all platforms present)"
   exit 0
 fi
@@ -137,6 +149,10 @@ cat > latest-client.json <<EOF
     "linux-amd64": {
       "name": "${lin_name}",
       "sha256": "${lin_sha}"
+    },
+    "linux-arm64": {
+      "name": "${lin_arm_name}",
+      "sha256": "${lin_arm_sha}"
     },
     "darwin-arm64": {
       "name": "${mac_arm_name}",

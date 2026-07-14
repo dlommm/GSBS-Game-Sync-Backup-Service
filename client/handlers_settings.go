@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,6 +55,7 @@ func settingsPageData(cfg *config) clientwebui.SettingsPageData {
 		BackupOnPull:        cfg.BackupOnPull,
 		UseCompression:      cfg.UseCompression,
 		SkipSyncWhenMetered: cfg.SkipSyncWhenMetered,
+		MeteredSupported:    runtime.GOOS == "windows",
 		PolicyOverrides:     overrides,
 	}
 }
@@ -169,7 +171,12 @@ func handleSettingsSave(w http.ResponseWriter, r *http.Request) {
 	// Toggles (unchecked checkboxes are absent from the form).
 	cfg.BackupOnPull = r.Form.Get("backup_on_pull") != ""
 	cfg.UseCompression = r.Form.Get("use_compression") != ""
-	cfg.SkipSyncWhenMetered = r.Form.Get("skip_sync_when_metered") != ""
+	// The metered checkbox renders disabled on non-Windows (no detection
+	// there), and disabled inputs never submit — leave the stored value alone
+	// so it survives if the config ever moves to a Windows machine.
+	if runtime.GOOS == "windows" {
+		cfg.SkipSyncWhenMetered = r.Form.Get("skip_sync_when_metered") != ""
+	}
 
 	// Per-game conflict-policy overrides (v5.2).
 	applyPolicyOverrideForm(cfg, r.Form)

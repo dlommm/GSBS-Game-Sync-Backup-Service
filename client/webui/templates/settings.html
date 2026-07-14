@@ -88,8 +88,8 @@
         <span>Compress sync traffic (gzip) to save bandwidth</span>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" name="skip_sync_when_metered" {{if .SkipSyncWhenMetered}}checked{{end}}>
-        <span>Skip syncing on metered connections (Windows)</span>
+        <input type="checkbox" name="skip_sync_when_metered" {{if .SkipSyncWhenMetered}}checked{{end}} {{if not .MeteredSupported}}disabled{{end}}>
+        <span>Skip syncing on metered connections{{if not .MeteredSupported}} (Windows only — has no effect on this OS){{end}}</span>
       </label>
     </div>
   </section>

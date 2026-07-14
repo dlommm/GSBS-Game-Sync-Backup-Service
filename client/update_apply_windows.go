@@ -29,12 +29,32 @@ func applyUpdatePlatform(stagedPath string) error {
 		return err
 	}
 	batch := filepath.Join(dir, "apply-update.bat")
+	// Retry taking ownership of the exe (the exiting process may still hold
+	// it), swap in the staged binary, and roll back to the previous binary if
+	// the swap fails. <exe>.old is kept for manual rollback; the client
+	// removes it on the next normal start (CleanupOldUpdateBinary).
 	script := fmt.Sprintf(`@echo off
 timeout /t 2 /nobreak >nul
-move /Y "%s" "%s"
-start "" "%s" --minimized
+set /a tries=0
+:movecur
+move /Y "%[2]s" "%[3]s" >nul 2>&1
+if not errorlevel 1 goto moved
+set /a tries+=1
+if %%tries%% lss 15 (
+  timeout /t 1 /nobreak >nul
+  goto movecur
+)
+rem Could not take ownership of the current binary; leave it in place.
+goto launch
+:moved
+move /Y "%[1]s" "%[2]s" >nul 2>&1
+if not errorlevel 1 goto launch
+rem Swap failed; restore the previous binary.
+move /Y "%[3]s" "%[2]s" >nul 2>&1
+:launch
+start "" "%[2]s" --minimized
 del "%%~f0"
-`, stagedPath, exe, exe)
+`, stagedPath, exe, exe+".old")
 	if err := os.WriteFile(batch, []byte(script), 0600); err != nil {
 		return err
 	}
@@ -44,9 +64,10 @@ del "%%~f0"
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start updater: %w", err)
 	}
-	// NOTE: The .bat runs detached; we cannot observe whether the `move` or
-	// restart succeeded from here. Failures (e.g. file locked) are silent on
-	// the Go side. The user will see the old binary on next launch if it failed.
+	// The .bat runs detached; the Go side cannot observe the outcome, but the
+	// script itself now retries the locked-file window and rolls back to the
+	// previous binary on a failed swap, so the client always relaunches in a
+	// working state.
 	log.Printf("update: Windows apply script launched; current process will exit for restart")
 	return nil
 }

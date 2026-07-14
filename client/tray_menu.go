@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"fyne.io/systray"
+	"github.com/gen2brain/beeep"
 )
 
 const (
@@ -126,6 +127,12 @@ func (c *TrayController) Run() {
 	c.startUpdateHandlers()
 	go c.runSetupFlow(setupURL, cfg)
 	go c.runConfigValidation(cfg)
+
+	CleanupOldUpdateBinary()
+	if applyErr := ConsumeUpdateApplyError(); applyErr != "" {
+		log.Printf("tray: previous update apply failed: %s", applyErr)
+		_ = beeep.Notify("GSBS", "Update could not be applied — running the previous version. See gsbs.log for details.", "")
+	}
 }
 
 func (c *TrayController) buildMenu(cfg *config) {

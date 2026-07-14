@@ -24,6 +24,15 @@ func overrideGOOS(t *testing.T, goos string) {
 	t.Cleanup(func() { goosForUpdate = orig })
 }
 
+// overrideGOARCH mirrors overrideGOOS for the architecture half of the
+// platform key / expected asset name.
+func overrideGOARCH(t *testing.T, goarch string) {
+	t.Helper()
+	orig := goarchForUpdate
+	goarchForUpdate = func() string { return goarch }
+	t.Cleanup(func() { goarchForUpdate = orig })
+}
+
 // ghReleasePayload builds a minimal GitHub releases/latest JSON response.
 func ghReleasePayload(tag string, assets []map[string]string) map[string]any {
 	assetList := make([]map[string]any, 0, len(assets))
@@ -80,8 +89,8 @@ func TestCheckForUpdate_APIError(t *testing.T) {
 }
 
 // TestCheckForUpdate_ManifestMissing verifies that a release with no
-// latest-client.json asset (and no matching asset-name heuristic) returns
-// Status=="manifest_mismatch".
+// latest-client.json asset (and no matching platform asset) offers a manual
+// download — a newer release exists, the tray just can't verify a binary.
 func TestCheckForUpdate_ManifestMissing(t *testing.T) {
 	overrideVersion(t, "1.0.0")
 	overrideGOOS(t, "linux")
@@ -100,11 +109,64 @@ func TestCheckForUpdate_ManifestMissing(t *testing.T) {
 
 	result := CheckForUpdate("testowner/testrepo", false)
 
-	if result.Status != "manifest_mismatch" {
-		t.Errorf("expected Status=manifest_mismatch, got %q (message: %s)", result.Status, result.Message)
+	if result.Status != "manual_download" {
+		t.Errorf("expected Status=manual_download, got %q (message: %s)", result.Status, result.Message)
 	}
-	if result.Info != nil {
-		t.Error("expected Info==nil for manifest_mismatch")
+	if result.Info == nil || !result.Info.Manual {
+		t.Error("expected Info.Manual==true for manual_download")
+	}
+}
+
+// A release that carries the platform binary but no latest-client.json must
+// NOT report "available": DownloadUpdate refuses assets without a checksum,
+// so that Install button would be a dead end. Manual download instead.
+func TestCheckForUpdate_AssetWithoutManifestIsManual(t *testing.T) {
+	overrideVersion(t, "1.0.0")
+	overrideGOOS(t, "linux")
+	overrideGOARCH(t, "amd64")
+
+	releasePayload := ghReleasePayload("v9.9.9", []map[string]string{
+		{"name": "gsbs-client-linux-amd64", "url": "http://example.com/gsbs-client-linux-amd64"},
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(releasePayload)
+	}))
+	defer srv.Close()
+	installTestTransport(t, srv)
+
+	result := CheckForUpdate("testowner/testrepo", false)
+
+	if result.Status != "manual_download" {
+		t.Errorf("expected Status=manual_download, got %q (message: %s)", result.Status, result.Message)
+	}
+	if result.Info == nil || !result.Info.Manual {
+		t.Error("expected Info.Manual==true when the asset has no manifest checksum")
+	}
+}
+
+// expectedClientAssetName must be architecture-aware: linux/arm64 ships its
+// own binary and must never be offered the amd64 asset.
+func TestExpectedClientAssetName_ArchAware(t *testing.T) {
+	cases := []struct {
+		goos, goarch, want string
+	}{
+		{"linux", "amd64", "gsbs-client-linux-amd64"},
+		{"linux", "arm64", "gsbs-client-linux-arm64"},
+		{"windows", "amd64", "gsbs-client-windows-amd64.exe"},
+		{"darwin", "arm64", "gsbs-client-darwin-arm64"},
+		{"darwin", "amd64", "gsbs-client-darwin-amd64"},
+	}
+	for _, tc := range cases {
+		overrideGOOS(t, tc.goos)
+		overrideGOARCH(t, tc.goarch)
+		if got := expectedClientAssetName(); got != tc.want {
+			t.Errorf("expectedClientAssetName(%s/%s) = %q, want %q", tc.goos, tc.goarch, got, tc.want)
+		}
+		if got := updatePlatformKey(); got != tc.goos+"-"+tc.goarch {
+			t.Errorf("updatePlatformKey(%s/%s) = %q", tc.goos, tc.goarch, got)
+		}
 	}
 }
 

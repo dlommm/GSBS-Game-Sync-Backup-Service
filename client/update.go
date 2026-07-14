@@ -60,8 +60,12 @@ type ClientManifestAsset struct {
 // Tests may override this to simulate a supported platform on CI.
 var goosForUpdate = func() string { return runtime.GOOS }
 
+// goarchForUpdate mirrors goosForUpdate for the architecture half of the
+// platform key / expected asset name.
+var goarchForUpdate = func() string { return runtime.GOARCH }
+
 func updatePlatformKey() string {
-	return runtime.GOOS + "-" + runtime.GOARCH
+	return goosForUpdate() + "-" + goarchForUpdate()
 }
 
 func normalizeVersion(v string) string {
@@ -263,11 +267,11 @@ func updateFromManifest(rel *ghRelease) UpdateCheckResult {
 func expectedClientAssetName() string {
 	switch goosForUpdate() {
 	case "windows":
-		return "gsbs-client-windows-amd64.exe"
+		return "gsbs-client-windows-" + goarchForUpdate() + ".exe"
 	case "linux":
-		return "gsbs-client-linux-amd64"
+		return "gsbs-client-linux-" + goarchForUpdate()
 	case "darwin":
-		return "gsbs-client-darwin-" + runtime.GOARCH
+		return "gsbs-client-darwin-" + goarchForUpdate()
 	default:
 		return ""
 	}
@@ -292,35 +296,33 @@ func updateFromAssetNames(rel *ghRelease) UpdateCheckResult {
 	}
 	for _, a := range rel.Assets {
 		if a.Name == want {
+			// The asset exists but there is no manifest checksum to verify it
+			// against, and DownloadUpdate refuses unverified binaries — an
+			// "available" status here would be a dead-end Install button.
+			// Offer a manual download instead (tray/web open the releases page).
 			return UpdateCheckResult{
-				Status: "available",
+				Status: "manual_download",
 				Info: &UpdateInfo{
-					Tag:         rel.TagName,
-					Version:     strings.TrimPrefix(rel.TagName, "v"),
-					AssetName:   a.Name,
-					DownloadURL: a.BrowserDownloadURL,
+					Tag:     rel.TagName,
+					Version: strings.TrimPrefix(rel.TagName, "v"),
+					Manual:  true,
 				},
+				Message: fmt.Sprintf("release %s has no verified manifest entry for %s; manual download from the releases page", rel.TagName, want),
 			}
 		}
 	}
 	log.Printf("update: asset %s not found in release %s", want, rel.TagName)
-	if goosForUpdate() == "darwin" {
-		// A newer release exists but carries no darwin binary (pre-4.2
-		// releases ship only DMGs). Offer a manual download: the tray opens
-		// the GitHub releases page instead of self-updating.
-		return UpdateCheckResult{
-			Status: "manual_download",
-			Info: &UpdateInfo{
-				Tag:     rel.TagName,
-				Version: strings.TrimPrefix(rel.TagName, "v"),
-				Manual:  true,
-			},
-			Message: fmt.Sprintf("no darwin asset in release %s; manual download from the releases page", rel.TagName),
-		}
-	}
+	// A newer release exists but carries no binary for this platform (e.g.
+	// pre-4.2 releases had no darwin assets, pre-5.3 no linux-arm64 manifest
+	// entry). Same answer: point the user at the releases page.
 	return UpdateCheckResult{
-		Status:  "manifest_mismatch",
-		Message: fmt.Sprintf("asset %s not found in release %s", want, rel.TagName),
+		Status: "manual_download",
+		Info: &UpdateInfo{
+			Tag:     rel.TagName,
+			Version: strings.TrimPrefix(rel.TagName, "v"),
+			Manual:  true,
+		},
+		Message: fmt.Sprintf("no %s asset in release %s; manual download from the releases page", want, rel.TagName),
 	}
 }
 
@@ -406,4 +408,43 @@ func ParseApplyUpdateFlag() string {
 // RunApplyUpdateMode handles early startup when applying a staged update on Linux.
 func RunApplyUpdateMode(stagedPath string) error {
 	return applyStagedBinary(stagedPath)
+}
+
+func updateApplyErrorPath() string {
+	return filepath.Join(ClientDataDir(), "updates", "last-apply-error.txt")
+}
+
+// recordUpdateApplyError persists an apply failure so the tray can surface it
+// on the next start — the apply helper runs detached, so without the marker a
+// failed (and rolled-back) update would be completely silent.
+func recordUpdateApplyError(err error) {
+	dir := filepath.Join(ClientDataDir(), "updates")
+	_ = os.MkdirAll(dir, 0755)
+	msg := time.Now().UTC().Format(time.RFC3339) + " " + err.Error() + "\n"
+	_ = os.WriteFile(updateApplyErrorPath(), []byte(msg), 0644)
+}
+
+// ConsumeUpdateApplyError returns and clears the last recorded apply failure
+// ("" when the previous update applied cleanly).
+func ConsumeUpdateApplyError() string {
+	data, err := os.ReadFile(updateApplyErrorPath())
+	if err != nil {
+		return ""
+	}
+	_ = os.Remove(updateApplyErrorPath())
+	return strings.TrimSpace(string(data))
+}
+
+// CleanupOldUpdateBinary removes the previous binary kept next to the
+// executable after a successful swap (Windows keeps <exe>.old for manual
+// rollback; other platforms remove it inline but may leave one behind after
+// a crash). Best-effort.
+func CleanupOldUpdateBinary() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	if abs, err := filepath.Abs(exe); err == nil {
+		_ = os.Remove(abs + ".old")
+	}
 }

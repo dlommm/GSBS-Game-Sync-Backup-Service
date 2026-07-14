@@ -28,9 +28,15 @@ func main() {
 	if staged := ParseApplyUpdateFlag(); staged != "" {
 		InitClientLog(true)
 		if err := RunApplyUpdateMode(staged); err != nil {
-			log.Fatal("apply update:", err)
+			// applyStagedBinary rolled back, so this process is still the
+			// previous, working binary: record the failure for the tray to
+			// surface, then fall through to a normal start instead of dying
+			// silently in a detached helper.
+			log.Printf("apply update failed (continuing on previous version): %v", err)
+			recordUpdateApplyError(err)
+		} else {
+			return
 		}
-		return
 	}
 
 	// Init log to file (and optionally stderr) so all client activity is recorded.

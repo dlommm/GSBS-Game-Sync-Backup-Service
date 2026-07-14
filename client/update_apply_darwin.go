@@ -98,9 +98,15 @@ func applyStagedBinary(stagedPath string) error {
 
 	// Replacing the binary breaks the bundle's ad-hoc signature seal; re-sign
 	// the same way the DMG packaging does or Gatekeeper kills the next launch.
+	// The bundle holds a single Mach-O in Contents/MacOS, so no --deep (Apple
+	// deprecated it in macOS 13 and signing the bundle covers the binary).
 	bundle := appBundleRoot(exe)
 	if bundle != "" {
-		if signOut, err := exec.Command("codesign", "--force", "--deep", "--sign", "-", bundle).CombinedOutput(); err != nil {
+		if _, err := exec.LookPath("codesign"); err != nil {
+			_ = os.Rename(oldPath, exe) // roll back to the still-signed old binary
+			return fmt.Errorf("codesign not found on PATH; cannot re-seal the app bundle: %w", err)
+		}
+		if signOut, err := exec.Command("codesign", "--force", "--sign", "-", bundle).CombinedOutput(); err != nil {
 			_ = os.Rename(oldPath, exe) // roll back to the still-signed old binary
 			return fmt.Errorf("codesign: %v: %s", err, strings.TrimSpace(string(signOut)))
 		}

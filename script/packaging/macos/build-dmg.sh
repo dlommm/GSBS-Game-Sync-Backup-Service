@@ -94,8 +94,11 @@ PLIST
 # dialog; an ad-hoc-signed, sealed bundle gets the softer "can't verify the
 # developer" flow with a working Open Anyway path instead. Still not
 # notarization — the one-time Gatekeeper approval remains documented.
-codesign --force --deep --sign - "$APP"
-codesign --verify --deep --strict "$APP"
+# No --deep: the bundle holds a single Mach-O in Contents/MacOS and Apple
+# deprecated --deep in macOS 13. Must stay in lockstep with the in-place
+# updater's re-sign (client/update_apply_darwin.go).
+codesign --force --sign - "$APP"
+codesign --verify --strict "$APP"
 
 # --- Stage the DMG contents: the .app + a drag target to /Applications ---
 STAGE="${WORK}/dmg"
