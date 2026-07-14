@@ -13,23 +13,38 @@ import (
 var (
 	syncMu            sync.Mutex
 	syncCancel        context.CancelFunc
+	syncDone          chan struct{}
 	syncNowCh         chan struct{}
 	refreshManifestCh chan struct{}
 )
 
 // restartSync cancels the current sync loop and starts a new one with the given config.
+// It waits (bounded) for the previous loop to drain first: the old loop's
+// shutdown flush can take up to 10s, and launching the new loop immediately
+// would briefly run two watchers, two SSE listeners, and two reconcilers over
+// the same shared state (push-hash cache, tray state, outbox).
 func restartSync(cfg *config) {
 	syncMu.Lock()
 	defer syncMu.Unlock()
 	if syncCancel != nil {
 		syncCancel()
+		if syncDone != nil {
+			select {
+			case <-syncDone:
+			case <-time.After(12 * time.Second):
+				log.Printf("tray: previous sync loop did not stop within 12s; starting new loop anyway")
+			}
+		}
 	}
 	syncNowCh = make(chan struct{})
 	refreshManifestCh = make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	syncCancel = cancel
+	done := make(chan struct{})
+	syncDone = done
 	log.Printf("tray: sync started server=%s", cfg.ServerURL)
 	go func() {
+		defer close(done)
 		if err := runSync(ctx, cfg, syncNowCh, refreshManifestCh); err != nil {
 			log.Println("sync:", err)
 		}

@@ -409,7 +409,15 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	// SSE listener: re-fetch manifest and trigger a pull when server pushes an update.
 	sseRefreshCh := make(chan struct{}, 1)
 	ssePullCh := make(chan struct{}, 1)
-	go ListenSSE(ctx, cfg.ServerURL, cfg.Token, func(eventType string) {
+	sseToken := func() string {
+		// Same source as client.TokenReload: pick up a rotated token from
+		// config/keyring instead of reconnecting forever with a stale one.
+		if c, err := loadConfig(); err == nil && strings.TrimSpace(c.Token) != "" {
+			return c.Token
+		}
+		return cfg.Token
+	}
+	go ListenSSE(ctx, cfg.ServerURL, sseToken, func(eventType string) {
 		switch eventType {
 		case "manifest-updated":
 			select {

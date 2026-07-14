@@ -170,11 +170,25 @@ func persistTrayState() {
 	}
 	dir := ClientDataDir()
 	_ = os.MkdirAll(dir, 0755)
-	tmp := trayStatePath() + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	// Unique temp per writer: persistTrayState is fired from multiple
+	// goroutines, and concurrent writers on one fixed .tmp name could
+	// interleave into a torn file before the rename.
+	tmp, err := os.CreateTemp(dir, "tray_state-*.tmp")
+	if err != nil {
 		return
 	}
-	_ = os.Rename(tmp, trayStatePath())
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmp.Name())
+		return
+	}
+	if err := os.Rename(tmp.Name(), trayStatePath()); err != nil {
+		_ = os.Remove(tmp.Name())
+	}
 }
 
 func initTrayState() {

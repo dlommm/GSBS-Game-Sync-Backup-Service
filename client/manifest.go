@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	clientlogx "github.com/gsbs/gsbs/client/logx"
@@ -644,11 +646,26 @@ func PathKeyForManifestEntry(gameID, pathTemplate string) string {
 	return hex.EncodeToString(h[:])[:16]
 }
 
+// errSSEUnauthorized marks a 401 from the events endpoint so the reconnect
+// loop can refresh the token and slow down instead of hot-looping.
+var errSSEUnauthorized = errors.New("sse: 401 Unauthorized — token may be invalid or expired; try logging in again from the tray")
+
+// sseIdleTimeout is how long the stream may be silent before the connection
+// is presumed half-open and torn down. The server heartbeats every 30s, so
+// 90s of silence means at least two missed heartbeats.
+const sseIdleTimeout = 90 * time.Second
+
 // ListenSSE connects to the server SSE endpoint and calls onEvent for each received event type.
-// It auto-reconnects with exponential backoff on disconnect. Blocks until ctx is cancelled.
-func ListenSSE(ctx context.Context, baseURL, token string, onEvent func(eventType string)) {
+// getToken is called before every connection attempt so a rotated or
+// re-issued token is picked up without restarting the sync loop. It
+// auto-reconnects with exponential backoff on disconnect; after two
+// consecutive 401s the delay is floored at 5 minutes so a revoked token
+// doesn't hammer the server. Blocks until ctx is cancelled.
+func ListenSSE(ctx context.Context, baseURL string, getToken func() string, onEvent func(eventType string)) {
 	const healthyThreshold = 30 * time.Second
+	const authBackoffFloor = 5 * time.Minute
 	bo := retry.SSEBackoff()
+	consecutiveAuthFailures := 0
 
 	for {
 		select {
@@ -657,14 +674,22 @@ func ListenSSE(ctx context.Context, baseURL, token string, onEvent func(eventTyp
 		default:
 		}
 		start := time.Now()
-		err := connectSSE(ctx, baseURL, token, onEvent)
+		err := connectSSE(ctx, baseURL, getToken(), onEvent)
 		if ctx.Err() != nil {
 			return
 		}
-		if time.Since(start) >= healthyThreshold {
-			bo.Reset()
+		if errors.Is(err, errSSEUnauthorized) {
+			consecutiveAuthFailures++
+		} else {
+			consecutiveAuthFailures = 0
+			if time.Since(start) >= healthyThreshold {
+				bo.Reset()
+			}
 		}
 		delay := bo.Next()
+		if consecutiveAuthFailures >= 2 && delay < authBackoffFloor {
+			delay = authBackoffFloor
+		}
 		if err != nil {
 			log.Printf("sse: connection error: %v (retrying in %s)", err, delay)
 		} else {
@@ -679,6 +704,12 @@ func ListenSSE(ctx context.Context, baseURL, token string, onEvent func(eventTyp
 }
 
 func connectSSE(ctx context.Context, baseURL, token string, onEvent func(eventType string)) error {
+	// Child context so the idle watchdog can tear down a half-open stream:
+	// without it a dead peer leaves scanner.Scan() blocked forever and SSE
+	// events silently stop arriving until the next process restart.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	url := baseURL + "/api/events"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -696,14 +727,43 @@ func connectSSE(ctx context.Context, baseURL, token string, onEvent func(eventTy
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized {
-			return fmt.Errorf("sse: 401 Unauthorized — token may be invalid or expired; try logging in again from the tray")
+			return errSSEUnauthorized
 		}
 		return fmt.Errorf("sse: %s", resp.Status)
 	}
 
+	var lastActivity atomic.Int64
+	lastActivity.Store(time.Now().UnixNano())
+	watchdogDone := make(chan struct{})
+	defer close(watchdogDone)
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-watchdogDone:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if time.Since(time.Unix(0, lastActivity.Load())) > sseIdleTimeout {
+					log.Printf("sse: no data for %s (server heartbeats every 30s); dropping connection", sseIdleTimeout)
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+
 	scanner := bufio.NewScanner(resp.Body)
+	// Default 64KB line cap would error the whole stream on one oversized
+	// data: line; allow up to 1MB.
+	scanner.Buffer(make([]byte, 64<<10), 1<<20)
 	var eventType string
 	for scanner.Scan() {
+		// Heartbeat comments and blank lines land here too — any line proves
+		// the stream is alive.
+		lastActivity.Store(time.Now().UnixNano())
 		line := scanner.Text()
 		if strings.HasPrefix(line, "event: ") {
 			eventType = strings.TrimPrefix(line, "event: ")
