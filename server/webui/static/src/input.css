@@ -466,6 +466,7 @@
   .alert-success { background: var(--success-muted); color: var(--success); border: 1px solid var(--success-line); }
   .alert-error { background: var(--error-muted); color: var(--error); border: 1px solid var(--error-line); }
   .alert-info { background: var(--info-muted); color: var(--info); border: 1px solid var(--info-line); }
+  .alert-warn { background: var(--warning-muted); color: var(--warning); border: 1px solid var(--warning-line); }
 
   .config-grid { display: flex; flex-wrap: wrap; gap: 1rem; padding: 0 1.25rem 1rem; }
   .config-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }

@@ -40,14 +40,7 @@ type adminAnalyticsData struct {
 	Query                 string
 	FilterStatus          string
 	FilterPlatform        string
-	Page                  int
-	PerPage               int
-	Total                 int
-	TotalPages            int
-	Start                 int
-	End                   int
-	PrevPage              int
-	NextPage              int
+	Pager                 pagerView
 
 	// Sync tab
 	PCGWSyncRuns       []types.PCGWSyncRun
@@ -290,19 +283,12 @@ func (h *WebHandler) serveAdminAnalytics(w http.ResponseWriter, r *http.Request)
 	}
 
 	if tab == "pcgw" {
-		games, q, status, platform, page, perPage, total, totalPages, start, end, prevPage, nextPage := h.loadPCGWPage(ctx, r)
+		games, q, status, platform, page, per, total := h.loadPCGWPage(ctx, r)
 		data.Games = games
 		data.Query = q
 		data.FilterStatus = status
 		data.FilterPlatform = platform
-		data.Page = page
-		data.PerPage = perPage
-		data.Total = total
-		data.TotalPages = totalPages
-		data.Start = start
-		data.End = end
-		data.PrevPage = prevPage
-		data.NextPage = nextPage
+		data.Pager = newPager("/admin/partial/analytics-pcgw", pcgwFilterParams(q, status, platform), page, per, total, "#analytics-pcgw-table", "games")
 
 		data.ManifestMeta, _ = h.store.GetPCGWManifestMeta(ctx)
 		data.ManifestSaveLocations, _ = h.store.CountGameSaveLocations(ctx)
@@ -333,11 +319,7 @@ func (h *WebHandler) serveAdminAnalyticsPCGWPartial(w http.ResponseWriter, r *ht
 	if _, _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
-	games, q, status, platform, page, perPage, total, totalPages, start, end, prevPage, nextPage := h.loadPCGWPage(r.Context(), r)
-	data := map[string]interface{}{
-		"Games": games, "Query": q, "FilterStatus": status, "FilterPlatform": platform,
-		"Page": page, "PerPage": perPage, "Total": total, "TotalPages": totalPages,
-		"Start": start, "End": end, "PrevPage": prevPage, "NextPage": nextPage,
-	}
-	h.renderPartial(w, "partials/admin_analytics_pcgw_table.html", data)
+	games, q, status, platform, page, per, total := h.loadPCGWPage(r.Context(), r)
+	pager := newPager("/admin/partial/analytics-pcgw", pcgwFilterParams(q, status, platform), page, per, total, "#analytics-pcgw-table", "games")
+	h.renderPartial(w, "partials/admin_analytics_pcgw_table.html", h.pcgwTableViewData(games, q, status, platform, pager))
 }

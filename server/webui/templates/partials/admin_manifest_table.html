@@ -18,15 +18,7 @@
     </tbody>
   </table>
 </div>
-{{if gt .ManifestTotalPages 1}}
-<nav class="manifest-pagination" aria-label="Manifest pagination">
-  <span class="manifest-pagination-summary">Page {{.ManifestPage}} of {{.ManifestTotalPages}} — {{.ManifestStart}}–{{.ManifestEnd}} of {{.ManifestTotal}}</span>
-  <div class="manifest-pagination-links">
-    {{if gt .ManifestPage 1}}<a href="/admin/manifest?count={{.ManifestPerPage}}&page={{.ManifestPrevPage}}&q={{urlquery .Query}}" class="btn-ghost-sm">« Prev</a>{{end}}
-    {{if lt .ManifestPage .ManifestTotalPages}}<a href="/admin/manifest?count={{.ManifestPerPage}}&page={{.ManifestNextPage}}&q={{urlquery .Query}}" class="btn-ghost-sm">Next »</a>{{end}}
-  </div>
-</nav>
-{{end}}
+{{template "partials/table_pager.html" .Pager}}
 {{else}}
 <div class="panel-empty"><p>{{if .Query}}No manifest entries match your search.{{else}}No manifest entries. Run PCGW sync to populate.{{end}}</p></div>
 {{end}}

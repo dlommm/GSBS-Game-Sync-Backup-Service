@@ -489,15 +489,8 @@ func templateTestData(name string) interface{} {
 					PathTemplate: "%USERPROFILE%/save", Source: "pcgw", UpdatedAt: now,
 				},
 			},
-			Query:              "",
-			ManifestPage:       1,
-			ManifestPerPage:    20,
-			ManifestTotal:      1,
-			ManifestTotalPages: 1,
-			ManifestStart:      1,
-			ManifestEnd:        1,
-			ManifestPrevPage:   0,
-			ManifestNextPage:   2,
+			Query: "",
+			Pager: samplePager("/admin/partial/manifest", "#manifest-table", "entries"),
 		}
 	case "admin_activity.html":
 		return adminActivityData{
@@ -587,7 +580,7 @@ func templateTestData(name string) interface{} {
 			Games: []types.PCGWGame{
 				{PageID: 123, Title: "Test Game", ParseStatus: "ok", UpdatedAt: now, SteamAppIDs: []string{"730"}, PlatformsPresent: []string{"windows"}},
 			},
-			Page: 1, PerPage: 20, Total: 1, TotalPages: 1, Start: 1, End: 1, PrevPage: 0, NextPage: 2,
+			Pager:      samplePager("/admin/partial/pcgw", "#pcgw-table", "games"),
 			JobRunning: true, JobProgressPages: 42, JobProgressTotal: 100, JobGamesSkipped: 1,
 			CapStatusText:     "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
 			BundleSyncSource:  store.PCGWSyncSourceS3,
@@ -730,15 +723,8 @@ func templateTestData(name string) interface{} {
 					PathTemplate: "%USERPROFILE%/save", Source: "pcgw", UpdatedAt: now,
 				},
 			},
-			"Query":              "",
-			"ManifestPage":       1,
-			"ManifestPerPage":    20,
-			"ManifestTotal":      1,
-			"ManifestTotalPages": 1,
-			"ManifestStart":      1,
-			"ManifestEnd":        1,
-			"ManifestPrevPage":   0,
-			"ManifestNextPage":   2,
+			"Query": "",
+			"Pager": samplePager("/admin/partial/manifest", "#manifest-table", "entries"),
 		}
 	case "partials/admin_jobs.html":
 		return map[string]interface{}{
@@ -785,14 +771,14 @@ func templateTestData(name string) interface{} {
 			"Games": []types.PCGWGame{
 				{PageID: 123, Title: "Test Game", ParseStatus: "ok", UpdatedAt: now},
 			},
-			"Total": 1, "Page": 1, "TotalPages": 1, "Start": 1, "End": 1,
+			"Pager": samplePager("/admin/partial/pcgw", "#pcgw-table", "games"),
 		}
 	case "partials/admin_analytics_pcgw_table.html":
 		return map[string]interface{}{
 			"Games": []types.PCGWGame{
 				{PageID: 456, Title: "Analytics Game", ParseStatus: "partial", UpdatedAt: now},
 			},
-			"Total": 1, "Page": 1, "TotalPages": 1, "Start": 1, "End": 1,
+			"Pager": samplePager("/admin/partial/analytics-pcgw", "#analytics-pcgw-table", "games"),
 		}
 	case "partials/admin_pcgw_job_status.html":
 		return map[string]interface{}{

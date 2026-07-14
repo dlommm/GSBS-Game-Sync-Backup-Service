@@ -5,7 +5,7 @@
 
 [![CI](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/codeql.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/codeql.yml)
-[![Release](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml/badge.svg)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml)
+[![Release](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/release.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/release.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/gsbs/gsbs)](https://goreportcard.com/report/github.com/gsbs/gsbs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker Hub](https://img.shields.io/badge/Docker-dendlomm%2Fgsbs--server-blue)](https://hub.docker.com/r/dendlomm/gsbs-server)

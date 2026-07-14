@@ -303,8 +303,22 @@ func dashboardErrorMsg(code string) string {
 		return "Failed to revoke client."
 	case "missing_client":
 		return "Missing client ID."
+	case "import_too_large":
+		return "Import file is too large."
+	case "import_no_file":
+		return "No import file selected."
+	case "import_not_zip":
+		return "Import file is not a valid GSBS export archive."
+	case "import_no_manifest", "import_bad_manifest":
+		return "Import archive is missing a valid manifest."
+	case "import_failed":
+		return "Import failed. See server log."
+	case "":
+		return ""
 	default:
-		return code
+		// Never reflect the raw query value: ?error= is attacker-writable and
+		// would render arbitrary text inside a trusted alert banner.
+		return "Unexpected error. See server log for details."
 	}
 }
 
@@ -417,14 +431,21 @@ func adminQueryError(r *http.Request) string {
 		return "PCGW wipe failed. See server log."
 	case "reset_dead_letter_failed":
 		return "Dead-letter reset failed. See server log."
+	case "":
+		return ""
 	default:
-		return r.URL.Query().Get("error")
+		// Never reflect the raw query value: ?error= is attacker-writable and
+		// would render arbitrary text inside a trusted alert banner.
+		return "Unexpected error. See server log for details."
 	}
 }
 
 func (h *WebHandler) appendAuditBroadcast(ctx context.Context, actorUserID, actorUsername, action, targetID, details string) {
 	_ = h.store.AppendAudit(ctx, actorUserID, actorUsername, action, targetID, details)
 	if h.hub != nil {
-		h.hub.Broadcast(sse.Event{Type: "audit-updated", Data: "{}"})
+		// Scope to the actor: a global broadcast would toast "Activity log
+		// updated" at every logged-in user (and spam every connected sync
+		// client with the event) whenever anyone does anything.
+		h.hub.BroadcastToUser(actorUserID, sse.Event{Type: "audit-updated", Data: "{}"})
 	}
 }

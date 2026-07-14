@@ -5,8 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151917" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <title>GSBS — Client setup</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/app.css">
@@ -25,7 +25,7 @@
       <span class="wizard-step wizard-step-pending" id="step-done">3. Syncing</span>
     </nav>
 
-    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+    {{if .Error}}<p class="alert alert-error" role="alert">{{.Error}}</p>{{end}}
 
     {{if .SetupDone}}
     <div class="discovery-panel" data-discovery-poll>
@@ -54,7 +54,7 @@
       <button type="submit">Log in &amp; start syncing</button>
     </form>
     <section class="auth-help">
-      <p class="cell-muted">No server yet? Deploy one in minutes — see the <a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Installation" target="_blank" rel="noopener">installation guide ↗</a>.</p>
+      <p class="cell-muted">No server yet? Deploy one in minutes — see the <a href="https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Installation" target="_blank" rel="noopener">installation guide ↗</a>.</p>
     </section>
     {{end}}
   </main>

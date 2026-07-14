@@ -93,6 +93,12 @@
       {{else}}
       <p class="crypto-status cell-muted">Connect a device to determine the fleet's encryption format.</p>
       {{end}}
+      {{if .CryptoStaleLegacy}}
+      <p class="alert alert-warn"><strong>{{range $i, $n := .CryptoStaleLegacy}}{{if $i}}, {{end}}{{$n}}{{end}}</strong>
+        {{if eq (len .CryptoStaleLegacy) 1}}hasn't{{else}}haven't{{end}} synced in 30+ days and only
+        {{if eq (len .CryptoStaleLegacy) 1}}supports{{else}}support{{end}} legacy encryption — that device won't be able to read
+        newly encrypted saves until it's updated. Update it on its next use, or revoke it from the Devices page.</p>
+      {{end}}
 
       {{if .CryptoDevices}}
       <ul class="crypto-devices">
@@ -102,6 +108,7 @@
           <span>{{.Name}}</span>
           {{if .Version}}<span class="client-version">v{{.Version}}</span>{{end}}
           {{if .V2Capable}}<span class="pill-yes">modern crypto</span>{{else}}<span class="pill-no">legacy only</span>{{end}}
+          {{if .Stale}}<span class="badge-warn" title="Unseen for 30+ days — not counted toward fleet readiness">stale</span>{{end}}
         </li>
         {{end}}
       </ul>

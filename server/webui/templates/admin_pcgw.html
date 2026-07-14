@@ -92,7 +92,7 @@
     {{template "partials/loading_skeleton.html" .}}
   </div>
   <div id="pcgw-table"
-       hx-get="/admin/partial/pcgw?q={{urlquery .Query}}&status={{urlquery .FilterStatus}}&platform={{urlquery .FilterPlatform}}&page={{.Page}}"
+       hx-get="/admin/partial/pcgw?q={{urlquery .Query}}&status={{urlquery .FilterStatus}}&platform={{urlquery .FilterPlatform}}&per={{.Pager.PerPage}}&page={{.Pager.Page}}"
        hx-trigger="job-finished from:body"
        hx-include="#pcgw-filters"
        hx-swap="innerHTML">

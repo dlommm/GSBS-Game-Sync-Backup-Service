@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -79,14 +80,7 @@ type adminPCGWData struct {
 	Query              string
 	FilterStatus       string
 	FilterPlatform     string
-	Page               int
-	PerPage            int
-	Total              int
-	TotalPages         int
-	Start              int
-	End                int
-	PrevPage           int
-	NextPage           int
+	Pager              pagerView
 	JobRunning         bool
 	JobProgressPages   int
 	JobProgressTotal   int
@@ -149,49 +143,50 @@ func (h *WebHandler) loadPCGWStats(ctx context.Context) PCGWStatsView {
 	}
 }
 
-func (h *WebHandler) loadPCGWPage(ctx context.Context, r *http.Request) (games []types.PCGWGame, q, status, platform string, page, perPage, total, totalPages, start, end, prevPage, nextPage int) {
+// loadPCGWPage loads one page of the PCGW catalog with the shared page/per
+// params. The caller builds the pager (paths/targets differ between the PCGW
+// admin page and the Analytics→PCGW tab).
+func (h *WebHandler) loadPCGWPage(ctx context.Context, r *http.Request) (games []types.PCGWGame, q, status, platform string, page, per, total int) {
 	q = strings.TrimSpace(r.URL.Query().Get("q"))
 	status = strings.TrimSpace(r.URL.Query().Get("status"))
 	platform = strings.TrimSpace(r.URL.Query().Get("platform"))
-	page, perPage = parseManifestPagination(r)
-	offset := (page - 1) * perPage
+	page, per = parsePageParams(r, 25)
+	offset := (page - 1) * per
 
 	var err error
 	if q != "" {
-		games, total, err = h.store.SearchPCGWGamesFTS(ctx, q, perPage, offset)
+		games, total, err = h.store.SearchPCGWGamesFTS(ctx, q, per, offset)
 	} else {
 		games, total, err = h.store.ListPCGWGames(ctx, store.PCGWGameListFilter{
-			ParseStatus: status, Platform: platform, Limit: perPage, Offset: offset,
+			ParseStatus: status, Platform: platform, Limit: per, Offset: offset,
 		})
 	}
 	if err != nil {
 		logx.Logger().Error().Err(err).Str("query", q).Msg("webui admin pcgw list failed")
-		return nil, q, status, platform, page, perPage, 0, 1, 0, 0, 0, 2
+		return nil, q, status, platform, page, per, 0
 	}
-	totalPages = mathCeilDiv(total, perPage)
-	if totalPages < 1 {
-		totalPages = 1
-	}
-	if page > totalPages {
-		page = totalPages
-	}
-	if total > 0 {
-		start = offset + 1
-		end = offset + len(games)
-		if end > total {
-			end = total
-		}
-	}
-	prevPage = page - 1
-	nextPage = page + 1
-	return games, q, status, platform, page, perPage, total, totalPages, start, end, prevPage, nextPage
+	return games, q, status, platform, page, per, total
 }
 
-func (h *WebHandler) pcgwTableViewData(games []types.PCGWGame, q, status, platform string, page, perPage, total, totalPages, start, end, prevPage, nextPage int) map[string]interface{} {
+// pcgwFilterParams returns the filter params carried through pager URLs.
+func pcgwFilterParams(q, status, platform string) url.Values {
+	params := url.Values{}
+	if q != "" {
+		params.Set("q", q)
+	}
+	if status != "" {
+		params.Set("status", status)
+	}
+	if platform != "" {
+		params.Set("platform", platform)
+	}
+	return params
+}
+
+func (h *WebHandler) pcgwTableViewData(games []types.PCGWGame, q, status, platform string, pager pagerView) map[string]interface{} {
 	return map[string]interface{}{
 		"Games": games, "Query": q, "FilterStatus": status, "FilterPlatform": platform,
-		"Page": page, "PerPage": perPage, "Total": total, "TotalPages": totalPages,
-		"Start": start, "End": end, "PrevPage": prevPage, "NextPage": nextPage,
+		"Pager": pager,
 	}
 }
 
@@ -201,7 +196,8 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	games, q, status, platform, page, perPage, total, totalPages, start, end, prevPage, nextPage := h.loadPCGWPage(ctx, r)
+	games, q, status, platform, page, per, total := h.loadPCGWPage(ctx, r)
+	pager := newPager("/admin/partial/pcgw", pcgwFilterParams(q, status, platform), page, per, total, "#pcgw-table", "games")
 	jobs := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret), false)
 	catalogStats, _ := h.store.GetPCGWCatalogStats(ctx)
 	latestRun, _ := h.store.GetLatestPCGWSyncRun(ctx)
@@ -216,14 +212,7 @@ func (h *WebHandler) serveAdminPCGW(w http.ResponseWriter, r *http.Request) {
 		Query:              q,
 		FilterStatus:       status,
 		FilterPlatform:     platform,
-		Page:               page,
-		PerPage:            perPage,
-		Total:              total,
-		TotalPages:         totalPages,
-		Start:              start,
-		End:                end,
-		PrevPage:           prevPage,
-		NextPage:           nextPage,
+		Pager:              pager,
 		JobRunning:         jobs.JobRunning,
 		JobProgressPages:   jobs.JobProgressPages,
 		JobProgressTotal:   jobs.JobProgressTotal,
@@ -255,8 +244,9 @@ func (h *WebHandler) serveAdminPCGWPartial(w http.ResponseWriter, r *http.Reques
 	if _, _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
-	games, q, status, platform, page, perPage, total, totalPages, start, end, prevPage, nextPage := h.loadPCGWPage(r.Context(), r)
-	h.renderPartial(w, "partials/admin_pcgw_table.html", h.pcgwTableViewData(games, q, status, platform, page, perPage, total, totalPages, start, end, prevPage, nextPage))
+	games, q, status, platform, page, per, total := h.loadPCGWPage(r.Context(), r)
+	pager := newPager("/admin/partial/pcgw", pcgwFilterParams(q, status, platform), page, per, total, "#pcgw-table", "games")
+	h.renderPartial(w, "partials/admin_pcgw_table.html", h.pcgwTableViewData(games, q, status, platform, pager))
 }
 
 func (h *WebHandler) serveAdminPCGWJobStatusPartial(w http.ResponseWriter, r *http.Request) {

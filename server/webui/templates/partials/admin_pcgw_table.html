@@ -23,22 +23,7 @@
     </tbody>
   </table>
 </div>
-{{if gt .TotalPages 1}}
-<div class="manifest-pagination">
-  <span class="manifest-pagination-summary">
-    {{if gt .Total 0}}{{.Start}}–{{.End}} of {{.Total}}{{else}}0 games{{end}}
-  </span>
-  <div class="manifest-pagination-links">
-    {{if gt .Page 1}}<a href="/admin/pcgw?q={{urlquery .Query}}&status={{urlquery .FilterStatus}}&platform={{urlquery .FilterPlatform}}&page={{.PrevPage}}" class="btn-ghost-sm">← Prev</a>{{end}}
-    <span class="cell-muted">Page {{.Page}} / {{.TotalPages}}</span>
-    {{if lt .Page .TotalPages}}<a href="/admin/pcgw?q={{urlquery .Query}}&status={{urlquery .FilterStatus}}&platform={{urlquery .FilterPlatform}}&page={{.NextPage}}" class="btn-ghost-sm">Next →</a>{{end}}
-  </div>
-</div>
-{{else if gt .Total 0}}
-<div class="manifest-pagination">
-  <span class="manifest-pagination-summary">{{.Total}} games</span>
-</div>
-{{end}}
+{{template "partials/table_pager.html" .Pager}}
 {{else if or .Query .FilterStatus .FilterPlatform}}
 <div class="panel-empty">
   <p>No games match your filters.</p>

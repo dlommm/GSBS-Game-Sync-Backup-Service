@@ -32,7 +32,9 @@ func (h *WebHandler) serveDashboardEvents(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	ch, unsub := h.hub.Subscribe(userID)
+	// Same per-user cap as the API stream: browser tabs and reconnect loops
+	// must not accumulate unbounded goroutines/channels (oldest is evicted).
+	ch, unsub := h.hub.SubscribeCapped(userID, 5)
 	defer unsub()
 
 	fmt.Fprint(w, ": heartbeat\n\n")

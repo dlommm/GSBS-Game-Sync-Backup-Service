@@ -392,7 +392,7 @@
     </form>
     <div id="analytics-pcgw-skeleton" class="loading-skeleton-wrap"><div class="loading-skeleton u-h-32"></div></div>
     <div id="analytics-pcgw-table"
-         hx-get="/admin/partial/analytics-pcgw?tab=pcgw&amp;q={{urlquery .Query}}&amp;status={{urlquery .FilterStatus}}&amp;platform={{urlquery .FilterPlatform}}&amp;page={{.Page}}"
+         hx-get="/admin/partial/analytics-pcgw?tab=pcgw&amp;q={{urlquery .Query}}&amp;status={{urlquery .FilterStatus}}&amp;platform={{urlquery .FilterPlatform}}&amp;per={{.Pager.PerPage}}&amp;page={{.Pager.Page}}"
          hx-trigger="load"
          hx-swap="innerHTML">
       {{template "partials/admin_analytics_pcgw_table.html" .}}

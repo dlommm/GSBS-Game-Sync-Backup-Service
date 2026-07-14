@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151917" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <title>Set up GSBS</title>
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="apple-touch-icon" href="/static/logo.png">
@@ -18,9 +18,9 @@
     <img src="/static/logo.png" alt="GSBS" class="auth-logo">
     <h1>Welcome to GSBS</h1>
     <p class="subtitle">Let's create your admin account and finish setup. No configuration files needed.</p>
-    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+    {{if .Error}}<p class="alert alert-error" role="alert">{{.Error}}</p>{{end}}
     {{if .Locked}}
-    <p class="error" role="alert">For security, first-run setup is only available for a short time after the server starts. Restart the server, then reload this page to complete setup.</p>
+    <p class="alert alert-error" role="alert">For security, first-run setup is only available for a short time after the server starts. Restart the server, then reload this page to complete setup.</p>
     {{else}}
     <nav class="wizard-steps" aria-label="Setup progress" id="setup-progress">
       <span class="wizard-step wizard-step-active" data-step-label="1">1. Account</span><span class="wizard-sep" aria-hidden="true">→</span>

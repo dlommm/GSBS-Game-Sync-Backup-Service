@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -481,48 +482,24 @@ func (h *WebHandler) serveAdminUserDetail(w http.ResponseWriter, r *http.Request
 	})
 }
 
-func parseManifestPagination(r *http.Request) (page, perPage int) {
-	perPage = 20
-	if n := r.URL.Query().Get("count"); n != "" {
-		switch n {
-		case "10", "20", "40", "60", "100":
-			_, _ = fmt.Sscanf(n, "%d", &perPage)
-		}
-	}
-	page = 1
-	if p := r.URL.Query().Get("page"); p != "" {
-		var v int
-		if _, err := fmt.Sscanf(p, "%d", &v); err == nil && v >= 1 {
-			page = v
-		}
-	}
-	return page, perPage
-}
-
-func (h *WebHandler) loadManifestPage(ctx context.Context, r *http.Request) (entries []types.GameSaveLocation, total, page, perPage, totalPages, start, end int) {
+// buildManifestTableView loads one page of manifest entries plus the shared
+// table pager (same pagerView/table_pager toolkit as the other admin tables).
+// The legacy ?count= page-size param is intentionally ignored: old links
+// simply fall back to the default page size.
+func (h *WebHandler) buildManifestTableView(ctx context.Context, r *http.Request) manifestTableView {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	page, perPage = parseManifestPagination(r)
-	offset := (page - 1) * perPage
-	var err error
-	entries, total, err = h.store.SearchGameSaveLocations(ctx, query, perPage, offset)
+	page, per := parsePageParams(r, 25)
+	entries, total, err := h.store.SearchGameSaveLocations(ctx, query, per, (page-1)*per)
 	if err != nil {
-		return nil, 0, page, perPage, 1, 0, 0
+		logx.Logger().Error().Err(err).Str("query", query).Msg("webui admin manifest list failed")
+		entries, total = nil, 0
 	}
-	totalPages = mathCeilDiv(total, perPage)
-	if totalPages < 1 {
-		totalPages = 1
+	params := url.Values{}
+	if query != "" {
+		params.Set("q", query)
 	}
-	if page > totalPages {
-		page = totalPages
-	}
-	if total > 0 {
-		start = offset + 1
-		end = offset + len(entries)
-		if end > total {
-			end = total
-		}
-	}
-	return entries, total, page, perPage, totalPages, start, end
+	pager := newPager("/admin/partial/manifest", params, page, per, total, "#manifest-table", "entries")
+	return manifestTableView{Manifest: entries, Query: query, Pager: pager}
 }
 
 func (h *WebHandler) serveAdminManifest(w http.ResponseWriter, r *http.Request) {
@@ -530,20 +507,13 @@ func (h *WebHandler) serveAdminManifest(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	entries, total, page, perPage, totalPages, start, end := h.loadManifestPage(r.Context(), r)
+	table := h.buildManifestTableView(r.Context(), r)
 	h.render(w, "admin_manifest.html", adminManifestData{
-		PageData:           h.adminPageData(w, r, userID, username, "manifest", "admin_manifest"),
-		Stats:              h.loadAdminStats(r.Context()),
-		Manifest:           entries,
-		Query:              r.URL.Query().Get("q"),
-		ManifestPage:       page,
-		ManifestPerPage:    perPage,
-		ManifestTotal:      total,
-		ManifestTotalPages: totalPages,
-		ManifestStart:      start,
-		ManifestEnd:        end,
-		ManifestPrevPage:   page - 1,
-		ManifestNextPage:   page + 1,
+		PageData: h.adminPageData(w, r, userID, username, "manifest", "admin_manifest"),
+		Stats:    h.loadAdminStats(r.Context()),
+		Manifest: table.Manifest,
+		Query:    table.Query,
+		Pager:    table.Pager,
 	})
 }
 
@@ -551,12 +521,9 @@ func (h *WebHandler) serveAdminManifestPartial(w http.ResponseWriter, r *http.Re
 	if _, _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
-	entries, total, page, perPage, totalPages, start, end := h.loadManifestPage(r.Context(), r)
+	table := h.buildManifestTableView(r.Context(), r)
 	h.renderPartial(w, "partials/admin_manifest_table.html", map[string]interface{}{
-		"Manifest": entries, "Query": r.URL.Query().Get("q"),
-		"ManifestPage": page, "ManifestPerPage": perPage, "ManifestTotal": total,
-		"ManifestTotalPages": totalPages, "ManifestStart": start, "ManifestEnd": end,
-		"ManifestPrevPage": page - 1, "ManifestNextPage": page + 1,
+		"Manifest": table.Manifest, "Query": table.Query, "Pager": table.Pager,
 	})
 }
 

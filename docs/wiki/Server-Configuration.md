@@ -9,7 +9,7 @@
 | Variable | Default | Description |
 |---|---|---|
 | `GSBS_ADDR` | `:8080` | Listen address (e.g. `0.0.0.0:8080`) |
-| `GSBS_TLS_CERT` | (unset) | PEM certificate path — set together with `GSBS_TLS_KEY` to serve HTTPS natively (since 5.2.4). A reverse proxy (see [COMPOSE](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/COMPOSE.md)) remains the recommended TLS path; native TLS suits proxy-less LAN setups with self-signed or internal-CA certs |
+| `GSBS_TLS_CERT` | (unset) | PEM certificate path — set together with `GSBS_TLS_KEY` to serve HTTPS natively (since 5.2.4). A reverse proxy (see [COMPOSE](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/COMPOSE.md)) remains the recommended TLS path; native TLS suits proxy-less LAN setups with self-signed or internal-CA certs |
 | `GSBS_TLS_KEY` | (unset) | PEM private-key path for `GSBS_TLS_CERT`. Setting only one of the pair refuses to start |
 | `GSBS_DB` | `gsbs.db` | Path to the SQLite database. Use a path in a mounted volume for persistence. |
 | `GSBS_SESSION_SECRET` | (required) | **Required — must be 32+ characters and not a placeholder or the server refuses to start** (since 4.0.0). Signs WebUI session cookies, CSRF tokens, and TOTP login tokens. Generate: `openssl rand -base64 32`. `GSBS_INSECURE_DEV_SECRET=1` bypasses the check for local dev only |

@@ -7,7 +7,7 @@
 # Requires: gh CLI authenticated with repo admin (classic PAT repo scope, or gh auth login).
 set -euo pipefail
 
-repo="${GSBS_GITHUB_REPO:-dlommm/GSBS-Game-Sync-Backup-Service}"
+repo="${GSBS_GITHUB_REPO:-dlommm/GSBS--Game-Sync---Backup-Service-}"
 state="${1:-}"
 
 case "$state" in

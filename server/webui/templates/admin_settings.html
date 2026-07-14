@@ -22,7 +22,7 @@
       <h3 class="settings-form-section-title">Sync source</h3>
       <p class="settings-form-section-desc">Choose how the server updates PCGW mirror data. The S3 bundle is a prebuilt snapshot fetched from object storage (Cloudflare R2/S3) and avoids direct PCGW API calls. Switching to Manual imports the S3 bundle once to seed, then runs only on-demand PCGW API syncs.</p>
       {{if .PCGWSyncSourceEnvOverride}}
-      <p class="notice notice-warn">Sync source is controlled by the <code>GSBS_PCGW_SYNC_SOURCE</code> environment variable.</p>
+      <p class="alert alert-warn">Sync source is controlled by the <code>GSBS_PCGW_SYNC_SOURCE</code> environment variable.</p>
       {{end}}
       <div class="form-group">
         <label class="radio-label">
@@ -40,7 +40,7 @@
       <h3 class="settings-form-section-title">Bundle fetch schedule</h3>
       <p class="settings-form-section-desc">Used when sync source is the S3 bundle. Fetches the small index.json version pointer and only downloads the full bundle when a newer version is published (ETag/304 = no download).</p>
       {{if .PCGWBundleCronEnvOverride}}
-      <p class="notice notice-warn">Bundle cron is controlled by <code>GSBS_PCGW_BUNDLE_CRON</code> environment variable.</p>
+      <p class="alert alert-warn">Bundle cron is controlled by <code>GSBS_PCGW_BUNDLE_CRON</code> environment variable.</p>
       {{end}}
       <div class="form-group">
         <label for="pcgw_bundle_cron">Bundle cron expression</label>
@@ -67,7 +67,7 @@
       <h3 class="settings-form-section-title">API sync schedule</h3>
       <p class="settings-form-section-desc">Used in Manual mode. Switching to Manual clears this schedule (manual-only); set a cron here to re-enable automatic PCGW API syncs.</p>
     {{if .PCGWCronEnvOverride}}
-    <p class="notice notice-warn">Cron is controlled by <code>GSBS_PCGW_CRON</code> environment variable (overrides database). Change it in Docker/compose and restart the server to update.</p>
+    <p class="alert alert-warn">Cron is controlled by <code>GSBS_PCGW_CRON</code> environment variable (overrides database). Change it in Docker/compose and restart the server to update.</p>
     {{end}}
 
     <div class="form-group">

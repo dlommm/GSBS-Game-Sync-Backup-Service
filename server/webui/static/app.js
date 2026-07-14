@@ -206,6 +206,7 @@
       '<div><dt><kbd>g</kbd> then <kbd>g</kbd></dt><dd>My Games</dd></div>' +
       '<div><dt><kbd>g</kbd> then <kbd>i</kbd></dt><dd>Insights</dd></div>' +
       '<div><dt><kbd>g</kbd> then <kbd>v</kbd></dt><dd>Devices</dd></div>' +
+      '<div><dt><kbd>g</kbd> then <kbd>c</kbd></dt><dd>Conflicts</dd></div>' +
       '<div><dt><kbd>g</kbd> then <kbd>s</kbd></dt><dd>Settings</dd></div>' +
       '<div><dt><kbd>?</kbd></dt><dd>This help</dd></div>' +
       '<div><dt><kbd>Esc</kbd></dt><dd>Close dialogs</dd></div>' +
@@ -437,6 +438,13 @@
       initDynamic(evt.target);
     });
     document.body.addEventListener('audit-updated', function (evt) {
+      // On the admin Activity page, refresh the visible audit table instead
+      // of toasting a promise the page doesn't keep (resets to page 1).
+      var region = document.getElementById('audit-table-region');
+      if (region && window.htmx) {
+        window.htmx.ajax('GET', '/admin/partial/audit', { target: '#audit-table-region', swap: 'innerHTML' });
+        return;
+      }
       if (window.gsbs && window.gsbs.toast) {
         var msg = (evt.detail && evt.detail.data) ? evt.detail.data : 'Activity log updated';
         window.gsbs.toast(msg, 'info', 3000);

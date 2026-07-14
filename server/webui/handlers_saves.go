@@ -64,9 +64,14 @@ func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	errorMsg := r.URL.Query().Get("error")
-	if errorMsg == "restore_failed" {
+	errorMsg := ""
+	switch r.URL.Query().Get("error") {
+	case "":
+	case "restore_failed":
 		errorMsg = "Restore failed. Version may not exist."
+	default:
+		// ?error= is attacker-writable; never render the raw value.
+		errorMsg = "Unexpected error. See server log for details."
 	}
 	csrfToken := SetCSRFToken(w, r, h.secret)
 	h.render(w, "save_versions.html", saveVersionsData{

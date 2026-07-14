@@ -9,7 +9,7 @@
     {{end}}
     <p class="cell-muted jobs-meta">{{.CapStatusText}}</p>
     {{if .CapReached}}
-    <p class="notice notice-warn u-mt-xs">Run another Phase 2 parse/store action to continue the remaining queue.</p>
+    <p class="alert alert-warn u-mt-xs">Run another Phase 2 parse/store action to continue the remaining queue.</p>
     {{end}}
   </div>
   {{if .ShowPCGWControls}}{{else}}
@@ -116,7 +116,7 @@
 <div class="table-wrap">
   <table class="data-table" data-table-id="admin-jobs">
     <caption class="sr-only">Job runs</caption>
-    <thead><tr><th scope="col" data-sortable>Job</th><th scope="col" data-sortable>Started</th><th scope="col" data-sortable>Duration</th><th scope="col" data-sortable>Status</th><th scope="col" data-sortable data-sort-numeric>Entries</th><th scope="col">Error</th></tr></thead>
+    <thead><tr><th scope="col">Job</th><th scope="col">Started</th><th scope="col">Duration</th><th scope="col">Status</th><th scope="col">Entries</th><th scope="col">Error</th></tr></thead>
     <tbody>
       {{range .RecentJobs}}
       <tr>

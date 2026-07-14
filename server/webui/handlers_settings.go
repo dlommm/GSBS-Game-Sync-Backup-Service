@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gsbs/gsbs/pkg/i18n"
 	"github.com/gsbs/gsbs/server/auth"
@@ -37,8 +38,9 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 	} else if r.URL.Query().Get("encryption_updated") == "1" {
 		success = "Encryption setting updated."
 	}
-	errorMsg := r.URL.Query().Get("error")
-	switch errorMsg {
+	errorMsg := ""
+	switch r.URL.Query().Get("error") {
+	case "":
 	case "missing_session":
 		errorMsg = "No session specified."
 	case "invalid_session":
@@ -55,12 +57,21 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 		errorMsg = "2FA is not enabled."
 	case "2fa_disable_failed":
 		errorMsg = "Failed to disable 2FA."
+	case "2fa_generate_failed":
+		errorMsg = "Could not generate a 2FA secret. Try again."
+	case "2fa_save_failed":
+		errorMsg = "Could not save the 2FA change. Try again."
+	case "2fa_session_expired":
+		errorMsg = "The 2FA setup session expired. Start again."
+	case "encryption_update_failed":
+		errorMsg = "Failed to update the encryption setting."
+	case "invalid_notify_url":
+		errorMsg = "That notification URL is not valid."
+	case "save_failed":
+		errorMsg = "Failed to save settings."
 	default:
-		if errorMsg != "" && !strings.HasPrefix(errorMsg, "2fa_") {
-			// keep
-		} else if errorMsg == "" {
-			errorMsg = ""
-		}
+		// ?error= is attacker-writable; never render the raw value.
+		errorMsg = "Unexpected error. See server log for details."
 	}
 	sessions, _ := h.store.ListSessionsByUser(r.Context(), userID)
 	totpEnabled, _ := h.store.IsTOTPEnabled(r.Context(), userID)
@@ -95,11 +106,20 @@ func (h *WebHandler) buildEncryptionCenter(ctx context.Context, userID string, d
 	if clients, err := h.store.ListClientsByUserID(ctx, userID); err == nil {
 		for _, c := range clients {
 			capable := appVersionMajor(c.AppVersion) >= 4
+			stale := clientIsCryptoStale(c.LastSeen)
 			data.CryptoDevices = append(data.CryptoDevices, cryptoDeviceRow{
 				Name: c.Name, Version: c.AppVersion, V2Capable: capable, Online: clientIsOnline(c.LastSeen),
+				Stale: stale,
 			})
 			if !capable {
-				data.CryptoBlockers = append(data.CryptoBlockers, c.Name)
+				if stale {
+					// The store's readiness check ignores devices unseen for
+					// 30+ days, so this one does NOT hold the fleet back — but
+					// it also can't read gsbs2 saves if it ever comes back.
+					data.CryptoStaleLegacy = append(data.CryptoStaleLegacy, c.Name)
+				} else {
+					data.CryptoBlockers = append(data.CryptoBlockers, c.Name)
+				}
 			}
 		}
 	}
@@ -122,6 +142,16 @@ func (h *WebHandler) buildEncryptionCenter(ctx context.Context, userID string, d
 	if data.TotalSaves > 0 {
 		data.EncryptedPct = data.EncryptedSaves * 100 / data.TotalSaves
 	}
+}
+
+// clientIsCryptoStale mirrors the store's CryptoV2Ready cutoff: devices
+// unseen for 30+ days (or never seen) are excluded from fleet readiness.
+func clientIsCryptoStale(lastSeen string) bool {
+	seen, err := time.Parse(time.RFC3339, lastSeen)
+	if err != nil {
+		return true
+	}
+	return seen.Before(time.Now().UTC().AddDate(0, 0, -30))
 }
 
 // appVersionMajor parses the leading integer of a version string ("4.3.0" →

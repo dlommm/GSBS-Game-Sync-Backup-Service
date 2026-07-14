@@ -66,6 +66,7 @@ type cryptoDeviceRow struct {
 	Version   string // reported app version; "" for pre-4.0 clients
 	V2Capable bool   // can read/write the modern gsbs2 (Argon2id) format
 	Online    bool
+	Stale     bool // unseen for 30+ days — excluded from fleet readiness
 }
 
 // cryptoGameRow is per-game encrypted coverage in the Encryption Center.
@@ -90,10 +91,14 @@ type settingsData struct {
 	CryptoV2Ready  bool
 	CryptoDevices  []cryptoDeviceRow
 	CryptoBlockers []string // names of devices holding the fleet on legacy crypto
-	CryptoGames    []cryptoGameRow
-	EncryptedSaves int
-	TotalSaves     int
-	EncryptedPct   int
+	// CryptoStaleLegacy names legacy-only devices unseen for 30+ days: the
+	// fleet-readiness check skips them, so once the fleet flips to gsbs2 they
+	// cannot read newly encrypted saves until updated.
+	CryptoStaleLegacy []string
+	CryptoGames       []cryptoGameRow
+	EncryptedSaves    int
+	TotalSaves        int
+	EncryptedPct      int
 }
 
 // gameCard is one tile/row on the My Games page.
@@ -208,17 +213,18 @@ type adminUsersData struct {
 
 type adminManifestData struct {
 	PageData
-	Stats              adminStats
-	Manifest           []types.GameSaveLocation
-	Query              string
-	ManifestPage       int
-	ManifestPerPage    int
-	ManifestTotal      int
-	ManifestTotalPages int
-	ManifestStart      int
-	ManifestEnd        int
-	ManifestPrevPage   int
-	ManifestNextPage   int
+	Stats    adminStats
+	Manifest []types.GameSaveLocation
+	Query    string
+	Pager    pagerView
+}
+
+// manifestTableView is the shared shape consumed by admin_manifest.html and
+// its htmx partial.
+type manifestTableView struct {
+	Manifest []types.GameSaveLocation
+	Query    string
+	Pager    pagerView
 }
 
 type adminActivityData struct {

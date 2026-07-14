@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Register — GSBS</title>
   <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#151917" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="apple-touch-icon" href="/static/logo.png">
   <link rel="stylesheet" href="/static/app.css">
@@ -18,7 +18,7 @@
     <img src="/static/logo.png" alt="GSBS" class="auth-logo">
     <h1>Create account</h1>
     <p class="subtitle">Register for GSBS</p>
-    {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+    {{if .Error}}<p class="alert alert-error" role="alert">{{.Error}}</p>{{end}}
     <form method="post" action="/register" class="auth-form">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <label for="username">Username</label>

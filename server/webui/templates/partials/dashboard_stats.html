@@ -22,9 +22,9 @@
   </div>
 </section>
 {{if gt .Stats.UsageBytes .QuotaBytes}}
-<div class="notice notice-warn" role="alert">Storage quota exceeded — new save uploads are blocked until usage drops. Delete old games or versions, or ask your admin to raise the quota. Existing saves keep syncing when they shrink or stay the same size.</div>
+<div class="alert alert-warn" role="alert">Storage quota exceeded — new save uploads are blocked until usage drops. Delete old games or versions, or ask your admin to raise the quota. Existing saves keep syncing when they shrink or stay the same size.</div>
 {{else if ge (percent .Stats.UsageBytes .QuotaBytes) 80.0}}
-<div class="notice notice-warn" role="alert">Storage {{printf "%.0f" (percent .Stats.UsageBytes .QuotaBytes)}}% full. Quota counts your saves plus their version history; free space by deleting old games or lowering version retention.</div>
+<div class="alert alert-warn" role="alert">Storage {{printf "%.0f" (percent .Stats.UsageBytes .QuotaBytes)}}% full. Quota counts your saves plus their version history; free space by deleting old games or lowering version retention.</div>
 {{end}}
 {{end}}
 {{end}}

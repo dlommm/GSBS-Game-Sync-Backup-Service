@@ -165,6 +165,18 @@ const maxImportBytes = 512 << 20
 // validation, size caps, quota inside the write transaction) and stored as a
 // new version — nothing is deleted.
 func (h *WebHandler) handleImportSaves(w http.ResponseWriter, r *http.Request) {
+	// Session and read-only gates come BEFORE the body is consumed: parsing
+	// an up-to-512MB multipart upload for an unauthenticated request would
+	// be a free denial-of-service lever. CSRF must stay after the parse (the
+	// token is a multipart field).
+	userID, username, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+	if h.readOnly {
+		Redirect(w, r, "/dashboard/games?error=read_only")
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes)
 	if err := r.ParseMultipartForm(64 << 20); err != nil { //nolint:gosec // G120: body capped by MaxBytesReader above; the arg only bounds the in-memory portion
 		Redirect(w, r, "/dashboard/games?error=import_too_large")
@@ -172,14 +184,6 @@ func (h *WebHandler) handleImportSaves(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ValidateCSRF(r, h.secret) {
 		http.Error(w, "Invalid security token.", http.StatusBadRequest)
-		return
-	}
-	userID, username, ok := h.requireSession(w, r)
-	if !ok {
-		return
-	}
-	if h.readOnly {
-		Redirect(w, r, "/dashboard/games?error=read_only")
 		return
 	}
 	file, _, err := r.FormFile("archive")

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -106,12 +107,15 @@ func (h *WebHandler) serveDashboardGames(w http.ResponseWriter, r *http.Request)
 		IsAdmin:   h.isAdminUser(r.Context(), userID, username),
 		CSRFToken: csrfToken, NavActive: "games",
 	}
-	if n := r.URL.Query().Get("imported"); n != "" {
-		data.ImportedMsg = "Imported " + n + " save(s) from archive."
-		if f := r.URL.Query().Get("import_failed"); f != "" && f != "0" {
-			data.ImportedMsg += " " + f + " entrie(s) were skipped (invalid or over quota)."
+	// Parse the counts as integers: the query is attacker-writable and must
+	// not inject arbitrary text into a trusted banner.
+	if n, err := strconv.Atoi(r.URL.Query().Get("imported")); err == nil && n >= 0 {
+		data.ImportedMsg = fmt.Sprintf("Imported %d save(s) from archive.", n)
+		if f, err := strconv.Atoi(r.URL.Query().Get("import_failed")); err == nil && f > 0 {
+			data.ImportedMsg += fmt.Sprintf(" %d entrie(s) were skipped (invalid or over quota).", f)
 		}
 	}
+	data.Error = dashboardErrorMsg(r.URL.Query().Get("error"))
 	h.render(w, "dashboard_games.html", data)
 }
 

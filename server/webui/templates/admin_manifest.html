@@ -6,17 +6,6 @@
   <div class="panel-header-actions">
     <h2>Manifest<span class="table-count">({{.Stats.ManifestCount}} entries)</span></h2>
     <div class="panel-actions">
-      <form method="get" action="/admin/manifest" class="inline-form manifest-count-form">
-        <select class="u-pad-sm" name="count" data-submit-on-change>
-          <option value="10" {{if eq .ManifestPerPage 10}}selected{{end}}>10</option>
-          <option value="20" {{if eq .ManifestPerPage 20}}selected{{end}}>20</option>
-          <option value="40" {{if eq .ManifestPerPage 40}}selected{{end}}>40</option>
-          <option value="60" {{if eq .ManifestPerPage 60}}selected{{end}}>60</option>
-          <option value="100" {{if eq .ManifestPerPage 100}}selected{{end}}>100</option>
-        </select>
-        <input type="hidden" name="q" value="{{.Query}}">
-        <span class="manifest-per-page-label">per page</span>
-      </form>
       <form method="get" action="/admin/manifest.csv" class="inline-form">
         <button type="submit" class="btn-ghost-sm">Export CSV</button>
       </form>
@@ -30,11 +19,10 @@
     <input type="search" class="search-input" name="q" value="{{.Query}}" placeholder="Search manifest…"
            hx-get="/admin/partial/manifest"
            hx-trigger="keyup changed delay:300ms, search"
-           hx-target="#manifest-table"
-           hx-include="[name='count']">
+           hx-target="#manifest-table">
   </div>
   <div id="manifest-table"
-       hx-get="/admin/partial/manifest?q={{urlquery .Query}}&count={{.ManifestPerPage}}&page={{.ManifestPage}}"
+       hx-get="/admin/partial/manifest?q={{urlquery .Query}}&per={{.Pager.PerPage}}&page={{.Pager.Page}}"
        hx-trigger="manifest-updated from:body"
        hx-swap="innerHTML">
     {{template "partials/admin_manifest_table.html" .}}
