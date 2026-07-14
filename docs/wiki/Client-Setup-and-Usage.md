@@ -32,7 +32,7 @@ Files inside:
 
 If the client is not logged in, it opens a browser setup page at `http://127.0.0.1:41234` automatically.
 
-![Setup wizard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-setup-wizard.png)
+![Setup wizard](https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-setup-wizard.png)
 
 1. Enter your **Server URL** (e.g. `https://gsbs.yourdomain.com`).
 2. Enter your **username and password** (or register on the server WebUI first).
@@ -45,7 +45,7 @@ On Windows, the tray **Login…** item opens this browser page by default. A nat
 
 ## System tray
 
-![Client status](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-local-dashboard-status.png)
+![Client status](https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-client-local-dashboard-status.png)
 
 ### Tray menu structure
 
@@ -81,7 +81,7 @@ On Windows, the tray **Login…** item opens this browser page by default. A nat
 
 The page auto-refreshes every 5 seconds. **Sync Now** on the page triggers an immediate sync.
 
-![Local status dashboard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-local-dashboard-status.png)
+![Local status dashboard](https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-client-local-dashboard-status.png)
 
 ### Notifications
 
@@ -132,7 +132,7 @@ If a game is not in the manifest or uses a non-standard save path:
 2. Search the manifest by name and click **Use this**, or paste an absolute save folder path.
 3. GSBS writes a `watch_paths` entry to `config.json` and restarts sync.
 
-![Add a game manually page](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-add-game-page.png)
+![Add a game manually page](https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-client-add-game-page.png)
 
 ---
 
@@ -226,7 +226,7 @@ New pushes are encrypted with AES-GCM. Existing plaintext saves remain until nat
 
 ## Auto-update
 
-The client checks [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest) on startup (after 30 seconds) and every 24 hours.
+The client checks [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest) on startup (after 30 seconds) and every 24 hours.
 
 **Update check statuses:**
 
@@ -250,7 +250,7 @@ Config options:
 ```json
 {
   "update_check_enabled": true,
-  "update_repo": "dlommm/GSBS--Game-Sync---Backup-Service-"
+  "update_repo": "dlommm/GSBS-Game-Sync-Backup-Service"
 }
 ```
 

@@ -134,7 +134,7 @@ sequenceDiagram
 - **Phase 1:** Detect new PCGW game IDs and update `pcgw_catalog`. Incremental syncs use a single-call probe — only a tail scan (or full rescan on first run / incomplete catalog) is performed when new IDs are found. Targeted actions (**Parse Missing Only**, **Retry Failed Pages**) skip Phase 1 (`catalog_scan_mode=skipped`).
 - **Phase 2:** Fetch and parse wikitext for new/changed/failed pages. Interrupted runs save a checkpoint and resume on next run.
 
-The sync runs weekly by default when using **API sync** (Sunday 03:00). **GitHub bundle mode** (default for new installs) fetches a pre-built manifest daily (04:00) with ETag checks — see [MANIFEST_BUNDLE](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/MANIFEST_BUNDLE.md). Configure via Admin → Settings or `GSBS_PCGW_CRON` / `GSBS_PCGW_BUNDLE_CRON`.
+The sync runs weekly by default when using **API sync** (Sunday 03:00). **GitHub bundle mode** (default for new installs) fetches a pre-built manifest daily (04:00) with ETag checks — see [MANIFEST_BUNDLE](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/MANIFEST_BUNDLE.md). Configure via Admin → Settings or `GSBS_PCGW_CRON` / `GSBS_PCGW_BUNDLE_CRON`.
 
 ### Manifest versions
 

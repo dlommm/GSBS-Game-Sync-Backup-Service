@@ -13,8 +13,8 @@
 - Linux build deps: `gcc` (cgo, for the SQLite server build — the tray client is pure Go)
 
 ```bash
-git clone https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-.git
-cd GSBS--Game-Sync---Backup-Service-
+git clone https://github.com/dlommm/GSBS-Game-Sync-Backup-Service.git
+cd GSBS-Game-Sync-Backup-Service
 go mod tidy
 ./script/build-webui.sh   # compile Tailwind CSS (requires Node.js)
 go build -o gsbs-server ./server
@@ -117,9 +117,9 @@ govulncheck ./...
 
 ### Documentation
 
-- Update [docs/ARCHITECTURE.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/ARCHITECTURE.md) for data model or sync flow changes.
-- Update [docs/API.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/API.md) for API endpoint changes.
-- Wiki pages in `docs/wiki/` are the published docs — update them when behavior changes. See the [wiki style guide](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/wiki/README.md).
+- Update [docs/ARCHITECTURE.md](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/ARCHITECTURE.md) for data model or sync flow changes.
+- Update [docs/API.md](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/API.md) for API endpoint changes.
+- Wiki pages in `docs/wiki/` are the published docs — update them when behavior changes. See the [wiki style guide](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/wiki/README.md).
 - All upgrade instructions must go in [Upgrading](Upgrading); other pages must link there.
 
 ---
@@ -146,7 +146,7 @@ When you change behavior in any area, update the matching skill and subagent so 
 ### How the wiki works
 
 - `docs/wiki/` in the repository is the **canonical authoring source** for all wiki pages.
-- The GitHub Wiki (`*.wiki.git`) is the **published view** — automatically synced by [`.github/workflows/sync-wiki.yml`](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/.github/workflows/sync-wiki.yml).
+- The GitHub Wiki (`*.wiki.git`) is the **published view** — automatically synced by [`.github/workflows/sync-wiki.yml`](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/.github/workflows/sync-wiki.yml).
 
 **Sync triggers:**
 - Push to `main` when files in `docs/wiki/`, `docs/*.md`, `README.md`, or `CONTRIBUTING.md` change.
@@ -156,7 +156,7 @@ When you change behavior in any area, update the matching skill and subagent so 
 ### Wiki authoring rules
 
 1. Edit files in `docs/wiki/` (not directly on the GitHub Wiki web UI).
-2. Follow the [wiki style guide](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/wiki/README.md) — headings, callouts, internal links, image URLs.
+2. Follow the [wiki style guide](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/wiki/README.md) — headings, callouts, internal links, image URLs.
 3. All upgrade procedures must be in [Upgrading](Upgrading); other pages link there.
 4. Run the quality checks locally before pushing:
 
@@ -180,7 +180,7 @@ The GitHub Wiki web UI can also be used to revert to a previous revision (wiki p
 
 ## Release workflow
 
-The release workflow is documented for maintainers in [docs/RELEASE.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/RELEASE.md). Summary:
+The release workflow is documented for maintainers in [docs/RELEASE.md](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/RELEASE.md). Summary:
 
 1. Update `CHANGELOG.md`.
 2. Commit and push to `main`; wait for CI green.

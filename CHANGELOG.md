@@ -923,18 +923,18 @@ Major release: full-project security & reliability audit fixes plus new flagship
 
 ## [1.0.13] — previous release
 
-See [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases) for earlier history.
+See [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases) for earlier history.
 
-[Unreleased]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v2.0.0...HEAD
-[2.0.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.6.0...v2.0.0
-[1.6.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.5.0...v1.6.0
-[1.2.3]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.2...v1.2.3
-[1.5.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.1...v1.5.0
-[1.2.1]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.2.0...v1.2.1
-[1.2.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.17...v1.1.0
-[1.0.17]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.16...v1.0.17
-[1.0.16]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.15...v1.0.16
-[1.0.15]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/compare/v1.0.14...v1.0.15
-[1.0.14]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/tag/v1.0.14
-[1.0.13]: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/tag/v1.0.13
+[Unreleased]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/compare/v1.6.0...v2.0.0
+[1.6.0]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/compare/v1.5.0...v1.6.0
+[1.2.3]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/compare/v1.2.2...v1.2.3
+[1.5.0]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/compare/v1.2.1...v1.5.0
+[1.2.1]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/compare/v1.0.17...v1.1.0
+[1.0.17]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/compare/v1.0.16...v1.0.17
+[1.0.16]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/compare/v1.0.15...v1.0.16
+[1.0.15]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/compare/v1.0.14...v1.0.15
+[1.0.14]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/tag/v1.0.14
+[1.0.13]: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/tag/v1.0.13

@@ -17,7 +17,7 @@ Every release is a **two-step** publish: code on `main`, then a **semver git tag
    The [Release workflow](../.github/workflows/release.yml) runs on the tag. It always publishes:
    - **GitHub Release** `vX.Y.Z` with binaries, installer, `.deb`, AppImage, manifests
    - **Docker Hub** `dendlomm/gsbs-server:X.Y.Z` and `dendlomm/gsbs-server:latest`
-4. **Monitor** the [Release workflow](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/release.yml).
+4. **Monitor** the [Release workflow](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml).
 5. **Verify** the GitHub Release contains:
    - `gsbs-server-windows-amd64.exe`, `gsbs-client-windows-amd64.exe`
    - `gsbs-server-linux-amd64`, `gsbs-client-linux-amd64`

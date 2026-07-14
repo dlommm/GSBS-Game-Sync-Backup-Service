@@ -209,7 +209,7 @@ curl https://your-server/api/health?ready=1
 ## Still stuck?
 
 1. Reproduce with `GSBS_LOG_LEVEL=debug` enabled on both server and client.
-2. Search [GitHub Issues](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/issues).
+2. Search [GitHub Issues](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/issues).
 3. For security concerns, see [Contributing → Security](Contributing#security).
 
 ---

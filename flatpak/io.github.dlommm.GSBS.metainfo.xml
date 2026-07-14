@@ -42,22 +42,22 @@
     <keyword>proton</keyword>
   </keywords>
 
-  <url type="homepage">https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-</url>
-  <url type="bugtracker">https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/issues</url>
-  <url type="vcs-browser">https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-</url>
+  <url type="homepage">https://github.com/dlommm/GSBS-Game-Sync-Backup-Service</url>
+  <url type="bugtracker">https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/issues</url>
+  <url type="vcs-browser">https://github.com/dlommm/GSBS-Game-Sync-Backup-Service</url>
 
   <screenshots>
     <screenshot type="default">
       <caption>Local sync status for this machine</caption>
-      <image>https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-local-dashboard-status.png</image>
+      <image>https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-client-local-dashboard-status.png</image>
     </screenshot>
     <screenshot>
       <caption>Browse and add games to sync</caption>
-      <image>https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-add-game-page.png</image>
+      <image>https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-client-add-game-page.png</image>
     </screenshot>
     <screenshot>
       <caption>Quick actions and sync controls</caption>
-      <image>https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-quick-actions-page.png</image>
+      <image>https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-client-quick-actions-page.png</image>
     </screenshot>
   </screenshots>
 

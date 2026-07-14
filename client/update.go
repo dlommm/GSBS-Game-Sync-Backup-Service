@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	defaultUpdateRepo = "dlommm/GSBS--Game-Sync---Backup-Service-"
+	defaultUpdateRepo = "dlommm/GSBS-Game-Sync-Backup-Service"
 	updateUserAgent   = "gsbs-client"
 	maxUpdateBytes    = 128 * 1024 * 1024 // 128 MiB
 )

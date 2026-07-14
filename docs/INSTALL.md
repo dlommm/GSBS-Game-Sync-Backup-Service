@@ -41,11 +41,11 @@ See [DOCKER.md](DOCKER.md) for environment variables and production tips.
 
 ### Option C: Binary (advanced)
 
-Download `gsbs-server-linux-amd64` or `gsbs-server-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest) and run the binary — it starts with no configuration and opens the setup wizard on first run. To restore from a backup, use `gsbs-server restore <archive>` (see [RESTORE.md](RESTORE.md)).
+Download `gsbs-server-linux-amd64` or `gsbs-server-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest) and run the binary — it starts with no configuration and opens the setup wizard on first run. To restore from a backup, use `gsbs-server restore <archive>` (see [RESTORE.md](RESTORE.md)).
 
 ## Client
 
-Download assets from the [latest GitHub Release](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest).
+Download assets from the [latest GitHub Release](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest).
 
 ### Windows
 
@@ -117,7 +117,7 @@ The macOS client ships as a `.dmg` disk image. Grab the one for your Mac:
 
 The tray menu's **Run at startup** installs a per-user LaunchAgent (`~/Library/LaunchAgents/io.github.dlommm.GSBS.plist`). Updates are manual on macOS (download the newer `.dmg` and drag it over the old app); the in-app self-updater is Windows/Linux only.
 
-> **Gatekeeper:** the app is ad-hoc signed but not notarized (notarization needs a paid Apple Developer account), so macOS asks for a one-time approval on first launch. If you see the harsher **"GSBS is damaged and can't be opened"** dialog (v4.1.0 DMGs, whose bundle was unsigned), nothing is actually damaged — that's the same quarantine flag; the `xattr -cr /Applications/GSBS.app` command clears it. Download only from the official [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest), and verify the download against `SHA256SUMS` if you want to be sure it wasn't tampered with.
+> **Gatekeeper:** the app is ad-hoc signed but not notarized (notarization needs a paid Apple Developer account), so macOS asks for a one-time approval on first launch. If you see the harsher **"GSBS is damaged and can't be opened"** dialog (v4.1.0 DMGs, whose bundle was unsigned), nothing is actually damaged — that's the same quarantine flag; the `xattr -cr /Applications/GSBS.app` command clears it. Download only from the official [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest), and verify the download against `SHA256SUMS` if you want to be sure it wasn't tampered with.
 
 ## First run
 

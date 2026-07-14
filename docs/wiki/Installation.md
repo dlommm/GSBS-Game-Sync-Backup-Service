@@ -13,8 +13,8 @@ The server is a single Go binary backed by SQLite. The recommended deployment is
 Production deployment with Caddy TLS reverse proxy and auto-HTTPS:
 
 ```bash
-git clone https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-.git
-cd GSBS--Game-Sync---Backup-Service-
+git clone https://github.com/dlommm/GSBS-Game-Sync-Backup-Service.git
+cd GSBS-Game-Sync-Backup-Service
 docker compose up -d
 ```
 
@@ -43,7 +43,7 @@ docker run -d \
 
 ### Option C: Binary (advanced)
 
-Download `gsbs-server-linux-amd64` or `gsbs-server-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest), then:
+Download `gsbs-server-linux-amd64` or `gsbs-server-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest), then:
 
 ```bash
 export GSBS_DB="/path/to/gsbs.db"
@@ -53,7 +53,7 @@ export GSBS_DB="/path/to/gsbs.db"
 
 ### Option D: Windows server installer wizard
 
-1. Download `gsbs-server-setup-X.Y.Z-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest).
+1. Download `gsbs-server-setup-X.Y.Z-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest).
 2. Run the installer as Administrator.
 3. In the installer, set `GSBS_DB` and the port; the session secret is generated automatically (or set `GSBS_SESSION_SECRET` to pin one).
 4. By default, leave **Install and run GSBS Server as a Windows Service (recommended)** enabled.
@@ -74,7 +74,7 @@ The installer writes runtime config to `C:\ProgramData\GSBS\server.env`, install
 
 ## Client
 
-Download client assets from the [latest GitHub Release](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest).
+Download client assets from the [latest GitHub Release](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest).
 
 ### Windows
 
@@ -83,7 +83,7 @@ Download client assets from the [latest GitHub Release](https://github.com/dlomm
 3. Optional: enable **Run at startup** during install.
 4. Launch **GSBS Client** from the Start Menu or system tray.
 
-> **SmartScreen note:** Windows may warn about unsigned executables. Download only from the official [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest) page and verify the SHA256 checksum in `SHA256SUMS` if you want extra assurance.
+> **SmartScreen note:** Windows may warn about unsigned executables. Download only from the official [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest) page and verify the SHA256 checksum in `SHA256SUMS` if you want extra assurance.
 
 **Auto-update:** The tray menu checks GitHub Releases daily. Use **Install update…** to update without re-running the installer.
 
@@ -102,7 +102,7 @@ Updates arrive via `flatpak update` or your software center (the in-app self-upd
 flatpak override --user io.github.dlommm.GSBS --filesystem=/path/to/SteamLibrary
 ```
 
-See [FLATPAK.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/FLATPAK.md) for the Steam Deck Desktop-Mode walkthrough, the full permission list, and Flatseal guidance.
+See [FLATPAK.md](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/FLATPAK.md) for the Steam Deck Desktop-Mode walkthrough, the full permission list, and Flatseal guidance.
 
 ### Linux — Debian/Ubuntu (.deb)
 
@@ -186,7 +186,7 @@ To point at a fork or mirror instead:
 
 ## Unraid
 
-See the [Unraid deployment guide](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/examples/UNRAID.md) and the example [compose-unraid.yml](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/examples/compose-unraid.yml).
+See the [Unraid deployment guide](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/examples/UNRAID.md) and the example [compose-unraid.yml](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/examples/compose-unraid.yml).
 
 ---
 

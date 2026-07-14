@@ -28,7 +28,7 @@ After upgrading to **v2.0.0**, the server runs schema migrations on startup; bac
 ### Binary
 
 1. Stop the running server.
-2. Replace the binary from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases).
+2. Replace the binary from [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases).
 3. Start with the same env vars and `GSBS_DB` path.
 
 ### Release tags

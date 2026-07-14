@@ -2,7 +2,7 @@
 
 > All notable changes to GSBS, newest first. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-For the complete machine-readable changelog, see [CHANGELOG.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/CHANGELOG.md) in the repository. This page summarizes the highlights of each release.
+For the complete machine-readable changelog, see [CHANGELOG.md](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/CHANGELOG.md) in the repository. This page summarizes the highlights of each release.
 
 ---
 
@@ -437,7 +437,7 @@ Major release: security & reliability audit fixes plus new flagship features.
 
 ---
 
-For full details on any release, see [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases) and the [repository CHANGELOG](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/CHANGELOG.md).
+For full details on any release, see [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases) and the [repository CHANGELOG](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/CHANGELOG.md).
 
 ---
 

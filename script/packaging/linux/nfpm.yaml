@@ -4,11 +4,11 @@ platform: linux
 version: "${VERSION}"
 section: utils
 priority: optional
-maintainer: GSBS <https://github.com/dlommm/GSBS--Game-Sync---Backup-Service->
+maintainer: GSBS <https://github.com/dlommm/GSBS-Game-Sync-Backup-Service>
 description: |
   GSBS (Game Sync & Backup Service) client — sync game saves to a central server.
   Requires a running GSBS server; configure via the tray menu after first launch.
-homepage: https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-
+homepage: https://github.com/dlommm/GSBS-Game-Sync-Backup-Service
 license: MIT
 # No appindicator library dependency: the tray is pure-Go D-Bus
 # (StatusNotifierItem). GNOME desktops need an SNI host such as the

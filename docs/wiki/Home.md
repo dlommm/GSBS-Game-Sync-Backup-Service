@@ -4,10 +4,10 @@
 
 ---
 
-[![CI](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/LICENSE)
+[![CI](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/ci.yml/badge.svg)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/LICENSE)
 [![Docker Hub](https://img.shields.io/badge/Docker-dendlomm%2Fgsbs--server-blue)](https://hub.docker.com/r/dendlomm/gsbs-server)
-[![Latest release](https://img.shields.io/github/v/release/dlommm/GSBS--Game-Sync---Backup-Service-)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/dlommm/GSBS-Game-Sync-Backup-Service)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest)
 
 ---
 
@@ -34,11 +34,11 @@ GSBS is a self-hosted game save sync service. A lightweight server stores one co
 
 | Server dashboard | Client status |
 |---|---|
-| ![Dashboard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-webui-dashboard.png) | ![Client status](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-client-local-dashboard-status.png) |
+| ![Dashboard](https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-webui-dashboard.png) | ![Client status](https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-client-local-dashboard-status.png) |
 
 | Client setup wizard | Admin overview |
 |---|---|
-| ![Setup wizard](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-setup-wizard.png) | ![Admin overview](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-webui-admin-overview.png) |
+| ![Setup wizard](https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-setup-wizard.png) | ![Admin overview](https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-webui-admin-overview.png) |
 
 ---
 
@@ -47,8 +47,8 @@ GSBS is a self-hosted game save sync service. A lightweight server stores one co
 ### 1. Run the server
 
 ```bash
-git clone https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-.git
-cd GSBS--Game-Sync---Backup-Service-
+git clone https://github.com/dlommm/GSBS-Game-Sync-Backup-Service.git
+cd GSBS-Game-Sync-Backup-Service
 cp .env.example .env
 # Edit .env — set GSBS_SESSION_SECRET (openssl rand -hex 32)
 docker compose up -d
@@ -58,7 +58,7 @@ See [Installation](Installation) for all server options (Docker Compose, bare Do
 
 ### 2. Install the client
 
-Download from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest):
+Download from [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest):
 
 | Platform | Install |
 |---|---|

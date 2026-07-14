@@ -9,7 +9,7 @@
 | Variable | Default | Description |
 |---|---|---|
 | `GSBS_ADDR` | `:8080` | Listen address (e.g. `0.0.0.0:8080`) |
-| `GSBS_TLS_CERT` | (unset) | PEM certificate path — set together with `GSBS_TLS_KEY` to serve HTTPS natively (since 5.2.4). A reverse proxy (see [COMPOSE](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/COMPOSE.md)) remains the recommended TLS path; native TLS suits proxy-less LAN setups with self-signed or internal-CA certs |
+| `GSBS_TLS_CERT` | (unset) | PEM certificate path — set together with `GSBS_TLS_KEY` to serve HTTPS natively (since 5.2.4). A reverse proxy (see [COMPOSE](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/COMPOSE.md)) remains the recommended TLS path; native TLS suits proxy-less LAN setups with self-signed or internal-CA certs |
 | `GSBS_TLS_KEY` | (unset) | PEM private-key path for `GSBS_TLS_CERT`. Setting only one of the pair refuses to start |
 | `GSBS_DB` | `gsbs.db` | Path to the SQLite database. Use a path in a mounted volume for persistence. |
 | `GSBS_SESSION_SECRET` | (required) | **Required — must be 32+ characters and not a placeholder or the server refuses to start** (since 4.0.0). Signs WebUI session cookies, CSRF tokens, and TOTP login tokens. Generate: `openssl rand -base64 32`. `GSBS_INSECURE_DEV_SECRET=1` bypasses the check for local dev only |
@@ -69,7 +69,7 @@
 | `GSBS_PCGW_BUNDLE_DELTA_URL` | Official delta URL | Delta bundle for seeded servers |
 | `GSBS_PCGW_BUNDLE_CRON` | `0 3 * * 1` | Bundle fetch schedule when source is `github` |
 
-See [MANIFEST_BUNDLE.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/MANIFEST_BUNDLE.md) in the main repo.
+See [MANIFEST_BUNDLE.md](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/MANIFEST_BUNDLE.md) in the main repo.
 
 ---
 
@@ -97,7 +97,7 @@ docker compose -f docker-compose.dev.yml up --build
 
 Open `http://localhost:8080`.
 
-See the [compose-caddy.yml](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/examples/compose-caddy.yml), [compose-nginx.yml](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/examples/compose-nginx.yml), and [compose-traefik.yml](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/examples/compose-traefik.yml) examples for reverse proxy alternatives.
+See the [compose-caddy.yml](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/examples/compose-caddy.yml), [compose-nginx.yml](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/examples/compose-nginx.yml), and [compose-traefik.yml](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/examples/compose-traefik.yml) examples for reverse proxy alternatives.
 
 ---
 
@@ -127,7 +127,7 @@ server {
 }
 ```
 
-**Traefik:** See [compose-traefik.yml](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/examples/compose-traefik.yml).
+**Traefik:** See [compose-traefik.yml](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/examples/compose-traefik.yml).
 
 Set `GSBS_TRUST_PROXY=1` when behind a proxy so the server trusts `X-Forwarded-For` for rate limiting.
 
@@ -207,11 +207,11 @@ The admin interface is available at `/admin` (session required + must match `GSB
 | `/admin/analytics` | Storage, active clients, sync volume, PCGW coverage |
 | `/admin/pcgw` | PCGW catalog search, sync controls, per-game detail, export/import |
 
-![Admin overview](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-webui-admin-overview.png)
+![Admin overview](https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-webui-admin-overview.png)
 
 | Users management | PCGW management |
 |---|---|
-| ![Admin users](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-webui-admin-users.png) | ![Admin PCGW](https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/docs/images/screenshots/example-webui-admin-pcgw.png) |
+| ![Admin users](https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-webui-admin-users.png) | ![Admin PCGW](https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/docs/images/screenshots/example-webui-admin-pcgw.png) |
 
 **PCGW sync (admin):**
 

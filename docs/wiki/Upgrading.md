@@ -80,7 +80,7 @@ docker run -d \
 ### Binary
 
 1. Stop the running server.
-2. Download the new `gsbs-server-linux-amd64` or `gsbs-server-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest).
+2. Download the new `gsbs-server-linux-amd64` or `gsbs-server-windows-amd64.exe` from [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest).
 3. Replace the binary.
 4. Start with the same environment variables and `GSBS_DB` path.
 
@@ -179,7 +179,7 @@ The server is always backward-compatible with older clients. Newer server featur
 
 **Client rollback:**
 
-- Reinstall the previous release binary or installer from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases).
+- Reinstall the previous release binary or installer from [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases).
 - Or disable auto-update (`"update_check_enabled": false`) until the issue is resolved.
 
 ---

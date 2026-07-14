@@ -3,13 +3,13 @@
   &nbsp;GSBS — Game Sync &amp; Backup Service
 </h1>
 
-[![CI](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/codeql.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/codeql.yml)
-[![Release](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/release.yml/badge.svg)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/actions/workflows/release.yml)
+[![CI](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/ci.yml/badge.svg)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/codeql.yml/badge.svg)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/codeql.yml)
+[![Release](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml/badge.svg)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/actions/workflows/release.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/gsbs/gsbs)](https://goreportcard.com/report/github.com/gsbs/gsbs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker Hub](https://img.shields.io/badge/Docker-dendlomm%2Fgsbs--server-blue)](https://hub.docker.com/r/dendlomm/gsbs-server)
-[![Latest release](https://img.shields.io/github/v/release/dlommm/GSBS--Game-Sync---Backup-Service-)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/dlommm/GSBS-Game-Sync-Backup-Service)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest)
 
 <p align="center">
   <img src="assets/images/readme-cover-image.png" alt="GSBS — Game Sync & Backup Service" width="100%" />
@@ -53,8 +53,8 @@ GSBS is a *hosted, multi-client, versioned save-sync service* — the combinatio
 ### 1. Server (Docker Compose — recommended)
 
 ```bash
-git clone https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-.git
-cd GSBS--Game-Sync---Backup-Service-   # folder name matches the GitHub repo name
+git clone https://github.com/dlommm/GSBS-Game-Sync-Backup-Service.git
+cd GSBS-Game-Sync-Backup-Service   # folder name matches the GitHub repo name
 docker compose up -d
 ```
 
@@ -66,7 +66,7 @@ Windows hosts can also use `gsbs-server-setup-X.Y.Z-windows-amd64.exe` from Rele
 
 ### 2. Client
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest):
+Download the latest release for your platform from [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest):
 
 | Platform | Install |
 |----------|---------|
@@ -103,19 +103,19 @@ The save-location manifest comes from PCGamingWiki — fresh installs pull a pre
 
 ## Documentation
 
-**The canonical user documentation is the [GSBS GitHub Wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki).** The wiki is automatically synced from `docs/wiki/` in this repository on every push to `main` and on each release tag.
+**The canonical user documentation is the [GSBS GitHub Wiki](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki).** The wiki is automatically synced from `docs/wiki/` in this repository on every push to `main` and on each release tag.
 
 | Wiki page | What it covers |
 |---|---|
-| [Installation](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Installation) | Server and client install on all platforms |
-| [Client Setup & Usage](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Client-Setup-and-Usage) | Tray, auto-discovery, sync behavior, E2E encryption, logs |
-| [Server Configuration](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Server-Configuration) | All environment variables, Docker, TLS, admin |
-| [How It Works](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/How-It-Works) | Architecture, data model, path keys, PCGW, cross-OS sync |
-| [Troubleshooting](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Troubleshooting) | Common problems and fixes |
-| [Upgrading](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Upgrading) | All upgrade procedures, version notes, rollback |
-| [API Reference](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/API-Reference) | Full REST API reference |
-| [FAQ](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/FAQ) | Frequently asked questions |
-| [Contributing](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Contributing) | Build from source, tests, conventions |
+| [Installation](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Installation) | Server and client install on all platforms |
+| [Client Setup & Usage](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Client-Setup-and-Usage) | Tray, auto-discovery, sync behavior, E2E encryption, logs |
+| [Server Configuration](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Server-Configuration) | All environment variables, Docker, TLS, admin |
+| [How It Works](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/How-It-Works) | Architecture, data model, path keys, PCGW, cross-OS sync |
+| [Troubleshooting](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Troubleshooting) | Common problems and fixes |
+| [Upgrading](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Upgrading) | All upgrade procedures, version notes, rollback |
+| [API Reference](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/API-Reference) | Full REST API reference |
+| [FAQ](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/FAQ) | Frequently asked questions |
+| [Contributing](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Contributing) | Build from source, tests, conventions |
 
 **In-repo reference docs** (source of truth for the wiki, kept in `docs/`):
 
@@ -145,10 +145,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for lint, coverage, and conventions.
 
 | Symptom | Where to look |
 |---------|---------------|
-| WebUI blank or login fails | [Troubleshooting wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Troubleshooting#server-problems) |
-| Client 401 / not syncing | Re-login from tray; check `gsbs.log` — [Troubleshooting wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Troubleshooting#client-problems) |
-| No tray icon (Linux) | AppIndicator packages — [Client Setup & Usage wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Client-Setup-and-Usage#linux-requirements) |
-| Upgrading server or client | [Upgrading wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki/Upgrading) |
+| WebUI blank or login fails | [Troubleshooting wiki](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Troubleshooting#server-problems) |
+| Client 401 / not syncing | Re-login from tray; check `gsbs.log` — [Troubleshooting wiki](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Troubleshooting#client-problems) |
+| No tray icon (Linux) | AppIndicator packages — [Client Setup & Usage wiki](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Client-Setup-and-Usage#linux-requirements) |
+| Upgrading server or client | [Upgrading wiki](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Upgrading) |
 
 ## Architecture
 

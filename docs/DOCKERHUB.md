@@ -1,6 +1,6 @@
 <p align="center">
-  <a href="https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-">
-    <img src="https://raw.githubusercontent.com/dlommm/GSBS--Game-Sync---Backup-Service-/main/assets/images/dockerhub-banner.png" alt="GSBS — Game Sync & Backup Service" width="640" />
+  <a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service">
+    <img src="https://raw.githubusercontent.com/dlommm/GSBS-Game-Sync-Backup-Service/main/assets/images/dockerhub-banner.png" alt="GSBS — Game Sync & Backup Service" width="640" />
   </a>
 </p>
 
@@ -17,7 +17,7 @@
 
 # GSBS Server
 
-[GSBS](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-) (Game Sync & Backup Service) keeps game saves in sync across your PCs. This image runs the **central server** only. Install the **Windows/Linux client** from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest) on each gaming machine.
+[GSBS](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service) (Game Sync & Backup Service) keeps game saves in sync across your PCs. This image runs the **central server** only. Install the **Windows/Linux client** from [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest) on each gaming machine.
 
 Clients watch save folders, upload on change, and pull existing saves when a game is installed. The server stores one current save per user per game path, serves a PCGamingWiki-based location manifest, and provides a WebUI for registration, tokens, and admin.
 
@@ -33,7 +33,7 @@ Clients watch save folders, upload on change, and pull existing saves when a gam
 - **Crash-safe canonical saves** — atomic disk writes when using `GSBS_SAVE_ROOT`
 - **Client manifest pagination (3.0.1)** — full catalog download for large game libraries
 
-Switch sync mode anytime in **Admin → Settings** (`s3` bundle vs direct PCGW API). See [docs/MANIFEST_BUNDLE.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/MANIFEST_BUNDLE.md).
+Switch sync mode anytime in **Admin → Settings** (`s3` bundle vs direct PCGW API). See [docs/MANIFEST_BUNDLE.md](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/MANIFEST_BUNDLE.md).
 
 ## What's in this image
 
@@ -46,7 +46,7 @@ Switch sync mode anytime in **Admin → Settings** (`s3` bundle vs direct PCGW A
 
 **Platforms:** `linux/amd64`, `linux/arm64`
 
-**Tags:** `latest` and semver without `v` (example `3.0.1`). Match [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases).
+**Tags:** `latest` and semver without `v` (example `3.0.1`). Match [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases).
 
 ## Quick start
 
@@ -69,7 +69,7 @@ On first boot the server fetches the PCGW manifest bundle automatically — clie
 
 Open `http://localhost:8080`, register, create an API token, and point the client at your server URL.
 
-**Production:** Put TLS in front (Caddy, Nginx, or Traefik). The repo includes [docker-compose.yml](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docker-compose.yml) (server + Caddy). See [docs/COMPOSE.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/COMPOSE.md).
+**Production:** Put TLS in front (Caddy, Nginx, or Traefik). The repo includes [docker-compose.yml](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docker-compose.yml) (server + Caddy). See [docs/COMPOSE.md](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/COMPOSE.md).
 
 ## Persistence
 
@@ -90,7 +90,7 @@ Mount a volume at `/app/data` and set `GSBS_DB=/app/data/gsbs.db`. All state (us
 | `GSBS_READ_ONLY` | Set to `true` to disable push and delete. |
 | `GSBS_MAX_STORAGE_BYTES` | Optional global storage cap. |
 
-Full list: [docs/DOCKER.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/DOCKER.md)
+Full list: [docs/DOCKER.md](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/DOCKER.md)
 
 ## Architecture
 
@@ -109,12 +109,12 @@ Full list: [docs/DOCKER.md](https://github.com/dlommm/GSBS--Game-Sync---Backup-S
 
 ## Documentation
 
-- [Install guide](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/INSTALL.md)
-- [Docker deployment](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/DOCKER.md)
-- [Manifest bundle sync (S3)](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/MANIFEST_BUNDLE.md)
-- [Client behavior](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/CLIENT.md)
-- [Architecture and security](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/ARCHITECTURE.md)
+- [Install guide](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/INSTALL.md)
+- [Docker deployment](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/DOCKER.md)
+- [Manifest bundle sync (S3)](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/MANIFEST_BUNDLE.md)
+- [Client behavior](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/CLIENT.md)
+- [Architecture and security](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/ARCHITECTURE.md)
 
 ## License
 
-MIT — [LICENSE](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/LICENSE)
+MIT — [LICENSE](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/LICENSE)

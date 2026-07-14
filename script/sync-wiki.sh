@@ -32,8 +32,8 @@ STAGING_DIR="$(mktemp -d)"
 DRY_RUN=false
 OUT_DIR=""
 
-# GitHub repository (e.g. dlommm/GSBS--Game-Sync---Backup-Service-)
-GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-dlommm/GSBS--Game-Sync---Backup-Service-}"
+# GitHub repository (e.g. dlommm/GSBS-Game-Sync-Backup-Service)
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-dlommm/GSBS-Game-Sync-Backup-Service}"
 GITHUB_SERVER_URL="${GITHUB_SERVER_URL:-https://github.com}"
 REPO_BLOB_BASE="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/main"
 RAW_BASE="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main"

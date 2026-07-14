@@ -106,7 +106,7 @@ Set `GSBS_LOG_LEVEL=debug` on the server or client (environment variable) for st
 ## Still stuck?
 
 1. Reproduce with verbose logging enabled.
-2. Check [GitHub Issues](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/issues).
+2. Check [GitHub Issues](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/issues).
 3. For security concerns see [SECURITY.md](../SECURITY.md).
 
 ## 2.0 behavior changes

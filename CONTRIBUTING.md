@@ -78,7 +78,7 @@ When you change behavior in one of these areas, update the matching skill and su
 
 ## Documentation and wiki
 
-The **[GSBS GitHub Wiki](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/wiki)** is the primary user-facing documentation hub.
+The **[GSBS GitHub Wiki](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki)** is the primary user-facing documentation hub.
 
 **Source of truth:** `docs/wiki/` in this repository. The wiki is a published view — automatically synced from source on every push to `main` (when docs files change) and on every release tag.
 

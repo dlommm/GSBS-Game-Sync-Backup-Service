@@ -1,6 +1,6 @@
 # FAQ
 
-> Frequently asked questions about GSBS. If your question isn't here, check [Troubleshooting](Troubleshooting) or open an issue on [GitHub](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/issues).
+> Frequently asked questions about GSBS. If your question isn't here, check [Troubleshooting](Troubleshooting) or open an issue on [GitHub](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/issues).
 
 ---
 
@@ -44,7 +44,7 @@ Port 443 (HTTPS) for client-to-server communication. If you run without TLS (loc
 
 ### Can I run the server without Docker?
 
-Yes. Download `gsbs-server-linux-amd64` (or the Windows binary) from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest), set `GSBS_SESSION_SECRET` and `GSBS_DB`, and run the binary. See [Installation → Option C](Installation#option-c-binary-advanced).
+Yes. Download `gsbs-server-linux-amd64` (or the Windows binary) from [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest), set `GSBS_SESSION_SECRET` and `GSBS_DB`, and run the binary. See [Installation → Option C](Installation#option-c-binary-advanced).
 
 ### Should I use `:latest` Docker tag in production?
 
@@ -139,7 +139,7 @@ Yes, when you run the server behind HTTPS (recommended). The built-in Docker Com
 
 ### The Windows installer isn't code-signed. Is it safe?
 
-Yes — download only from the official [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest) page. Verify the SHA256 checksum in `SHA256SUMS` if in doubt. Windows SmartScreen warning is expected for unsigned executables; choose **More info → Run anyway**.
+Yes — download only from the official [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest) page. Verify the SHA256 checksum in `SHA256SUMS` if in doubt. Windows SmartScreen warning is expected for unsigned executables; choose **More info → Run anyway**.
 
 ---
 
@@ -186,7 +186,7 @@ Yes, when `GSBS_METRICS=1`. `GET /metrics` returns Prometheus text format (reque
 
 ### Can I run the server on a NAS?
 
-Yes. Any device that can run Docker (Synology DSM, Unraid, TrueNAS SCALE, etc.) can host the server. See the [Unraid guide](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/blob/main/docs/examples/UNRAID.md).
+Yes. Any device that can run Docker (Synology DSM, Unraid, TrueNAS SCALE, etc.) can host the server. See the [Unraid guide](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/examples/UNRAID.md).
 
 ### Do I need the server and clients to be on the same network?
 

@@ -70,7 +70,7 @@ If the icon does not appear, confirm a status notifier / AppIndicator host is ru
 
 ### Auto-update
 
-The client checks [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest) on startup (after 30s) and every 24 hours. When a newer version is available:
+The client checks [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest) on startup (after 30s) and every 24 hours. When a newer version is available:
 
 - A notification appears; the tray shows **Install update X.Y.Z…**
 - **Check for updates…** runs a manual check

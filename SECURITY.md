@@ -7,7 +7,7 @@
 | Latest release | Yes |
 | Older releases | Best effort |
 
-Install updates from [GitHub Releases](https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-/releases/latest) or use the client tray **Check for updates**.
+Install updates from [GitHub Releases](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases/latest) or use the client tray **Check for updates**.
 
 ## Reporting a vulnerability
 
