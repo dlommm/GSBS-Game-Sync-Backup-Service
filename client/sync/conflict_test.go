@@ -1,9 +1,18 @@
 package sync
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/gsbs/gsbs/pkg/paths"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDecidePull(t *testing.T) {
@@ -26,7 +35,9 @@ func TestDecidePull(t *testing.T) {
 		{"lww server newer", true, "a", localOlder, "b", "last_write_wins", PullApply},
 		{"lww equal mtime", true, "a", serverTime, "b", "last_write_wins", PullConflict},
 		{"keep_local newer", true, "a", localNewer, "b", "keep_local", PullSkip},
-		{"keep_local older", true, "a", localOlder, "b", "keep_local", PullApply},
+		// keep_local never overwrites existing local data: a definitively newer
+		// server copy surfaces as a conflict (keep-both) instead of applying.
+		{"keep_local older", true, "a", localOlder, "b", "keep_local", PullConflict},
 		{"keep_server server wins", true, "a", localOlder, "b", "keep_server", PullApply},
 		{"keep_server local wins", true, "a", localNewer, "b", "keep_server", PullConflict},
 		// Legacy server rows without a hash must not blind-overwrite local files.
@@ -66,7 +77,7 @@ func TestDecidePull_SkewWindow(t *testing.T) {
 		{"keep_local exact equal", 0, "keep_local", PullSkip},
 		{"keep_local +30s", 30 * time.Second, "keep_local", PullSkip},
 		{"keep_local -30s", -30 * time.Second, "keep_local", PullSkip},
-		{"keep_local -3m", -3 * time.Minute, "keep_local", PullApply},
+		{"keep_local -3m", -3 * time.Minute, "keep_local", PullConflict},
 		{"keep_local +3m", 3 * time.Minute, "keep_local", PullSkip},
 		{"keep_server exact equal", 0, "keep_server", PullApply},
 		{"keep_server +30s", 30 * time.Second, "keep_server", PullApply},
@@ -138,4 +149,41 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(b[i:])
+}
+
+// Resolving a cross-machine conflict with "keep local" must succeed as a
+// compare-and-swap against exactly the server version the user reviewed:
+// X-GSBS-If-Hash carries the recorded ServerHash (not this machine's stale
+// last-pushed hash, which caused an eternal-409 resolve loop before 5.3).
+func TestResolveConflict_KeepLocalUsesRecordedServerHash(t *testing.T) {
+	dir := t.TempDir()
+	SetConflictsPathForTest(filepath.Join(dir, "conflicts.json"))
+	defer SetConflictsPathForTest("")
+	ResetPushHashCacheForTest()
+
+	savePath := filepath.Join(dir, "save.dat")
+	require.NoError(t, os.WriteFile(savePath, []byte("local-content"), 0644))
+
+	const serverHash = "abc123-server-hash"
+	var gotIfHash atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/saves" && r.Method == http.MethodPost {
+			gotIfHash.Store(r.Header.Get("X-GSBS-If-Hash"))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		}
+	}))
+	defer srv.Close()
+
+	c, err := NewClient(srv.URL, "test-token", paths.NewResolver(), paths.CurrentOS(), 0, false, false)
+	require.NoError(t, err)
+
+	RecordConflict(ConflictRecord{
+		GameID: "g1", PathKey: "pk1", FilePath: savePath,
+		LocalHash: "local-hash", ServerHash: serverHash,
+	})
+
+	require.NoError(t, ResolveConflict(context.Background(), c, "g1", "pk1", ResolveKeepLocal, savePath))
+	assert.Equal(t, serverHash, gotIfHash.Load(), "push must CAS against the reviewed server version")
+	assert.Equal(t, 0, ConflictCount(), "conflict cleared after resolve")
 }

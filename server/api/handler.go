@@ -787,6 +787,9 @@ type pullSaveItem struct {
 	UpdatedAt string `json:"updated_at"`
 	Content   string `json:"content"` // base64
 	Encrypted bool   `json:"encrypted,omitempty"`
+	// ContentHash lets clients verify the downloaded content end-to-end
+	// (plaintext SHA-256 recorded at push time). Empty for legacy rows.
+	ContentHash string `json:"content_hash,omitempty"`
 }
 
 func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID string) {
@@ -811,11 +814,12 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID stri
 			return
 		}
 		items := []pullSaveItem{{
-			GameID:    blob.GameID,
-			PathKey:   blob.PathKey,
-			UpdatedAt: blob.UpdatedAt,
-			Content:   encodeBase64(blob.Content),
-			Encrypted: blob.Encrypted,
+			GameID:      blob.GameID,
+			PathKey:     blob.PathKey,
+			UpdatedAt:   blob.UpdatedAt,
+			Content:     encodeBase64(blob.Content),
+			Encrypted:   blob.Encrypted,
+			ContentHash: blob.ContentHash,
 		}}
 		resp := map[string]interface{}{"saves": items}
 		writeJSON(w, http.StatusOK, resp)
@@ -842,11 +846,12 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request, userID stri
 	items := make([]pullSaveItem, len(saves))
 	for i := range saves {
 		items[i] = pullSaveItem{
-			GameID:    saves[i].GameID,
-			PathKey:   saves[i].PathKey,
-			UpdatedAt: saves[i].UpdatedAt,
-			Content:   encodeBase64(saves[i].Content),
-			Encrypted: saves[i].Encrypted,
+			GameID:      saves[i].GameID,
+			PathKey:     saves[i].PathKey,
+			UpdatedAt:   saves[i].UpdatedAt,
+			Content:     encodeBase64(saves[i].Content),
+			Encrypted:   saves[i].Encrypted,
+			ContentHash: saves[i].ContentHash,
 		}
 	}
 	resp := map[string]interface{}{"saves": items}

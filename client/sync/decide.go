@@ -31,7 +31,11 @@ func DecidePull(localExists bool, localHash string, localMtime time.Time, server
 //   - keep_local skips (no local data loss; the server copy still exists);
 //   - keep_server applies (the user explicitly chose the server as truth).
 //
-// Outside the window the classic time comparison applies unchanged.
+// Outside the window keep_server and last_write_wins apply the classic time
+// comparison. keep_local NEVER overwrites an existing local file — a
+// definitively newer server copy surfaces as a conflict instead, keeping both
+// versions alive (local on disk, server's retained server-side) until the
+// user picks one.
 func DecidePullSkew(localExists bool, localHash string, localMtime time.Time, serverHash string, serverTime time.Time, policy string, skewTolerance time.Duration) PullDecision {
 	if !localExists {
 		return PullApply
@@ -51,7 +55,7 @@ func DecidePullSkew(localExists bool, localHash string, localMtime time.Time, se
 		if withinWindow || localMtime.After(serverTime) {
 			return PullSkip
 		}
-		return PullApply
+		return PullConflict
 	case "keep_server":
 		if withinWindow || serverTime.After(localMtime) || serverTime.Equal(localMtime) {
 			return PullApply

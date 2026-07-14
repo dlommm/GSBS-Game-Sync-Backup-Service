@@ -134,6 +134,18 @@ func ResolveConflict(ctx context.Context, client *Client, gameID, pathKey string
 		if err != nil {
 			return err
 		}
+		// Push sends X-GSBS-If-Hash from the last-pushed cache, which for a
+		// cross-machine conflict never matches the other machine's server hash
+		// — the push would 409 forever. Seed the cache with the server hash the
+		// user just reviewed so the resolve is a compare-and-swap against
+		// exactly that version; if the server moved again meanwhile, a fresh
+		// 409/conflict is the correct outcome.
+		for _, rec := range ListConflicts() {
+			if rec.GameID == gameID && rec.PathKey == pathKey && rec.ServerHash != "" {
+				client.markPushed(gameID, pathKey, rec.ServerHash)
+				break
+			}
+		}
 		if err := client.Push(ctx, gameID, pathKey, absPath, "", content); err != nil {
 			return err
 		}

@@ -1073,13 +1073,18 @@ func watchDirFromResolved(abs string) string {
 }
 
 // resolveWatchRoot returns the resolved watch directory anchor for a save slot.
-func resolveWatchRoot(gameID, pathKey string, manifestEntries []types.GameSaveLocation, watchPaths []watchPath, resolver *paths.Resolver, currentOS paths.OS) string {
+// installRootsByGame must be the SAME merged map (PCGW + discovered + config
+// overrides) that resolveSavePath uses: passing nil makes template resolution
+// fall back to PCGW-only install hints, so any <game-install-folder> slot
+// anchored to a discovered root would resolve to "" here while resolveSavePath
+// still produces a path — silently bypassing the pull escape guard.
+func resolveWatchRoot(gameID, pathKey string, manifestEntries []types.GameSaveLocation, watchPaths []watchPath, resolver *paths.Resolver, currentOS paths.OS, installRootsByGame map[string][]string) string {
 	for _, w := range watchPaths {
 		if w.GameID != gameID {
 			continue
 		}
 		if w.PathKey == pathKey || w.RuleKey == pathKey {
-			if root := resolveWatchRootDirect(w, resolver, currentOS); root != "" {
+			if root := resolveWatchRootDirect(w, resolver, currentOS, installRootsByGame); root != "" {
 				return root
 			}
 		}
@@ -1088,7 +1093,7 @@ func resolveWatchRoot(gameID, pathKey string, manifestEntries []types.GameSaveLo
 		if w.GameID != gameID {
 			continue
 		}
-		if root := resolveWatchRootByPathKeyForFile(gameID, pathKey, w, resolver, currentOS); root != "" {
+		if root := resolveWatchRootByPathKeyForFile(gameID, pathKey, w, resolver, currentOS, installRootsByGame); root != "" {
 			return root
 		}
 	}
@@ -1097,7 +1102,7 @@ func resolveWatchRoot(gameID, pathKey string, manifestEntries []types.GameSaveLo
 			continue
 		}
 		if PathKeyForManifestEntry(e.GameID, e.PathTemplate) == pathKey {
-			for _, abs := range resolveManifestTemplate(resolver, e.PathTemplate, currentOS, gameID, nil) {
+			for _, abs := range resolveManifestTemplate(resolver, e.PathTemplate, currentOS, gameID, installRootsByGame) {
 				if root := watchDirFromResolved(abs); root != "" {
 					return root
 				}
@@ -1111,11 +1116,11 @@ func resolveWatchRoot(gameID, pathKey string, manifestEntries []types.GameSaveLo
 				Recursive: rule.Recursive, SyncAll: rule.SyncAll,
 			}
 			if ruleKey == pathKey {
-				if root := resolveWatchRootDirect(wp, resolver, currentOS); root != "" {
+				if root := resolveWatchRootDirect(wp, resolver, currentOS, installRootsByGame); root != "" {
 					return root
 				}
 			}
-			if root := resolveWatchRootByPathKeyForFile(gameID, pathKey, wp, resolver, currentOS); root != "" {
+			if root := resolveWatchRootByPathKeyForFile(gameID, pathKey, wp, resolver, currentOS, installRootsByGame); root != "" {
 				return root
 			}
 		}
@@ -1123,9 +1128,9 @@ func resolveWatchRoot(gameID, pathKey string, manifestEntries []types.GameSaveLo
 	return ""
 }
 
-func resolveWatchRootDirect(w watchPath, resolver *paths.Resolver, currentOS paths.OS) string {
+func resolveWatchRootDirect(w watchPath, resolver *paths.Resolver, currentOS paths.OS, installRootsByGame map[string][]string) string {
 	for _, dirTemplate := range watchRootDirs(w) {
-		for _, abs := range resolveManifestTemplate(resolver, dirTemplate, currentOS, w.GameID, nil) {
+		for _, abs := range resolveManifestTemplate(resolver, dirTemplate, currentOS, w.GameID, installRootsByGame) {
 			if root := watchDirFromResolved(abs); root != "" {
 				return root
 			}
@@ -1134,12 +1139,12 @@ func resolveWatchRootDirect(w watchPath, resolver *paths.Resolver, currentOS pat
 	return ""
 }
 
-func resolveWatchRootByPathKeyForFile(gameID, pathKey string, w watchPath, resolver *paths.Resolver, currentOS paths.OS) string {
+func resolveWatchRootByPathKeyForFile(gameID, pathKey string, w watchPath, resolver *paths.Resolver, currentOS paths.OS, installRootsByGame map[string][]string) string {
 	ruleKey := ruleKeyForWatchPath(w)
 	syncAll := syncAllForWatchPath(w)
 	patterns := w.IncludePatterns
 	for _, dirTemplate := range watchRootDirs(w) {
-		for _, root := range resolveManifestTemplate(resolver, dirTemplate, currentOS, gameID, nil) {
+		for _, root := range resolveManifestTemplate(resolver, dirTemplate, currentOS, gameID, installRootsByGame) {
 			if root == "" {
 				continue
 			}

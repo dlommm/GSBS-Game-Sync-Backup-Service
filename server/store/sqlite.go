@@ -1023,7 +1023,7 @@ func nullIfEmpty(s string) interface{} {
 
 func (s *sqliteStore) ListSaves(ctx context.Context, userID string) ([]types.SaveBlob, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT game_id, path_key, content, storage_path, updated_at, COALESCE(encrypted, 0) FROM saves WHERE user_id = ?`, userID,
+		`SELECT game_id, path_key, content, storage_path, updated_at, COALESCE(encrypted, 0), COALESCE(content_hash, '') FROM saves WHERE user_id = ?`, userID,
 	)
 	if err != nil {
 		return nil, err
@@ -1036,7 +1036,7 @@ func (s *sqliteStore) ListSaves(ctx context.Context, userID string) ([]types.Sav
 		var enc int
 		var rawContent []byte
 		var storagePath sql.NullString
-		if err := rows.Scan(&b.GameID, &b.PathKey, &rawContent, &storagePath, &updatedAt, &enc); err != nil {
+		if err := rows.Scan(&b.GameID, &b.PathKey, &rawContent, &storagePath, &updatedAt, &enc, &b.ContentHash); err != nil {
 			return nil, err
 		}
 		b.Content, err = s.readSaveContent(storagePath, rawContent)
@@ -1066,7 +1066,7 @@ func (s *sqliteStore) ListSavesPaginated(ctx context.Context, userID string, lim
 		offset = 0
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT game_id, path_key, content, storage_path, updated_at, COALESCE(encrypted, 0) FROM saves WHERE user_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
+		`SELECT game_id, path_key, content, storage_path, updated_at, COALESCE(encrypted, 0), COALESCE(content_hash, '') FROM saves WHERE user_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?`,
 		userID, limit, offset)
 	if err != nil {
 		return nil, 0, err
@@ -1079,7 +1079,7 @@ func (s *sqliteStore) ListSavesPaginated(ctx context.Context, userID string, lim
 		var enc int
 		var rawContent []byte
 		var storagePath sql.NullString
-		if err := rows.Scan(&b.GameID, &b.PathKey, &rawContent, &storagePath, &updatedAt, &enc); err != nil {
+		if err := rows.Scan(&b.GameID, &b.PathKey, &rawContent, &storagePath, &updatedAt, &enc, &b.ContentHash); err != nil {
 			return nil, 0, err
 		}
 		b.Content, err = s.readSaveContent(storagePath, rawContent)
@@ -1133,9 +1133,9 @@ func (s *sqliteStore) GetSave(ctx context.Context, userID, gameID, pathKey strin
 	var rawContent []byte
 	var storagePath sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT game_id, path_key, content, storage_path, updated_at, COALESCE(encrypted, 0) FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+		`SELECT game_id, path_key, content, storage_path, updated_at, COALESCE(encrypted, 0), COALESCE(content_hash, '') FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
 		userID, gameID, pathKey,
-	).Scan(&b.GameID, &b.PathKey, &rawContent, &storagePath, &updatedAt, &enc)
+	).Scan(&b.GameID, &b.PathKey, &rawContent, &storagePath, &updatedAt, &enc, &b.ContentHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

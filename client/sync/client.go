@@ -321,6 +321,9 @@ type PullResponse struct {
 		UpdatedAt string `json:"updated_at"`
 		Content   string `json:"content"` // base64
 		Encrypted bool   `json:"encrypted,omitempty"`
+		// ContentHash is the plaintext SHA-256 the server recorded at push time.
+		// Absent on pre-5.3 servers (empty value skips pull verification).
+		ContentHash string `json:"content_hash,omitempty"`
 	} `json:"saves"`
 	Total int `json:"total,omitempty"` // total saves on server (only set when paginated)
 }
@@ -484,6 +487,12 @@ func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryRespo
 		if absPath == "" {
 			continue
 		}
+		// Slots pushed by pre-5.3 clients can point at our own backup files;
+		// never restore them (and never fetch their content).
+		if IsGSBSArtifact(absPath) {
+			logSyncDebug("pull_skip_gsbs_artifact", "game_id", s.GameID, "path_key", s.PathKey, "path", absPath)
+			continue
+		}
 		if opts.SkipGame != nil && opts.SkipGame(s.GameID) {
 			logSyncDebug("pull_deferred_game_running", "game_id", s.GameID, "path_key", s.PathKey)
 			continue
@@ -535,7 +544,7 @@ func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryRespo
 			continue
 		}
 		for _, item := range out.Saves {
-			if err := c.applyOneSaveEncrypted(item.GameID, item.PathKey, item.UpdatedAt, item.Content, absPath, opts, item.Encrypted); err != nil {
+			if err := c.applyOneSaveEncrypted(item.GameID, item.PathKey, item.UpdatedAt, item.Content, absPath, opts, item.Encrypted, s.ContentHash); err != nil {
 				log.Printf("pull apply: %v", err)
 				if OnSaveEvent != nil {
 					OnSaveEvent(item.GameID, item.PathKey, s.GameTitle, SaveDirPull, err)
@@ -565,7 +574,7 @@ func (c *Client) pullAndApplyFull(ctx context.Context, resolvePath func(gameID, 
 			if elig == paths.SkipNotInstalled || elig == paths.SkipNoAnchor {
 				continue
 			}
-			if err := c.applyOneSaveEncrypted(s.GameID, s.PathKey, s.UpdatedAt, s.Content, absPath, opts, s.Encrypted); err != nil {
+			if err := c.applyOneSaveEncrypted(s.GameID, s.PathKey, s.UpdatedAt, s.Content, absPath, opts, s.Encrypted, s.ContentHash); err != nil {
 				log.Printf("pull apply: %v", err)
 				if OnSaveEvent != nil {
 					OnSaveEvent(s.GameID, s.PathKey, "", SaveDirPull, err)
@@ -624,12 +633,22 @@ func (c *Client) pullPageWithRetry(ctx context.Context, limit, offset int, onRet
 }
 
 func (c *Client) applyOneSave(gameID, pathKey, updatedAt, contentB64, absPath string, opts PullOptions) error {
-	return c.applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, absPath, opts, false)
+	return c.applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, absPath, opts, false, "")
 }
 
-func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, absPath string, opts PullOptions, encrypted bool) error {
+// applyOneSaveEncrypted writes one pulled save to disk. expectedHash, when
+// non-empty, is the server-advertised plaintext SHA-256; the downloaded
+// content must match it or nothing is written (end-to-end pull integrity;
+// empty on pre-5.3 servers).
+func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, absPath string, opts PullOptions, encrypted bool, expectedHash string) error {
 	if opts.SkipGame != nil && opts.SkipGame(gameID) {
 		logSyncDebug("pull_deferred_game_running", "game_id", gameID, "path_key", pathKey)
+		return nil
+	}
+	// Slots pushed by pre-5.3 clients can point at our own backup files;
+	// never restore them over the local backup.
+	if IsGSBSArtifact(absPath) {
+		logSyncDebug("pull_skip_gsbs_artifact", "game_id", gameID, "path_key", pathKey, "path", absPath)
 		return nil
 	}
 	raw, err := base64.StdEncoding.DecodeString(contentB64)
@@ -640,25 +659,29 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 	if err != nil {
 		return fmt.Errorf("decrypt game=%s: %w", gameID, err)
 	}
+	serverHash := FileHash(content)
+	if expectedHash != "" && serverHash != expectedHash {
+		return fmt.Errorf("pull integrity: content hash mismatch game=%s path_key=%s (server advertised %s, downloaded %s)", gameID, pathKey, expectedHash, serverHash)
+	}
 	elig := paths.EvaluatePullEligibility(absPath, gameID, opts.PullContext)
 	if elig == paths.SkipNotInstalled || elig == paths.SkipNoAnchor {
 		return nil
 	}
 	localHash := ""
 	localExists := false
+	var localData []byte
 	var localMtime time.Time
 	if data, err := os.ReadFile(absPath); err == nil {
 		localExists = true
+		localData = data
 		localHash = FileHash(data)
 		if fi, err := os.Stat(absPath); err == nil {
 			localMtime = fi.ModTime()
 		}
-		_ = data
 	}
 	serverTime, _ := time.Parse(time.RFC3339, updatedAt)
 	// Same one-clock translation as the summaries path.
 	serverTime = serverTime.Add(-c.serverClockOffset())
-	serverHash := FileHash(content)
 	decision := DecidePull(localExists, localHash, localMtime, serverHash, serverTime, opts.policyFor(gameID))
 	if decision == PullSkip {
 		return nil
@@ -675,26 +698,43 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 		}
 		return nil
 	}
-	if elig == paths.ApplyCreateDir {
-		if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
+	if len(content) == 0 && localExists {
+		// The push paths never upload empty files, so an empty server blob is
+		// suspect — refuse to clobber existing local data with it.
+		logSyncWarn("pull_skip_empty_server_content", "game_id", gameID, "path_key", pathKey, "path", absPath)
+		return nil
+	}
+	if elig != paths.ApplyCreateDir && !paths.PathExists(absPath) {
+		return nil
+	}
+	// Validate the target BEFORE any filesystem mutation (MkdirAll/backup):
+	// a save whose resolved path escapes its watch root must not create
+	// directories or drop backup files outside the root either.
+	if opts.WatchRoot != nil {
+		root := opts.WatchRoot(gameID, pathKey)
+		if root == "" {
+			if !localExists {
+				// Fail closed for new files: without a resolved root we cannot
+				// prove the write stays inside the game's save area. Heals on a
+				// later pull once install roots/manifest resolution catch up.
+				logSyncWarn("pull_blocked_no_watch_root", "game_id", gameID, "path_key", pathKey, "path", absPath)
+				return nil
+			}
+			// Overwrite-in-place of a file our own resolver located is safe
+			// even when the root anchor is unavailable.
+			logSyncDebug("pull_overwrite_no_watch_root", "game_id", gameID, "path_key", pathKey, "path", absPath)
+		} else if err := ValidateWriteUnderRoot(absPath, root); err != nil {
 			return err
 		}
-	} else if !paths.PathExists(absPath) && elig != paths.ApplyCreateDir {
-		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
 		return err
 	}
-	if opts.BackupBeforeOverwrite {
-		if _, err := os.Stat(absPath); err == nil {
-			if data, err := os.ReadFile(absPath); err == nil {
-				_ = atomicWriteFile(absPath+".gsbs.bak", data, 0644)
-			}
-		}
-	}
-	if opts.WatchRoot != nil {
-		if err := ValidateWriteUnderRoot(absPath, opts.WatchRoot(gameID, pathKey)); err != nil {
-			return err
+	if opts.BackupBeforeOverwrite && localExists {
+		// A failed backup must abort the overwrite: the option promises the
+		// previous local state survives every pull.
+		if err := atomicWriteFile(absPath+".gsbs.bak", localData, 0644); err != nil {
+			return fmt.Errorf("backup before overwrite game=%s path=%s: %w", gameID, absPath, err)
 		}
 	}
 	if err := atomicWriteFile(absPath, content, 0644); err != nil {

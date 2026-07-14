@@ -264,7 +264,10 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		manifestMu.RLock()
 		entries := manifestEntries
 		manifestMu.RUnlock()
-		return resolveWatchRoot(gameID, pathKey, entries, wp, resolver, currentOS)
+		installRootsMu.RLock()
+		roots := installRoots
+		installRootsMu.RUnlock()
+		return resolveWatchRoot(gameID, pathKey, entries, wp, resolver, currentOS, roots)
 	}
 	pullOpts.WatchRoot = watchRoot
 
@@ -642,6 +645,11 @@ func mapToSyncWatchPaths(wps []watchPath) []sync.WatchPath {
 			continue
 		}
 		for _, t := range wp.PathTemplates {
+			// Legacy config shape: nothing writes path_templates anymore, and a
+			// template that resolves to a broad root is exactly the July-2026
+			// incident class. The watcher/reconcile unsafe-target checks reject
+			// those post-resolution; warn so the user migrates the entry.
+			log.Printf("sync: deprecated path_templates entry for game %s (%q) — re-add the game to store a directory + include patterns", wp.GameID, t)
 			out = append(out, sync.WatchPath{
 				GameID:    wp.GameID,
 				RuleKey:   ruleKey,
@@ -667,6 +675,13 @@ func buildReconciledWatchPaths(wps []sync.WatchPath, resolver *paths.Resolver, c
 		}
 		for _, abs := range resolver.ResolveAllForGame(wp.Directory, currentOS, roots) {
 			if abs == "" {
+				continue
+			}
+			// Same last-line-of-defense as the watcher: reconcile walks these
+			// directories recursively, so an unsafe root here would re-upload
+			// a whole home/XDG tree.
+			if resolver.UnsafeWatchTarget(abs, wp.SyncAll, wp.Recursive, wp.IncludePatterns) {
+				log.Printf("reconcile: unsafe dir skipped (safety guard): dir=%s game_id=%s", abs, wp.GameID)
 				continue
 			}
 			info, err := os.Stat(abs)

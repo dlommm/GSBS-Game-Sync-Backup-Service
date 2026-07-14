@@ -171,6 +171,14 @@ func (w *Watcher) resolvedWatchDirs(watchPaths []WatchPath) map[string]pathEntry
 			if abs == "" {
 				continue
 			}
+			// Last line of defense: callers are supposed to filter unsafe
+			// roots, but manifest data and legacy configs are untrusted —
+			// never attach a watch to a home/XDG/system root regardless of
+			// what upstream produced.
+			if w.resolver.UnsafeWatchTarget(abs, wp.SyncAll, wp.Recursive, wp.IncludePatterns) {
+				logSyncWarn("watcher_unsafe_dir_skipped", "dir", abs, "game_id", wp.GameID, "rule_key", wp.RuleKey)
+				continue
+			}
 			info, err := os.Stat(abs)
 			if err != nil {
 				logSyncWarn("watcher_dir_missing", "dir", abs, "game_id", wp.GameID, "error", err)
@@ -566,6 +574,9 @@ func (w *Watcher) rescan(ctx context.Context) {
 }
 
 func matchInclude(relativePath string, patterns []string, syncAll bool) bool {
+	if IsGSBSArtifact(relativePath) {
+		return false
+	}
 	return saverule.MatchInclude(relativePath, patterns, syncAll)
 }
 

@@ -212,3 +212,39 @@ func TestReconcileLocalToServer_ContextCancelled_StopsEarly(t *testing.T) {
 	// With the context already cancelled the outer loop exits immediately at the select.
 	assert.Equal(t, 0, n)
 }
+
+// GSBS's own artifacts (.gsbs.bak pull backups, .gsbs.tmp atomic-write temps)
+// must never be uploaded, even under SyncAll with no user exclude patterns —
+// regression test for the .gsbs.bak re-upload bug (backups written into the
+// watched directory came back as new server slots).
+func TestReconcileLocalToServer_SkipsGSBSArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "save.dat"), []byte("data"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "save.dat.gsbs.bak"), []byte("backup"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "save.dat.gsbs.tmp"), []byte("temp"), 0644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "nested"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "nested", "slot.sav.gsbs.bak"), []byte("backup"), 0644))
+
+	var pushedPaths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/saves" && r.Method == http.MethodPost {
+			pushedPaths = append(pushedPaths, r.Header.Get("X-Relative-Path"))
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	client := newReconcileTestClient(t, srv.URL)
+	wps := []WatchPath{{
+		GameID:    "g1",
+		RuleKey:   "rk1",
+		Directory: dir,
+		SyncAll:   true,
+		Recursive: true,
+	}}
+
+	n := ReconcileLocalToServer(context.Background(), wps, client, map[string]string{})
+	assert.Equal(t, 1, n, "only the real save uploads")
+	require.Len(t, pushedPaths, 1)
+	assert.Equal(t, "save.dat", pushedPaths[0])
+}

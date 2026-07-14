@@ -206,6 +206,13 @@ func ProcessOutbox(ctx context.Context, client *Client) int {
 		if !entry.NextRetryAt.IsZero() && now.Before(entry.NextRetryAt) {
 			continue
 		}
+		// Entries queued by pre-5.3 clients can reference our own artifacts
+		// (.gsbs.bak backups); drop them instead of uploading.
+		if IsGSBSArtifact(entry.FilePath) {
+			logSyncInfo("outbox_dropped_gsbs_artifact", "id", entry.ID, "game_id", entry.GameID, "path_key", entry.PathKey, "file", entry.FilePath)
+			_ = os.Remove(path)
+			continue
+		}
 		candidates = append(candidates, candidate{entry, path})
 	}
 	outboxMu.Unlock()
