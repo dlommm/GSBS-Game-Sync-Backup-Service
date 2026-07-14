@@ -233,9 +233,16 @@ func isRegistryPath(s string) bool {
 	return strings.Contains(s, "HKEY_")
 }
 
-// hasPathTraversal reports whether s contains a ".." path traversal component.
+// hasPathTraversal reports whether s contains a ".." path traversal
+// COMPONENT. A plain substring check would silently drop legitimate names
+// that merely contain two dots (e.g. "saves..backup" or "v1..2").
 func hasPathTraversal(s string) bool {
-	return strings.Contains(s, "..")
+	for _, seg := range strings.FieldsFunc(s, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if seg == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 // splitOutsideTemplates splits s on sep only when not inside nested {{...}} wikitext.

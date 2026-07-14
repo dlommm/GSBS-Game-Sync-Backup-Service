@@ -4,6 +4,71 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [5.3.0] - 2026-07-14
+
+Full-project fix & polish release: client data safety, update pipeline, resilience, and WebUI consistency.
+
+### Changed
+- **`keep_local` now keeps both versions.** With the `keep_local` conflict policy, a definitively
+  newer server copy no longer overwrites your local file — it surfaces as a conflict (tray +
+  Dashboard → Conflicts) so you choose. Both versions survive: yours on disk, the server's in
+  version history. Resolving "keep local" also no longer loops forever on cross-machine conflicts
+  (it now confirms against exactly the server version you reviewed).
+- Update fallback is honest: when a release has no verified manifest entry for your platform, the
+  tray offers **Get update from GitHub** instead of an Install button whose download would be
+  refused for lacking a checksum.
+- "Skip syncing on metered connections" is disabled with an explanatory hint on macOS/Linux
+  (detection is Windows-only); saving settings there no longer clears the stored value.
+
+### Fixed
+- **Clients no longer sync GSBS's own backup files.** With "Backup before overwrite" enabled
+  (the default), `.gsbs.bak` files written next to your saves were uploaded back to the server
+  as bogus save slots — and restored onto other devices. They (and `.gsbs.tmp` temps) are now
+  excluded everywhere: watcher, startup reconcile, offline outbox, and restore. Existing
+  `*.gsbs.bak` slots on the server can be deleted from the game page.
+- **Pull integrity**: downloaded saves are verified against the server-recorded content hash
+  end-to-end before anything is written (the server now sends the hash on the full-pull path too).
+- Pull path safety: the watch-root escape guard runs before any directory or backup is created,
+  and it now covers `<game-install-folder>` saves anchored to discovered install roots (they
+  previously bypassed the check). The watcher and reconcile also reject home/XDG/system roots
+  directly as a last line of defense, covering legacy `path_templates` configs.
+- A failed pre-overwrite backup now aborts the overwrite; empty server content never clobbers
+  an existing local file.
+- **linux/arm64 auto-update**: `latest-client.json` now includes `linux-arm64` (releases enforce
+  all 5 platforms), and the updater picks the right asset per architecture — arm64 Linux clients
+  previously could never self-update.
+- Windows update apply: retries while the old binary is still locked and rolls back to the
+  previous binary on a failed swap (was: silent failure). macOS re-sign drops the deprecated
+  `codesign --deep`, guards for a missing `codesign`, and a failed apply now relaunches the
+  previous version with a tray notification instead of dying silently.
+- Settings changes / adding a game no longer briefly run two sync loops in parallel; the tray
+  state file can no longer be torn by concurrent writers.
+- Client SSE listener: detects dead connections (idle watchdog), reloads a rotated token instead
+  of reconnecting forever with a stale one, backs off to 5-minute retries after repeated 401s,
+  and tolerates large events.
+- WebUI: import failures now show a message on My Games (they were silently dropped); the
+  Activity page's audit table refreshes live instead of toasting a promise it didn't keep;
+  "Activity log updated" toasts no longer fire for every logged-in user on any account's action.
+- WebUI security hardening: `?error=` codes map to fixed messages (raw query text was rendered
+  inside trusted alert banners), import authenticates before parsing the upload body, and the
+  dashboard event stream is capped per user like the API's.
+- Broken GitHub repository links across the WebUI, README badge, and docs (404s).
+- Save-rule parsing no longer discards legitimate paths containing consecutive dots
+  (e.g. `saves..backup`) — only real `..` traversal components are rejected.
+- Retry logic stops retrying permanent local errors (missing file, permission denied, corrupt data).
+
+### Added
+- **Admin tables unified on the shared pager**: Manifest, PCGW catalog, and Analytics → PCGW now
+  use the same prev/next + rows-per-page control as the rest of the admin (htmx partial swap,
+  filters preserved) instead of two bespoke full-page-reload paginations.
+- Settings → Encryption Center warns about legacy-only devices unseen for 30+ days: they're
+  excluded from fleet readiness and won't be able to read newly encrypted saves until updated
+  (stale devices are also tagged in the device list).
+- Keyboard shortcuts dialog documents "g then c" (Conflicts); error/warning toasts announce
+  assertively to screen readers (and no longer announce twice).
+- SECURITY.md and ARCHITECTURE.md document the legacy PBKDF2 envelope's limits and the
+  stale-device encryption caveat.
+
 ## [5.2.4] - 2026-07-07
 
 ### Added

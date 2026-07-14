@@ -1,6 +1,10 @@
 package retry
 
 import (
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 )
@@ -64,4 +68,21 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(b[i:])
+}
+
+// Permanent local failures must not burn retry attempts: the outcome cannot
+// change on a second try.
+func TestIsRetryableError_PermanentLocalErrors(t *testing.T) {
+	if IsRetryableError(os.ErrNotExist) {
+		t.Fatal("os.ErrNotExist should not be retryable")
+	}
+	if IsRetryableError(fmt.Errorf("read save: %w", os.ErrPermission)) {
+		t.Fatal("wrapped os.ErrPermission should not be retryable")
+	}
+	if IsRetryableError(base64.CorruptInputError(7)) {
+		t.Fatal("corrupt base64 should not be retryable")
+	}
+	if !IsRetryableError(errors.New("connection reset by peer")) {
+		t.Fatal("transport errors stay retryable")
+	}
 }

@@ -213,3 +213,18 @@ func TestParseSaveRules_RegistryMixedWithValid(t *testing.T) {
 		t.Errorf("Directory = %q", got[0].Directory)
 	}
 }
+
+// hasPathTraversal must flag ".." only as a path COMPONENT — names that merely
+// contain consecutive dots are legitimate and must survive normalization.
+func TestHasPathTraversalComponentWise(t *testing.T) {
+	for _, s := range []string{"..", "a/../b", `..\x`, "../save", `dir\..\other`} {
+		if !hasPathTraversal(s) {
+			t.Errorf("hasPathTraversal(%q) = false, want true", s)
+		}
+	}
+	for _, s := range []string{"saves..backup", "v1..2", "a...b", "save.dat", "dir/sub..name/file"} {
+		if hasPathTraversal(s) {
+			t.Errorf("hasPathTraversal(%q) = true, want false", s)
+		}
+	}
+}

@@ -116,6 +116,11 @@ func parseCargoSingleValue(v interface{}) string {
 	return ""
 }
 
+// parseCargoMultiValue splits a Cargo multi-value field. Cargo's fulltext
+// format joins values with a plain comma and offers no per-query delimiter or
+// quoting, so a value that itself contains ", " (e.g. "Bandai Namco, Inc.")
+// is genuinely ambiguous at this layer and will split — accepted data-quality
+// limitation, not fixable client-side.
 func parseCargoMultiValue(v interface{}) []string {
 	s := parseCargoSingleValue(v)
 	if s == "" {

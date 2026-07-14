@@ -6,6 +6,20 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.3.0] — 2026-07-14
+
+Full-project fix & polish release.
+
+### Highlights
+- **Clients no longer sync GSBS's own `.gsbs.bak` backup files** (they were uploaded as bogus save slots on default settings — delete any existing `*.gsbs.bak` slots from the game page).
+- **`keep_local` keeps both versions**: a newer server copy surfaces as a conflict instead of overwriting your local file; resolving "keep local" no longer loops on cross-machine conflicts.
+- **Pull integrity**: downloads are verified against the server-recorded content hash before anything touches disk; the path-escape guard runs before any write and covers install-folder saves.
+- **linux/arm64 clients can finally auto-update**; Windows update apply retries + rolls back; macOS apply failures notify instead of dying silently.
+- Client resilience: no more overlapping sync loops after settings changes; SSE listener detects dead connections and handles token rotation/revocation.
+- WebUI: Manifest/PCGW/Analytics tables use the shared pager; import errors surface; audit toasts scoped to you; `?error=` text is never reflected; Encryption Center flags stale legacy-only devices.
+
+---
+
 ## [5.2.4] — 2026-07-07
 
 ### Added

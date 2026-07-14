@@ -58,6 +58,7 @@ End-to-end encryption is **client-side and optional** (per account flag + local 
 
 - **Envelope**: AES-256-GCM. Two KDF formats coexist — legacy `v1` (PBKDF2-SHA256, 100k) with no prefix, and `v2` (`gsbs2:` prefix, Argon2id t=3/64 MiB). Clients read both formats forever.
 - **Fleet auto-negotiation**: a client writes the stronger `v2` format only once the server reports every device seen in the last 30 days runs ≥ 4.0.0 (`crypto_v2_ready`), so a mixed fleet never produces a blob an older device can't read. `crypto_v2: true/false` in the client config forces or pins the format.
+- **Stale-device caveat**: the 30-day window means a legacy-only device that stops syncing is eventually dropped from the readiness check; if it comes back after the fleet switched to `gsbs2:`, it cannot decrypt newly encrypted saves until updated (the server still holds the ciphertext — nothing is lost). Settings → Encryption Center names such devices.
 - **Hashes**: the client dedups and sends `X-Content-Hash` as the *plaintext* SHA-256. For unencrypted pushes the server verifies it against the received bytes; for encrypted pushes it can't (only ciphertext is transmitted) and stores the declared value by design.
 - **At rest on the server**: TOTP secrets are sealed with AES-256-GCM under a key file in `gsbs-keys/` (kept outside the database). Back up `gsbs-keys/` with the DB.
 

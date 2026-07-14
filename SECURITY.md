@@ -42,6 +42,12 @@ We aim to acknowledge reports within 72 hours and provide a fix or mitigation ti
 - Client auto-update verifies SHA256 checksums from `latest-client.json` before applying.
 - Windows installers are unsigned; verify downloads from official GitHub Releases only.
 
+### Encryption formats
+
+- New encrypted saves use the modern `gsbs2:` envelope (AES-256-GCM with an **Argon2id** key derivation) once every recently-seen device on the account runs v4+ — the switch is automatic.
+- The legacy envelope uses PBKDF2-SHA256 with 100,000 iterations, which is below current OWASP guidance. It is **decrypt-only** for compatibility: existing legacy saves re-encrypt to `gsbs2:` automatically the next time they change and sync. Use a strong, unique passphrase either way — passphrase quality dominates KDF strength.
+- A legacy-only device that has not synced in 30+ days is excluded from the fleet-readiness check; if it returns after the fleet switched, it cannot read newly encrypted saves until updated (the Encryption Center in Settings warns about such devices).
+
 ### Secrets in the repository
 
 GSBS does not commit passwords, API keys, or session secrets. Use environment variables and local config files. See [.cursor/rules/gsbs-no-secrets.mdc](.cursor/rules/gsbs-no-secrets.mdc) for contributor guidelines.

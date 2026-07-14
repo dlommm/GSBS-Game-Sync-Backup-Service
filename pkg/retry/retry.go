@@ -2,8 +2,10 @@ package retry
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -55,6 +57,14 @@ func IsRetryableError(err error) bool {
 		return false
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	// Permanent local failures: retrying cannot change the outcome.
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrPermission) {
+		return false
+	}
+	var corrupt base64.CorruptInputError
+	if errors.As(err, &corrupt) {
 		return false
 	}
 	code := HTTPStatusFromError(err)
