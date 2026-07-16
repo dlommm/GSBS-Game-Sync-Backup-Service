@@ -207,6 +207,30 @@ func resolveUnmatchedSteam(installed []discovery.InstalledGame, idx *discovery.M
 	}
 }
 
+// currentScanOptions prepends the user's configured launcher folders (config
+// heroic_folder/lutris_folder/…) to the per-OS scan defaults — they were
+// previously honored by the path RESOLVER but ignored by discovery.
+func currentScanOptions() discovery.ScanOptions {
+	cfg, err := loadConfig()
+	if err != nil || cfg == nil {
+		return discovery.ScanOptions{}
+	}
+	opts := discovery.ScanOptions{}
+	if cfg.HeroicFolder != "" {
+		opts.HeroicRoots = []string{cfg.HeroicFolder}
+	}
+	if cfg.LutrisFolder != "" {
+		opts.LutrisRoots = []string{cfg.LutrisFolder}
+	}
+	if cfg.BottlesFolder != "" {
+		opts.BottlesRoots = []string{cfg.BottlesFolder}
+	}
+	if cfg.PrismFolder != "" {
+		opts.PrismRoots = []string{cfg.PrismFolder}
+	}
+	return opts
+}
+
 // runDiscovery scans launchers, matches against manifest, returns count of newly discovered games.
 func runDiscovery(manifestEntries []types.GameSaveLocation) int {
 	prev := loadDiscoveryCache()
@@ -222,7 +246,7 @@ func runDiscovery(manifestEntries []types.GameSaveLocation) int {
 		idMap = make(map[string]string)
 	}
 
-	installed := discovery.ScanInstalledGames()
+	installed := discovery.ScanInstalledGamesOpts(currentScanOptions())
 	resolveUnmatchedSteam(installed, idx, idMap)
 	matched := discovery.MatchManifestWithV2Index(installed, idx, idMap)
 

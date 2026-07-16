@@ -118,6 +118,17 @@ func notifyAuthError(msg string) {
 	_ = beeep.Alert("GSBS", truncateMsg(msg, 120), "")
 }
 
+// notifyActionError surfaces a failed tray action (open folder/config,
+// autostart toggle, …). These failures were log-only, so a menu click that
+// did nothing gave the user zero feedback.
+func notifyActionError(action string, err error) {
+	if err == nil {
+		return
+	}
+	_ = beeep.Alert("GSBS", truncateMsg(action+" failed: "+err.Error(), 120), "")
+	log.Printf("tray notify: %s failed: %v", action, err)
+}
+
 func notifyPushError(gameID, pathKey, msg string) {
 	title := gameTitleFor(gameID)
 	_ = beeep.Alert("GSBS", truncateMsg(fmt.Sprintf("Upload failed for %s: %s", title, msg), 120), "")

@@ -33,8 +33,12 @@ finish-args:
   - --socket=fallback-x11
   - --socket=wayland
   - --device=dri
-  # Tray icon (StatusNotifierItem) and desktop notifications.
+  # Tray icon (StatusNotifierItem) and desktop notifications. The own-name
+  # lets the tray lib claim its per-PID SNI bus name — without it every
+  # launch logs a (non-fatal) RequestName denial and strict SNI hosts may
+  # refuse the fallback registration.
   - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.StatusNotifierItem-*
   - --talk-name=org.freedesktop.Notifications
   # Autostart / run-in-background via the XDG portal.
   - --talk-name=org.freedesktop.portal.Background
@@ -42,6 +46,10 @@ finish-args:
   # OS keyring (Secret Service) for secure token storage.
   - --talk-name=org.freedesktop.secrets
   # Filesystem: home plus the sandboxed trees where launchers keep saves.
+  # TODO(Flathub tightening): --filesystem=home is broad and fallback-x11/
+  # wayland/dri are unused by the D-Bus-only tray; narrowing them must not
+  # regress existing installs' save-dir access, so it is deferred to a
+  # dedicated permissions release.
   - --filesystem=home
   - --filesystem=xdg-data/Steam:create
   - --filesystem=~/.var/app/com.valvesoftware.Steam

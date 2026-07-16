@@ -9,10 +9,17 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/gen2brain/beeep"
 	"github.com/gsbs/gsbs/client/sync"
 )
 
 func main() {
+	// Brand every desktop notification. beeep's default is the literal string
+	// "DefaultAppName"; on Windows that is also the toast AppUserModelID, and
+	// an unregistered one can be silently dropped — the installer's Start-menu
+	// shortcut sets a matching AppUserModelID ("GSBS", see gsbs-client.iss).
+	beeep.AppName = "GSBS"
+
 	// Stamp every API request with this build's version (drives the server's
 	// crypto-v2 fleet negotiation and the Devices page version column).
 	sync.SetClientAppVersion(Version)

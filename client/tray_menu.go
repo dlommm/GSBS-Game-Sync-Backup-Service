@@ -760,6 +760,7 @@ func (c *TrayController) startClickHandlers() {
 				enabled := !RunAtStartupEnabled()
 				if err := SetRunAtStartup(enabled); err != nil {
 					log.Printf("tray: run at startup: %v", err)
+					notifyActionError("Run at startup", err)
 				} else if enabled {
 					c.mAutostart.Check()
 				} else {

@@ -19,8 +19,24 @@ type InstalledGame struct {
 	InstallPath string `json:"install_path,omitempty"` // absolute install folder when known (e.g. Steam common/)
 }
 
-// ScanInstalledGames returns all games detected across supported launchers.
+// ScanOptions prepends user-configured launcher roots ahead of the per-OS
+// default candidates (the client sets these from heroic_folder etc. in
+// config.json and auto-detected paths).
+type ScanOptions struct {
+	HeroicRoots  []string // heroic config dirs (containing Games/ or store_cache/)
+	LutrisRoots  []string // lutris config dirs (containing games/)
+	BottlesRoots []string // bottles data dirs (containing bottles/<name>/bottle.yml)
+	PrismRoots   []string // PrismLauncher data dirs (containing instances/)
+}
+
+// ScanInstalledGames returns all games detected across supported launchers
+// using only the per-OS default locations.
 func ScanInstalledGames() []InstalledGame {
+	return ScanInstalledGamesOpts(ScanOptions{})
+}
+
+// ScanInstalledGamesOpts is ScanInstalledGames with configured launcher roots.
+func ScanInstalledGamesOpts(opts ScanOptions) []InstalledGame {
 	var out []InstalledGame
 	seen := make(map[string]bool)
 	add := func(g InstalledGame) {
@@ -46,20 +62,36 @@ func ScanInstalledGames() []InstalledGame {
 	for _, g := range scanUbisoft() {
 		add(g)
 	}
-	for _, g := range scanHeroic() {
+	for _, g := range scanHeroic(opts.HeroicRoots) {
 		add(g)
 	}
-	for _, g := range scanLutris() {
+	for _, g := range scanLutris(opts.LutrisRoots) {
 		add(g)
 	}
-	for _, g := range scanBottles() {
+	for _, g := range scanBottles(opts.BottlesRoots) {
 		add(g)
 	}
 	for _, g := range scanEA() {
 		add(g)
 	}
-	for _, g := range scanPrism() {
+	for _, g := range scanPrism(opts.PrismRoots) {
 		add(g)
+	}
+	return out
+}
+
+// candidateRoots prepends configured roots to defaults, dropping empties and
+// duplicates while preserving order (configured roots win).
+func candidateRoots(configured, defaults []string) []string {
+	var out []string
+	seen := make(map[string]bool)
+	for _, r := range append(append([]string(nil), configured...), defaults...) {
+		r = strings.TrimSpace(r)
+		if r == "" || seen[r] {
+			continue
+		}
+		seen[r] = true
+		out = append(out, r)
 	}
 	return out
 }
@@ -219,49 +251,81 @@ func scanUbisoft() []InstalledGame {
 	return out
 }
 
-func scanHeroic() []InstalledGame {
-	var out []InstalledGame
+// heroicDefaultRoots are the per-OS Heroic config locations. The old scanner
+// hardcoded ~/.config/heroic (a Linux path) everywhere except darwin, so
+// Windows (%APPDATA%\heroic) and Flatpak Heroic installs were never scanned —
+// even though the launcher DETECTOR already knew the Flatpak path.
+func heroicDefaultRoots() []string {
 	home, _ := os.UserHomeDir()
-	heroicRoot := filepath.Join(home, ".config", "heroic")
-	if runtime.GOOS == "darwin" {
-		heroicRoot = filepath.Join(home, "Library", "Application Support", "heroic")
-	}
-	configPath := filepath.Join(heroicRoot, "Games", "legendary", "library.json")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		// Also try games store
-		configPath = filepath.Join(heroicRoot, "store_cache", "legendary", "library.json")
-		data, err = os.ReadFile(configPath)
-		if err != nil {
-			return out
+	switch runtime.GOOS {
+	case "windows":
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			return []string{filepath.Join(appData, "heroic")}
+		}
+		return nil
+	case "darwin":
+		return []string{filepath.Join(home, "Library", "Application Support", "heroic")}
+	default:
+		return []string{
+			filepath.Join(home, ".config", "heroic"),
+			filepath.Join(home, ".var", "app", "com.heroicgameslauncher.hgl", "config", "heroic"),
 		}
 	}
-	var library map[string]struct {
-		Title   string `json:"title"`
-		AppName string `json:"app_name"`
-	}
-	if json.Unmarshal(data, &library) != nil {
-		return out
-	}
-	for id, g := range library {
-		gameID := g.AppName
-		if gameID == "" {
-			gameID = id
+}
+
+func scanHeroic(configuredRoots []string) []InstalledGame {
+	var out []InstalledGame
+	for _, heroicRoot := range candidateRoots(configuredRoots, heroicDefaultRoots()) {
+		// Both library layouts exist in the wild; read whichever is present
+		// under EACH root (the old either/or applied to a single root).
+		for _, configPath := range []string{
+			filepath.Join(heroicRoot, "Games", "legendary", "library.json"),
+			filepath.Join(heroicRoot, "store_cache", "legendary", "library.json"),
+		} {
+			data, err := os.ReadFile(configPath)
+			if err != nil {
+				continue
+			}
+			var library map[string]struct {
+				Title   string `json:"title"`
+				AppName string `json:"app_name"`
+			}
+			if json.Unmarshal(data, &library) != nil {
+				continue
+			}
+			for id, g := range library {
+				gameID := g.AppName
+				if gameID == "" {
+					gameID = id
+				}
+				out = append(out, InstalledGame{
+					GameID:   gameID,
+					Title:    g.Title,
+					Launcher: "heroic",
+				})
+			}
 		}
-		out = append(out, InstalledGame{
-			GameID:   gameID,
-			Title:    g.Title,
-			Launcher: "heroic",
-		})
 	}
 	return out
 }
 
-func scanLutris() []InstalledGame {
-	var out []InstalledGame
+// lutrisDefaultRoots covers native and Flatpak Lutris (the Flatpak path was
+// granted in the GSBS Flatpak manifest but never scanned).
+func lutrisDefaultRoots() []string {
 	home, _ := os.UserHomeDir()
-	gamesDir := filepath.Join(home, ".config", "lutris", "games")
-	matches, _ := filepath.Glob(filepath.Join(gamesDir, "*.yml"))
+	return []string{
+		filepath.Join(home, ".config", "lutris"),
+		filepath.Join(home, ".var", "app", "net.lutris.Lutris", "config", "lutris"),
+	}
+}
+
+func scanLutris(configuredRoots []string) []InstalledGame {
+	var out []InstalledGame
+	var matches []string
+	for _, root := range candidateRoots(configuredRoots, lutrisDefaultRoots()) {
+		m, _ := filepath.Glob(filepath.Join(root, "games", "*.yml"))
+		matches = append(matches, m...)
+	}
 	slugRe := regexp.MustCompile(`(?m)^slug:\s*(.+)$`)
 	nameRe := regexp.MustCompile(`(?m)^name:\s*(.+)$`)
 	for _, m := range matches {
@@ -288,30 +352,40 @@ func scanLutris() []InstalledGame {
 	return out
 }
 
-func scanBottles() []InstalledGame {
-	var out []InstalledGame
+// bottlesDefaultRoots covers Flatpak Bottles (the common install) and native.
+func bottlesDefaultRoots() []string {
 	home, _ := os.UserHomeDir()
-	bottlesDir := filepath.Join(home, ".var", "app", "com.usebottles.bottles", "data", "bottles", "bottles")
-	entries, err := os.ReadDir(bottlesDir)
-	if err != nil {
-		return out
+	return []string{
+		filepath.Join(home, ".var", "app", "com.usebottles.bottles", "data", "bottles"),
+		filepath.Join(home, ".local", "share", "bottles"),
 	}
-	for _, e := range entries {
-		if !e.IsDir() {
+}
+
+func scanBottles(configuredRoots []string) []InstalledGame {
+	var out []InstalledGame
+	for _, root := range candidateRoots(configuredRoots, bottlesDefaultRoots()) {
+		bottlesDir := filepath.Join(root, "bottles")
+		entries, err := os.ReadDir(bottlesDir)
+		if err != nil {
 			continue
 		}
-		yml := filepath.Join(bottlesDir, e.Name(), "bottle.yml")
-		title := e.Name()
-		if data, err := os.ReadFile(yml); err == nil {
-			if nm := regexp.MustCompile(`(?m)^Name:\s*(.+)$`).FindStringSubmatch(string(data)); len(nm) >= 2 {
-				title = strings.TrimSpace(nm[1])
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
 			}
+			yml := filepath.Join(bottlesDir, e.Name(), "bottle.yml")
+			title := e.Name()
+			if data, err := os.ReadFile(yml); err == nil {
+				if nm := regexp.MustCompile(`(?m)^Name:\s*(.+)$`).FindStringSubmatch(string(data)); len(nm) >= 2 {
+					title = strings.TrimSpace(nm[1])
+				}
+			}
+			out = append(out, InstalledGame{
+				GameID:   e.Name(),
+				Title:    title,
+				Launcher: "bottles",
+			})
 		}
-		out = append(out, InstalledGame{
-			GameID:   e.Name(),
-			Title:    title,
-			Launcher: "bottles",
-		})
 	}
 	return out
 }
@@ -344,11 +418,22 @@ func scanEA() []InstalledGame {
 	return out
 }
 
-func scanPrism() []InstalledGame {
-	var out []InstalledGame
+// prismDefaultRoots covers native and Flatpak PrismLauncher.
+func prismDefaultRoots() []string {
 	home, _ := os.UserHomeDir()
-	instancesDir := filepath.Join(home, ".local", "share", "PrismLauncher", "instances")
-	matches, _ := filepath.Glob(filepath.Join(instancesDir, "*/instance.cfg"))
+	return []string{
+		filepath.Join(home, ".local", "share", "PrismLauncher"),
+		filepath.Join(home, ".var", "app", "org.prismlauncher.PrismLauncher", "data", "PrismLauncher"),
+	}
+}
+
+func scanPrism(configuredRoots []string) []InstalledGame {
+	var out []InstalledGame
+	var matches []string
+	for _, root := range candidateRoots(configuredRoots, prismDefaultRoots()) {
+		m, _ := filepath.Glob(filepath.Join(root, "instances", "*", "instance.cfg"))
+		matches = append(matches, m...)
+	}
 	for _, cfgPath := range matches {
 		data, err := os.ReadFile(cfgPath)
 		if err != nil {

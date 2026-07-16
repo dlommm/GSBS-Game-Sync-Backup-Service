@@ -6,6 +6,7 @@ require (
 	fyne.io/systray v1.12.2
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/gen2brain/beeep v0.11.2
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/klauspost/compress v1.18.6
 	github.com/lxn/walk v0.0.0-20210112085537-c389da54e794
 	github.com/mattn/go-sqlite3 v1.14.22
@@ -32,7 +33,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/esiqveland/notify v0.13.3 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
-	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackmordaunt/icns/v3 v3.0.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.11 // indirect

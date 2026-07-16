@@ -50,7 +50,8 @@ func DetectPaths() DetectedPaths {
 		}
 	}
 
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		pf86 := os.Getenv("ProgramFiles(x86)")
 		if pf86 == "" {
 			pf86 = filepath.Join(os.Getenv("ProgramFiles"), "..", "Program Files (x86)")
@@ -79,7 +80,24 @@ func DetectPaths() DetectedPaths {
 		if pathExists(xbox) {
 			out.XboxApp = xbox
 		}
-	} else {
+	case "darwin":
+		// macOS previously fell into the Linux branch and probed XDG/.var
+		// paths that never exist there, so "Detect launcher paths" found
+		// only Steam. These match the discovery scanners' darwin knowledge.
+		appSupport := filepath.Join(home, "Library", "Application Support")
+		gogGames := filepath.Join(home, "GOG Games")
+		if pathExists(gogGames) {
+			out.GOGGalaxy = gogGames
+		}
+		epic := filepath.Join(appSupport, "Epic")
+		if pathExists(epic) {
+			out.EpicGames = epic
+		}
+		heroic := filepath.Join(appSupport, "heroic")
+		if pathExists(heroic) {
+			out.Heroic = heroic
+		}
+	default: // linux
 		gogGames := filepath.Join(home, "GOG Games")
 		if pathExists(gogGames) {
 			out.GOGGalaxy = gogGames

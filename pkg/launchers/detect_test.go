@@ -22,8 +22,11 @@ func setupHome(t *testing.T) string {
 }
 
 func TestDetectPaths_UnixLaunchers(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("unix launcher paths")
+	// These are LINUX launcher locations. darwin used to fall into the same
+	// branch (and this test asserted that bug); it now has its own branch —
+	// see detect_darwin_test.go.
+	if runtime.GOOS != "linux" {
+		t.Skip("linux launcher paths")
 	}
 	home := setupHome(t)
 

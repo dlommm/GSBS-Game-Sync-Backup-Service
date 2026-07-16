@@ -54,6 +54,7 @@ func openWithDefault(args ...string) error {
 func openLogDarwin() {
 	if err := openWithDefault(ClientLogPath()); err != nil {
 		log.Printf("tray: open log: %v", err)
+		notifyActionError("Open log", err)
 	}
 }
 
@@ -62,6 +63,7 @@ func openDataFolderDarwin() {
 	_ = os.MkdirAll(path, 0o755)
 	if err := openWithDefault(path); err != nil {
 		log.Printf("tray: open data: %v", err)
+		notifyActionError("Open data folder", err)
 	}
 }
 
@@ -76,6 +78,7 @@ func openConfigDarwin() {
 	// -t opens in the default text editor rather than a JSON-associated app.
 	if err := openWithDefault("-t", path); err != nil {
 		log.Printf("tray: open config: %v", err)
+		notifyActionError("Open config", err)
 	}
 }
 

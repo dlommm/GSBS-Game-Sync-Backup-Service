@@ -50,6 +50,7 @@ func openLogLinux() {
 	path := ClientLogPath()
 	if err := exec.Command("xdg-open", path).Start(); err != nil {
 		log.Printf("tray: open log: %v", err)
+		notifyActionError("Open log", err)
 	}
 }
 
@@ -58,6 +59,7 @@ func openDataFolderLinux() {
 	_ = os.MkdirAll(path, 0755)
 	if err := exec.Command("xdg-open", path).Start(); err != nil {
 		log.Printf("tray: open data: %v", err)
+		notifyActionError("Open data folder", err)
 	}
 }
 
@@ -69,19 +71,13 @@ func openConfigLinux() {
 		cfg := defaultConfig(path)
 		_ = saveConfig(cfg)
 	}
-	editor := os.Getenv("EDITOR")
-	if editor != "" {
-		cmd := exec.Command(editor, path)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			log.Printf("tray: open config: %v", err)
-		}
-		return
-	}
-	if err := exec.Command("xdg-open", path).Run(); err != nil {
+	// Non-blocking desktop handler, like the log/data-folder helpers and the
+	// other platforms. The old $EDITOR path inherited the tray's stdio: a tray
+	// launched from autostart has no TTY, so a terminal editor (vim/nano — the
+	// common $EDITOR values) opened nowhere and the menu click blocked forever.
+	if err := exec.Command("xdg-open", path).Start(); err != nil {
 		log.Printf("tray: xdg-open config: %v", err)
+		notifyActionError("Open config", err)
 	}
 }
 

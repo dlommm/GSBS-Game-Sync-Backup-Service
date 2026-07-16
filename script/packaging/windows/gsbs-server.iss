@@ -3,7 +3,7 @@
 
 #define MyAppName "GSBS Server"
 #define MyAppPublisher "GSBS"
-#define MyAppURL "https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-"
+#define MyAppURL "https://github.com/dlommm/GSBS-Game-Sync-Backup-Service"
 #define MyAppExeName "gsbs-server-windows-amd64.exe"
 #define MyLauncherName "gsbs-server-launcher.cmd"
 
@@ -454,7 +454,7 @@ begin
   PCGWCronEdit := AddLabeledEdit(PCGWPage, 'GSBS_PCGW_CRON', '0 3 * * 0', 'Incremental sync cron schedule', Top, False);
   PCGWFullCronEdit := AddLabeledEdit(PCGWPage, 'GSBS_PCGW_FULL_CRON', '', 'Optional full sync cron schedule', Top, False);
   PCGWRateLimitEdit := AddLabeledEdit(PCGWPage, 'GSBS_PCGW_RATE_LIMIT', '2s', 'Delay between PCGW requests', Top, False);
-  PCGWUserAgentEdit := AddLabeledEdit(PCGWPage, 'GSBS_PCGW_USER_AGENT', 'GSBS Windows Installer (+https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-)', 'Custom User-Agent for PCGW requests', Top, False);
+  PCGWUserAgentEdit := AddLabeledEdit(PCGWPage, 'GSBS_PCGW_USER_AGENT', 'GSBS Windows Installer (+https://github.com/dlommm/GSBS-Game-Sync-Backup-Service)', 'Custom User-Agent for PCGW requests', Top, False);
   PCGWStoreFullWikitextCheck := AddLabeledCheck(PCGWPage, 'GSBS_PCGW_STORE_FULL_WIKITEXT', 'Stores compressed full-page wikitext for debugging/forensics', Top);
   PCGWStoreFullWikitextCheck.Checked := True;
   PCGWMaxPagesEdit := AddLabeledEdit(PCGWPage, 'GSBS_PCGW_MAX_PAGES_PER_RUN', '5000', 'Ingest budget per sync run', Top, False);

@@ -3,7 +3,7 @@
 
 #define MyAppName "GSBS Client"
 #define MyAppPublisher "GSBS"
-#define MyAppURL "https://github.com/dlommm/GSBS--Game-Sync---Backup-Service-"
+#define MyAppURL "https://github.com/dlommm/GSBS-Game-Sync-Backup-Service"
 #define MyAppExeName "gsbs-client.exe"
 
 [Setup]
@@ -25,6 +25,12 @@ WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+; Detect a running tray client before overwriting its exe. The client creates
+; a session-Local mutex for the single-instance decision plus a Global one
+; purely as this beacon (see client/single_instance_windows.go).
+AppMutex=Local\GSBSClientSingleInstance,Global\GSBSClientSingleInstance
+CloseApplications=yes
+RestartApplications=no
 
 ; --- Branding (assets generated from assets/images/ by cmd/gen-branding) ---
 SetupIconFile=..\..\..\client\icon.ico
@@ -54,9 +60,11 @@ Name: "autostart"; Description: "Run GSBS Client at Windows startup"; GroupDescr
 Source: "{#SourceDir}\gsbs-client-windows-amd64.exe"; DestDir: "{app}"; DestName: "{#MyAppExeName}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--minimized"; Tasks: startmenuicon
+; AppUserModelID must match beeep.AppName ("GSBS", set in client/main.go):
+; toasts from an unregistered AppID can be silently dropped on Win10/11.
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--minimized"; AppUserModelID: "GSBS"; Tasks: startmenuicon
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--minimized"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--minimized"; AppUserModelID: "GSBS"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GSBS"; ValueData: """{app}\{#MyAppExeName}"" --minimized"; Flags: uninsdeletevalue; Tasks: autostart
