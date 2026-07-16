@@ -19,9 +19,23 @@ func wireSyncTrayHooks() {
 			cacheGameTitle(gameID, gameTitle)
 		}
 		RecordSaveEvent(gameID, pathKey, dir, err)
+		entry := ActivityEntry{
+			GameID: gameID, Title: gameTitleFor(gameID), PathKey: pathKey,
+			Direction: string(dir), OK: err == nil,
+		}
+		if err != nil {
+			entry.Detail = err.Error()
+		}
+		RecordActivity(entry)
 	}
 	clientsync.OnPullProgress = UpdateSyncProgress
-	clientsync.OnOutboxEnqueued = RecordPendingUpload
+	clientsync.OnOutboxEnqueued = func(gameID, pathKey string) {
+		RecordPendingUpload(gameID, pathKey)
+		RecordActivity(ActivityEntry{
+			GameID: gameID, Title: gameTitleFor(gameID), PathKey: pathKey,
+			Direction: "queued", OK: true, Detail: "server unreachable — queued for retry",
+		})
+	}
 	clientsync.OnQuotaError = notifyQuotaError
 	clientsync.OnAuthError = notifyAuthError
 	clientsync.OnPushError = func(gameID, pathKey, msg string) {

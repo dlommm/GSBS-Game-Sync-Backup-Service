@@ -324,6 +324,7 @@ type SummaryResponse struct {
 		GameTitle    string `json:"game_title"`
 		UpdatedAt    string `json:"updated_at"`
 		ContentHash  string `json:"content_hash"`
+		SizeBytes    int64  `json:"size_bytes,omitempty"`
 		Encrypted    bool   `json:"encrypted,omitempty"`
 		RelativePath string `json:"relative_path,omitempty"`
 	} `json:"saves"`
@@ -1135,26 +1136,106 @@ func (c *Client) Push(ctx context.Context, gameID, pathKey, filePath, relativePa
 
 // FetchAccountSettings returns server-side account flags (e.g. encryption_enabled).
 func (c *Client) FetchAccountSettings(ctx context.Context) (encryptionEnabled bool, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/account", nil)
+	info, err := c.FetchAccountInfo(ctx)
 	if err != nil {
 		return false, err
+	}
+	return info.EncryptionEnabled, nil
+}
+
+// AccountInfo is the client-visible account state from GET /api/account.
+type AccountInfo struct {
+	EncryptionEnabled bool  `json:"encryption_enabled"`
+	UsageBytes        int64 `json:"usage_bytes"` // 0 on pre-5.4 servers
+	QuotaBytes        int64 `json:"quota_bytes"` // 0 = unlimited or pre-5.4 server
+}
+
+// FetchAccountInfo returns account settings plus storage usage/quota (the
+// storage fields are absent on pre-5.4 servers and decode as zero).
+func (c *Client) FetchAccountInfo(ctx context.Context) (AccountInfo, error) {
+	var info AccountInfo
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/account", nil)
+	if err != nil {
+		return info, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.getToken())
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return false, err
+		return info, err
 	}
 	defer closeIO(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("account: status %d", resp.StatusCode)
+		return info, fmt.Errorf("account: status %d", resp.StatusCode)
 	}
-	var out struct {
-		EncryptionEnabled bool `json:"encryption_enabled"`
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return info, err
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return false, err
+	return info, nil
+}
+
+// SaveSummary is a lightweight per-slot view for local UI (storage panel).
+type SaveSummary struct {
+	GameID    string
+	GameTitle string
+	PathKey   string
+	SizeBytes int64
+}
+
+// FetchSaveSummaries lists the account's save slots with sizes.
+func (c *Client) FetchSaveSummaries(ctx context.Context) ([]SaveSummary, error) {
+	summaries, err := c.pullSummaries(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return out.EncryptionEnabled, nil
+	out := make([]SaveSummary, 0, len(summaries.Saves))
+	for _, s := range summaries.Saves {
+		out = append(out, SaveSummary{
+			GameID: s.GameID, GameTitle: s.GameTitle, PathKey: s.PathKey, SizeBytes: s.SizeBytes,
+		})
+	}
+	return out, nil
+}
+
+// SaveVersion is one row of a slot's server-side version history (mirrors
+// the server's SaveVersionInfo JSON shape).
+type SaveVersion struct {
+	Version     int
+	UpdatedAt   string
+	SizeBytes   int64
+	ChangeBytes int64
+	ClientName  string
+}
+
+// ListVersionsTyped returns the version history decoded into typed rows
+// (ListVersions predates it and returns raw maps; templates need types).
+func (c *Client) ListVersionsTyped(ctx context.Context, gameID, pathKey string) ([]SaveVersion, error) {
+	raw, err := c.ListVersions(ctx, gameID, pathKey)
+	if err != nil {
+		return nil, err
+	}
+	num := func(v interface{}) int64 {
+		if f, ok := v.(float64); ok {
+			return int64(f)
+		}
+		return 0
+	}
+	str := func(v interface{}) string {
+		if s, ok := v.(string); ok {
+			return s
+		}
+		return ""
+	}
+	out := make([]SaveVersion, 0, len(raw))
+	for _, m := range raw {
+		out = append(out, SaveVersion{
+			Version:     int(num(m["version"])),
+			UpdatedAt:   str(m["updated_at"]),
+			SizeBytes:   num(m["size_bytes"]),
+			ChangeBytes: num(m["change_bytes"]),
+			ClientName:  str(m["client_name"]),
+		})
+	}
+	return out, nil
 }
 
 // ListVersions returns version history for a save slot.

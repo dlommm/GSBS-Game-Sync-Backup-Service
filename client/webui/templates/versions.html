@@ -1,0 +1,60 @@
+{{define "versions"}}{{template "layout" .}}{{end}}
+{{define "versions_content"}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Version history</h1>
+    <p class="page-sub">{{if .GameTitle}}{{.GameTitle}}{{else}}{{.GameID}}{{end}} — restore any earlier save right from this PC.</p>
+  </div>
+  <a class="btn-ghost-sm" href="/insights">Back to Insights</a>
+</div>
+
+{{if .Restored}}<div class="alert alert-success">Version restored on the server — the restored save syncs down on the next pull (started automatically).</div>{{end}}
+{{if .RestoreError}}<div class="alert alert-error">Restore failed: {{.RestoreError}}</div>{{end}}
+
+{{if .NotConnected}}
+<section class="panel">
+  <div class="panel-empty">
+    <p>Not connected — the sync engine isn't running or this PC isn't logged in.</p>
+    <p class="hint"><a href="/">Open Status</a> to connect, then come back.</p>
+  </div>
+</section>
+{{else}}
+<section class="panel">
+  <div class="panel-header-actions">
+    <h2>Server versions</h2>
+    <span class="cell-muted">{{len .Versions}} kept</span>
+  </div>
+  {{if .Versions}}
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th scope="col">Version</th><th scope="col">Saved</th><th scope="col">Size</th><th scope="col">Change</th><th scope="col">Device</th><th scope="col" class="th-action"></th></tr></thead>
+      <tbody>
+        {{range .Versions}}
+        <tr>
+          <td class="cell-primary">v{{.Version}}{{if .Current}} <span class="pill-yes">current</span>{{end}}</td>
+          <td class="cell-muted" title="{{.UpdatedAt}}">{{formatTime .UpdatedAt}}</td>
+          <td class="cell-size">{{formatBytes .SizeBytes}}</td>
+          <td class="cell-muted">{{if .ChangeBytes}}{{formatBytes .ChangeBytes}}{{else}}—{{end}}</td>
+          <td class="cell-muted">{{if .ClientName}}{{.ClientName}}{{else}}—{{end}}</td>
+          <td class="cell-action">
+            {{if not .Current}}
+            <form method="post" action="/versions/restore" class="inline-form">
+              <input type="hidden" name="game_id" value="{{$.GameID}}">
+              <input type="hidden" name="path_key" value="{{$.PathKey}}">
+              <input type="hidden" name="version" value="{{.Version}}">
+              <button type="submit" class="btn-ghost-sm">Restore</button>
+            </form>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <p class="panel-subtitle">Restoring makes the chosen version the server's current save; your local file updates on the next sync. The replaced version stays in this history.</p>
+  {{else}}
+  <div class="panel-empty"><p>No versions recorded for this save yet — history appears after the first few syncs.</p></div>
+  {{end}}
+</section>
+{{end}}
+{{end}}

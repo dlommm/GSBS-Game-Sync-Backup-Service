@@ -675,6 +675,14 @@ func (h *Handler) handleAccount(w http.ResponseWriter, r *http.Request, userID s
 	if ready, rerr := h.store.CryptoV2Ready(r.Context(), userID); rerr == nil {
 		resp["crypto_v2_ready"] = ready
 	}
+	// Storage state for the client's local dashboard (since 5.4): quota was
+	// previously only observable as a 413 error toast at push time.
+	if usage, uerr := h.store.StorageUsage(r.Context(), userID); uerr == nil {
+		resp["usage_bytes"] = usage
+	}
+	if quota, qerr := h.store.UserQuotaBytes(r.Context(), userID); qerr == nil {
+		resp["quota_bytes"] = quota
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 

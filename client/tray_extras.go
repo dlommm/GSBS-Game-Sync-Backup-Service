@@ -16,8 +16,16 @@ func openDashboard(cfg *config) {
 	_ = open.Run(cfg.ServerURL + "/dashboard")
 }
 
-// openSaveVersions opens the WebUI version history for a save slot.
+// openSaveVersions opens the version history for a save slot — the client's
+// own local page when the setup server is running (restore works right
+// there), otherwise the server WebUI.
 func openSaveVersions(cfg *config, gameID, pathKey string) {
+	if base := GetSetupURL(); base != "" {
+		u := fmt.Sprintf("%s/versions?game_id=%s&path_key=%s",
+			base, url.QueryEscape(gameID), url.QueryEscape(pathKey))
+		_ = open.Run(u)
+		return
+	}
 	if cfg == nil || cfg.ServerURL == "" {
 		return
 	}

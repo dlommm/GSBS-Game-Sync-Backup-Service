@@ -207,12 +207,13 @@ type InsightsBar struct {
 
 // InsightsGameRow is one matched game's sync state.
 type InsightsGameRow struct {
-	GameID     string
-	Title      string
-	Status     string // ok, conflict, pending, error, syncing
-	Direction  string // push / pull
-	LastSyncAt string // RFC3339
-	Conflict   bool
+	GameID       string
+	Title        string
+	Status       string // ok, conflict, pending, error, syncing
+	Direction    string // push / pull
+	LastSyncAt   string // RFC3339
+	Conflict     bool
+	FirstPathKey string // for the local Versions page link
 }
 
 // InsightsConflictRow is one recorded save conflict.
@@ -236,6 +237,23 @@ type InsightsOutboxRow struct {
 	NextRetryAt string
 }
 
+// InsightsActivityRow is one line of the recent-activity feed.
+type InsightsActivityRow struct {
+	At        string // RFC3339
+	Title     string
+	PathKey   string
+	Direction string // push / pull / queued
+	OK        bool
+	Detail    string
+}
+
+// InsightsStorageRow is one game's server-side storage footprint.
+type InsightsStorageRow struct {
+	Title     string
+	SizeBytes int64
+	Pct       int // of the largest game (bar width)
+}
+
 // InsightsPageData drives the client's local Insights page.
 type InsightsPageData struct {
 	PageData
@@ -248,6 +266,49 @@ type InsightsPageData struct {
 	Games         []InsightsGameRow
 	Conflicts     []InsightsConflictRow
 	Outbox        []InsightsOutboxRow
+	Activity      []InsightsActivityRow
+	// Resolving is set right after a conflict-resolution POST (it runs in the
+	// background and can take a while).
+	Resolving bool
+	// Storage panel (server-side usage; hidden when unavailable).
+	StorageGames []InsightsStorageRow
+	UsageBytes   int64
+	QuotaBytes   int64 // 0 = unlimited/unknown
+	UsagePct     int
+	StorageKnown bool
+}
+
+// ── Versions page (local save-version history + restore) ────────────────────
+
+// VersionRow is one restorable server-side version of a save slot.
+type VersionRow struct {
+	Version     int
+	UpdatedAt   string
+	SizeBytes   int64
+	ChangeBytes int64
+	ClientName  string
+	Current     bool
+}
+
+// VersionsPageData drives the local version-history page.
+type VersionsPageData struct {
+	PageData
+	GameID       string
+	PathKey      string
+	GameTitle    string
+	Versions     []VersionRow
+	Restored     bool
+	RestoreError string
+	NotConnected bool
+}
+
+// RenderVersionsPage renders the local save-version history page.
+func RenderVersionsPage(w http.ResponseWriter, data VersionsPageData) {
+	data.PageName = "versions"
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := tmpl.ExecuteTemplate(w, "versions", data); err != nil {
+		http.Error(w, "Template error: "+err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // RenderInsightsPage renders the local sync-insights page.

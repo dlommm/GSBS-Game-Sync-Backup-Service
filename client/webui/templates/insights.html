@@ -81,29 +81,95 @@
     <h2>Conflicts</h2>
     <span class="cell-muted">{{len .Conflicts}} recorded</span>
   </div>
+  {{if .Resolving}}<div class="alert alert-info">Resolving in the background — this row disappears once the sync completes (refresh in a moment).</div>{{end}}
   {{if .Conflicts}}
   <div class="table-wrap">
     <table class="data-table">
-      <thead><tr><th scope="col">Detected</th><th scope="col">Game</th><th scope="col">File</th><th scope="col">Resolution</th><th scope="col">Local changed</th><th scope="col">Server changed</th></tr></thead>
+      <thead><tr><th scope="col">Detected</th><th scope="col">Game</th><th scope="col">File</th><th scope="col">Local changed</th><th scope="col">Server changed</th><th scope="col" class="th-action">Resolve</th></tr></thead>
       <tbody>
         {{range .Conflicts}}
         <tr>
           <td class="cell-muted" title="{{.DetectedAt}}">{{formatTime .DetectedAt}}</td>
           <td class="cell-primary">{{.GameID}}</td>
           <td class="cell-muted" title="{{.FilePath}}"><code class="code-inline">{{.PathKey}}</code></td>
-          <td>{{if .Policy}}<span class="badge-warn">{{.Policy}}</span>{{else}}—{{end}}</td>
           <td class="cell-muted">{{if .LocalMtime}}{{formatTime .LocalMtime}}{{else}}—{{end}}</td>
           <td class="cell-muted">{{if .ServerUpdatedAt}}{{formatTime .ServerUpdatedAt}}{{else}}—{{end}}</td>
+          <td class="cell-action">
+            <form method="post" action="/insights/resolve" class="inline-form">
+              <input type="hidden" name="game_id" value="{{.GameID}}">
+              <input type="hidden" name="path_key" value="{{.PathKey}}">
+              <input type="hidden" name="file_path" value="{{.FilePath}}">
+              <button type="submit" name="choice" value="keep_local" class="btn-ghost-sm">Keep local</button>
+              <button type="submit" name="choice" value="use_server" class="btn-ghost-sm">Use server</button>
+            </form>
+          </td>
         </tr>
         {{end}}
       </tbody>
     </table>
   </div>
-  <p class="panel-subtitle">The same save changed on two PCs; your conflict policy chose the winner. Older versions are restorable from the server dashboard.</p>
+  <p class="panel-subtitle">The same save changed on two PCs. "Keep local" uploads this PC's copy; "Use server" downloads the server's. Either way the losing version stays restorable in version history.</p>
   {{else}}
   <div class="panel-empty"><p>No conflicts recorded. Your devices are taking turns nicely.</p></div>
   {{end}}
 </section>
+
+<div class="analytics-cols">
+  <section class="panel">
+    <div class="panel-header"><h2>Recent activity — this PC</h2></div>
+    {{if .Activity}}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th scope="col">When</th><th scope="col">Game</th><th scope="col">What</th></tr></thead>
+        <tbody>
+          {{range .Activity}}
+          <tr>
+            <td class="cell-muted" title="{{.At}}">{{formatTime .At}}</td>
+            <td class="cell-primary">{{if .Title}}{{.Title}}{{else}}—{{end}}</td>
+            <td>
+              {{if not .OK}}<span class="badge-failed">{{.Direction}} failed</span>
+              {{else if eq .Direction "push"}}<span class="badge-success">uploaded</span>
+              {{else if eq .Direction "pull"}}<span class="badge-success">downloaded</span>
+              {{else}}<span class="badge-warn">queued</span>{{end}}
+              {{if .Detail}}<span class="cell-muted"> — {{.Detail}}</span>{{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <div class="panel-empty"><p>No activity recorded yet — entries appear as saves sync.</p></div>
+    {{end}}
+  </section>
+
+  <section class="panel">
+    <div class="panel-header"><h2>Server storage</h2></div>
+    {{if .StorageKnown}}
+    {{if .QuotaBytes}}
+    <p class="panel-subtitle">{{formatBytes .UsageBytes}} of {{formatBytes .QuotaBytes}} used ({{.UsagePct}}%). Quota counts saves plus version history.</p>
+    <div class="topgame-bar-track u-mb-sm"><span data-width-pct="{{.UsagePct}}" class="topgame-bar-fill has-bar-width"></span></div>
+    {{else}}
+    <p class="panel-subtitle">{{formatBytes .UsageBytes}} stored on the server (no quota set).</p>
+    {{end}}
+    {{if .StorageGames}}
+    <div class="topgames-list">
+      {{range .StorageGames}}
+      <div class="topgame-row">
+        <span class="topgame-info">
+          <span class="topgame-title">{{.Title}}</span>
+          <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
+        </span>
+        <span class="topgame-size">{{formatBytes .SizeBytes}}</span>
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+    {{else}}
+    <div class="panel-empty"><p>Storage details unavailable — the server may be offline or older than 5.4.</p></div>
+    {{end}}
+  </section>
+</div>
 
 <section class="panel">
   <div class="panel-header-actions">
@@ -128,6 +194,7 @@
           <td class="cell-muted" {{if .LastSyncAt}}title="{{.LastSyncAt}}"{{end}}>{{if .LastSyncAt}}{{formatTime .LastSyncAt}}{{else}}—{{end}}</td>
           <td class="cell-muted">{{if .Direction}}{{.Direction}}{{else}}—{{end}}</td>
           <td class="cell-action">
+            {{if .FirstPathKey}}<a class="btn-ghost-sm" href="/versions?game_id={{urlquery .GameID}}&amp;path_key={{urlquery .FirstPathKey}}">Versions</a>{{end}}
             <button type="button" class="btn-ghost-sm" data-open-folder="{{.GameID}}">Reveal folder</button>
           </td>
         </tr>

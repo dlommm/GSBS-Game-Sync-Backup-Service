@@ -3,16 +3,20 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -64,6 +68,9 @@ func StartSetupServer() string {
 	mux.HandleFunc("/games/search", handleGamesSearch)
 	mux.HandleFunc("/games/add", handleGamesAdd)
 	mux.HandleFunc("/insights", handleInsightsPage)
+	mux.HandleFunc("/insights/resolve", handleInsightsResolve)
+	mux.HandleFunc("/versions", handleVersionsPage)
+	mux.HandleFunc("/versions/restore", handleVersionsRestore)
 	mux.HandleFunc("/open-folder", handleOpenFolder)
 	mux.HandleFunc("/api/check-update", handleCheckUpdate)
 
@@ -125,6 +132,25 @@ func openNative(path string) error {
 
 // handleOpenFolder reveals a watched game folder (or the config folder) in the
 // OS file manager. Only paths the client already knows about are allowed.
+// resolveGameFolder returns the configured save directory for a game ("" when
+// unknown). Shared by the local UI's Reveal-folder and the tray's per-game
+// Open-save-folder action.
+func resolveGameFolder(gameID string) string {
+	if gameID == "" {
+		return ""
+	}
+	cfg, _ := loadConfig()
+	if cfg == nil {
+		return ""
+	}
+	for _, wp := range cfg.WatchPaths {
+		if wp.GameID == gameID && wp.Directory != "" {
+			return wp.Directory
+		}
+	}
+	return ""
+}
+
 func handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
@@ -136,16 +162,7 @@ func handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 		dir, _ := os.UserConfigDir()
 		target = filepath.Join(dir, "gsbs")
 	case "game":
-		gameID := r.URL.Query().Get("game_id")
-		cfg, _ := loadConfig()
-		if cfg != nil && gameID != "" {
-			for _, wp := range cfg.WatchPaths {
-				if wp.GameID == gameID && wp.Directory != "" {
-					target = wp.Directory
-					break
-				}
-			}
-		}
+		target = resolveGameFolder(r.URL.Query().Get("game_id"))
 	}
 	if target == "" {
 		http.Error(w, "unknown folder", http.StatusNotFound)
@@ -242,10 +259,11 @@ func handleInsightsPage(w http.ResponseWriter, r *http.Request) {
 	snap := GetTraySnapshot()
 	for _, g := range snap.Games {
 		row := clientwebui.InsightsGameRow{
-			GameID:   g.GameID,
-			Title:    g.Title,
-			Status:   string(g.Status),
-			Conflict: g.HasConflict,
+			GameID:       g.GameID,
+			Title:        g.Title,
+			Status:       string(g.Status),
+			Conflict:     g.HasConflict,
+			FirstPathKey: g.FirstPathKey,
 		}
 		if row.Title == "" {
 			row.Title = g.GameID
@@ -278,7 +296,191 @@ func handleInsightsPage(w http.ResponseWriter, r *http.Request) {
 			NextRetryAt: e.NextRetryAt.UTC().Format(time.RFC3339),
 		})
 	}
+
+	data.Resolving = r.URL.Query().Get("resolving") == "1"
+	for _, a := range RecentActivity(30) {
+		data.Activity = append(data.Activity, clientwebui.InsightsActivityRow{
+			At: a.At.UTC().Format(time.RFC3339), Title: a.Title, PathKey: a.PathKey,
+			Direction: a.Direction, OK: a.OK, Detail: a.Detail,
+		})
+	}
+	fillInsightsStorage(&data)
 	clientwebui.RenderInsightsPage(w, data)
+}
+
+// fillInsightsStorage adds the server-storage panel data (best-effort with a
+// short timeout; the panel hides itself when the server is unreachable or
+// pre-5.4). Live fetch, not cached — this page is opened deliberately.
+func fillInsightsStorage(data *clientwebui.InsightsPageData) {
+	c := getSyncClient()
+	if c == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	summaries, err := c.FetchSaveSummaries(ctx)
+	if err != nil {
+		return
+	}
+	type agg struct {
+		title string
+		size  int64
+	}
+	perGame := map[string]*agg{}
+	var total int64
+	for _, s := range summaries {
+		a := perGame[s.GameID]
+		if a == nil {
+			a = &agg{title: s.GameTitle}
+			perGame[s.GameID] = a
+		}
+		if a.title == "" {
+			a.title = s.GameID
+		}
+		a.size += s.SizeBytes
+		total += s.SizeBytes
+	}
+	rows := make([]clientwebui.InsightsStorageRow, 0, len(perGame))
+	var maxSize int64 = 1
+	for _, a := range perGame {
+		if a.size > maxSize {
+			maxSize = a.size
+		}
+	}
+	for _, a := range perGame {
+		rows = append(rows, clientwebui.InsightsStorageRow{
+			Title: a.title, SizeBytes: a.size, Pct: int(a.size * 100 / maxSize),
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].SizeBytes > rows[j].SizeBytes })
+	if len(rows) > 10 {
+		rows = rows[:10]
+	}
+	data.StorageGames = rows
+	data.UsageBytes = total
+	data.StorageKnown = true
+	if info, ierr := c.FetchAccountInfo(ctx); ierr == nil {
+		if info.UsageBytes > 0 {
+			// Server truth includes version history; prefer it over the sum
+			// of current saves.
+			data.UsageBytes = info.UsageBytes
+		}
+		data.QuotaBytes = info.QuotaBytes
+		if info.QuotaBytes > 0 {
+			pct := int(data.UsageBytes * 100 / info.QuotaBytes)
+			if pct > 100 {
+				pct = 100
+			}
+			data.UsagePct = pct
+		}
+	}
+}
+
+// handleInsightsResolve resolves one conflict from the local UI (per-row
+// Keep local / Use server — previously tray-only and all-or-nothing).
+func handleInsightsResolve(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	gameID := r.Form.Get("game_id")
+	pathKey := r.Form.Get("path_key")
+	filePath := r.Form.Get("file_path")
+	choice := clientsync.ResolveChoice(r.Form.Get("choice"))
+	if gameID == "" || pathKey == "" || (choice != clientsync.ResolveKeepLocal && choice != clientsync.ResolveUseServer) {
+		http.Error(w, "missing or invalid parameters", http.StatusBadRequest)
+		return
+	}
+	// resolveConflictAction can block on network for up to 2 minutes — run it
+	// in the background and let the page show a "resolving" banner.
+	go resolveConflictAction(gameID, pathKey, filePath, choice)
+	http.Redirect(w, r, "/insights?resolving=1", http.StatusSeeOther)
+}
+
+// handleVersionsPage lists a save slot's server-side version history locally
+// (the ListVersions/RestoreVersion client APIs existed since 4.x with no UI —
+// the tray used to bounce to the server WebUI).
+func handleVersionsPage(w http.ResponseWriter, r *http.Request) {
+	gameID := r.URL.Query().Get("game_id")
+	pathKey := r.URL.Query().Get("path_key")
+	data := clientwebui.VersionsPageData{
+		PageData: clientwebui.PageData{NavActive: "insights", Title: "Version history"},
+		GameID:   gameID,
+		PathKey:  pathKey,
+	}
+	data.GameTitle = gameTitleFor(gameID)
+	data.Restored = r.URL.Query().Get("restored") == "1"
+	data.RestoreError = restoreErrorMessage(r.URL.Query().Get("error"))
+	c := getSyncClient()
+	if c == nil || gameID == "" || pathKey == "" {
+		data.NotConnected = true
+		clientwebui.RenderVersionsPage(w, data)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	versions, err := c.ListVersionsTyped(ctx, gameID, pathKey)
+	if err != nil {
+		log.Printf("versions: list: %v", err)
+		data.NotConnected = true
+		clientwebui.RenderVersionsPage(w, data)
+		return
+	}
+	for i, v := range versions {
+		data.Versions = append(data.Versions, clientwebui.VersionRow{
+			Version: v.Version, UpdatedAt: v.UpdatedAt, SizeBytes: v.SizeBytes,
+			ChangeBytes: v.ChangeBytes, ClientName: v.ClientName,
+			Current: i == 0,
+		})
+	}
+	clientwebui.RenderVersionsPage(w, data)
+}
+
+// restoreErrorMessage maps restore error codes to fixed messages (never
+// reflect raw query text into the page).
+func restoreErrorMessage(code string) string {
+	switch code {
+	case "":
+		return ""
+	case "restore_failed":
+		return "the server could not restore that version — it may have been pruned."
+	default:
+		return "unexpected error; see the client log."
+	}
+}
+
+func handleVersionsRestore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	gameID := r.Form.Get("game_id")
+	pathKey := r.Form.Get("path_key")
+	version, _ := strconv.Atoi(r.Form.Get("version"))
+	back := "/versions?game_id=" + url.QueryEscape(gameID) + "&path_key=" + url.QueryEscape(pathKey)
+	c := getSyncClient()
+	if c == nil || gameID == "" || pathKey == "" || version <= 0 {
+		http.Redirect(w, r, back+"&error=restore_failed", http.StatusSeeOther)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	if err := c.RestoreVersion(ctx, gameID, pathKey, version); err != nil {
+		log.Printf("versions: restore v%d game=%s: %v", version, gameID, err)
+		http.Redirect(w, r, back+"&error=restore_failed", http.StatusSeeOther)
+		return
+	}
+	// Pull the restored content down right away.
+	triggerSyncNow()
+	http.Redirect(w, r, back+"&restored=1", http.StatusSeeOther)
 }
 
 // GetSetupURL returns the setup page URL if the server started, else "".
