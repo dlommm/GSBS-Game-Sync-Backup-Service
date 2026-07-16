@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	clientsync "github.com/gsbs/gsbs/client/sync"
+	clientwebui "github.com/gsbs/gsbs/client/webui"
 	"github.com/gsbs/gsbs/pkg/paths"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -126,4 +128,48 @@ func TestActivityLogRoundTrip(t *testing.T) {
 	recent = RecentActivity(10)
 	require.Len(t, recent, 2, "persisted entries survive reload")
 	assert.Equal(t, "boom", recent[0].Detail)
+}
+
+// Test-connection: reachable server, error status, and unreachable host.
+func TestTestConnectionHandler(t *testing.T) {
+	isolateHome(t)
+	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/health" {
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer healthy.Close()
+
+	post := func(serverURL string) map[string]interface{} {
+		req := httptest.NewRequest("POST", "/setup/test-connection",
+			strings.NewReader("server_url="+serverURL))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		handleTestConnection(rec, req)
+		var out map[string]interface{}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+		return out
+	}
+
+	assert.Equal(t, true, post(healthy.URL)["ok"])
+	assert.Equal(t, false, post("http://127.0.0.1:1")["ok"], "closed port is unreachable")
+	assert.Equal(t, false, post("ftp://example.com")["ok"], "non-http scheme rejected")
+	assert.Equal(t, false, post("not a url")["ok"])
+}
+
+// The settings page must never render the stored passphrase value.
+func TestSettingsPageNeverRendersPassphrase(t *testing.T) {
+	isolateHome(t)
+	const secret = "super-secret-passphrase-value"
+	cfg := blankConfig()
+	cfg.EncryptionPassphrase = secret
+	data := settingsPageData(cfg)
+	require.True(t, data.PassphraseSet)
+
+	rec := httptest.NewRecorder()
+	clientwebui.RenderSettingsPage(rec, data)
+	require.Equal(t, 200, rec.Code)
+	assert.NotContains(t, rec.Body.String(), secret, "passphrase value must never reach HTML")
 }

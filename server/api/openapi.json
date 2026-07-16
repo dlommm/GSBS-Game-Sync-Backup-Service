@@ -326,7 +326,7 @@
       },
       "post": {
         "summary": "Push a save (whole-file). Body is the raw save bytes (ciphertext when encrypted).",
-        "description": "Preconditions: X-GSBS-If-Hash (optimistic concurrency) or X-GSBS-If-Absent (first-push guard) → 409 on mismatch. For unencrypted pushes the server verifies X-Content-Hash. Storage quota (counting version history) is enforced in-transaction.",
+        "description": "Preconditions: X-GSBS-If-Hash (optimistic concurrency) or X-GSBS-If-Absent (first-push guard) \u2192 409 on mismatch. For unencrypted pushes the server verifies X-Content-Hash. Storage quota (counting version history) is enforced in-transaction.",
         "security": [
           {
             "bearerAuth": []
@@ -720,7 +720,7 @@
     },
     "/api/events": {
       "get": {
-        "summary": "Server-Sent Events stream (save-updated, client-activity, …)",
+        "summary": "Server-Sent Events stream (save-updated, client-activity, \u2026)",
         "security": [
           {
             "bearerAuth": []
@@ -774,7 +774,7 @@
     },
     "/api/account": {
       "get": {
-        "summary": "Account settings (encryption_enabled, crypto_v2_ready)",
+        "summary": "Account settings (encryption_enabled, crypto_v2_ready, usage_bytes, quota_bytes)",
         "security": [
           {
             "bearerAuth": []
@@ -883,7 +883,7 @@
     "/api/conflicts/resolve": {
       "post": {
         "summary": "Mark one of my conflicts resolved",
-        "description": "Marks a conflict resolved (kept_server, kept_local, or dismissed). Does not modify save content — use restore or a fresh push for that.",
+        "description": "Marks a conflict resolved (kept_server, kept_local, or dismissed). Does not modify save content \u2014 use restore or a fresh push for that.",
         "security": [
           {
             "bearerAuth": []
@@ -1107,6 +1107,45 @@
           },
           "400": {
             "description": "Missing fields or implausible bounds"
+          }
+        }
+      }
+    },
+    "/api/account/encryption": {
+      "post": {
+        "summary": "Enable account E2E encryption (enable-only; disabling requires the server web interface)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Enabled"
+          },
+          "403": {
+            "description": "Disable attempted via device token"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }

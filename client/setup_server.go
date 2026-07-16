@@ -49,6 +49,8 @@ func StartSetupServer() string {
 	mux.HandleFunc("/quick-actions", handleQuickActionsPage)
 	mux.HandleFunc("/settings", handleSettingsPage)
 	mux.HandleFunc("/settings/save", handleSettingsSave)
+	mux.HandleFunc("/settings/encryption", handleEncryptionEnable)
+	mux.HandleFunc("/setup/test-connection", handleTestConnection)
 	mux.HandleFunc("/help", handleHelpPage)
 	mux.HandleFunc("/logs", handleLogsPage)
 	mux.HandleFunc("/partial/logs", handleLogsPartial)
@@ -400,6 +402,47 @@ func handleInsightsResolve(w http.ResponseWriter, r *http.Request) {
 	// in the background and let the page show a "resolving" banner.
 	go resolveConflictAction(gameID, pathKey, filePath, choice)
 	http.Redirect(w, r, "/insights?resolving=1", http.StatusSeeOther)
+}
+
+// handleTestConnection checks server reachability before the user submits
+// credentials (the setup form previously logged in blind).
+func handleTestConnection(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	raw := strings.TrimSpace(r.Form.Get("server_url"))
+	writeOut := func(ok bool, detail string) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": ok, "detail": detail})
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		writeOut(false, "Enter a full URL like https://gsbs.example.com")
+		return
+	}
+	target := u.Scheme + "://" + u.Host + strings.TrimRight(u.Path, "/") + "/api/health"
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, target, nil)
+	if err != nil {
+		writeOut(false, "Invalid URL.")
+		return
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		writeOut(false, "Unreachable: "+err.Error())
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		writeOut(false, fmt.Sprintf("Server answered with status %d — is this a GSBS server?", resp.StatusCode))
+		return
+	}
+	writeOut(true, "Server reachable ✓")
 }
 
 // handleInsightsSyncGame flushes one game's pending pushes and triggers a

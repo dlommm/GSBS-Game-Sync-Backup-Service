@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"runtime"
 	"sort"
@@ -42,7 +43,7 @@ func settingsPageData(cfg *config) clientwebui.SettingsPageData {
 		}
 		return strings.ToLower(an) < strings.ToLower(bn)
 	})
-	return clientwebui.SettingsPageData{
+	data := clientwebui.SettingsPageData{
 		PageData: clientwebui.PageData{
 			NavActive: "settings",
 			Title:     "Settings",
@@ -61,7 +62,73 @@ func settingsPageData(cfg *config) clientwebui.SettingsPageData {
 		QuietHoursStart:     cfg.QuietHoursStart,
 		QuietHoursEnd:       cfg.QuietHoursEnd,
 		PolicyOverrides:     overrides,
+		PassphraseSet:       cfg.EncryptionPassphrase != "",
 	}
+	if c := getSyncClient(); c != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if enc, err := c.FetchAccountSettings(ctx); err == nil {
+			data.EncryptionKnown = true
+			data.EncryptionAccountEnabled = enc
+		}
+		cancel()
+	}
+	return data
+}
+
+// handleEncryptionEnable is the guided E2E-encryption onboarding: store the
+// passphrase (keyring via saveConfig/secretSet), enable encryption on the
+// account (enable-only API), restart sync. The passphrase value is never
+// rendered back, logged, or echoed on validation errors.
+func handleEncryptionEnable(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	cfg, err := loadConfig()
+	if err != nil || cfg == nil {
+		http.Error(w, "config unavailable", http.StatusInternalServerError)
+		return
+	}
+	renderErr := func(msg string) {
+		data := settingsPageData(cfg)
+		data.Error = msg
+		clientwebui.RenderSettingsPage(w, data)
+	}
+	pass := r.Form.Get("passphrase")
+	confirm := r.Form.Get("passphrase_confirm")
+	if len(pass) < 8 {
+		renderErr("Passphrase must be at least 8 characters.")
+		return
+	}
+	if pass != confirm {
+		renderErr("Passphrases do not match.")
+		return
+	}
+	c := getSyncClient()
+	if c == nil {
+		renderErr("Not connected — log in and let sync start before enabling encryption.")
+		return
+	}
+	cfg.EncryptionPassphrase = pass
+	if err := saveConfig(cfg); err != nil {
+		renderErr("Could not store the passphrase: " + err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	if err := c.EnableEncryption(ctx); err != nil {
+		renderErr("The server rejected enabling encryption: " + err.Error())
+		return
+	}
+	saveAccountSettingsCache(cfg.ServerURL, true)
+	restartSync(cfg)
+	data := settingsPageData(cfg)
+	data.Success = "End-to-end encryption enabled. Set the SAME passphrase on your other devices; existing saves convert as they next change and sync."
+	clientwebui.RenderSettingsPage(w, data)
 }
 
 // validConflictPolicy reports whether p is a supported conflict policy.

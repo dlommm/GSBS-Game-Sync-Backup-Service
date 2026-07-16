@@ -43,6 +43,10 @@
     <form method="post" action="/login" class="auth-form" data-setup-login>
       <label for="server_url">Server address</label>
       <input id="server_url" name="server_url" type="url" required placeholder="https://gsbs.example.com" value="{{.SetupServerURL}}" autocomplete="url" spellcheck="false" autofocus>
+      <p class="field-hint">
+        <button type="button" id="testConnBtn" class="btn-ghost-sm" data-test-connection>Test connection</button>
+        <span id="testConnResult" aria-live="polite"></span>
+      </p>
       <label for="username">Username</label>
       <input id="username" name="username" type="text" required autocomplete="username">
       <label for="password">Password</label>

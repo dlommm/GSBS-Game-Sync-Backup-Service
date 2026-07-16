@@ -114,6 +114,32 @@
     });
   }
 
+  /* ---- Setup: test connection before logging in ---- */
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-test-connection]');
+    if (!btn) return;
+    var urlInput = document.getElementById('server_url');
+    var result = document.getElementById('testConnResult');
+    if (!urlInput || !result) return;
+    btn.disabled = true;
+    result.textContent = 'Testing…';
+    var body = new URLSearchParams();
+    body.set('server_url', urlInput.value);
+    fetch('/setup/test-connection', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() })
+      .then(function (r) { return r.json(); })
+      .then(function (out) {
+        btn.disabled = false;
+        result.textContent = out.detail || (out.ok ? 'Server reachable ✓' : 'Unreachable');
+        result.className = out.ok ? 'badge-success' : 'badge-failed';
+      })
+      .catch(function () {
+        btn.disabled = false;
+        result.textContent = 'Could not reach the local client';
+        result.className = 'badge-failed';
+      });
+  });
+
   /* ---- Check for updates ---- */
 
   document.addEventListener('click', function (e) {

@@ -65,3 +65,42 @@ func TestAccountIncludesUsageAndQuota(t *testing.T) {
 		t.Fatalf("quota_bytes = %d, want %d", out.QuotaBytes, 1<<20)
 	}
 }
+
+// POST /api/account/encryption is ENABLE-only: a stolen device token must not
+// be able to downgrade the account to plaintext uploads.
+func TestEncryptionEndpointEnableOnly(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := auth.NewService(st)
+	ctx := context.Background()
+	uid, _ := svc.RegisterUser(ctx, "u1", "password123")
+	_, token, _ := svc.Login(ctx, "u1", "password123", "test-client", "linux")
+	h := NewHandler(st, svc, false, nil, nil, nil, nil, nil, nil, 0, false, "", "test")
+
+	do := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/account/encryption", bytes.NewReader([]byte(body)))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if rec := do(`{"enabled":true}`); rec.Code != http.StatusOK {
+		t.Fatalf("enable: %d %s", rec.Code, rec.Body.String())
+	}
+	enabled, _ := st.IsEncryptionEnabled(ctx, uid)
+	if !enabled {
+		t.Fatal("encryption must be enabled after the call")
+	}
+	if rec := do(`{"enabled":false}`); rec.Code != http.StatusForbidden {
+		t.Fatalf("disable must be rejected with 403, got %d", rec.Code)
+	}
+	enabled, _ = st.IsEncryptionEnabled(ctx, uid)
+	if !enabled {
+		t.Fatal("encryption must stay enabled after a rejected disable")
+	}
+}

@@ -55,6 +55,11 @@ type SettingsPageData struct {
 	QuietHoursStart   string // "22:30" or ""
 	QuietHoursEnd     string
 	PolicyOverrides   []PolicyOverride
+	// End-to-end encryption onboarding (v5.4). The passphrase VALUE is never
+	// rendered — only whether one is stored.
+	EncryptionKnown          bool // false when the server was unreachable
+	EncryptionAccountEnabled bool
+	PassphraseSet            bool
 }
 
 // LogsPageData holds data for the client logs viewer.

@@ -137,4 +137,40 @@
     <span class="save-bar-hint" data-dirty-hint hidden>Unsaved changes</span>
   </div>
 </form>
+
+<section class="panel" aria-labelledby="encryption-heading">
+  <div class="panel-header"><h2 id="encryption-heading">End-to-end encryption</h2></div>
+  <div class="panel-body form-stack">
+    {{if not .EncryptionKnown}}
+    <p class="cell-muted">Server unreachable — encryption state unknown. {{if .PassphraseSet}}A passphrase is stored in this PC's keyring.{{end}}</p>
+    {{else if .EncryptionAccountEnabled}}
+    <p><span class="badge-success">enabled</span> Saves are encrypted on this PC before upload{{if not .PassphraseSet}} — <strong>but no passphrase is stored here</strong>: enter the account passphrase below or this device uploads plaintext and cannot read encrypted saves{{end}}.</p>
+    {{if not .PassphraseSet}}
+    <form method="post" action="/settings/encryption" class="form-stack">
+      <label class="field-label">Account passphrase
+        <input type="password" name="passphrase" required minlength="8" autocomplete="new-password">
+      </label>
+      <label class="field-label">Confirm passphrase
+        <input type="password" name="passphrase_confirm" required minlength="8" autocomplete="new-password">
+      </label>
+      <div class="form-actions-row"><button type="submit" class="btn-primary">Store passphrase on this PC</button></div>
+    </form>
+    {{else}}
+    <p class="cell-muted">Passphrase: stored in this PC's keyring (never shown, never sent to the server). Disabling encryption is only possible from the server web interface.</p>
+    {{end}}
+    {{else}}
+    <p class="cell-muted">Encrypt your saves on this PC before they leave it — the server only ever stores ciphertext.</p>
+    <form method="post" action="/settings/encryption" class="form-stack">
+      <label class="field-label">Choose a passphrase (min 8 characters)
+        <input type="password" name="passphrase" required minlength="8" autocomplete="new-password">
+      </label>
+      <label class="field-label">Confirm passphrase
+        <input type="password" name="passphrase_confirm" required minlength="8" autocomplete="new-password">
+      </label>
+      <p class="field-hint"><strong>Write it down.</strong> Losing the passphrase means losing access to encrypted saves — the server cannot recover them. Use the SAME passphrase on every device; existing saves convert as they next change and sync.</p>
+      <div class="form-actions-row"><button type="submit" class="btn-primary">Enable encryption</button></div>
+    </form>
+    {{end}}
+  </div>
+</section>
 {{end}}

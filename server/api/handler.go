@@ -210,6 +210,7 @@ func Routes() []RouteDef {
 		{"POST", "/api/change-password", true},
 		{"POST", "/api/token/refresh", true},
 		{"GET", "/api/account", true},
+		{"POST", "/api/account/encryption", true},
 		{"GET", "/api/conflicts", true},
 		{"POST", "/api/conflicts/resolve", true},
 		{"GET", "/api/inbox", true},
@@ -263,6 +264,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.withAuth(h.handleTokenRefresh)(w, r)
 	case r.URL.Path == "/api/account" && r.Method == http.MethodGet:
 		h.withAuth(h.handleAccount)(w, r)
+	case r.URL.Path == "/api/account/encryption" && r.Method == http.MethodPost:
+		h.withAuth(h.handleEnableEncryption)(w, r)
 	case r.URL.Path == "/api/conflicts" && r.Method == http.MethodGet:
 		h.withAuth(h.handleListConflicts)(w, r)
 	case r.URL.Path == "/api/conflicts/resolve" && r.Method == http.MethodPost:
@@ -684,6 +687,35 @@ func (h *Handler) handleAccount(w http.ResponseWriter, r *http.Request, userID s
 		resp["quota_bytes"] = quota
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleEnableEncryption lets a device token ENABLE account E2E encryption
+// (the client's guided onboarding). Disabling is deliberately rejected: a
+// stolen device token must not be able to downgrade the account to plaintext
+// uploads — that stays a session-authenticated server WebUI action.
+func (h *Handler) handleEnableEncryption(w http.ResponseWriter, r *http.Request, userID string) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if !req.Enabled {
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error": "encryption can only be disabled from the server web interface",
+		})
+		return
+	}
+	if err := h.store.SetEncryptionEnabled(r.Context(), userID, true); err != nil {
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api enable encryption failed")
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "update failed"})
+		return
+	}
+	if username, _ := h.store.UsernameByID(r.Context(), userID); username != "" {
+		_ = h.store.AppendAudit(r.Context(), userID, username, "enable_encryption", "", "via client API")
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (h *Handler) handleListClients(w http.ResponseWriter, r *http.Request, userID string) {

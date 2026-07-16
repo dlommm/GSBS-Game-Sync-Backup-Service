@@ -1173,6 +1173,30 @@ func (c *Client) FetchAccountInfo(ctx context.Context) (AccountInfo, error) {
 	return info, nil
 }
 
+// EnableEncryption turns on account-level E2E encryption (enable-only API;
+// disabling requires the server web interface by design).
+func (c *Client) EnableEncryption(ctx context.Context) error {
+	body := bytes.NewReader([]byte(`{"enabled":true}`))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/account/encryption", body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.getToken())
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer closeIO(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		if msg := readAPIError(resp.Body); msg != "" {
+			return fmt.Errorf("enable encryption: %s", msg)
+		}
+		return fmt.Errorf("enable encryption: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 // SaveSummary is a lightweight per-slot view for local UI (storage panel).
 type SaveSummary struct {
 	GameID    string
