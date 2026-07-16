@@ -4,6 +4,76 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+## [5.4.0] - 2026-07-15
+
+Client deep-dive release: every desktop client (Windows, macOS, Linux, Flatpak/Steam Deck)
+audited, hardened, and extended with twelve requested features.
+
+### Fixed
+- **Quota, conflict, and auth errors no longer retry-storm.** A 413 push made three attempts
+  (three quota toasts) and was then parked in the offline outbox for up to 7 days of 2-minute
+  retries; 409 conflicts double-reported; 401s were retried as transport errors. All three now
+  classify correctly, make exactly one request, and never enter the outbox. Stale entries queued
+  by older clients clean themselves up on the first retry tick after upgrading.
+- **Monthly token rotation no longer wedges long-running clients.** The one-shot reload latch is
+  gone, the rotation ticker updates the live sync client, and pull paths reload a rotated token
+  on 401 — previously a pull-only device broke after its first rotation and every device after
+  its second, requiring a manual re-login.
+- **Encryption fails closed.** A transient `/api/account` error at startup used to silently
+  disable E2E encryption for the whole session (plaintext uploads for an encrypted account);
+  the client now retries, falls back to a persisted per-server cache, and otherwise assumes
+  encryption whenever a passphrase is configured.
+- A local save whose failed upload aged out of the offline outbox (7+ days offline) now uploads
+  on the next start when it is definitively newer than the server copy (safe compare-and-swap;
+  concurrent changes surface as a normal conflict).
+- `config.json` writes are atomic — a crash mid-write can no longer blank the client config.
+- Desktop notifications are branded **GSBS** (previously the literal "DefaultAppName" on every
+  OS; on Windows such toasts could be dropped entirely — the installer now registers a matching
+  AppUserModelID on its shortcuts).
+- **Heroic games are now discovered on Windows** (`%APPDATA%\heroic`) and under Flatpak Heroic;
+  Lutris/Bottles/Prism scanning covers both native and Flatpak installs; the launcher-folder
+  settings finally affect discovery; launcher detection on macOS probes real macOS paths
+  instead of Linux ones.
+- Windows: a second user on the same machine (RDP/fast user switching) can run their own
+  client — the single-instance mutex is per-session; re-running the installer over a running
+  tray now closes it cleanly instead of half-upgrading.
+- Linux: AppImage "Run at startup" survives reboots (it recorded the temporary mount path);
+  tray "Edit config" no longer hangs on a terminal `$EDITOR`; failed tray actions toast
+  instead of dying silently in the log.
+- Flatpak: autostart uses the Background portal (with fallback), and the tray claims its
+  StatusNotifier bus name cleanly.
+- The local dashboard now tells the truth: paused/metered state gets its own banner (it showed
+  "All synced" with a dead Sync-now button), Insights "Saves synced (7d)" and completion toasts
+  report real numbers (they were hardcoded to zero), "folders watched" counts actual folders,
+  and a device whose uploads keep failing shows the error on the game row.
+
+### Added
+- **Restore from the client**: a local version-history page for every synced save with
+  one-click restore — no more bouncing to the server WebUI (which remains the fallback).
+- **Per-conflict resolution in the client UI**: Keep local / Use server buttons per row on
+  Insights (was tray-only, all-or-nothing).
+- **Recent activity feed** on Insights: a persisted timeline of this device's uploads,
+  downloads, and queued saves with error details.
+- **Server storage panel**: per-game synced sizes and a usage/quota meter (`GET /api/account`
+  now reports `usage_bytes`/`quota_bytes`; quota was previously only visible as an error).
+- **Notification levels**: All / Problems only / Silent, plus a per-upload toast toggle.
+- **Quiet hours**: defer syncing inside a daily window (midnight wrap supported) with automatic
+  catch-up when the window ends; **Snooze 1 hour / until tomorrow** in the tray (auto-resume,
+  never persisted — a crash can't leave you permanently paused).
+- **Per-game tray controls**: Sync now, Snooze 1 hour, Open save folder, and Version history
+  under each synced game; a matching per-game Sync-now button on Insights.
+- **Steam Deck: game-aware sync works under Flatpak again** for Steam games via Steam's own
+  state file (the sandbox blocks the process scan used elsewhere); non-Steam games under
+  Flatpak sync immediately (documented limitation).
+- **"Folders that need access" panel** on the dashboard: every sandbox-blocked save folder
+  listed with the exact `flatpak override` fix command, plus games skipped by the unsafe-root
+  safety guard; docs gained a Steam Deck quick start.
+- **Guided E2E-encryption setup** in the client Settings (passphrase stored via the OS keyring,
+  never rendered; enabling is possible from the client, disabling deliberately stays a server
+  WebUI action — new enable-only `POST /api/account/encryption`).
+- **Test connection** button on the setup form — checks the server before you submit
+  credentials.
+
 ## [5.3.0] - 2026-07-14
 
 Full-project fix & polish release: client data safety, update pipeline, resilience, and WebUI consistency.

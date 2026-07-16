@@ -6,6 +6,19 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.4.0] — 2026-07-15
+
+Client deep-dive release — all four clients (Windows, macOS, Linux, Flatpak/Steam Deck) audited and extended.
+
+### Highlights
+- **Restore saves right from the client** (local version-history page), per-conflict Keep-local/Use-server buttons, a recent-activity feed, and a storage/quota panel.
+- **Quiet hours, tray snooze, notification levels, and per-game controls** (sync now / snooze / open folder / versions under each game).
+- **Steam Deck**: game-aware sync works under Flatpak again for Steam games; a new "Folders that need access" panel shows exactly what to grant.
+- **Guided end-to-end encryption setup** in Settings (keyring-backed; enable-only from devices) and a setup Test-connection button.
+- Big fix wave: quota/conflict/auth retry storms, monthly-token-rotation wedge, encryption fail-open on startup blips, "DefaultAppName" toasts (Windows could drop them entirely), Heroic discovery on Windows/Flatpak, AppImage autostart, per-session Windows mutex, truthful paused/metered dashboard state.
+
+---
+
 ## [5.3.0] — 2026-07-14
 
 Full-project fix & polish release.
