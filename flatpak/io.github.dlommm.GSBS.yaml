@@ -33,12 +33,13 @@ finish-args:
   - --socket=fallback-x11
   - --socket=wayland
   - --device=dri
-  # Tray icon (StatusNotifierItem) and desktop notifications. The own-name
-  # lets the tray lib claim its per-PID SNI bus name — without it every
-  # launch logs a (non-fatal) RequestName denial and strict SNI hosts may
-  # refuse the fallback registration.
+  # Tray icon (StatusNotifierItem) and desktop notifications. NOTE: the
+  # per-PID SNI bus name (org.kde.StatusNotifierItem-<pid>-1) cannot be
+  # granted via --own-name — flatpak only allows trailing ".*" wildcards and
+  # the SNI name uses dashes (flatpak-builder rejects "…Item-*" outright).
+  # The tray lib's RequestName is denied (one harmless log line) and it
+  # registers via its unique connection name instead, which SNI hosts accept.
   - --talk-name=org.kde.StatusNotifierWatcher
-  - --own-name=org.kde.StatusNotifierItem-*
   - --talk-name=org.freedesktop.Notifications
   # Autostart / run-in-background via the XDG portal.
   - --talk-name=org.freedesktop.portal.Background
