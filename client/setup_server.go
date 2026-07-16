@@ -69,6 +69,7 @@ func StartSetupServer() string {
 	mux.HandleFunc("/games/add", handleGamesAdd)
 	mux.HandleFunc("/insights", handleInsightsPage)
 	mux.HandleFunc("/insights/resolve", handleInsightsResolve)
+	mux.HandleFunc("/insights/sync-game", handleInsightsSyncGame)
 	mux.HandleFunc("/versions", handleVersionsPage)
 	mux.HandleFunc("/versions/restore", handleVersionsRestore)
 	mux.HandleFunc("/open-folder", handleOpenFolder)
@@ -399,6 +400,26 @@ func handleInsightsResolve(w http.ResponseWriter, r *http.Request) {
 	// in the background and let the page show a "resolving" banner.
 	go resolveConflictAction(gameID, pathKey, filePath, choice)
 	http.Redirect(w, r, "/insights?resolving=1", http.StatusSeeOther)
+}
+
+// handleInsightsSyncGame flushes one game's pending pushes and triggers a
+// pull (the local-UI twin of the tray's per-game "Sync now").
+func handleInsightsSyncGame(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	gameID := r.Form.Get("game_id")
+	if gameID == "" {
+		http.Error(w, "game_id required", http.StatusBadRequest)
+		return
+	}
+	FlushGame(gameID)
+	http.Redirect(w, r, "/insights", http.StatusSeeOther)
 }
 
 // handleVersionsPage lists a save slot's server-side version history locally

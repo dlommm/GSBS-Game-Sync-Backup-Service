@@ -49,8 +49,12 @@ type SettingsPageData struct {
 	// MeteredSupported is false on platforms without metered-connection
 	// detection (everything except Windows) — the checkbox renders disabled
 	// there so the setting doesn't pretend to work.
-	MeteredSupported bool
-	PolicyOverrides  []PolicyOverride
+	MeteredSupported  bool
+	NotificationLevel string // all / errors / silent
+	NotifyPerUpload   bool
+	QuietHoursStart   string // "22:30" or ""
+	QuietHoursEnd     string
+	PolicyOverrides   []PolicyOverride
 }
 
 // LogsPageData holds data for the client logs viewer.

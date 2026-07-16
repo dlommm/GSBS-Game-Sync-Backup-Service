@@ -100,7 +100,30 @@ type config struct {
 	ConflictPolicyOverrides     map[string]string `json:"conflict_policy_overrides,omitempty"` // game_id -> policy (last_write_wins, keep_local, keep_server)
 	UpdateCheckEnabled          *bool             `json:"update_check_enabled,omitempty"`      // default true; set false to disable client update checks
 	UpdateRepo                  string            `json:"update_repo,omitempty"`               // GitHub owner/repo override for release checks
+	NotificationLevel           string            `json:"notification_level,omitempty"`       // "all" (default), "errors" (errors+conflicts only), "silent"
+	NotifyPerUpload             *bool             `json:"notify_per_upload,omitempty"`         // default true: toast per game upload (debounced)
+	QuietHoursStart             string            `json:"quiet_hours_start,omitempty"`         // "22:30" local; with quiet_hours_end, sync defers in the window
+	QuietHoursEnd               string            `json:"quiet_hours_end,omitempty"`
 	WatchPaths                  []watchPath       `json:"watch_paths"`
+}
+
+// notifyPerUploadEnabled returns the per-upload toast setting (default true —
+// the pre-5.4 behavior).
+func (c *config) notifyPerUploadEnabled() bool {
+	return c == nil || c.NotifyPerUpload == nil || *c.NotifyPerUpload
+}
+
+// effectiveNotificationLevel normalizes the notification level.
+func (c *config) effectiveNotificationLevel() string {
+	if c == nil {
+		return "all"
+	}
+	switch c.NotificationLevel {
+	case "errors", "silent":
+		return c.NotificationLevel
+	default:
+		return "all"
+	}
 }
 
 type watchPath struct {

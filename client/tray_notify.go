@@ -23,7 +23,63 @@ func initTrayNotify() {
 	// Hook global sync result for richer toasts (set by platform after controller init).
 }
 
+// notifyKind classifies toasts for the user's notification-level setting.
+type notifyKind int
+
+const (
+	// notifyInfo: routine good news (sync complete, uploads, discovery).
+	notifyInfo notifyKind = iota
+	// notifyProblem: errors and conflicts the user should know about.
+	notifyProblem
+	// notifyEssential: direct feedback for a user action or an operational
+	// must-see (setup required, already running) — shown even on "silent".
+	notifyEssential
+)
+
+type notifyPrefsState struct {
+	level     string // all, errors, silent
+	perUpload bool
+}
+
+var notifyPrefs struct {
+	mu    sync.RWMutex
+	state notifyPrefsState
+}
+
+// SetNotifyPrefs installs the notification settings snapshot. Called from
+// runSync start and settings save — never loadConfig() per toast (config
+// loading touches the OS keyring).
+func SetNotifyPrefs(level string, perUpload bool) {
+	notifyPrefs.mu.Lock()
+	notifyPrefs.state = notifyPrefsState{level: level, perUpload: perUpload}
+	notifyPrefs.mu.Unlock()
+}
+
+func notifyAllowed(kind notifyKind) bool {
+	notifyPrefs.mu.RLock()
+	p := notifyPrefs.state
+	notifyPrefs.mu.RUnlock()
+	switch kind {
+	case notifyEssential:
+		return true
+	case notifyProblem:
+		return p.level != "silent"
+	default:
+		return p.level == "all" || p.level == ""
+	}
+}
+
+func perUploadToastsEnabled() bool {
+	notifyPrefs.mu.RLock()
+	defer notifyPrefs.mu.RUnlock()
+	// Zero value (never set) keeps the pre-5.4 default: toasts on.
+	return notifyPrefs.state.level == "" || notifyPrefs.state.perUpload
+}
+
 func notifySyncComplete(success bool, errMsg string) {
+	if !notifyAllowed(notifyInfo) {
+		return
+	}
 	notifyMu.Lock()
 	stats := syncCompleteStats
 	err := lastSyncNotifyErr
@@ -47,6 +103,9 @@ func notifySyncComplete(success bool, errMsg string) {
 }
 
 func notifyPushDebounced(gameID string) {
+	if !notifyAllowed(notifyInfo) || !perUploadToastsEnabled() {
+		return
+	}
 	title := gameTitleFor(gameID)
 	notifyMu.Lock()
 	last, ok := pushDebounce[gameID]
@@ -60,12 +119,18 @@ func notifyPushDebounced(gameID string) {
 }
 
 func notifyConflictToast(gameID, pathKey string) {
+	if !notifyAllowed(notifyProblem) {
+		return
+	}
 	title := gameTitleFor(gameID)
 	_ = beeep.Notify("GSBS", fmt.Sprintf("Conflict: %s — open tray to resolve", title), "")
 	log.Printf("tray notify: conflict game=%s path_key=%s", gameID, pathKey)
 }
 
 func notifyFirstRunToast(games []discovery.MatchedGame) {
+	if !notifyAllowed(notifyInfo) {
+		return
+	}
 	n := len(games)
 	if n == 0 {
 		return
@@ -89,6 +154,9 @@ func notifyFirstRunToast(games []discovery.MatchedGame) {
 }
 
 func notifyDiscoveryNew(count int) {
+	if !notifyAllowed(notifyInfo) {
+		return
+	}
 	if count <= 0 {
 		return
 	}
@@ -107,6 +175,9 @@ func notifySetupRequired() {
 }
 
 func notifyConfigWarnings(warnings []string) {
+	if !notifyAllowed(notifyProblem) {
+		return
+	}
 	if len(warnings) == 0 {
 		return
 	}
@@ -115,6 +186,9 @@ func notifyConfigWarnings(warnings []string) {
 }
 
 func notifyAuthError(msg string) {
+	if !notifyAllowed(notifyProblem) {
+		return
+	}
 	_ = beeep.Alert("GSBS", truncateMsg(msg, 120), "")
 }
 
@@ -130,12 +204,18 @@ func notifyActionError(action string, err error) {
 }
 
 func notifyPushError(gameID, pathKey, msg string) {
+	if !notifyAllowed(notifyProblem) {
+		return
+	}
 	title := gameTitleFor(gameID)
 	_ = beeep.Alert("GSBS", truncateMsg(fmt.Sprintf("Upload failed for %s: %s", title, msg), 120), "")
 	log.Printf("tray notify: push error game=%s path_key=%s: %s", gameID, pathKey, msg)
 }
 
 func notifyQuotaError(msg string) {
+	if !notifyAllowed(notifyProblem) {
+		return
+	}
 	if msg == "" {
 		msg = "Storage quota exceeded — free space on the server or contact your admin"
 	}

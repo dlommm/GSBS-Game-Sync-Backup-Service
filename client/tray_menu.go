@@ -40,17 +40,26 @@ type TrayController struct {
 	refreshMu sync.Mutex
 
 	// Status
-	mStatus    *systray.MenuItem
-	mProgress  *systray.MenuItem
-	mSyncNow   *systray.MenuItem
-	mPause     *systray.MenuItem
-	mDashboard *systray.MenuItem
+	mStatus         *systray.MenuItem
+	mProgress       *systray.MenuItem
+	mSyncNow        *systray.MenuItem
+	mPause          *systray.MenuItem
+	mSnooze1h       *systray.MenuItem
+	mSnoozeTomorrow *systray.MenuItem
+	snoozeTimer     *time.Timer
+	mDashboard      *systray.MenuItem
 
-	// Synced games submenu
-	mGamesMenu   *systray.MenuItem
-	gameSlots    []*systray.MenuItem
-	mGamesFooter *systray.MenuItem
-	gameIDs      [maxSyncedGameSlots]string
+	// Synced games submenu — each slot is a parent with pre-created action
+	// children (systray cannot delete items, so everything is allocated up
+	// front and shown/hidden with its slot).
+	mGamesMenu       *systray.MenuItem
+	gameSlots        []*systray.MenuItem
+	gameSyncItems    []*systray.MenuItem
+	gameSnoozeItems  []*systray.MenuItem
+	gameFolderItems  []*systray.MenuItem
+	gameVersionItems []*systray.MenuItem
+	mGamesFooter     *systray.MenuItem
+	gameIDs          [maxSyncedGameSlots]string
 
 	// Discovered submenu
 	mDiscoveredMenu *systray.MenuItem
@@ -95,6 +104,39 @@ type TrayController struct {
 // NewTrayController creates a controller with the given platform hooks.
 func NewTrayController(p TrayPlatform) *TrayController {
 	return &TrayController{platform: p}
+}
+
+// startSnooze pauses syncing for d WITHOUT persisting cfg.SyncPaused — a
+// crash mid-snooze must not leave the user permanently paused.
+func (c *TrayController) startSnooze(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	c.cancelSnoozeTimer()
+	until := time.Now().Add(d)
+	SyncPaused.Store(true)
+	UpdateTrayPaused(true)
+	c.mPause.SetTitle(pauseResumeMenuTitle(true))
+	c.mStatus.SetTooltip("Snoozed until " + until.Local().Format("15:04"))
+	c.refreshMu.Lock()
+	c.snoozeTimer = time.AfterFunc(d, func() {
+		SyncPaused.Store(false)
+		UpdateTrayPaused(false)
+		c.mPause.SetTitle(pauseResumeMenuTitle(false))
+		log.Printf("tray: snooze ended — resuming sync")
+		RunResumeCatchUp()
+	})
+	c.refreshMu.Unlock()
+	log.Printf("tray: snoozed until %s", until.Local().Format("15:04"))
+}
+
+func (c *TrayController) cancelSnoozeTimer() {
+	c.refreshMu.Lock()
+	if c.snoozeTimer != nil {
+		c.snoozeTimer.Stop()
+		c.snoozeTimer = nil
+	}
+	c.refreshMu.Unlock()
 }
 
 // Run builds the menu and starts handlers. Call from systray onReady after SetIcon.
@@ -145,12 +187,17 @@ func (c *TrayController) buildMenu(cfg *config) {
 	systray.AddSeparator()
 	c.mSyncNow = systray.AddMenuItem("Sync now", "Run sync immediately")
 	c.mPause = systray.AddMenuItem(pauseResumeMenuTitle(cfg.SyncPaused), "Pause or resume syncing")
+	c.mSnooze1h = systray.AddMenuItem("Snooze 1 hour", "Pause syncing and resume automatically in an hour")
+	c.mSnoozeTomorrow = systray.AddMenuItem("Snooze until tomorrow", "Pause syncing until 08:00 tomorrow")
 
 	systray.AddSeparator()
 	c.mGamesMenu = systray.AddMenuItem("Synced games", "Recently synced games")
 	for i := 0; i < maxSyncedGameSlots; i++ {
-		slot := c.mGamesMenu.AddSubMenuItem("", "Open save versions")
-		slot.Disable()
+		slot := c.mGamesMenu.AddSubMenuItem("", "Per-game actions")
+		c.gameSyncItems = append(c.gameSyncItems, slot.AddSubMenuItem("Sync now", "Push pending changes and pull this game"))
+		c.gameSnoozeItems = append(c.gameSnoozeItems, slot.AddSubMenuItem("Snooze 1 hour", "Skip syncing this game for an hour"))
+		c.gameFolderItems = append(c.gameFolderItems, slot.AddSubMenuItem("Open save folder", "Reveal the watched save folder"))
+		c.gameVersionItems = append(c.gameVersionItems, slot.AddSubMenuItem("Version history…", "Browse and restore save versions"))
 		slot.Hide()
 		c.gameSlots = append(c.gameSlots, slot)
 	}
@@ -330,7 +377,11 @@ func (c *TrayController) refreshFromSnapshot() {
 		if i < len(snap.Games) {
 			g := snap.Games[i]
 			c.gameIDs[i] = g.GameID
-			slot.SetTitle(formatGameRow(g))
+			title := formatGameRow(g)
+			if until := GameSnoozedUntil(g.GameID); !until.IsZero() {
+				title += " · snoozed until " + until.Local().Format("15:04")
+			}
+			slot.SetTitle(title)
 			slot.SetTooltip(g.GameID)
 			slot.Enable()
 			slot.Show()
@@ -582,6 +633,7 @@ func (c *TrayController) startClickHandlers() {
 	go func() {
 		for range c.mPause.ClickedCh {
 			paused := !SyncPaused.Load()
+			c.cancelSnoozeTimer() // manual toggle overrides any running snooze
 			SyncPaused.Store(paused)
 			if cfg, _ := loadConfig(); cfg != nil {
 				cfg.SyncPaused = paused
@@ -591,8 +643,20 @@ func (c *TrayController) startClickHandlers() {
 			c.mPause.SetTitle(pauseResumeMenuTitle(paused))
 			UpdateTrayPaused(paused)
 			if !paused {
-				triggerSyncNow()
+				RunResumeCatchUp()
 			}
+		}
+	}()
+	go func() {
+		for range c.mSnooze1h.ClickedCh {
+			c.startSnooze(time.Hour)
+		}
+	}()
+	go func() {
+		for range c.mSnoozeTomorrow.ClickedCh {
+			now := time.Now()
+			tomorrow8 := time.Date(now.Year(), now.Month(), now.Day(), 8, 0, 0, 0, now.Location()).AddDate(0, 0, 1)
+			c.startSnooze(time.Until(tomorrow8))
 		}
 	}()
 	go func() {
@@ -769,10 +833,43 @@ func (c *TrayController) startClickHandlers() {
 			}
 		}()
 	}
-	for i, slot := range c.gameSlots {
+	for i := range c.gameSlots {
 		idx := i
 		go func() {
-			for range slot.ClickedCh {
+			for range c.gameSyncItems[idx].ClickedCh {
+				if gameID := c.gameIDAt(idx); gameID != "" {
+					log.Printf("tray: per-game sync now: %s", gameID)
+					FlushGame(gameID)
+					refreshTrayCounts()
+				}
+			}
+		}()
+		go func() {
+			for range c.gameSnoozeItems[idx].ClickedCh {
+				if gameID := c.gameIDAt(idx); gameID != "" {
+					SnoozeGame(gameID, time.Now().Add(time.Hour))
+					notifyTrayState()
+				}
+			}
+		}()
+		go func() {
+			for range c.gameFolderItems[idx].ClickedCh {
+				gameID := c.gameIDAt(idx)
+				if gameID == "" {
+					continue
+				}
+				dir := resolveGameFolder(gameID)
+				if dir == "" {
+					notifyActionError("Open save folder", fmt.Errorf("no watched folder recorded for %s", gameID))
+					continue
+				}
+				if err := openNative(dir); err != nil {
+					notifyActionError("Open save folder", err)
+				}
+			}
+		}()
+		go func() {
+			for range c.gameVersionItems[idx].ClickedCh {
 				gameID := c.gameIDAt(idx)
 				cfg := c.cfg()
 				if gameID == "" || cfg == nil {

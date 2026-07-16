@@ -56,6 +56,10 @@ func settingsPageData(cfg *config) clientwebui.SettingsPageData {
 		UseCompression:      cfg.UseCompression,
 		SkipSyncWhenMetered: cfg.SkipSyncWhenMetered,
 		MeteredSupported:    runtime.GOOS == "windows",
+		NotificationLevel:   cfg.effectiveNotificationLevel(),
+		NotifyPerUpload:     cfg.notifyPerUploadEnabled(),
+		QuietHoursStart:     cfg.QuietHoursStart,
+		QuietHoursEnd:       cfg.QuietHoursEnd,
 		PolicyOverrides:     overrides,
 	}
 }
@@ -178,8 +182,36 @@ func handleSettingsSave(w http.ResponseWriter, r *http.Request) {
 		cfg.SkipSyncWhenMetered = r.Form.Get("skip_sync_when_metered") != ""
 	}
 
+	// Notifications (v5.4).
+	switch lvl := r.Form.Get("notification_level"); lvl {
+	case "all", "errors", "silent":
+		cfg.NotificationLevel = lvl
+	}
+	perUpload := r.Form.Get("notify_per_upload") != ""
+	cfg.NotifyPerUpload = &perUpload
+
+	// Quiet hours (v5.4): both bounds must parse or the pair clears.
+	qs, qe := strings.TrimSpace(r.Form.Get("quiet_hours_start")), strings.TrimSpace(r.Form.Get("quiet_hours_end"))
+	if qs == "" && qe == "" {
+		cfg.QuietHoursStart, cfg.QuietHoursEnd = "", ""
+	} else {
+		_, ok1 := parseClock(qs)
+		_, ok2 := parseClock(qe)
+		if !ok1 || !ok2 {
+			data := settingsPageData(cfg)
+			data.Error = "Quiet hours must be HH:MM times (e.g. 22:30 to 07:00), or both empty."
+			clientwebui.RenderSettingsPage(w, data)
+			return
+		}
+		cfg.QuietHoursStart, cfg.QuietHoursEnd = qs, qe
+	}
+
 	// Per-game conflict-policy overrides (v5.2).
 	applyPolicyOverrideForm(cfg, r.Form)
+
+	// Apply notification prefs immediately (restartSync also does, but the
+	// toast gate should not wait for the sync loop swap).
+	SetNotifyPrefs(cfg.effectiveNotificationLevel(), cfg.notifyPerUploadEnabled())
 
 	if err := saveConfig(cfg); err != nil {
 		data := settingsPageData(cfg)

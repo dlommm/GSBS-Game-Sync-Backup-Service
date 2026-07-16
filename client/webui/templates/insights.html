@@ -194,6 +194,10 @@
           <td class="cell-muted" {{if .LastSyncAt}}title="{{.LastSyncAt}}"{{end}}>{{if .LastSyncAt}}{{formatTime .LastSyncAt}}{{else}}—{{end}}</td>
           <td class="cell-muted">{{if .Direction}}{{.Direction}}{{else}}—{{end}}</td>
           <td class="cell-action">
+            <form method="post" action="/insights/sync-game" class="inline-form">
+              <input type="hidden" name="game_id" value="{{.GameID}}">
+              <button type="submit" class="btn-ghost-sm">Sync now</button>
+            </form>
             {{if .FirstPathKey}}<a class="btn-ghost-sm" href="/versions?game_id={{urlquery .GameID}}&amp;path_key={{urlquery .FirstPathKey}}">Versions</a>{{end}}
             <button type="button" class="btn-ghost-sm" data-open-folder="{{.GameID}}">Reveal folder</button>
           </td>

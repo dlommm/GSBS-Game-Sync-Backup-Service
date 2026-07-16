@@ -512,6 +512,14 @@ func (w *Watcher) maybeAttachRecursiveSubdir(dir string) {
 // rescan walks all currently watched directories and queues any files that are
 // not already in the debounce queue. Called after a fsnotify.Overflow event to
 // compensate for dropped events.
+// Rescan walks every watched directory and enqueues changed files (the push
+// hash cache dedups unchanged ones). Used as the catch-up after a pause /
+// quiet-hours window ends: pushes during a pause are DROPPED, not queued, so
+// resuming without a rescan would silently lose the changes made meanwhile.
+func (w *Watcher) Rescan(ctx context.Context) {
+	w.rescan(ctx)
+}
+
 func (w *Watcher) rescan(ctx context.Context) {
 	w.mu.Lock()
 	pathMapCopy := make(map[string]pathEntry, len(w.pathMap))

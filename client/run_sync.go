@@ -116,6 +116,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	watchMode := cfg.effectiveAutoWatchMode()
 
 	SyncPaused.Store(cfg.SyncPaused)
+	SetNotifyPrefs(cfg.effectiveNotificationLevel(), cfg.notifyPerUploadEnabled())
 	NextRetryAt.Store(time.Time{})
 
 	onRetryIn := func(d time.Duration) {
@@ -333,12 +334,24 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		return out
 	}
 	gamePoller := startGameWatch(ctx, cfg, getGameWatcher, rootsSnapshot)
-	if gamePoller != nil {
-		pullOpts.SkipGame = gamePoller.Running
+	// SkipGame combines the running-game poller with per-game snoozes; the
+	// gamewatch interface itself is unchanged.
+	pullOpts.SkipGame = func(gameID string) bool {
+		if gameSnoozed(gameID) {
+			return true
+		}
+		return gamePoller != nil && gamePoller.Running(gameID)
+	}
+
+	// syncDeferred reports any global reason not to sync right now.
+	syncDeferred := func() bool {
+		return SyncPaused.Load() ||
+			(cfg.SkipSyncWhenMetered && IsMeteredConnection()) ||
+			inQuietHours(cfg, time.Now())
 	}
 
 	doPull := func(label string) {
-		if SyncPaused.Load() || (cfg.SkipSyncWhenMetered && IsMeteredConnection()) {
+		if syncDeferred() {
 			return
 		}
 		if OnSyncStart != nil {
@@ -382,8 +395,13 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		return err
 	}
 	watcher.SetInstallRoots(installRoots)
+	watcher.DeferPush = func(gameID string) bool {
+		if gameSnoozed(gameID) {
+			return true
+		}
+		return gamePoller != nil && gamePoller.Running(gameID)
+	}
 	if gamePoller != nil {
-		watcher.DeferPush = gamePoller.Running
 		gameWatcherMu.Lock()
 		gameWatcherRef = watcher
 		gameWatcherMu.Unlock()
@@ -394,9 +412,17 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 	watcher.ExcludePatterns = cfg.WatchExclude
 	watcher.Verbose = cfg.VerboseLog
-	watcher.IsPaused = func() bool {
-		return SyncPaused.Load() || (cfg.SkipSyncWhenMetered && IsMeteredConnection())
-	}
+	watcher.IsPaused = syncDeferred
+	// Per-game "Sync now" from the tray/local UI.
+	setFlushGameHook(func(gameID string) { watcher.FlushPendingFor(gameID) })
+	defer setFlushGameHook(nil)
+	// Resume/snooze-end catch-up: rescan (pause drops pushes) then pull via
+	// the sync-now channel so the pull runs serially in the select loop.
+	setResumeCatchUpHook(func() {
+		watcher.Rescan(ctx)
+		triggerSyncNow()
+	})
+	defer setResumeCatchUpHook(nil)
 	WatcherHealthy.Store(true)
 	go sync.RunWatcherSupervisor(ctx, watcher, getSyncWatchPaths, func(ok bool) {
 		WatcherHealthy.Store(ok)
@@ -486,6 +512,12 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+
+	// Quiet-hours transitions + snooze expiry, checked once a minute. Pauses
+	// DROP watcher pushes, so leaving the window must rescan to catch up.
+	quietTicker := time.NewTicker(time.Minute)
+	defer quietTicker.Stop()
+	wasQuiet := inQuietHours(cfg, time.Now())
 	// Daily check for the monthly token rotation (long-running installs never
 	// restart; mid-run rotation is safe via the 401 → TokenReload path).
 	tokenTicker := time.NewTicker(24 * time.Hour)
@@ -566,6 +598,19 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 			return nil
 		case <-ticker.C:
 			doPull("periodic pull")
+		case <-quietTicker.C:
+			nowQuiet := inQuietHours(cfg, time.Now())
+			if wasQuiet && !nowQuiet {
+				log.Printf("sync: quiet hours ended — catching up")
+				watcher.Rescan(ctx)
+				doPull("quiet hours ended")
+			}
+			wasQuiet = nowQuiet
+			// Fire deferred pushes for games whose snooze just expired
+			// (GameSnoozedUntil lazily clears expired entries).
+			for _, id := range expiredSnoozes() {
+				watcher.FlushPendingFor(id)
+			}
 		case <-tokenTicker.C:
 			maybeRefreshToken(ctx, cfg)
 			// The rotation rewrites cfg+disk; without this the LIVE client

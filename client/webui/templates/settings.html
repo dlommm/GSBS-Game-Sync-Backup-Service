@@ -94,6 +94,43 @@
     </div>
   </section>
 
+  <section class="panel" aria-labelledby="notifications-heading">
+    <div class="panel-header"><h2 id="notifications-heading">Notifications</h2></div>
+    <div class="panel-body form-stack">
+      <label class="checkbox-label">
+        <input type="radio" name="notification_level" value="all" {{if eq .NotificationLevel "all"}}checked{{end}}>
+        <span>All — sync results, uploads, discoveries, and problems</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="radio" name="notification_level" value="errors" {{if eq .NotificationLevel "errors"}}checked{{end}}>
+        <span>Problems only — errors and conflicts</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="radio" name="notification_level" value="silent" {{if eq .NotificationLevel "silent"}}checked{{end}}>
+        <span>Silent — only setup prompts and direct action feedback</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" name="notify_per_upload" {{if .NotifyPerUpload}}checked{{end}}>
+        <span>Toast when a game's save uploads (debounced per game)</span>
+      </label>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="quiet-heading">
+    <div class="panel-header"><h2 id="quiet-heading">Quiet hours</h2></div>
+    <div class="panel-body form-stack">
+      <p class="field-hint">Defer all syncing inside a daily window (crosses midnight fine). Changes made during quiet hours upload automatically when the window ends. Leave both empty to disable.</p>
+      <div class="form-row">
+        <label class="field-label">From
+          <input type="time" name="quiet_hours_start" value="{{.QuietHoursStart}}">
+        </label>
+        <label class="field-label">To
+          <input type="time" name="quiet_hours_end" value="{{.QuietHoursEnd}}">
+        </label>
+      </div>
+    </div>
+  </section>
+
   <div class="form-actions-row">
     <button type="submit" class="btn-primary">Save settings</button>
     <a href="/dashboard" class="btn-ghost">Cancel</a>
