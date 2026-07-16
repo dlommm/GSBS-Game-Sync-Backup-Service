@@ -31,24 +31,33 @@ import (
 // surface a re-login prompt and stop hammering the endpoint with retries.
 var ErrUnauthorized = errors.New("unauthorized")
 
+// ErrQuotaExceeded marks a 413 push rejection (storage quota or size cap).
+// Non-retryable: the outcome cannot change until the user frees space.
+var ErrQuotaExceeded = errors.New("quota exceeded or save too large")
+
+// ErrConflict marks a 409 push rejection (optimistic-concurrency hash
+// mismatch). Non-retryable and never outboxed: the conflict record + user
+// resolution is the recovery path.
+var ErrConflict = errors.New("push conflict")
+
 const maxConcurrentPushes = 4
 
 // Client talks to the GSBS server for push/pull.
 type Client struct {
 	baseURL           string
 	token             string
-	tokenMu           sync.RWMutex // guards token and authRetried
+	tokenMu           sync.RWMutex // guards token
 	resolver          *paths.Resolver
 	currentOS         paths.OS
 	http              *http.Client
 	useCompression    bool
 	verbose           bool
+	encMu             sync.RWMutex // guards encryptionEnabled and passphrase
 	encryptionEnabled bool
 	passphrase        string
 	pushMu            sync.Mutex
 	lastPushedHash    map[string]string // gameID+pathKey -> content hash
 	pushSem           chan struct{}
-	authRetried       bool
 	guardFirstPush    bool          // send X-GSBS-If-Absent on first push of a slot (conflict-aware policies)
 	TokenReload       func() string // optional: reload token from config on 401
 
@@ -153,9 +162,20 @@ const syncTimeout = 5 * time.Minute
 // If useCompression is true, push body is gzip-compressed and pull requests Accept-Encoding: gzip.
 // If verbose is true, extra detail is logged (e.g. per-file sync).
 // SetEncryption configures optional E2E encryption (client-side passphrase; never sent to server).
+// Safe to call while sync workers are running (a background account-settings
+// refresh may update it mid-session).
 func (c *Client) SetEncryption(enabled bool, passphrase string) {
+	c.encMu.Lock()
 	c.encryptionEnabled = enabled
 	c.passphrase = passphrase
+	c.encMu.Unlock()
+}
+
+// encryptionState snapshots the encryption settings for one operation.
+func (c *Client) encryptionState() (enabled bool, passphrase string) {
+	c.encMu.RLock()
+	defer c.encMu.RUnlock()
+	return c.encryptionEnabled, c.passphrase
 }
 
 // NewClient creates a sync client. If maxKbps > 0, sync bandwidth is limited to that many KiB/s.
@@ -340,31 +360,41 @@ const pushMaxRetries = 3
 func (c *Client) pullSummaries(ctx context.Context) (*SummaryResponse, error) {
 	var out *SummaryResponse
 	err := retry.Do(ctx, retry.DefaultBackoff(), maxPullRetries, func() error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/saves?summaries=1", nil)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Authorization", "Bearer "+c.getToken())
-		started := time.Now()
-		resp, err := c.http.Do(req)
-		if err != nil {
-			return err
-		}
-		defer closeIO(resp.Body)
-		if resp.StatusCode != http.StatusOK {
-			if resp.StatusCode == http.StatusUnauthorized {
-				return fmt.Errorf("summaries: %w", ErrUnauthorized)
+		// Two iterations max: a 401 gets one chance to pick up a rotated
+		// token (the monthly rotation otherwise wedges pull-only devices).
+		for attempt := 0; ; attempt++ {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/saves?summaries=1", nil)
+			if err != nil {
+				return err
 			}
-			return fmt.Errorf("summaries: status %d", resp.StatusCode)
+			req.Header.Set("Authorization", "Bearer "+c.getToken())
+			started := time.Now()
+			resp, err := c.http.Do(req)
+			if err != nil {
+				return err
+			}
+			if resp.StatusCode != http.StatusOK {
+				status := resp.StatusCode
+				closeIO(resp.Body)
+				if status == http.StatusUnauthorized {
+					if attempt == 0 && c.tryReloadToken() {
+						continue
+					}
+					return fmt.Errorf("summaries: %w (%w)", ErrUnauthorized, &retry.HTTPError{Status: status})
+				}
+				return fmt.Errorf("summaries: status %d", status)
+			}
+			c.noteServerClock(resp, started)
+			var decoded SummaryResponse
+			decodeErr := json.NewDecoder(resp.Body).Decode(&decoded)
+			closeIO(resp.Body)
+			if decodeErr != nil {
+				return decodeErr
+			}
+			c.cryptoV2Ready.Store(decoded.CryptoV2Ready)
+			out = &decoded
+			return nil
 		}
-		c.noteServerClock(resp, started)
-		var decoded SummaryResponse
-		if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-			return err
-		}
-		c.cryptoV2Ready.Store(decoded.CryptoV2Ready)
-		out = &decoded
-		return nil
 	})
 	return out, err
 }
@@ -373,22 +403,33 @@ func (c *Client) pullSingle(ctx context.Context, gameID, pathKey string) (*PullR
 	var out *PullResponse
 	url := fmt.Sprintf("%s/api/saves?game_id=%s&path_key=%s", c.baseURL, gameID, pathKey)
 	err := retry.Do(ctx, retry.DefaultBackoff(), maxPullRetries, func() error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		doGet := func() (*http.Response, error) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			if err != nil {
+				return nil, err
+			}
+			req.Header.Set("Authorization", "Bearer "+c.getToken())
+			if c.useCompression {
+				req.Header.Set("Accept-Encoding", "gzip")
+			}
+			return c.http.Do(req)
+		}
+		resp, err := doGet()
 		if err != nil {
 			return err
 		}
-		req.Header.Set("Authorization", "Bearer "+c.getToken())
-		if c.useCompression {
-			req.Header.Set("Accept-Encoding", "gzip")
-		}
-		resp, err := c.http.Do(req)
-		if err != nil {
-			return err
+		if resp.StatusCode == http.StatusUnauthorized && c.tryReloadToken() {
+			// One in-place retry with the rotated token.
+			closeIO(resp.Body)
+			resp, err = doGet()
+			if err != nil {
+				return err
+			}
 		}
 		defer closeIO(resp.Body)
 		if resp.StatusCode != http.StatusOK {
 			if resp.StatusCode == http.StatusUnauthorized {
-				return fmt.Errorf("pull single: %w", ErrUnauthorized)
+				return fmt.Errorf("pull single: %w (%w)", ErrUnauthorized, &retry.HTTPError{Status: http.StatusUnauthorized})
 			}
 			return fmt.Errorf("pull single: status %d", resp.StatusCode)
 		}
@@ -422,22 +463,33 @@ func (c *Client) pullPage(ctx context.Context, limit, offset int) (*PullResponse
 	if limit > 0 || offset > 0 {
 		url = fmt.Sprintf("%s?limit=%d&offset=%d", url, limit, offset)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	doGet := func() (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+c.getToken())
+		if c.useCompression {
+			req.Header.Set("Accept-Encoding", "gzip")
+		}
+		return c.http.Do(req)
+	}
+	resp, err := doGet()
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.getToken())
-	if c.useCompression {
-		req.Header.Set("Accept-Encoding", "gzip")
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return nil, err
+	if resp.StatusCode == http.StatusUnauthorized && c.tryReloadToken() {
+		// One in-place retry with the rotated token.
+		closeIO(resp.Body)
+		resp, err = doGet()
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer closeIO(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized {
-			return nil, fmt.Errorf("pull: %w", ErrUnauthorized)
+			return nil, fmt.Errorf("pull: %w (%w)", ErrUnauthorized, &retry.HTTPError{Status: http.StatusUnauthorized})
 		}
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
@@ -465,8 +517,26 @@ func isRetryablePullError(err error, statusCode int) bool {
 	return retry.IsRetryableHTTP(statusCode)
 }
 
+// PullStats summarizes one pull pass so the tray/UI can report real numbers
+// (they previously always showed zero — SyncEndStats{} was hardcoded).
+type PullStats struct {
+	Applied   int // saves actually written to disk
+	Skipped   int // unchanged / policy-skipped
+	Conflicts int // conflicts recorded this pass
+	Errors    int // per-slot apply failures
+	// Games are the IDs with at least one applied save this pass.
+	Games map[string]bool
+}
+
+func (s *PullStats) noteGame(gameID string) {
+	if s.Games == nil {
+		s.Games = make(map[string]bool)
+	}
+	s.Games[gameID] = true
+}
+
 // PullAndApplyWithResolver fetches saves and writes using the given path resolver.
-func (c *Client) PullAndApplyWithResolver(ctx context.Context, resolvePath func(gameID, pathKey string) string, opts PullOptions, onRetryIn func(time.Duration)) error {
+func (c *Client) PullAndApplyWithResolver(ctx context.Context, resolvePath func(gameID, pathKey string) string, opts PullOptions, onRetryIn func(time.Duration)) (PullStats, error) {
 	summaries, sumErr := c.pullSummaries(ctx)
 	if sumErr == nil && len(summaries.Saves) > 0 {
 		return c.applyFromSummaries(ctx, summaries, resolvePath, opts)
@@ -477,7 +547,8 @@ func (c *Client) PullAndApplyWithResolver(ctx context.Context, resolvePath func(
 	return c.pullAndApplyFull(ctx, resolvePath, opts, onRetryIn)
 }
 
-func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryResponse, resolvePath func(gameID, pathKey string) string, opts PullOptions) error {
+func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryResponse, resolvePath func(gameID, pathKey string) string, opts PullOptions) (PullStats, error) {
+	var stats PullStats
 	total := len(summaries.Saves)
 	for i, s := range summaries.Saves {
 		if OnPullProgress != nil {
@@ -511,6 +582,7 @@ func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryRespo
 			// so this fast-path skip now works for encrypted saves too — local
 			// plaintext matches the server's recorded plaintext hash.
 			if s.ContentHash != "" && localHash == s.ContentHash {
+				stats.Skipped++
 				continue
 			}
 			if fi, err := os.Stat(absPath); err == nil {
@@ -523,9 +595,11 @@ func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryRespo
 		serverTime = serverTime.Add(-c.serverClockOffset())
 		decision := DecidePull(localExists, localHash, localMtime, s.ContentHash, serverTime, opts.policyFor(s.GameID))
 		if decision == PullSkip {
+			stats.Skipped++
 			continue
 		}
 		if decision == PullConflict {
+			stats.Conflicts++
 			RecordConflict(ConflictRecord{
 				GameID: s.GameID, PathKey: s.PathKey, FilePath: absPath,
 				LocalHash: localHash, ServerHash: s.ContentHash,
@@ -541,21 +615,32 @@ func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryRespo
 		out, err := c.pullSingle(ctx, s.GameID, s.PathKey)
 		if err != nil {
 			log.Printf("pull single: game=%s path_key=%s: %v", s.GameID, s.PathKey, err)
+			stats.Errors++
 			continue
 		}
 		for _, item := range out.Saves {
-			if err := c.applyOneSaveEncrypted(item.GameID, item.PathKey, item.UpdatedAt, item.Content, absPath, opts, item.Encrypted, s.ContentHash); err != nil {
+			applied, err := c.applyOneSaveEncrypted(item.GameID, item.PathKey, item.UpdatedAt, item.Content, absPath, opts, item.Encrypted, s.ContentHash)
+			if err != nil {
 				log.Printf("pull apply: %v", err)
+				stats.Errors++
 				if OnSaveEvent != nil {
 					OnSaveEvent(item.GameID, item.PathKey, s.GameTitle, SaveDirPull, err)
 				}
+				continue
+			}
+			if applied {
+				stats.Applied++
+				stats.noteGame(item.GameID)
+			} else {
+				stats.Skipped++
 			}
 		}
 	}
-	return nil
+	return stats, nil
 }
 
-func (c *Client) pullAndApplyFull(ctx context.Context, resolvePath func(gameID, pathKey string) string, opts PullOptions, onRetryIn func(time.Duration)) error {
+func (c *Client) pullAndApplyFull(ctx context.Context, resolvePath func(gameID, pathKey string) string, opts PullOptions, onRetryIn func(time.Duration)) (PullStats, error) {
+	var stats PullStats
 	// Paginate so neither the server nor this client holds the whole library in
 	// memory at once. Each page is fetched (with retry/backoff) and applied
 	// before the next is requested.
@@ -563,7 +648,7 @@ func (c *Client) pullAndApplyFull(ctx context.Context, resolvePath func(gameID, 
 	for {
 		page, err := c.pullPageWithRetry(ctx, fullPullPageSize, offset, onRetryIn)
 		if err != nil {
-			return err
+			return stats, err
 		}
 		for _, s := range page.Saves {
 			absPath := resolvePath(s.GameID, s.PathKey)
@@ -574,11 +659,20 @@ func (c *Client) pullAndApplyFull(ctx context.Context, resolvePath func(gameID, 
 			if elig == paths.SkipNotInstalled || elig == paths.SkipNoAnchor {
 				continue
 			}
-			if err := c.applyOneSaveEncrypted(s.GameID, s.PathKey, s.UpdatedAt, s.Content, absPath, opts, s.Encrypted, s.ContentHash); err != nil {
+			applied, err := c.applyOneSaveEncrypted(s.GameID, s.PathKey, s.UpdatedAt, s.Content, absPath, opts, s.Encrypted, s.ContentHash)
+			if err != nil {
 				log.Printf("pull apply: %v", err)
+				stats.Errors++
 				if OnSaveEvent != nil {
 					OnSaveEvent(s.GameID, s.PathKey, "", SaveDirPull, err)
 				}
+				continue
+			}
+			if applied {
+				stats.Applied++
+				stats.noteGame(s.GameID)
+			} else {
+				stats.Skipped++
 			}
 		}
 		offset += len(page.Saves)
@@ -587,7 +681,7 @@ func (c *Client) pullAndApplyFull(ctx context.Context, resolvePath func(gameID, 
 			break
 		}
 	}
-	return nil
+	return stats, nil
 }
 
 // pullPageWithRetry fetches one page of full saves, retrying transient errors
@@ -633,39 +727,41 @@ func (c *Client) pullPageWithRetry(ctx context.Context, limit, offset int, onRet
 }
 
 func (c *Client) applyOneSave(gameID, pathKey, updatedAt, contentB64, absPath string, opts PullOptions) error {
-	return c.applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, absPath, opts, false, "")
+	_, err := c.applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, absPath, opts, false, "")
+	return err
 }
 
 // applyOneSaveEncrypted writes one pulled save to disk. expectedHash, when
 // non-empty, is the server-advertised plaintext SHA-256; the downloaded
 // content must match it or nothing is written (end-to-end pull integrity;
-// empty on pre-5.3 servers).
-func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, absPath string, opts PullOptions, encrypted bool, expectedHash string) error {
+// empty on pre-5.3 servers). applied reports whether the file was written
+// (false = skipped by policy/eligibility/guards), so pull stats stay honest.
+func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, absPath string, opts PullOptions, encrypted bool, expectedHash string) (applied bool, err error) {
 	if opts.SkipGame != nil && opts.SkipGame(gameID) {
 		logSyncDebug("pull_deferred_game_running", "game_id", gameID, "path_key", pathKey)
-		return nil
+		return false, nil
 	}
 	// Slots pushed by pre-5.3 clients can point at our own backup files;
 	// never restore them over the local backup.
 	if IsGSBSArtifact(absPath) {
 		logSyncDebug("pull_skip_gsbs_artifact", "game_id", gameID, "path_key", pathKey, "path", absPath)
-		return nil
+		return false, nil
 	}
 	raw, err := base64.StdEncoding.DecodeString(contentB64)
 	if err != nil {
-		return fmt.Errorf("decode game=%s: %w", gameID, err)
+		return false, fmt.Errorf("decode game=%s: %w", gameID, err)
 	}
 	content, err := c.decodeContent(raw, encrypted)
 	if err != nil {
-		return fmt.Errorf("decrypt game=%s: %w", gameID, err)
+		return false, fmt.Errorf("decrypt game=%s: %w", gameID, err)
 	}
 	serverHash := FileHash(content)
 	if expectedHash != "" && serverHash != expectedHash {
-		return fmt.Errorf("pull integrity: content hash mismatch game=%s path_key=%s (server advertised %s, downloaded %s)", gameID, pathKey, expectedHash, serverHash)
+		return false, fmt.Errorf("pull integrity: content hash mismatch game=%s path_key=%s (server advertised %s, downloaded %s)", gameID, pathKey, expectedHash, serverHash)
 	}
 	elig := paths.EvaluatePullEligibility(absPath, gameID, opts.PullContext)
 	if elig == paths.SkipNotInstalled || elig == paths.SkipNoAnchor {
-		return nil
+		return false, nil
 	}
 	localHash := ""
 	localExists := false
@@ -684,7 +780,7 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 	serverTime = serverTime.Add(-c.serverClockOffset())
 	decision := DecidePull(localExists, localHash, localMtime, serverHash, serverTime, opts.policyFor(gameID))
 	if decision == PullSkip {
-		return nil
+		return false, nil
 	}
 	if decision == PullConflict {
 		RecordConflict(ConflictRecord{
@@ -696,16 +792,16 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 		if OnConflictDetected != nil {
 			OnConflictDetected(gameID, pathKey, absPath)
 		}
-		return nil
+		return false, nil
 	}
 	if len(content) == 0 && localExists {
 		// The push paths never upload empty files, so an empty server blob is
 		// suspect — refuse to clobber existing local data with it.
 		logSyncWarn("pull_skip_empty_server_content", "game_id", gameID, "path_key", pathKey, "path", absPath)
-		return nil
+		return false, nil
 	}
 	if elig != paths.ApplyCreateDir && !paths.PathExists(absPath) {
-		return nil
+		return false, nil
 	}
 	// Validate the target BEFORE any filesystem mutation (MkdirAll/backup):
 	// a save whose resolved path escapes its watch root must not create
@@ -718,27 +814,27 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 				// prove the write stays inside the game's save area. Heals on a
 				// later pull once install roots/manifest resolution catch up.
 				logSyncWarn("pull_blocked_no_watch_root", "game_id", gameID, "path_key", pathKey, "path", absPath)
-				return nil
+				return false, nil
 			}
 			// Overwrite-in-place of a file our own resolver located is safe
 			// even when the root anchor is unavailable.
 			logSyncDebug("pull_overwrite_no_watch_root", "game_id", gameID, "path_key", pathKey, "path", absPath)
 		} else if err := ValidateWriteUnderRoot(absPath, root); err != nil {
-			return err
+			return false, err
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(absPath), 0755); err != nil {
-		return err
+		return false, err
 	}
 	if opts.BackupBeforeOverwrite && localExists {
 		// A failed backup must abort the overwrite: the option promises the
 		// previous local state survives every pull.
 		if err := atomicWriteFile(absPath+".gsbs.bak", localData, 0644); err != nil {
-			return fmt.Errorf("backup before overwrite game=%s path=%s: %w", gameID, absPath, err)
+			return false, fmt.Errorf("backup before overwrite game=%s path=%s: %w", gameID, absPath, err)
 		}
 	}
 	if err := atomicWriteFile(absPath, content, 0644); err != nil {
-		return err
+		return false, err
 	}
 	// Suppress watcher echo: mark this content as already pushed so the
 	// fsnotify Write event for the file we just wrote doesn't trigger a re-upload.
@@ -751,7 +847,7 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 	if OnSaveEvent != nil {
 		OnSaveEvent(gameID, pathKey, "", SaveDirPull, nil)
 	}
-	return nil
+	return true, nil
 }
 
 func (c *Client) pushSlotKey(gameID, pathKey string) string {
@@ -815,6 +911,11 @@ func (c *Client) releasePushSlot() {
 	}
 }
 
+// tryReloadToken picks up a rotated token from TokenReload. Returns false when
+// the reloaded token is unchanged — that is the recursion/loop stopper for the
+// retry-once-per-request auth pattern, so no cross-request latch is needed
+// (a latch here once wedged every long-running install after its second
+// monthly rotation).
 func (c *Client) tryReloadToken() bool {
 	if c.TokenReload == nil {
 		return false
@@ -829,9 +930,21 @@ func (c *Client) tryReloadToken() bool {
 		return false
 	}
 	c.token = newTok
-	c.authRetried = true
 	logSyncInfo("push_token_reload", "success", true)
 	return true
+}
+
+// SetToken updates the bearer token in the live client (the monthly rotation
+// ticker rewrites config; without this the running client keeps the old token
+// until the next 401).
+func (c *Client) SetToken(tok string) {
+	tok = strings.TrimSpace(tok)
+	if tok == "" {
+		return
+	}
+	c.tokenMu.Lock()
+	c.token = tok
+	c.tokenMu.Unlock()
 }
 
 func (c *Client) getToken() string {
@@ -840,20 +953,15 @@ func (c *Client) getToken() string {
 	return c.token
 }
 
-func (c *Client) getAuthRetried() bool {
-	c.tokenMu.RLock()
-	defer c.tokenMu.RUnlock()
-	return c.authRetried
-}
-
 func (c *Client) encodeContent(plaintext []byte) (wire []byte, encrypted bool, err error) {
-	if c.encryptionEnabled && c.passphrase != "" {
+	enabled, passphrase := c.encryptionState()
+	if enabled && passphrase != "" {
 		var enc string
 		var err error
 		if c.useCryptoV2() {
-			enc, err = crypto.EncryptV2(c.passphrase, plaintext)
+			enc, err = crypto.EncryptV2(passphrase, plaintext)
 		} else {
-			enc, err = crypto.Encrypt(c.passphrase, plaintext)
+			enc, err = crypto.Encrypt(passphrase, plaintext)
 		}
 		if err != nil {
 			return nil, false, err
@@ -867,13 +975,21 @@ func (c *Client) decodeContent(wire []byte, encrypted bool) ([]byte, error) {
 	if !encrypted {
 		return wire, nil
 	}
-	if c.passphrase == "" {
+	_, passphrase := c.encryptionState()
+	if passphrase == "" {
 		return nil, fmt.Errorf("encrypted save but no passphrase configured")
 	}
-	return crypto.Decrypt(c.passphrase, string(wire))
+	return crypto.Decrypt(passphrase, string(wire))
 }
 
 func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relativePath string, content []byte) error {
+	return c.pushOnceAttempt(ctx, gameID, pathKey, filePath, relativePath, content, true)
+}
+
+// pushOnceAttempt performs one push. allowAuthRetry permits a single in-place
+// retry after a successful token reload on 401 — per REQUEST, not per client
+// lifetime, so every rotation gets its own chance to heal.
+func (c *Client) pushOnceAttempt(ctx context.Context, gameID, pathKey, filePath, relativePath string, content []byte, allowAuthRetry bool) error {
 	if err := c.acquirePushSlot(ctx); err != nil {
 		return err
 	}
@@ -942,15 +1058,18 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 	defer closeIO(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusUnauthorized {
-			if !c.getAuthRetried() && c.tryReloadToken() {
-				return c.pushOnce(ctx, gameID, pathKey, filePath, relativePath, content)
+			if allowAuthRetry && c.tryReloadToken() {
+				return c.pushOnceAttempt(ctx, gameID, pathKey, filePath, relativePath, content, false)
 			}
 			msg := "push: 401 Unauthorized — token may be invalid or expired; try logging in again from the tray"
 			if OnAuthError != nil {
 				OnAuthError(msg)
 			}
 			logSyncError("push_auth_failed", "game_id", gameID, "path_key", pathKey, "relative_path", relativePath, "error", msg)
-			return fmt.Errorf("push: %w", ErrUnauthorized)
+			// Wrap the typed status so retry classification never mistakes an
+			// auth failure for a retryable transport error (the message alone
+			// carries no "status N" for the legacy parser to find).
+			return fmt.Errorf("push: %w (%w)", ErrUnauthorized, &retry.HTTPError{Status: http.StatusUnauthorized})
 		}
 		if resp.StatusCode == http.StatusRequestEntityTooLarge {
 			msg := readAPIError(resp.Body)
@@ -960,7 +1079,7 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 			if OnQuotaError != nil {
 				OnQuotaError(msg)
 			}
-			return fmt.Errorf("push: 413 %s", msg)
+			return fmt.Errorf("push: %w: %s (%w)", ErrQuotaExceeded, msg, &retry.HTTPError{Status: http.StatusRequestEntityTooLarge, Msg: msg})
 		}
 		if resp.StatusCode == http.StatusConflict {
 			// Server rejected push due to hash mismatch (optimistic concurrency).
@@ -986,7 +1105,8 @@ func (c *Client) pushOnce(ctx context.Context, gameID, pathKey, filePath, relati
 				OnConflictDetected(gameID, pathKey, filePath)
 			}
 			logSyncWarn("push_conflict_409", "game_id", gameID, "path_key", pathKey, "server_hash", conflictResp.CurrentHash, "local_hash", hash)
-			return fmt.Errorf("push: conflict for game=%s path=%s (server hash differs; resolve via tray or web UI)", gameID, pathKey)
+			return fmt.Errorf("push: %w for game=%s path=%s (server hash differs; resolve via tray or web UI) (%w)",
+				ErrConflict, gameID, pathKey, &retry.HTTPError{Status: http.StatusConflict})
 		}
 		bodySnip, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		logSyncWarn("push_http_error", "game_id", gameID, "path_key", pathKey, "status", resp.StatusCode, "body_snippet", strings.TrimSpace(string(bodySnip)))
@@ -1088,15 +1208,46 @@ func (c *Client) RestoreVersion(ctx context.Context, gameID, pathKey string, ver
 // (plaintext SHA-256; see ContentChangeHash) for all saves on the server.
 // Used by startup reconciliation to find saves missing on or differing from the server.
 func (c *Client) FetchServerHashes(ctx context.Context) (map[string]string, error) {
+	state, err := c.FetchServerState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(state))
+	for k, v := range state {
+		out[k] = v.Hash
+	}
+	return out, nil
+}
+
+// ServerSaveInfo is one slot's server-side state as seen by reconcile.
+type ServerSaveInfo struct {
+	Hash string
+	// UpdatedAt is the server timestamp translated onto the LOCAL clock
+	// (serverClockOffset already subtracted), so callers can compare it to
+	// file mtimes directly. Zero when the server row carried no timestamp.
+	UpdatedAt time.Time
+}
+
+// FetchServerState returns "gameID\x00pathKey" -> {hash, updated_at} for every
+// slot with a recorded hash. Reconcile uses the timestamp to detect a local
+// file that is NEWER than the server copy (e.g. its failed push aged out of
+// the outbox) — hash alone can't distinguish "local newer" from "local stale".
+func (c *Client) FetchServerState(ctx context.Context) (map[string]ServerSaveInfo, error) {
 	summaries, err := c.pullSummaries(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]string, len(summaries.Saves))
+	offset := c.serverClockOffset()
+	out := make(map[string]ServerSaveInfo, len(summaries.Saves))
 	for _, s := range summaries.Saves {
-		if s.ContentHash != "" {
-			out[s.GameID+"\x00"+s.PathKey] = s.ContentHash
+		if s.ContentHash == "" {
+			continue
 		}
+		info := ServerSaveInfo{Hash: s.ContentHash}
+		if t, perr := time.Parse(time.RFC3339, s.UpdatedAt); perr == nil {
+			info.UpdatedAt = t.Add(-offset)
+		}
+		out[s.GameID+"\x00"+s.PathKey] = info
 	}
 	return out, nil
 }

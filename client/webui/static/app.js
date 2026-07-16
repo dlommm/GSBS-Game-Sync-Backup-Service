@@ -216,6 +216,17 @@
                         : 'Connect this PC to your GSBS server to start syncing.');
         relogin.hidden = false;
         syncBtn.hidden = true;
+      } else if (s.paused) {
+        // Previously invisible here: a paused client rendered "All synced"
+        // and Sync now silently did nothing for 60s before a misleading toast.
+        setHero('warn', 'Sync paused', 'Resume from the tray menu to continue protecting your saves.');
+        relogin.hidden = true;
+        syncBtn.hidden = true;
+      } else if (s.metered) {
+        setHero('warn', 'Metered connection — sync skipped',
+          'Syncing resumes automatically on an unmetered network (or turn off the metered setting).');
+        relogin.hidden = true;
+        syncBtn.hidden = true;
       } else if (s.conflict_count > 0 || (s.last_sync_at && !s.last_sync_ok)) {
         setHero('warn', 'Attention needed',
           s.conflict_count > 0 ? s.conflict_count + ' conflict' + (s.conflict_count === 1 ? '' : 's') + ' recorded — details in Insights.'

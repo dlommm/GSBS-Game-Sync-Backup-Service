@@ -217,7 +217,10 @@ func saveConfig(c *config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0600)
+	// Atomic: a crash mid-write must never corrupt config.json — a corrupt
+	// file makes loadConfig fail and callers fall back to a blank config,
+	// losing server_url/watch_paths (and a later save persists the blanks).
+	return atomicWriteFile(path, data, 0600)
 }
 
 // mergeWatchPaths merges manifest-derived paths with config watch_paths. Config entries are added first (user override), then manifest entries not already present.

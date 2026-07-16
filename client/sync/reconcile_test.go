@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gsbs/gsbs/pkg/paths"
 	"github.com/stretchr/testify/assert"
@@ -55,7 +56,7 @@ func TestReconcileLocalToServer_NilServerHashes_RefusesBlindUpload(t *testing.T)
 	assert.Equal(t, int32(0), pushCount.Load())
 
 	// Empty non-nil map = fresh account: everything uploads.
-	n = ReconcileLocalToServer(context.Background(), wps, client, map[string]string{})
+	n = ReconcileLocalToServer(context.Background(), wps, client, map[string]ServerSaveInfo{})
 	assert.Equal(t, 2, n)
 	assert.Equal(t, int32(2), pushCount.Load())
 }
@@ -87,8 +88,8 @@ func TestReconcileLocalToServer_MatchingHash_SkipsAll(t *testing.T) {
 
 	// pathKey for a single exact-file pattern is the ruleKey itself.
 	pathKey := pushPathKey("rk1", "save.sav", []string{"*.sav"}, false)
-	serverHashes := map[string]string{
-		"g1\x00" + pathKey: wireHash,
+	serverHashes := map[string]ServerSaveInfo{
+		"g1\x00" + pathKey: {Hash: wireHash},
 	}
 
 	n := ReconcileLocalToServer(context.Background(), wps, client, serverHashes)
@@ -118,8 +119,8 @@ func TestReconcileLocalToServer_MissingSlotKey_Uploads(t *testing.T) {
 	}}
 
 	// Server has saves for a completely different game — our slot key is absent.
-	serverHashes := map[string]string{
-		"other-game\x00some-path": "deadbeef",
+	serverHashes := map[string]ServerSaveInfo{
+		"other-game\x00some-path": {Hash: "deadbeef"},
 	}
 
 	n := ReconcileLocalToServer(context.Background(), wps, client, serverHashes)
@@ -151,8 +152,8 @@ func TestReconcileLocalToServer_ServerHasDifferentHash_Skips(t *testing.T) {
 
 	pathKey := pushPathKey("rk1", "save.sav", nil, true)
 	// Server has the slot but with a different hash — pull/conflict logic should handle.
-	serverHashes := map[string]string{
-		"g1\x00" + pathKey: "differenthash000",
+	serverHashes := map[string]ServerSaveInfo{
+		"g1\x00" + pathKey: {Hash: "differenthash000"},
 	}
 
 	n := ReconcileLocalToServer(context.Background(), wps, client, serverHashes)
@@ -182,7 +183,7 @@ func TestReconcileLocalToServer_SkipsEmptyFiles(t *testing.T) {
 		SyncAll:   true,
 	}}
 
-	n := ReconcileLocalToServer(context.Background(), wps, client, map[string]string{})
+	n := ReconcileLocalToServer(context.Background(), wps, client, map[string]ServerSaveInfo{})
 	assert.Equal(t, 1, n)
 	assert.Equal(t, int32(1), pushCount.Load())
 }
@@ -208,7 +209,7 @@ func TestReconcileLocalToServer_ContextCancelled_StopsEarly(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
-	n := ReconcileLocalToServer(ctx, wps, client, map[string]string{})
+	n := ReconcileLocalToServer(ctx, wps, client, map[string]ServerSaveInfo{})
 	// With the context already cancelled the outer loop exits immediately at the select.
 	assert.Equal(t, 0, n)
 }
@@ -243,8 +244,52 @@ func TestReconcileLocalToServer_SkipsGSBSArtifacts(t *testing.T) {
 		Recursive: true,
 	}}
 
-	n := ReconcileLocalToServer(context.Background(), wps, client, map[string]string{})
+	n := ReconcileLocalToServer(context.Background(), wps, client, map[string]ServerSaveInfo{})
 	assert.Equal(t, 1, n, "only the real save uploads")
 	require.Len(t, pushedPaths, 1)
 	assert.Equal(t, "save.dat", pushedPaths[0])
+}
+
+// A local save that is definitively NEWER than the server's different copy
+// (e.g. its failed push aged out of the outbox while offline) must upload as
+// a compare-and-swap against the observed server hash; ambiguous timestamps
+// must keep skipping.
+func TestReconcileLocalToServer_LocalNewer_CASPush(t *testing.T) {
+	dir := t.TempDir()
+	savePath := filepath.Join(dir, "save.sav")
+	require.NoError(t, os.WriteFile(savePath, []byte("local-newer-content"), 0644))
+
+	const serverHash = "server-old-hash"
+	var pushCount atomic.Int32
+	var gotIfHash atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/saves" && r.Method == http.MethodPost {
+			pushCount.Add(1)
+			gotIfHash.Store(r.Header.Get("X-GSBS-If-Hash"))
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer srv.Close()
+
+	client := newReconcileTestClient(t, srv.URL)
+	wps := []WatchPath{{GameID: "g1", RuleKey: "rk1", Directory: dir, SyncAll: true}}
+	pathKey := pushPathKey("rk1", "save.sav", nil, true)
+
+	// Server copy is a day older than the local file — definitively stale.
+	state := map[string]ServerSaveInfo{
+		"g1\x00" + pathKey: {Hash: serverHash, UpdatedAt: time.Now().Add(-24 * time.Hour)},
+	}
+	n := ReconcileLocalToServer(context.Background(), wps, client, state)
+	assert.Equal(t, 1, n, "definitively newer local save uploads")
+	assert.Equal(t, int32(1), pushCount.Load())
+	assert.Equal(t, serverHash, gotIfHash.Load(), "push must CAS against the observed server hash")
+
+	// Within the skew window: ambiguous — must skip, not push.
+	ResetPushHashCacheForTest()
+	client2 := newReconcileTestClient(t, srv.URL)
+	state["g1\x00"+pathKey] = ServerSaveInfo{Hash: serverHash, UpdatedAt: time.Now().Add(-30 * time.Second)}
+	pushCount.Store(0)
+	n = ReconcileLocalToServer(context.Background(), wps, client2, state)
+	assert.Equal(t, 0, n, "ambiguous timestamps skip")
+	assert.Equal(t, int32(0), pushCount.Load())
 }

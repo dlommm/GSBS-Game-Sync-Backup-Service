@@ -86,3 +86,24 @@ func TestIsRetryableError_PermanentLocalErrors(t *testing.T) {
 		t.Fatal("transport errors stay retryable")
 	}
 }
+
+// HTTPError must classify through multi-%w wrap chains regardless of the
+// surrounding message text (the string parser can't see "push: 413 …").
+func TestHTTPErrorThroughWrapChains(t *testing.T) {
+	base := &HTTPError{Status: 413, Msg: "quota exceeded"}
+	wrapped := fmt.Errorf("push: %w: %s (%w)", errors.New("quota sentinel"), "quota exceeded", base)
+	if got := HTTPStatusFromError(wrapped); got != 413 {
+		t.Fatalf("HTTPStatusFromError(wrapped) = %d, want 413", got)
+	}
+	if IsRetryableError(wrapped) {
+		t.Fatal("413 through wrap chain must be non-retryable")
+	}
+	retryable := fmt.Errorf("pull: %w", &HTTPError{Status: 503})
+	if !IsRetryableError(retryable) {
+		t.Fatal("503 through wrap chain must stay retryable")
+	}
+	// Legacy string format still parses (fallback path).
+	if got := HTTPStatusFromError(errors.New("push: status 502")); got != 502 {
+		t.Fatalf("legacy parse = %d, want 502", got)
+	}
+}

@@ -787,7 +787,23 @@ type WatchPathBuildStats struct {
 	SkippedMissingDir int
 	SkippedMalformed  int
 	SkippedUnsafe     int // resolved to a home/system root — too broad to watch
+	// UnsafeDetails names the skipped-unsafe games/dirs (capped) so the UI can
+	// tell the user "this game matched but its save folder can't be watched"
+	// instead of hiding it at debug level.
+	UnsafeDetails []UnsafeSkip
 }
+
+// UnsafeSkip is one manifest entry whose resolved save dir was refused by the
+// watch-path safety guard.
+type UnsafeSkip struct {
+	GameID string `json:"game_id"`
+	Title  string `json:"title,omitempty"`
+	Dir    string `json:"dir"`
+}
+
+// maxUnsafeDetails caps the per-build details list (the counter still counts
+// everything; ~a hundred over-broad upstream paths is normal).
+const maxUnsafeDetails = 100
 
 // LogZeroWatchPathsSummary logs skip-reason counts when no watch paths were built.
 func LogZeroWatchPathsSummary(stats WatchPathBuildStats) {
@@ -960,6 +976,9 @@ func ManifestToWatchPaths(entries []types.GameSaveLocation, resolver *paths.Reso
 					// on every rebuild — debug-level, with one summary line in the
 					// build stats (a warning per game buried real errors).
 					stats.SkippedUnsafe++
+					if len(stats.UnsafeDetails) < maxUnsafeDetails {
+						stats.UnsafeDetails = append(stats.UnsafeDetails, UnsafeSkip{GameID: e.GameID, Title: e.GameTitle, Dir: abs})
+					}
 					clientlogx.EventDebug("watch_path_unsafe", "game_id", e.GameID, "dir", abs, "template", rule.Directory)
 					continue
 				}

@@ -702,6 +702,12 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 	if info == nil || content == nil {
 		return
 	}
+	// The file read back non-empty: clear the one-shot empty-retry flag so a
+	// FUTURE transient-empty event for this file gets its re-check grace again
+	// (the flag previously leaked and permanently disabled the retry).
+	w.mu.Lock()
+	delete(w.emptyRetries, filePath)
+	w.mu.Unlock()
 	// Write-stability gate: a game doing a slow in-place write can pause
 	// longer than the debounce interval, so the read above may have caught a
 	// half-written file. Re-stat after the read — any size/mtime movement
@@ -756,6 +762,13 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 	}
 	if !retry.IsRetryableError(pushErr) {
 		logSyncWarn("push_non_retryable", "game_id", gameID, "path_key", pathKey, "relative_path", relPath, "error", pushErr)
+		// Conflict: already recorded + surfaced via OnConflictDetected inside
+		// pushOnce — a second toast here would double-report it.
+		// Quota: OnQuotaError already fired (exactly once, since the typed
+		// error stops retry.Do after the first attempt).
+		if errors.Is(pushErr, ErrConflict) || errors.Is(pushErr, ErrQuotaExceeded) {
+			return
+		}
 		if OnPushError != nil {
 			OnPushError(gameID, pathKey, pushErr.Error())
 		}

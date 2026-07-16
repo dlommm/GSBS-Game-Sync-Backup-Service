@@ -176,11 +176,52 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		}
 		return c.Token
 	}
-	if enc, err := client.FetchAccountSettings(ctx); err == nil {
+	// Encryption must FAIL CLOSED: a transient /api/account error at startup
+	// previously disabled encryption for the whole session, silently uploading
+	// plaintext for an encrypted account. Order of trust: live server answer →
+	// last cached answer for this server → (no cache) assume encrypted iff a
+	// passphrase is configured. encodeContent only encrypts when enabled AND a
+	// passphrase is set, so unencrypted accounts are unaffected.
+	var encKnown bool
+	err = retry.Do(ctx, retry.DefaultBackoff(), 3, func() error {
+		enc, ferr := client.FetchAccountSettings(ctx)
+		if ferr != nil {
+			return ferr
+		}
 		client.SetEncryption(enc, cfg.EncryptionPassphrase)
-	} else {
-		log.Printf("account settings: %v (encryption disabled)", err)
-		client.SetEncryption(false, cfg.EncryptionPassphrase)
+		saveAccountSettingsCache(cfg.ServerURL, enc)
+		encKnown = true
+		return nil
+	})
+	if !encKnown {
+		if cached, ok := loadAccountSettingsCache(cfg.ServerURL); ok {
+			log.Printf("account settings: unreachable (%v) — using cached state (encryption=%v)", err, cached)
+			client.SetEncryption(cached, cfg.EncryptionPassphrase)
+		} else {
+			assumed := cfg.EncryptionPassphrase != ""
+			log.Printf("account settings: unreachable (%v), no cache — assuming encryption=%v (passphrase %sconfigured)",
+				err, assumed, map[bool]string{true: "", false: "not "}[assumed])
+			client.SetEncryption(assumed, cfg.EncryptionPassphrase)
+		}
+		// Keep asking in the background; the client applies the real answer
+		// mid-session as soon as the server responds.
+		go func() {
+			ticker := time.NewTicker(5 * time.Minute)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					if enc, ferr := client.FetchAccountSettings(ctx); ferr == nil {
+						client.SetEncryption(enc, cfg.EncryptionPassphrase)
+						saveAccountSettingsCache(cfg.ServerURL, enc)
+						log.Printf("account settings: recovered (encryption=%v)", enc)
+						return
+					}
+				}
+			}
+		}()
 	}
 	// Encryption write-format: follow the server's fleet-readiness signal
 	// unless the config pins it (crypto_v2 true/false).
@@ -207,6 +248,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	if wpStats.SkippedUnsafe > 0 {
 		log.Printf("sync: %d manifest save paths resolve to home/system roots and are not watched (safety guard; details at debug level)", wpStats.SkippedUnsafe)
 	}
+	publishWatchBuildState(wpStats, len(effectiveWatchPaths))
 	// One-time notice if any resolved save folder is blocked (e.g. Flatpak
 	// sandbox not granted). Runs on a snapshot off the startup path.
 	go warnInaccessibleWatchPaths(effectiveWatchPaths)
@@ -304,17 +346,23 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		}
 		UpdateFromSyncStart("Pulling saves", 0)
 		var pullErr error
-		if err := client.PullAndApplyWithResolver(ctx, resolvePath, pullOpts, onRetryIn); err != nil {
+		stats, err := client.PullAndApplyWithResolver(ctx, resolvePath, pullOpts, onRetryIn)
+		if err != nil {
 			log.Printf("%s: %v", label, err)
 			pullErr = err
 			if errors.Is(err, sync.ErrUnauthorized) {
 				log.Printf("%s: auth failure detected — outbox retries paused until re-login", label)
 			}
 		} else {
-			log.Printf("%s: complete", label)
+			log.Printf("%s: complete (applied=%d skipped=%d conflicts=%d errors=%d)",
+				label, stats.Applied, stats.Skipped, stats.Conflicts, stats.Errors)
 			sync.ClearOutboxAuthFailed()
 		}
-		UpdateFromSyncEnd(pullErr, SyncEndStats{})
+		// Real numbers: SyncEndStats{} was hardcoded before, which kept the
+		// Insights "Saves synced (7d)" metric and the completion toast at zero.
+		endStats := SyncEndStats{GamesSynced: len(stats.Games), SavesSynced: stats.Applied}
+		recordSyncStatsForNotify(endStats.GamesSynced, endStats.SavesSynced)
+		UpdateFromSyncEnd(pullErr, endStats)
 		setLastSync(time.Now(), pullErr)
 	}
 
@@ -362,7 +410,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 			time.Sleep(2 * time.Second)
 			reconcileCtx, reconcileCancel := context.WithTimeout(ctx, 5*time.Minute)
 			defer reconcileCancel()
-			serverHashes, sumErr := client.FetchServerHashes(reconcileCtx)
+			serverState, sumErr := client.FetchServerState(reconcileCtx)
 			if sumErr != nil {
 				// Never reconcile blind: without the server's hashes we cannot
 				// tell "missing on server" from "server has a newer copy", and
@@ -376,7 +424,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 			reconRoots := installRoots
 			installRootsMu.RUnlock()
 			reconWPs := buildReconciledWatchPaths(getSyncWatchPaths(), resolver, currentOS, reconRoots)
-			n := sync.ReconcileLocalToServer(reconcileCtx, reconWPs, client, serverHashes)
+			n := sync.ReconcileLocalToServer(reconcileCtx, reconWPs, client, serverState)
 			if n > 0 {
 				log.Printf("reconcile: uploaded %d local save(s) missing on server", n)
 			} else {
@@ -492,6 +540,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 			newSyncWP := getSyncWatchPaths()
 			_ = watcher.AddPaths(newSyncWP)
 			watcher.RemoveStalePaths(newSyncWP)
+			publishWatchBuildState(wpStats, len(newWP))
 			log.Printf("manifest refresh (%s): watch paths +%d -%d (now %d)", reason, added, removed, len(newWP))
 			if len(newWP) == 0 {
 				LogZeroWatchPathsSummary(wpStats)
@@ -519,6 +568,9 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 			doPull("periodic pull")
 		case <-tokenTicker.C:
 			maybeRefreshToken(ctx, cfg)
+			// The rotation rewrites cfg+disk; without this the LIVE client
+			// keeps the old token until the next 401 round-trip.
+			client.SetToken(cfg.Token)
 		case <-syncNowCh:
 			doPull("sync now")
 		case <-ssePullCh:
@@ -557,6 +609,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 				newSyncWP := getSyncWatchPaths()
 				_ = watcher.AddPaths(newSyncWP)
 				watcher.RemoveStalePaths(newSyncWP)
+				publishWatchBuildState(wpStats, len(newWP))
 				if added > 0 || removed > 0 {
 					log.Printf("discovery rebuild: watch paths +%d -%d (now %d)", added, removed, len(newWP))
 				}

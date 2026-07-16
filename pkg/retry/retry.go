@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,10 +23,32 @@ func IsNonRetryableHTTP(status int) bool {
 		status == http.StatusRequestEntityTooLarge
 }
 
-// HTTPStatusFromError extracts an HTTP status from error messages like "status 503" or "push: status 503".
+// HTTPError is a typed HTTP-status error for wrapping into error chains so
+// retry classification does not depend on message formatting. Callers that
+// build user-facing messages (e.g. "push: 413 quota exceeded") should wrap an
+// *HTTPError with %w so HTTPStatusFromError sees the status regardless of the
+// surrounding text.
+type HTTPError struct {
+	Status int
+	Msg    string
+}
+
+func (e *HTTPError) Error() string {
+	if e.Msg == "" {
+		return "status " + strconv.Itoa(e.Status)
+	}
+	return "status " + strconv.Itoa(e.Status) + ": " + e.Msg
+}
+
+// HTTPStatusFromError extracts an HTTP status from a wrapped *HTTPError, or
+// falls back to parsing legacy messages like "status 503" / "push: status 503".
 func HTTPStatusFromError(err error) int {
 	if err == nil {
 		return 0
+	}
+	var he *HTTPError
+	if errors.As(err, &he) {
+		return he.Status
 	}
 	s := err.Error()
 	for _, prefix := range []string{"status ", "push: status ", "pull single: status ", "summaries: status "} {

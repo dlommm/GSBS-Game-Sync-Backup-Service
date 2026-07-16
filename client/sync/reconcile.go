@@ -7,19 +7,23 @@ import (
 )
 
 // ReconcileLocalToServer scans each watched path's resolved local files and uploads
-// any file that is not yet present on the server (missing from serverHashes map).
-// serverHashes maps "gameID\x00pathKey" -> content change hash (plaintext SHA-256).
+// any file that is not yet present on the server (missing from serverState).
+// serverState maps "gameID\x00pathKey" -> {hash, updated_at} (see FetchServerState).
 // A nil map means the server state is UNKNOWN and reconcile refuses to run —
 // pushing without the different-hash guard could overwrite newer server saves
 // after a transient fetch failure. An empty (non-nil) map is a legitimate fresh
 // account and uploads everything.
 // watchPaths must have resolved absolute directories (not templates).
 // Skips empty files and files that already match server hash.
-// When a slot key exists on the server with a different hash, it is skipped — pull/conflict
-// logic handles those cases.
+// When a slot exists on the server with a different hash: if the LOCAL file is
+// definitively newer (mtime beyond the skew window past the server timestamp),
+// it is pushed as a compare-and-swap against the observed server hash — this
+// recovers saves whose failed push aged out of the outbox (they would
+// otherwise never upload until the file changed again). Any other difference
+// is skipped; pull/conflict logic owns those.
 // Runs serially; intended for startup only. Respects ctx cancellation.
-func ReconcileLocalToServer(ctx context.Context, watchPaths []WatchPath, client *Client, serverHashes map[string]string) int {
-	if serverHashes == nil {
+func ReconcileLocalToServer(ctx context.Context, watchPaths []WatchPath, client *Client, serverState map[string]ServerSaveInfo) int {
+	if serverState == nil {
 		logSyncWarn("reconcile_skipped_no_server_state", "reason", "server hashes unavailable; refusing blind uploads")
 		return 0
 	}
@@ -83,16 +87,33 @@ func ReconcileLocalToServer(ctx context.Context, watchPaths []WatchPath, client 
 			if err != nil {
 				return nil
 			}
-			if serverHashes != nil {
-				if serverHashes[slotKey] == changeHash {
+			if srv, existsOnServer := serverState[slotKey]; existsOnServer {
+				if srv.Hash == changeHash {
 					logSyncDebug("reconcile_skip_unchanged", "game_id", wp.GameID, "path_key", pathKey, "file", path)
 					return nil
 				}
-				if _, existsOnServer := serverHashes[slotKey]; existsOnServer {
-					// Server has this save but with different hash — skip; pull/conflict logic handles this
-					logSyncDebug("reconcile_skip_server_has_different", "game_id", wp.GameID, "path_key", pathKey)
+				// Different content. If the local file is definitively newer
+				// than the server copy, its push was lost (e.g. aged out of
+				// the outbox after 7 days offline) — upload it as a CAS
+				// against the observed server hash, exactly like resolving a
+				// conflict with keep-local. A concurrent server change 409s
+				// into the normal conflict flow instead of overwriting.
+				if fi, statErr := os.Stat(path); statErr == nil && !srv.UpdatedAt.IsZero() &&
+					fi.ModTime().Sub(srv.UpdatedAt) > DefaultSkewTolerance {
+					logSyncInfo("reconcile_upload_local_newer", "game_id", wp.GameID, "path_key", pathKey,
+						"relative_path", relPath, "local_mtime", fi.ModTime().UTC().Format("2006-01-02T15:04:05Z"),
+						"server_updated_at", srv.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"))
+					client.markPushed(wp.GameID, pathKey, srv.Hash)
+					if err := client.Push(ctx, wp.GameID, pathKey, path, relPath, content); err != nil {
+						logSyncWarn("reconcile_upload_error", "game_id", wp.GameID, "path_key", pathKey, "error", err)
+					} else {
+						uploaded++
+					}
 					return nil
 				}
+				// Server newer or timestamps ambiguous — pull/conflict logic owns it.
+				logSyncDebug("reconcile_skip_server_has_different", "game_id", wp.GameID, "path_key", pathKey)
+				return nil
 			}
 
 			logSyncInfo("reconcile_upload", "game_id", wp.GameID, "path_key", pathKey, "relative_path", relPath, "bytes", len(content), "file", path)

@@ -408,8 +408,13 @@ type setupStatusResponse struct {
 	PendingUploads int      `json:"pending_uploads"`
 	ConflictCount  int      `json:"conflict_count"`
 	WatchedPaths   int      `json:"watched_paths"`
+	Paused         bool     `json:"paused"`
+	Metered        bool     `json:"metered"`
 	NextSyncETASec int      `json:"next_sync_eta_sec,omitempty"`
 	GamesRunning   int      `json:"games_running,omitempty"`
+	// UnsafeSkips are manifest-matched games whose save folder resolves to a
+	// home/system root the safety guard refuses to watch.
+	UnsafeSkips []UnsafeSkip `json:"unsafe_skips,omitempty"`
 	// Updater fields
 	UpdateLastCheckedAt  string `json:"update_last_checked_at,omitempty"`
 	UpdateLastCheckedAgo string `json:"update_last_checked_ago,omitempty"`
@@ -436,6 +441,7 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	snap := GetTraySnapshot()
 	syncAt, syncErr := getLastSync()
 
+	watchCount, unsafeSkips := getWatchBuildState()
 	resp := setupStatusResponse{
 		LoggedIn:       loggedIn,
 		AuthFailed:     snap.AuthFailed,
@@ -445,8 +451,15 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 		WatcherHealthy: WatcherHealthy.Load(),
 		PendingUploads: snap.PendingUploads,
 		ConflictCount:  snap.ConflictCount,
-		WatchedPaths:   len(snap.Games) + len(snap.Discovered),
-		LastSyncOK:     syncErr == nil,
+		WatchedPaths: watchCount,
+		// Live sources, not the tray snapshot: SyncPaused is the atomic that
+		// actually gates doPull/watcher, and "metered" only matters when the
+		// skip-on-metered setting is enabled (the snapshot's Metered field is
+		// sampled once at menu build and can be stale).
+		Paused:      SyncPaused.Load(),
+		Metered:     cfg != nil && cfg.SkipSyncWhenMetered && IsMeteredConnection(),
+		UnsafeSkips: unsafeSkips,
+		LastSyncOK:  syncErr == nil,
 	}
 	if !syncAt.IsZero() {
 		resp.LastSyncAt = syncAt.UTC().Format("2006-01-02T15:04:05Z")

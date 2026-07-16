@@ -44,7 +44,7 @@ func TestApplyOneSave_IntegrityMismatchWritesNothing(t *testing.T) {
 	opts := DefaultPullOptions()
 	opts.BackupBeforeOverwrite = true
 
-	err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, FileHash([]byte("something-else")))
+	_, err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, FileHash([]byte("something-else")))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "pull integrity")
 
@@ -62,7 +62,7 @@ func TestApplyOneSave_IntegrityMatchApplies(t *testing.T) {
 	ageFile(t, target)
 
 	c := newPullTestClient(t)
-	err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, DefaultPullOptions(), false, FileHash([]byte("server-data")))
+	_, err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, DefaultPullOptions(), false, FileHash([]byte("server-data")))
 	require.NoError(t, err)
 
 	data, readErr := os.ReadFile(target)
@@ -89,7 +89,7 @@ func TestApplyOneSave_EscapeGuardRunsBeforeAnyWrite(t *testing.T) {
 	opts.BackupBeforeOverwrite = true
 	opts.WatchRoot = func(gameID, pathKey string) string { return root }
 
-	err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, "")
+	_, err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "escapes watch root")
 
@@ -114,7 +114,7 @@ func TestApplyOneSave_NoWatchRootBlocksNewFile(t *testing.T) {
 	opts.PullContext = paths.PullContext{InstalledSteamApps: []string{"123"}}
 	opts.WatchRoot = func(gameID, pathKey string) string { return "" }
 
-	err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, "")
+	_, err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, "")
 	require.NoError(t, err, "blocked pull is a skip, not an error")
 	assert.NoFileExists(t, target)
 	assert.NoDirExists(t, filepath.Join(tmp, "steamapps", "compatdata"), "no directories may be created when the root is unresolved")
@@ -132,7 +132,9 @@ func TestApplyOneSave_NoWatchRootAllowsOverwriteInPlace(t *testing.T) {
 	opts := DefaultPullOptions()
 	opts.WatchRoot = func(gameID, pathKey string) string { return "" }
 
-	require.NoError(t, c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, ""))
+	applied, applyErr := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, "")
+	require.NoError(t, applyErr)
+	assert.True(t, applied)
 	data, readErr := os.ReadFile(target)
 	require.NoError(t, readErr)
 	assert.Equal(t, "server-data", string(data))
@@ -146,7 +148,9 @@ func TestApplyOneSave_EmptyServerContentSkipped(t *testing.T) {
 	ageFile(t, target)
 
 	c := newPullTestClient(t)
-	require.NoError(t, c.applyOneSaveEncrypted("g1", "pk1", serverNow(), "", target, DefaultPullOptions(), false, ""))
+	applied, applyErr := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), "", target, DefaultPullOptions(), false, "")
+	require.NoError(t, applyErr)
+	assert.False(t, applied, "empty server content is a skip, not an apply")
 
 	data, readErr := os.ReadFile(target)
 	require.NoError(t, readErr)
@@ -162,7 +166,9 @@ func TestApplyOneSave_SkipsGSBSArtifactTargets(t *testing.T) {
 	ageFile(t, target)
 
 	c := newPullTestClient(t)
-	require.NoError(t, c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, DefaultPullOptions(), false, ""))
+	applied, applyErr := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, DefaultPullOptions(), false, "")
+	require.NoError(t, applyErr)
+	assert.False(t, applied, "artifact targets are never restored")
 
 	data, readErr := os.ReadFile(target)
 	require.NoError(t, readErr)
@@ -189,7 +195,7 @@ func TestApplyOneSave_BackupFailureAbortsOverwrite(t *testing.T) {
 	opts := DefaultPullOptions()
 	opts.BackupBeforeOverwrite = true
 
-	err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, "")
+	_, err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "backup before overwrite")
 
