@@ -638,6 +638,13 @@ type setupStatusResponse struct {
 	// UnsafeSkips are manifest-matched games whose save folder resolves to a
 	// home/system root the safety guard refuses to watch.
 	UnsafeSkips []UnsafeSkip `json:"unsafe_skips,omitempty"`
+	// BlockedDirs are watch dirs the process cannot read (Flatpak sandbox
+	// grants, permissions); the dashboard lists them with fix commands.
+	BlockedDirs []string `json:"blocked_dirs,omitempty"`
+	Flatpak     bool     `json:"flatpak,omitempty"`
+	// GameAwareLimited: running under Flatpak where game detection covers
+	// Steam only (registry signal; the process scan is sandbox-blocked).
+	GameAwareLimited bool `json:"game_aware_limited,omitempty"`
 	// Updater fields
 	UpdateLastCheckedAt  string `json:"update_last_checked_at,omitempty"`
 	UpdateLastCheckedAgo string `json:"update_last_checked_ago,omitempty"`
@@ -682,7 +689,11 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 		Paused:      SyncPaused.Load(),
 		Metered:     cfg != nil && cfg.SkipSyncWhenMetered && IsMeteredConnection(),
 		UnsafeSkips: unsafeSkips,
-		LastSyncOK:  syncErr == nil,
+		BlockedDirs: BlockedWatchDirs(),
+		Flatpak:     isFlatpak(),
+		GameAwareLimited: isFlatpak() &&
+			(cfg == nil || cfg.GameAwareSync == nil || *cfg.GameAwareSync),
+		LastSyncOK: syncErr == nil,
 	}
 	if !syncAt.IsZero() {
 		resp.LastSyncAt = syncAt.UTC().Format("2006-01-02T15:04:05Z")

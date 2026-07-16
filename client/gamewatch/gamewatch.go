@@ -107,11 +107,16 @@ func pathUnder(path, root string) bool {
 // Poller periodically scans processes and tracks per-game running state with
 // stop hysteresis. Callbacks fire from the polling goroutine.
 type Poller struct {
+	// Detector may be nil when ExtraRunning supplies the only signal
+	// (Flatpak: the sandbox PID namespace blocks the process scan).
 	Detector Detector
 	Interval time.Duration
 	// Roots returns the current game→install-roots map (refreshed each scan
 	// so discovery updates take effect without restarting the poller).
 	Roots func() map[string][]string
+	// ExtraRunning supplies additional gameID→running signals merged into
+	// each scan (e.g. Steam's registry RunningAppID). May be nil.
+	ExtraRunning func() map[string]bool
 	// OnGameStart / OnGameStop fire on state transitions (may be nil).
 	OnGameStart func(gameID string)
 	OnGameStop  func(gameID string)
@@ -163,14 +168,26 @@ func (p *Poller) Run(ctx context.Context) {
 
 // scan performs one detection pass and fires transition callbacks.
 func (p *Poller) scan() {
-	if p.Detector == nil || p.Roots == nil {
+	if (p.Detector == nil && p.ExtraRunning == nil) || (p.Detector != nil && p.Roots == nil) {
 		return
 	}
-	procs, err := p.Detector.Snapshot()
-	if err != nil {
-		return // best-effort: a failed scan changes nothing
+	seen := map[string]bool{}
+	if p.Detector != nil {
+		procs, err := p.Detector.Snapshot()
+		if err != nil {
+			return // best-effort: a failed scan changes nothing
+		}
+		seen = RunningGames(procs, p.Roots())
 	}
-	seen := RunningGames(procs, p.Roots())
+	// Merge auxiliary signals (e.g. Steam's registry RunningAppID under
+	// Flatpak, where the process scan is blocked by the PID namespace).
+	if p.ExtraRunning != nil {
+		for id, on := range p.ExtraRunning() {
+			if on {
+				seen[id] = true
+			}
+		}
+	}
 
 	var started, stopped []string
 	p.mu.Lock()

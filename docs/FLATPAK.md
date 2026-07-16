@@ -99,16 +99,45 @@ sandbox.
 
 ---
 
+## Steam Deck quick start
+
+1. **Install** (Desktop Mode): add the GSBS repo and install as described under
+   *For users* above, or download the bundle from Releases.
+2. **Log in**: launch GSBS from the application menu (Desktop Mode); the tray
+   icon opens the local setup page in the browser — enter your server URL and
+   credentials once.
+3. **Autostart**: enable *Run at startup* from the tray. Since 5.4 this goes
+   through the Background portal (with a direct fallback), so it survives
+   SteamOS updates.
+4. **SD-card game libraries** under `/run/media` are covered out of the box.
+   A Steam library on a second *internal* drive or another mount needs a
+   one-time grant:
+   ```bash
+   flatpak override --user --filesystem="/path/to/SteamLibrary" io.github.dlommm.GSBS
+   ```
+   The client's **Dashboard → "Folders that need access"** panel lists any
+   blocked folder with the exact command to run (Flatseal works too).
+5. **Game-aware sync on Deck**: since 5.4 GSBS reads Steam's own state file to
+   see which Steam game is running and defers its sync until you quit — this
+   works in both Desktop and Gaming Mode. Non-Steam games (Heroic, Lutris, …)
+   are not detected under Flatpak and simply sync immediately.
+
+---
+
 ## Limitations
 
-- **Autostart**: the "Run at startup" toggle writes a host autostart entry that
-  relaunches GSBS via `flatpak run io.github.dlommm.GSBS --minimized`, so it
-  works from the sandbox. (A future version may switch to the Background portal.)
+- **Autostart** uses the Background portal since 5.4, falling back to a host
+  autostart entry (`flatpak run io.github.dlommm.GSBS --minimized`) when the
+  portal is unavailable.
 - **Self-update is disabled** in the Flatpak build — the tray shows "Updates
   managed by your software center"; use `flatpak update`.
-- GSBS shows a one-time tray notice if a save folder isn't accessible in the
-  sandbox; grant it with Flatseal (see above).
-- Unusual save locations may need a Flatseal grant (see above).
+- **Game-aware sync detects Steam games only** under Flatpak (via Steam's
+  `registry.vdf`): the sandbox's PID namespace hides host processes, so the
+  process-scan detector used on other platforms cannot run. Non-Steam games
+  sync immediately instead of deferring.
+- Blocked save folders are listed on the client Dashboard ("Folders that need
+  access") with per-folder fix commands; unusual locations may need a
+  Flatseal grant (see above).
 
 ---
 

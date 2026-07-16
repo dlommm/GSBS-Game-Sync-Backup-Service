@@ -13,11 +13,27 @@ import (
 
 var sandboxWarnOnce sync.Once
 
+// blockedDirsState holds the latest permission-blocked watch dirs so the
+// local dashboard can list them with exact fix instructions (a single vague
+// toast was the only signal before 5.4).
+var blockedDirsState struct {
+	mu   sync.Mutex
+	dirs []string
+}
+
+// BlockedWatchDirs returns the last detected permission-blocked directories.
+func BlockedWatchDirs() []string {
+	blockedDirsState.mu.Lock()
+	defer blockedDirsState.mu.Unlock()
+	return append([]string(nil), blockedDirsState.dirs...)
+}
+
 // warnInaccessibleWatchPaths checks resolved watch directories for permission
 // problems — most often a Flatpak sandbox that hasn't been granted a particular
-// save folder — and surfaces a single tray notification instead of silently
-// failing to watch them. A directory that simply doesn't exist (game not
-// installed, or no saves written yet) is normal and ignored.
+// save folder — records them for the dashboard, and surfaces a single tray
+// notification instead of silently failing to watch them. A directory that
+// simply doesn't exist (game not installed, or no saves written yet) is
+// normal and ignored.
 //
 // Safe to call from a goroutine: it only reads the snapshot slice passed in.
 func warnInaccessibleWatchPaths(paths []watchPath) {
@@ -33,6 +49,9 @@ func warnInaccessibleWatchPaths(paths []watchPath) {
 			blocked = append(blocked, dir)
 		}
 	}
+	blockedDirsState.mu.Lock()
+	blockedDirsState.dirs = blocked
+	blockedDirsState.mu.Unlock()
 	if len(blocked) == 0 {
 		return
 	}

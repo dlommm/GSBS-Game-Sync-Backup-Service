@@ -270,6 +270,54 @@
       el('conflictCount').textContent = s.conflict_count;
       el('conflictCard').hidden = !s.conflict_count;
 
+      // Access panel: sandbox-blocked folders + unsafe-root skips + the
+      // Flatpak game-detection limitation. Built from nodes, no HTML concat.
+      var accessPanel = el('accessPanel');
+      if (accessPanel) {
+        var blocked = s.blocked_dirs || [];
+        var unsafe = s.unsafe_skips || [];
+        var showPanel = blocked.length > 0 || unsafe.length > 0 || s.game_aware_limited;
+        accessPanel.hidden = !showPanel;
+        if (showPanel) {
+          var intro = el('accessIntro');
+          if (blocked.length > 0) {
+            intro.textContent = s.flatpak
+              ? 'These save folders exist but the Flatpak sandbox can’t read them. Grant access with the command below (or Flatseal), then restart GSBS.'
+              : 'These save folders exist but GSBS can’t read them — check folder permissions.';
+          } else {
+            intro.textContent = '';
+          }
+          var list = el('blockedDirList');
+          list.textContent = '';
+          blocked.forEach(function (dir) {
+            var li = document.createElement('li');
+            li.className = 'client-game-item';
+            var name = document.createElement('code');
+            name.className = 'code-inline';
+            name.textContent = dir;
+            li.appendChild(name);
+            if (s.flatpak) {
+              var fix = document.createElement('code');
+              fix.className = 'code-inline';
+              fix.textContent = 'flatpak override --user --filesystem="' + dir + '" io.github.dlommm.GSBS';
+              li.appendChild(document.createElement('br'));
+              li.appendChild(fix);
+            }
+            list.appendChild(li);
+          });
+          el('gameAwareNote').hidden = !s.game_aware_limited;
+          var unsafeNote = el('unsafeSkipNote');
+          if (unsafe.length > 0) {
+            var names = unsafe.slice(0, 5).map(function (u) { return u.title || u.game_id; }).join(', ');
+            unsafeNote.textContent = unsafe.length + ' matched game(s) point at a broad system folder GSBS refuses to watch for safety (' +
+              names + (unsafe.length > 5 ? ', …' : '') + '). Add the game manually with its exact save folder to sync it.';
+            unsafeNote.hidden = false;
+          } else {
+            unsafeNote.hidden = true;
+          }
+        }
+      }
+
       var updateCard = el('updateCard');
       if (s.update_status === 'available' && s.update_available_tag) {
         el('updateTag').textContent = s.update_available_tag;

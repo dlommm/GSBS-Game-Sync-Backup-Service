@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	gosync "sync"
 	"time"
@@ -26,18 +27,25 @@ func startGameWatch(ctx context.Context, cfg *config, getWatcher func() *sync.Wa
 		log.Println("game-aware sync: disabled by config")
 		return nil
 	}
-	if isFlatpak() {
-		log.Println("game-aware sync: unavailable under Flatpak (sandbox hides host processes); sync behaves as before")
-		return nil
-	}
 	interval := time.Duration(cfg.GameScanInterval)
 	if interval <= 0 {
 		interval = gamewatch.DefaultInterval
 	}
 	p := &gamewatch.Poller{
-		Detector: gamewatch.NewDetector(),
 		Interval: interval,
 		Roots:    rootsSnapshot,
+	}
+	if isFlatpak() {
+		// The sandbox PID namespace hides host processes, so the process-scan
+		// detector is useless here. Steam's registry.vdf (a plain file under
+		// $HOME, readable through the existing filesystem grants) still says
+		// which Steam app is running — the signal that matters on Steam Deck.
+		// Non-Steam games stay undetected under Flatpak and sync immediately
+		// as before (documented limitation).
+		p.ExtraRunning = steamRegistryRunning()
+		log.Println("game-aware sync (Flatpak): Steam-registry signal only — non-Steam games sync immediately")
+	} else {
+		p.Detector = gamewatch.NewDetector()
 	}
 	// Session capture (v5.2): remember when each game appeared; on exit,
 	// report the finished session so the server's version timeline can show
@@ -69,6 +77,28 @@ func startGameWatch(ctx context.Context, cfg *config, getWatcher func() *sync.Wa
 	go p.Run(ctx)
 	log.Printf("game-aware sync: enabled (scan interval %s)", interval)
 	return p
+}
+
+// steamRegistryRunning returns the ExtraRunning closure for Flatpak: it maps
+// Steam's RunningAppID (from registry.vdf) to the manifest game ID via the
+// discovery cache's IDMap ("steam:<appid>" keys). Refreshed every scan; a
+// missing/zero/unmapped app ID means "nothing running".
+func steamRegistryRunning() func() map[string]bool {
+	home, _ := os.UserHomeDir()
+	regPaths := gamewatch.SteamRegistryPaths(home)
+	return func() map[string]bool {
+		appID := gamewatch.ReadRunningSteamAppID(regPaths)
+		if appID == "" {
+			return nil
+		}
+		gameID := appID
+		if cache := loadDiscoveryCache(); cache.IDMap != nil {
+			if mapped := cache.IDMap["steam:"+appID]; mapped != "" {
+				gameID = mapped
+			}
+		}
+		return map[string]bool{gameID: true}
+	}
 }
 
 // reportGameSession posts one finished play session to the server (v5.2).
