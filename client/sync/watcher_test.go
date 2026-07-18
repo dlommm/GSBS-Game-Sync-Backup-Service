@@ -368,3 +368,14 @@ func TestFindWatchDir_CaseInsensitive(t *testing.T) {
 	require.True(t, ok2, "expected case-insensitive match to succeed")
 	assert.Equal(t, canonical, foundDir2, "should return the canonical registered path")
 }
+
+func TestEffectiveMaxSaveBytes(t *testing.T) {
+	w := &Watcher{}
+	if got := w.effectiveMaxSaveBytes(); got != DefaultMaxSaveBytes {
+		t.Fatalf("default = %d, want %d", got, DefaultMaxSaveBytes)
+	}
+	w.MaxSaveBytes = 5 << 20
+	if got := w.effectiveMaxSaveBytes(); got != 5<<20 {
+		t.Fatalf("override = %d, want %d", got, 5<<20)
+	}
+}

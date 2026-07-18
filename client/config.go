@@ -102,6 +102,7 @@ type config struct {
 	SkipOverwriteWhenLocalNewer bool              `json:"skip_overwrite_when_local_newer,omitempty"` // if true, on pull do not overwrite when local file is newer than server
 	ManifestInclude             string            `json:"manifest_include,omitempty"`                // "saves", "config", or "both" (default) — which manifest entries to fetch
 	MaxSyncKbps                 int               `json:"max_sync_kbps,omitempty"`                   // optional max sync bandwidth in KiB/s; 0 = no limit
+	MaxSaveMB                   int               `json:"max_save_mb,omitempty"`                     // skip uploading a single save larger than this many MiB (0 = default 256)
 	SyncPaused                  bool              `json:"sync_paused,omitempty"`                     // if true, do not run periodic pull or watcher push until resumed
 	SkipSyncWhenMetered         bool              `json:"skip_sync_when_metered,omitempty"`          // Windows: skip pull/push when connection is metered
 	WatchExclude                []string          `json:"watch_exclude,omitempty"`                   // glob patterns for files to ignore when watching (e.g. "*.tmp", "*.bak")

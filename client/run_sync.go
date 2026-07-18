@@ -412,6 +412,9 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	}
 	watcher.ExcludePatterns = cfg.WatchExclude
 	watcher.Verbose = cfg.VerboseLog
+	if cfg.MaxSaveMB > 0 {
+		watcher.MaxSaveBytes = int64(cfg.MaxSaveMB) << 20
+	}
 	watcher.IsPaused = syncDeferred
 	// Per-game "Sync now" from the tray/local UI.
 	setFlushGameHook(func(gameID string) { watcher.FlushPendingFor(gameID) })

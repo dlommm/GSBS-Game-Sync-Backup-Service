@@ -90,6 +90,23 @@ type Watcher struct {
 	DeferPush       func(gameID string) bool
 	ExcludePatterns []string
 	Verbose         bool
+	// MaxSaveBytes caps the size of a single save the watcher will read into
+	// memory and upload (0 = DefaultMaxSaveBytes). A push reads the whole file,
+	// encrypts and gzips it in memory (~3x), so an unbounded read risks OOM; an
+	// oversized save is skipped and surfaced via OnPushError instead.
+	MaxSaveBytes int64
+}
+
+// DefaultMaxSaveBytes is the built-in per-save size ceiling (256 MiB) — far
+// above any real game save, below the memory cliff of buffering + encrypting +
+// compressing a file in RAM.
+const DefaultMaxSaveBytes = 256 << 20
+
+func (w *Watcher) effectiveMaxSaveBytes() int64 {
+	if w.MaxSaveBytes > 0 {
+		return w.MaxSaveBytes
+	}
+	return DefaultMaxSaveBytes
 }
 
 // gameDeferRecheck is how often a deferred push re-checks whether its game
@@ -637,6 +654,14 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 		var statErr error
 		info, statErr = os.Stat(filePath)
 		if statErr == nil && info.Size() > 0 {
+			if maxBytes := w.effectiveMaxSaveBytes(); info.Size() > maxBytes {
+				logSyncWarn("push_too_large", "game_id", gameID, "file", filePath,
+					"size", info.Size(), "max", maxBytes, "msg", "save exceeds max size; not uploaded")
+				if OnPushError != nil {
+					OnPushError(gameID, pathKey, fmt.Sprintf("save is %d bytes, over the %d-byte limit — not uploaded", info.Size(), maxBytes))
+				}
+				return
+			}
 			var readErr error
 			content, readErr = os.ReadFile(filePath)
 			if readErr == nil {
