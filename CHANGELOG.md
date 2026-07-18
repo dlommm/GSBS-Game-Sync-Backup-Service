@@ -2,7 +2,7 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [5.5.0] - 2026-07-18
 
 Two passes: a security/safety/performance/hygiene pass from a full-project
 audit, and a WebUI deep-dive (server + client) that followed it.

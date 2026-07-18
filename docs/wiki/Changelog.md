@@ -6,6 +6,19 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.5.0] — 2026-07-18
+
+Hardening + WebUI deep-dive release.
+
+### Highlights
+- **Live updates work again** across the WebUI — the SSE pipeline had silently broken under htmx 2, so the activity pulse, notification/conflict badges, admin job progress, and auto-refreshing panels were all stale until reload. All restored and verified end-to-end.
+- **Security hardening**: SSRF-guarded notification webhooks, per-account login lockout on top of IP rate limits, storage quotas can no longer be spoofed by a client, the client's local control server resists CSRF/DNS-rebinding, and client secrets are encrypted at rest when no OS keyring is available.
+- **A faster, lighter UI**: static assets ship with real caching and gzip (CSS 87KB → 16KB on the wire), ~900KB of oversized logo art removed from the binaries, and the client dashboard gets instant SSE updates instead of 5-second polling — a real battery win on Steam Deck.
+- **Cover-art-forward My Games**: Steam library art at full 2:3 portrait with sync status on the artwork; the admin area gains the standard topbar (search, bell, theme toggle, log out).
+- **Data-safety fixes**: crash-safe file writes everywhere, save deletion/promotion ordering fixed, reads hash-verify saves and fail closed, and admins can purge corrupt saves from the UI.
+
+---
+
 ## [5.4.0] — 2026-07-15
 
 Client deep-dive release — all four clients (Windows, macOS, Linux, Flatpak/Steam Deck) audited and extended.
