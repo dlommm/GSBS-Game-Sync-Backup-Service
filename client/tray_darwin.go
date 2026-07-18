@@ -24,6 +24,7 @@ func runTray() {
 }
 
 func onExitDarwin() {
+	FlushActivityNow()
 	syncMu.Lock()
 	defer syncMu.Unlock()
 	if syncCancel != nil {

@@ -46,6 +46,7 @@ func onReadyWindows() {
 }
 
 func onExitWindows() {
+	FlushActivityNow()
 	syncMu.Lock()
 	defer syncMu.Unlock()
 	if syncCancel != nil {

@@ -23,10 +23,18 @@ type ActivityEntry struct {
 
 const activityLogCap = 300
 
+// activityFlushDelay coalesces rapid RecordActivity calls (e.g. a bulk pull
+// applying hundreds of saves) into a single disk write instead of one
+// fsync-rename per entry. The in-memory log updates immediately, so the UI is
+// unaffected; only persistence is deferred by up to this window.
+const activityFlushDelay = 2 * time.Second
+
 var (
 	activityMu     gosync.Mutex
 	activityLoaded bool
 	activityLog    []ActivityEntry
+	activityDirty  bool
+	activityTimer  *time.Timer
 )
 
 func activityLogPath() string {
@@ -48,7 +56,9 @@ func loadActivityLocked() {
 	}
 }
 
-// RecordActivity appends one feed entry (ring-buffered, persisted).
+// RecordActivity appends one feed entry (ring-buffered) and schedules a
+// debounced persist. Persistence is coalesced so a burst of events costs one
+// disk write, not one per entry.
 func RecordActivity(e ActivityEntry) {
 	if e.At.IsZero() {
 		e.At = time.Now()
@@ -59,13 +69,43 @@ func RecordActivity(e ActivityEntry) {
 	if len(activityLog) > activityLogCap {
 		activityLog = activityLog[len(activityLog)-activityLogCap:]
 	}
+	activityDirty = true
+	if activityTimer == nil {
+		activityTimer = time.AfterFunc(activityFlushDelay, flushActivity)
+	}
+	activityMu.Unlock()
+}
+
+// flushActivity writes the pending activity log to disk once, then re-arms only
+// if more entries arrive. Runs on the AfterFunc goroutine.
+func flushActivity() {
+	activityMu.Lock()
+	if !activityDirty {
+		activityTimer = nil
+		activityMu.Unlock()
+		return
+	}
 	snapshot := append([]ActivityEntry(nil), activityLog...)
+	activityDirty = false
+	activityTimer = nil
 	activityMu.Unlock()
 
 	if data, err := json.Marshal(snapshot); err == nil {
 		_ = os.MkdirAll(ClientDataDir(), 0755)
 		_ = atomicWriteFile(activityLogPath(), data, 0644)
 	}
+}
+
+// FlushActivityNow persists any pending activity immediately (best-effort),
+// for use on a clean shutdown so the last few seconds of feed aren't lost.
+func FlushActivityNow() {
+	activityMu.Lock()
+	if activityTimer != nil {
+		activityTimer.Stop()
+		activityTimer = nil
+	}
+	activityMu.Unlock()
+	flushActivity()
 }
 
 // RecentActivity returns up to n entries, newest first.

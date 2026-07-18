@@ -53,7 +53,8 @@ func TestSaveConfigKeyringStripsTokenFromFile(t *testing.T) {
 	}
 }
 
-// Keyring disabled: secrets stay in the (0600) file as a graceful fallback.
+// Keyring disabled: secrets are stored ENCRYPTED (secret_file.go), never left
+// cleartext in config.json, and are still recovered on load.
 func TestSaveConfigFileFallback(t *testing.T) {
 	keyring.MockInit()
 	t.Setenv("GSBS_TOKEN_STORE", "file")
@@ -69,15 +70,15 @@ func TestSaveConfigFileFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "tok-file") {
-		t.Fatalf("fallback should keep token in file:\n%s", data)
+	if strings.Contains(string(data), "tok-file") {
+		t.Fatalf("token must not be stored cleartext in config.json:\n%s", data)
 	}
 	got, err := loadConfig()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Token != "tok-file" {
-		t.Fatalf("loadConfig token = %q", got.Token)
+		t.Fatalf("loadConfig token = %q (should recover from the encrypted store)", got.Token)
 	}
 }
 

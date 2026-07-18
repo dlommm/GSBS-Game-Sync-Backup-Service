@@ -120,7 +120,8 @@ func TestActivityLogRoundTrip(t *testing.T) {
 	assert.Equal(t, "g2", recent[0].GameID, "newest first")
 	assert.Equal(t, "g1", recent[1].GameID)
 
-	// Force a reload from disk.
+	// Persistence is debounced now; flush before forcing a reload from disk.
+	FlushActivityNow()
 	activityMu.Lock()
 	activityLoaded = false
 	activityLog = nil
