@@ -26,12 +26,12 @@ func TestAnalyticsQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	meta := SaveMeta{ContentSize: 100}
-	if _, err := st.UpsertSaveWithMeta(ctx, userID, "730", "main", []byte("data"), &meta); err != nil {
+	// Stored size is derived from the actual content bytes, never a
+	// client-declared value: "data" and "more" are 4 bytes each → 8 total.
+	if _, err := st.UpsertSaveWithMeta(ctx, userID, "730", "main", []byte("data"), &SaveMeta{}); err != nil {
 		t.Fatal(err)
 	}
-	meta.ContentSize = 50
-	if _, err := st.UpsertSaveWithMeta(ctx, userID, "730", "cfg", []byte("more"), &meta); err != nil {
+	if _, err := st.UpsertSaveWithMeta(ctx, userID, "730", "cfg", []byte("more"), &SaveMeta{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -46,7 +46,7 @@ func TestAnalyticsQueries(t *testing.T) {
 	if err != nil || len(top) != 1 {
 		t.Fatalf("ListTopSaveGames: %v len=%d", err, len(top))
 	}
-	if top[0].GameID != "730" || top[0].SaveCount != 2 || top[0].StorageBytes != 150 {
+	if top[0].GameID != "730" || top[0].SaveCount != 2 || top[0].StorageBytes != 8 {
 		t.Fatalf("top game: %+v", top[0])
 	}
 

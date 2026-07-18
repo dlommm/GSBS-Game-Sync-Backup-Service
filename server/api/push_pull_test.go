@@ -385,3 +385,42 @@ func TestPullSingleSaveKeyTooLong(t *testing.T) {
 		t.Fatalf("expected 400, got %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// TestPushIgnoresClientContentSize: a client cannot under-report its storage
+// footprint via X-Content-Size. The server counts actual stored bytes, so a
+// spoofed size neither evades the quota nor corrupts usage accounting.
+func TestPushIgnoresClientContentSize(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := auth.NewService(st)
+	ctx := context.Background()
+	userID, _ := svc.RegisterUser(ctx, "u1", "password123")
+	_, token, _ := svc.Login(ctx, "u1", "password123", "c", "linux")
+	h := NewHandler(st, svc, false, nil, nil, nil, nil, nil, nil, 0, false, "", "test")
+
+	body := bytes.Repeat([]byte("A"), 1000)
+	req := httptest.NewRequest(http.MethodPost, "/api/saves", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Game-ID", "game1")
+	req.Header.Set("X-Path-Key", "pk1")
+	req.Header.Set("X-Content-Hash", sha256Hex(body))
+	req.Header.Set("X-Content-Size", "1") // the lie: claim a single byte
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("push: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// UserStorageBytes is the saves-only term (content_size), the value a
+	// spoofed X-Content-Size used to poison: it read 1 before the fix.
+	saves, err := st.UserStorageBytes(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saves != 1000 {
+		t.Fatalf("UserStorageBytes = %d, want 1000 (real bytes, not the spoofed X-Content-Size)", saves)
+	}
+}

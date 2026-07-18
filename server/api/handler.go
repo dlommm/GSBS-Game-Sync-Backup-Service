@@ -1137,7 +1137,9 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		Str("user_id", userID).Str("game_id", gameID).Str("path_key", pathKey).
 		Str("file", filePath).Int("size", len(content)).Msg("push")
 	contentHash := strings.TrimSpace(r.Header.Get("X-Content-Hash"))
-	contentSize, _ := strconv.ParseInt(r.Header.Get("X-Content-Size"), 10, 64)
+	// X-Content-Size is intentionally NOT read for accounting — the store
+	// derives the authoritative size from the actual stored bytes so a client
+	// cannot under-report to evade its quota (see UpsertSaveWithMeta).
 	encrypted := r.Header.Get("X-Encrypted") == "1"
 	// The stored hash feeds dedup and optimistic concurrency, so the server
 	// verifies it rather than trusting the client. For unencrypted pushes the
@@ -1156,7 +1158,6 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 	clientID, _ := r.Context().Value(contextClientID).(string)
 	meta := &store.SaveMeta{
 		ContentHash:      contentHash,
-		ContentSize:      contentSize,
 		ClientID:         clientID,
 		Encrypted:        encrypted,
 		RelativePath:     relPath,

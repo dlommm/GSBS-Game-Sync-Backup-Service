@@ -425,7 +425,6 @@ func (p PruneCounts) Total() int64 {
 // SaveMeta optional metadata for upsert (hash dedup, client tracking).
 type SaveMeta struct {
 	ContentHash  string
-	ContentSize  int64
 	ClientID     string
 	Encrypted    bool
 	RelativePath string // validated client-relative path when GSBS_SAVE_ROOT is set

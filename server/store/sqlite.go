@@ -847,9 +847,10 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 		if meta.ContentHash != "" {
 			contentHash = meta.ContentHash
 		}
-		if meta.ContentSize > 0 {
-			contentSize = meta.ContentSize
-		}
+		// contentSize stays int64(len(content)) — the actual stored footprint.
+		// The client-declared X-Content-Size is NOT trusted for accounting: a
+		// spoofed value would let a client under-report and evade its quota and
+		// the global storage limit (both count COALESCE(content_size, ...)).
 		clientID = meta.ClientID
 		if meta.Encrypted {
 			encrypted = 1
@@ -1157,32 +1158,44 @@ func (s *sqliteStore) DeleteSave(ctx context.Context, userID, gameID, pathKey st
 		`SELECT storage_path FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
 		userID, gameID, pathKey,
 	).Scan(&storagePath)
-	if storagePath.Valid && storagePath.String != "" {
-		removeSaveFile(storagePath.String)
-	}
-	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
-		userID, gameID, pathKey,
-	)
+	// Delete the rows (save + its versions) atomically first; a mid-way failure
+	// rolls back and leaves the blob intact. Only after the commit is the file
+	// removed, so we never orphan a row pointing at a deleted blob.
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	_, _ = s.db.ExecContext(ctx,
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+		userID, gameID, pathKey,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM save_versions WHERE user_id = ? AND game_id = ? AND path_key = ?`,
 		userID, gameID, pathKey,
-	)
+	); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if storagePath.Valid && storagePath.String != "" {
+		removeSaveFile(storagePath.String)
+	}
 	return nil
 }
 
 // DeleteSavesForGame removes every save (and its versions and filesystem blobs)
 // for one game belonging to a user. Returns the number of save rows deleted.
 func (s *sqliteStore) DeleteSavesForGame(ctx context.Context, userID, gameID string) (int, error) {
+	var paths []string
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT storage_path FROM saves WHERE user_id = ? AND game_id = ? AND storage_path IS NOT NULL AND storage_path != ''`,
 		userID, gameID,
 	)
 	if err == nil {
-		var paths []string
 		for rows.Next() {
 			var p sql.NullString
 			if rows.Scan(&p) == nil && p.Valid && p.String != "" {
@@ -1190,17 +1203,29 @@ func (s *sqliteStore) DeleteSavesForGame(ctx context.Context, userID, gameID str
 			}
 		}
 		rows.Close()
-		for _, p := range paths {
-			removeSaveFile(p)
-		}
 	}
-	res, err := s.db.ExecContext(ctx,
+	// Rows (saves + versions) go in one transaction; files are removed only
+	// after the commit so a failure never orphans a row against a missing blob.
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx,
 		`DELETE FROM saves WHERE user_id = ? AND game_id = ?`, userID, gameID)
 	if err != nil {
 		return 0, err
 	}
-	_, _ = s.db.ExecContext(ctx,
-		`DELETE FROM save_versions WHERE user_id = ? AND game_id = ?`, userID, gameID)
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM save_versions WHERE user_id = ? AND game_id = ?`, userID, gameID); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	for _, p := range paths {
+		removeSaveFile(p)
+	}
 	n, _ := res.RowsAffected()
 	return int(n), nil
 }
