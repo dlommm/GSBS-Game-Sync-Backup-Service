@@ -7,7 +7,7 @@
 <div class="dash-main">
 <section id="dashboard-stats"
          hx-get="/dashboard/partial/stats"
-         hx-trigger="load, save-updated from:body"
+         hx-trigger="load, save-updated from:body throttle:2s"
          hx-swap="innerHTML">
   {{template "partials/loading_skeleton.html" .}}
 </section>
@@ -19,7 +19,7 @@
   </div>
   <div id="recent-games"
        hx-get="/dashboard/partial/saves"
-       hx-trigger="load, save-updated from:body"
+       hx-trigger="load, save-updated from:body throttle:2s"
        hx-swap="innerHTML">
     {{template "partials/loading_skeleton.html" .}}
   </div>
@@ -37,7 +37,7 @@
   </div>
   <div id="activity-feed"
        hx-get="/dashboard/partial/activity"
-       hx-trigger="load, save-updated from:body"
+       hx-trigger="load, save-updated from:body throttle:2s"
        hx-swap="innerHTML">
     {{template "partials/loading_skeleton.html" .}}
   </div>
@@ -53,7 +53,7 @@
   </div>
   <div id="clients-table"
        hx-get="/dashboard/partial/clients"
-       hx-trigger="load, save-updated from:body"
+       hx-trigger="load, save-updated from:body throttle:2s"
        hx-swap="innerHTML">
     {{template "partials/loading_skeleton.html" .}}
   </div>
@@ -70,7 +70,4 @@
 </section>
 </aside>
 </div>
-{{end}}
-{{define "dashboard_scripts"}}
-<div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>
 {{end}}

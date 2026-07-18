@@ -1939,6 +1939,20 @@ func (s *sqliteStore) DistinctGameCount(ctx context.Context, userID string) (int
 	return n, err
 }
 
+// CountSavesByUser returns the number of save rows for a user.
+func (s *sqliteStore) CountSavesByUser(ctx context.Context, userID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM saves WHERE user_id = ?`, userID).Scan(&n)
+	return n, err
+}
+
+// CountClientsByUser returns the number of registered clients for a user.
+func (s *sqliteStore) CountClientsByUser(ctx context.Context, userID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM clients WHERE user_id = ?`, userID).Scan(&n)
+	return n, err
+}
+
 // TotalStorageBytes returns total storage in bytes across all saves (admin stats).
 func (s *sqliteStore) TotalStorageBytes(ctx context.Context) (int64, error) {
 	var n int64

@@ -68,12 +68,9 @@
   </div>
   <div id="games-grid"
        hx-get="/dashboard/partial/games" hx-include="#games-filter"
-       hx-trigger="load, save-updated from:body" hx-swap="innerHTML"
+       hx-trigger="load, save-updated from:body throttle:2s" hx-swap="innerHTML"
        aria-live="polite">
     {{template "partials/loading_skeleton.html" .}}
   </div>
 </form>
-{{end}}
-{{define "dashboard_games_scripts"}}
-<div sse-swap="save-updated" hx-trigger="save-updated from:body" hidden></div>
 {{end}}

@@ -165,7 +165,6 @@
 {{end}}
 {{define "admin_overview_scripts"}}
 <div hidden
-     sse-swap="job-finished,job-progress"
-     hx-trigger="job-finished,job-progress from:body"
+     hx-trigger="job-finished from:body, job-progress from:body throttle:1s"
      hx-get="/admin/partial/jobs?context=overview" hx-target="#admin-jobs-panel" hx-swap="innerHTML"></div>
 {{end}}

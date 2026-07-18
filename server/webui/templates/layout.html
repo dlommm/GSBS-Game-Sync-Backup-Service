@@ -14,7 +14,7 @@
   <script src="/static/theme-boot.js"></script>
 </head>
 <body class="{{if .BodyClass}}{{.BodyClass}}{{else if .AdminNav}}admin-shell{{else}}app-shell{{end}}"
-      {{if not .AdminNav}}hx-ext="sse" sse-connect="/dashboard/events"{{end}}>
+      {{if not .AdminNav}}data-sse="/dashboard/events"{{end}}>
   <a href="#main-content" class="skip-link">Skip to main content</a>
   <div class="shell">
   {{if .AdminNav}}

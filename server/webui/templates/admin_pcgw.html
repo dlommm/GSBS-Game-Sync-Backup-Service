@@ -102,7 +102,6 @@
 {{end}}
 {{define "admin_pcgw_scripts"}}
 <div hidden
-     sse-swap="job-progress,job-finished"
-     hx-trigger="job-progress from:body, job-finished from:body"
+     hx-trigger="job-progress from:body throttle:1s, job-finished from:body"
      hx-get="/admin/partial/pcgw-job-status" hx-target="#job-status" hx-swap="innerHTML"></div>
 {{end}}

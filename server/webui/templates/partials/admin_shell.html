@@ -52,7 +52,7 @@
   <hr class="admin-sidebar-divider">
   <a href="/dashboard" class="admin-sidebar-back">← Dashboard</a>
 </aside>
-<div class="admin-main" hx-ext="sse" sse-connect="/dashboard/events">
+<div class="admin-main" data-sse="/dashboard/events">
   <main id="main-content" class="page-content" role="main">
     {{template "partials/alerts.html" .}}
     {{renderPageBlock .PageName "content" .}}

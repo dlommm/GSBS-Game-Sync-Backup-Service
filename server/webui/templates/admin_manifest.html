@@ -30,5 +30,5 @@
 </section>
 {{end}}
 {{define "admin_manifest_scripts"}}
-<div hidden sse-swap="manifest-updated" hx-trigger="manifest-updated from:body" hx-get="/admin/partial/manifest" hx-target="#manifest-table" hx-swap="innerHTML"></div>
+<div hidden hx-trigger="manifest-updated from:body throttle:2s" hx-get="/admin/partial/manifest" hx-target="#manifest-table" hx-swap="innerHTML"></div>
 {{end}}

@@ -216,6 +216,10 @@ type Store interface {
 	SaveRootPath() string
 	// DistinctGameCount returns number of unique games with saves for a user.
 	DistinctGameCount(ctx context.Context, userID string) (int, error)
+	// CountSavesByUser returns the number of save rows for a user.
+	CountSavesByUser(ctx context.Context, userID string) (int, error)
+	// CountClientsByUser returns the number of registered clients for a user.
+	CountClientsByUser(ctx context.Context, userID string) (int, error)
 
 	// Game save locations (manifest from PCGW)
 	UpsertGameSaveLocations(ctx context.Context, entries []types.GameSaveLocation) error

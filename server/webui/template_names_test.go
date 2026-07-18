@@ -78,16 +78,16 @@ var nestedTemplateRefs = []string{
 
 // Page-specific layout blocks referenced via {{template (printf "%s_*" .PageName) .}}.
 var pageBlockTemplates = []string{
-	"dashboard_title", "dashboard_content", "dashboard_scripts",
+	"dashboard_title", "dashboard_content",
 	"settings_title", "settings_content",
 	"enable_2fa_title", "enable_2fa_content",
 	"recovery_codes_title", "recovery_codes_content", "recovery_codes_scripts",
 	"save_versions_title", "save_versions_content",
-	"dashboard_games_title", "dashboard_games_content", "dashboard_games_scripts",
-	"game_detail_title", "game_detail_content", "game_detail_scripts",
-	"dashboard_clients_title", "dashboard_clients_content", "dashboard_clients_scripts",
+	"dashboard_games_title", "dashboard_games_content",
+	"game_detail_title", "game_detail_content",
+	"dashboard_clients_title", "dashboard_clients_content",
 	"dashboard_conflicts_title", "dashboard_conflicts_content", "dashboard_conflicts_scripts",
-	"dashboard_analytics_title", "dashboard_analytics_content", "dashboard_analytics_scripts",
+	"dashboard_analytics_title", "dashboard_analytics_content",
 	"admin_user_detail_title", "admin_user_detail_content",
 	"admin_overview_title", "admin_overview_content", "admin_overview_scripts",
 	"admin_users_title", "admin_users_content", "admin_users_scripts",

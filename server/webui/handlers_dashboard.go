@@ -95,19 +95,19 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 
 func (h *WebHandler) loadDashboardStats(ctx context.Context, userID string) dashboardStats {
 	var stats dashboardStats
-	clients, err := h.store.ListClientsByUserID(ctx, userID)
+	clientCount, err := h.store.CountClientsByUser(ctx, userID)
 	if err != nil {
-		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard stats: list clients failed")
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard stats: count clients failed")
 		stats.StoreError = true
 	} else {
-		stats.ClientCount = len(clients)
+		stats.ClientCount = clientCount
 	}
-	saves, err := h.store.ListSaveSummaries(ctx, userID)
+	saveCount, err := h.store.CountSavesByUser(ctx, userID)
 	if err != nil {
-		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard stats: list saves failed")
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("dashboard stats: count saves failed")
 		stats.StoreError = true
 	} else {
-		stats.SaveCount = len(saves)
+		stats.SaveCount = saveCount
 	}
 	totalBytes, err := h.store.UserStorageBytes(ctx, userID)
 	if err != nil {
