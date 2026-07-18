@@ -107,7 +107,7 @@
     {{if .IntegrityFindings}}
     <div class="table-wrap u-mt-sm">
       <table class="data-table">
-        <thead><tr><th>Found</th><th>User</th><th>Game</th><th>File</th><th>Problem</th></tr></thead>
+        <thead><tr><th>Found</th><th>User</th><th>Game</th><th>File</th><th>Problem</th><th>Action</th></tr></thead>
         <tbody>
         {{range .IntegrityFindings}}
           <tr>
@@ -116,13 +116,31 @@
             <td>{{.GameID}}</td>
             <td class="cell-muted">{{.PathKey}}</td>
             <td><span class="badge-warn">{{.Kind}}</span></td>
+            <td>
+              <form method="POST" action="/admin/integrity/purge">
+                <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+                <input type="hidden" name="user_id" value="{{.UserID}}">
+                <input type="hidden" name="game_id" value="{{.GameID}}">
+                <input type="hidden" name="path_key" value="{{.PathKey}}">
+                <button type="submit" class="btn-danger-sm">Purge slot</button>
+              </form>
+            </td>
           </tr>
         {{end}}
         </tbody>
       </table>
     </div>
-    <p class="cell-muted u-mt-xs">Restore an affected save from its version history, or delete the slot and let the client push a fresh copy.</p>
+    <p class="cell-muted u-mt-xs">Restore an affected save from its version history, or purge the slot and let the client push a fresh copy.</p>
     {{end}}
+    <form method="POST" action="/admin/saves/purge-game" class="u-mt-sm">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <label class="cell-muted" for="purge-game-id">Purge one game across <strong>all</strong> users — cleanup for data uploaded in error (e.g. a mislabeled save path). Type the game ID twice to confirm:</label>
+      <div class="u-flex u-mt-sm">
+        <input type="text" id="purge-game-id" name="game_id" class="text-input" placeholder="game ID" autocomplete="off">
+        <input type="text" name="confirm" class="text-input" placeholder="repeat game ID" autocomplete="off">
+        <button type="submit" class="btn-danger-sm">Purge across all users</button>
+      </div>
+    </form>
   </div>
 </section>
 

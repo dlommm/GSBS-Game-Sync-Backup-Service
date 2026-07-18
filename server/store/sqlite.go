@@ -1244,6 +1244,29 @@ func (s *sqliteStore) DeleteSavesForGame(ctx context.Context, userID, gameID str
 	return int(n), nil
 }
 
+// PurgeSavesForGameAllUsers deletes every save (with versions and filesystem
+// blobs) for one game_id across ALL users. Intended for operators cleaning up
+// data that was bulk-uploaded in error (e.g. a mislabeled manifest that captured
+// a system directory). Reuses the per-user delete so file/row ordering stays
+// crash-safe. Returns the number of users touched and total save rows removed.
+func (s *sqliteStore) PurgeSavesForGameAllUsers(ctx context.Context, gameID string) (users int, saves int, err error) {
+	list, err := s.ListUsers(ctx)
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, u := range list {
+		n, derr := s.DeleteSavesForGame(ctx, u.ID, gameID)
+		if derr != nil {
+			return users, saves, derr
+		}
+		if n > 0 {
+			users++
+			saves += n
+		}
+	}
+	return users, saves, nil
+}
+
 func (s *sqliteStore) ListSaveVersions(ctx context.Context, userID, gameID, pathKey string, limit int) ([]SaveVersionInfo, error) {
 	if limit <= 0 {
 		limit = 10

@@ -423,6 +423,70 @@ func (h *WebHandler) handleAdminIntegrityRun(w http.ResponseWriter, r *http.Requ
 	Redirect(w, r, "/admin?integrity_started=1")
 }
 
+// handleAdminIntegrityPurge deletes a single flagged save slot (identified by a
+// data-integrity finding). The client can re-push a fresh copy.
+func (h *WebHandler) handleAdminIntegrityPurge(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	if h.readOnly {
+		Redirect(w, r, "/admin?error=read_only")
+		return
+	}
+	actorID, actorName, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	targetUser := strings.TrimSpace(r.FormValue("user_id"))
+	gameID := strings.TrimSpace(r.FormValue("game_id"))
+	pathKey := strings.TrimSpace(r.FormValue("path_key"))
+	if targetUser == "" || gameID == "" || pathKey == "" {
+		Redirect(w, r, "/admin?error=purge_missing_params")
+		return
+	}
+	if err := h.store.DeleteSave(r.Context(), targetUser, gameID, pathKey); err != nil {
+		logx.Logger().Error().Err(err).Str("target_user", targetUser).Str("game_id", gameID).Msg("admin integrity purge failed")
+		Redirect(w, r, "/admin?error=purge_failed")
+		return
+	}
+	h.appendAuditBroadcast(r.Context(), actorID, actorName, "admin_purge_save", targetUser, fmt.Sprintf("game_id=%s path_key=%s", gameID, pathKey))
+	Redirect(w, r, "/admin?purged=1")
+}
+
+// handleAdminPurgeGameAllUsers deletes every save for one game_id across ALL
+// users — operator cleanup of bad bulk-uploaded data. Destructive, so it
+// requires the game ID to be typed twice (game_id must equal confirm).
+func (h *WebHandler) handleAdminPurgeGameAllUsers(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	if h.readOnly {
+		Redirect(w, r, "/admin?error=read_only")
+		return
+	}
+	actorID, actorName, ok := h.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	gameID := strings.TrimSpace(r.FormValue("game_id"))
+	if gameID == "" || gameID != strings.TrimSpace(r.FormValue("confirm")) {
+		Redirect(w, r, "/admin?error=purge_confirm")
+		return
+	}
+	users, saves, err := h.store.PurgeSavesForGameAllUsers(r.Context(), gameID)
+	if err != nil {
+		logx.Logger().Error().Err(err).Str("game_id", gameID).Msg("admin cross-user purge failed")
+		Redirect(w, r, "/admin?error=purge_failed")
+		return
+	}
+	h.appendAuditBroadcast(r.Context(), actorID, actorName, "admin_purge_game_all_users", gameID, fmt.Sprintf("users=%d saves=%d", users, saves))
+	logx.Logger().Warn().Str("game_id", gameID).Int("users", users).Int("saves", saves).Str("admin", actorName).
+		Msg("admin purged a game's saves across all users")
+	Redirect(w, r, fmt.Sprintf("/admin?purged_game=%d", saves))
+}
+
 func (h *WebHandler) serveAdminUsers(w http.ResponseWriter, r *http.Request) {
 	userID, username, ok := h.requireAdmin(w, r)
 	if !ok {

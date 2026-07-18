@@ -246,6 +246,10 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleClearCoverCache(w, r)
 	case path == "/admin/integrity/run" && r.Method == http.MethodPost:
 		h.handleAdminIntegrityRun(w, r)
+	case path == "/admin/integrity/purge" && r.Method == http.MethodPost:
+		h.handleAdminIntegrityPurge(w, r)
+	case path == "/admin/saves/purge-game" && r.Method == http.MethodPost:
+		h.handleAdminPurgeGameAllUsers(w, r)
 	case path == "/admin/backup/run" && r.Method == http.MethodPost:
 		h.handleAdminBackupRun(w, r)
 	case path == "/admin/notify/test" && r.Method == http.MethodPost:

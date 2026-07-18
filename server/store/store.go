@@ -162,6 +162,9 @@ type Store interface {
 	GetSaveClientID(ctx context.Context, userID, gameID, pathKey string) (string, error)
 	DeleteSave(ctx context.Context, userID, gameID, pathKey string) error
 	DeleteSavesForGame(ctx context.Context, userID, gameID string) (int, error)
+	// PurgeSavesForGameAllUsers deletes a game's saves across every user (admin
+	// cleanup of bad bulk-uploaded data). Returns users affected and rows removed.
+	PurgeSavesForGameAllUsers(ctx context.Context, gameID string) (users int, saves int, err error)
 	// Save versioning (last N versions per slot; retention policy applied on upsert)
 	ListSaveVersions(ctx context.Context, userID, gameID, pathKey string, limit int) ([]SaveVersionInfo, error)
 	GetSaveVersion(ctx context.Context, userID, gameID, pathKey string, version int) (*types.SaveBlob, error)
