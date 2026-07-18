@@ -1,7 +1,7 @@
 {{define "partials/dashboard_clients.html"}}
 {{if .Clients}}
 <div class="table-wrap">
-  <table class="data-table">
+  <table class="data-table" data-table-id="devices">
     <thead><tr><th scope="col">Name</th><th scope="col">Platform</th><th scope="col">Last active</th><th scope="col" class="th-action"><span class="sr-only">Actions</span></th></tr></thead>
     <tbody>
       {{range .Clients}}

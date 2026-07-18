@@ -78,7 +78,7 @@
       </div>
       {{if .TopUsers}}
       <div class="table-wrap">
-        <table class="data-table">
+        <table class="data-table" data-table-id="analytics-top-users">
           <thead><tr><th scope="col">User</th><th scope="col">Saves</th><th scope="col">Storage</th><th scope="col">Quota</th></tr></thead>
           <tbody>
             {{range .TopUsers}}
@@ -101,7 +101,7 @@
       <div class="panel-header"><h2>Top synced games</h2></div>
       {{if .TopSaveGames}}
       <div class="table-wrap">
-        <table class="data-table">
+        <table class="data-table" data-table-id="analytics-top-games">
           <thead><tr><th scope="col">Game</th><th scope="col">Saves</th><th scope="col">Storage</th></tr></thead>
           <tbody>
             {{range .TopSaveGames}}
@@ -201,7 +201,7 @@
       <div class="panel-header"><h2>Job reliability</h2></div>
       {{if .JobStats}}
       <div class="table-wrap">
-        <table class="data-table">
+        <table class="data-table" data-table-id="analytics-job-reliability">
           <thead><tr><th scope="col">Job</th><th scope="col">Runs</th><th scope="col">Success</th><th scope="col">Avg duration</th><th scope="col">Last</th></tr></thead>
           <tbody>
             {{range .JobStats}}
@@ -432,7 +432,7 @@
       </div>
       {{if .ParseFailures}}
       <div class="table-wrap">
-        <table class="data-table">
+        <table class="data-table" data-table-id="analytics-parse-failures">
           <thead><tr><th scope="col">When</th><th scope="col">Game</th><th scope="col">Section</th><th scope="col">Error</th></tr></thead>
           <tbody>
             {{range .ParseFailures}}
@@ -501,7 +501,7 @@
     </form>
     {{if .PCGWSyncRuns}}
     <div class="table-wrap">
-      <table class="data-table">
+      <table class="data-table" data-table-id="analytics-sync-runs">
         <thead>
           <tr>
             <th scope="col">Started</th>

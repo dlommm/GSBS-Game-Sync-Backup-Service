@@ -10,7 +10,7 @@
   </div>
   {{if .Versions}}
   <div class="table-wrap">
-    <table class="data-table">
+    <table class="data-table" data-table-id="save-versions">
       <thead><tr><th scope="col">Version</th><th scope="col">Updated</th><th scope="col">Size</th><th scope="col">Change</th><th scope="col">Device</th><th scope="col" class="th-action">Actions</th></tr></thead>
       <tbody>
         {{range .Versions}}

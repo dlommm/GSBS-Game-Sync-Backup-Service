@@ -69,7 +69,6 @@ var nestedTemplateRefs = []string{
 	"partials/job_status_badge.html",
 	"partials/timeline_item.html",
 	"partials/loading_skeleton.html",
-	"partials/game-icon.html",
 	"partials/metric-card.html",
 	"partials/empty-state.html",
 	"partials/insights_body.html",

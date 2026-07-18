@@ -100,6 +100,8 @@
 
   function initActionMenus() {
     document.querySelectorAll('details.action-menu').forEach(function (menu) {
+      if (menu.dataset.gsbsBound) return;
+      menu.dataset.gsbsBound = '1';
       menu.addEventListener('toggle', function () {
         var cell = menu.closest('.cell-action');
         if (menu.open) {
@@ -118,21 +120,24 @@
         }
       });
     });
-    window.addEventListener('resize', function () {
-      document.querySelectorAll('details.action-menu[open]').forEach(positionActionMenu);
-    });
-    document.addEventListener('click', function (evt) {
-      if (evt.target.closest('details.action-menu')) return;
-      document.querySelectorAll('details.action-menu[open]').forEach(function (menu) {
-        menu.open = false;
-      });
-    });
   }
+
+  window.addEventListener('resize', function () {
+    document.querySelectorAll('details.action-menu[open]').forEach(positionActionMenu);
+  });
+  document.addEventListener('click', function (evt) {
+    if (evt.target.closest('details.action-menu')) return;
+    document.querySelectorAll('details.action-menu[open]').forEach(function (menu) {
+      menu.open = false;
+    });
+  });
 
   /* ---- Long settings forms: show the sticky save bar once dirty ---- */
 
   function initDirtyTracking() {
     document.querySelectorAll('form[data-dirty-track]').forEach(function (form) {
+      if (form.dataset.gsbsBound) return;
+      form.dataset.gsbsBound = '1';
       var bar = form.querySelector('[data-save-bar]');
       if (!bar) return;
       function markDirty() { bar.classList.add('visible'); }
@@ -222,6 +227,8 @@
 
   function initFilterCsvLinks() {
     document.querySelectorAll('form[data-filter-csv]').forEach(function (form) {
+      if (form.dataset.gsbsBound) return;
+      form.dataset.gsbsBound = '1';
       var link = document.querySelector(form.getAttribute('data-filter-csv'));
       var base = form.getAttribute('data-csv-base');
       if (!link || !base) return;
@@ -242,5 +249,12 @@
     initLogsPage();
     initFilterCsvLinks();
     initDirtyTracking();
+    // Rebind per-element inits after HTMX swaps (idempotent via data flags),
+    // so action menus / dirty bars / CSV links inside swapped partials work.
+    document.body.addEventListener('htmx:afterSwap', function () {
+      initActionMenus();
+      initFilterCsvLinks();
+      initDirtyTracking();
+    });
   });
 })();

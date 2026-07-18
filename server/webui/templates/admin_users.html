@@ -9,7 +9,7 @@
   </div>
   {{if .Users}}
   <div class="table-wrap users-table-wrap">
-    <table class="data-table users-table">
+    <table class="data-table users-table" data-table-id="admin-users">
       <thead><tr><th scope="col">Username</th><th scope="col">Status</th><th scope="col">Quota</th><th scope="col" class="col-clients">Clients</th><th scope="col" class="col-saves">Saves</th><th scope="col" class="col-storage">Storage</th><th scope="col" class="th-action">Actions</th></tr></thead>
       <tbody>
         {{range .Users}}
@@ -67,7 +67,7 @@
   <div class="panel-header"><h2>All Clients</h2></div>
   {{if .Clients}}
   <div class="table-wrap">
-    <table class="data-table">
+    <table class="data-table" data-table-id="admin-clients">
       <thead><tr><th scope="col" data-sortable>User</th><th scope="col" data-sortable>Name</th><th scope="col" data-sortable>Platform</th><th scope="col" data-sortable>Last active</th><th scope="col" class="th-action"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>
         {{range .Clients}}

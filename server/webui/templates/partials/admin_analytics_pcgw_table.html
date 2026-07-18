@@ -1,7 +1,7 @@
 {{define "partials/admin_analytics_pcgw_table.html"}}
 {{if .Games}}
 <div class="table-wrap">
-  <table class="data-table">
+  <table class="data-table" data-table-id="analytics-pcgw">
     <thead><tr><th scope="col">Title</th><th scope="col">Page ID</th><th scope="col">Steam</th><th scope="col">Platforms</th><th scope="col">Status</th><th scope="col">Updated</th></tr></thead>
     <tbody>
     {{range .Games}}

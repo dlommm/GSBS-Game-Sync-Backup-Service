@@ -25,10 +25,33 @@
   function items() {
     return Array.prototype.slice.call(results.querySelectorAll('.cmdk-item'));
   }
+  // The results div is role="listbox"; mark each item as an option so the
+  // arrow-key selection is announced (visual-only .selected before).
+  function decorate() {
+    items().forEach(function (el, i) {
+      el.setAttribute('role', 'option');
+      el.id = 'cmdk-opt-' + i;
+      el.setAttribute('aria-selected', 'false');
+    });
+  }
   function highlight() {
     var its = items();
-    its.forEach(function (el, i) { el.classList.toggle('selected', i === sel); });
-    if (sel >= 0 && its[sel]) its[sel].scrollIntoView({ block: 'nearest' });
+    its.forEach(function (el, i) {
+      el.classList.toggle('selected', i === sel);
+      el.setAttribute('aria-selected', i === sel ? 'true' : 'false');
+    });
+    if (sel >= 0 && its[sel]) {
+      its[sel].scrollIntoView({ block: 'nearest' });
+      input.setAttribute('aria-activedescendant', its[sel].id);
+    } else {
+      input.removeAttribute('aria-activedescendant');
+    }
+  }
+  // Label for the recents list: the title span only — raw textContent glues
+  // icon + title + subtitle together ("EElden Ring12 files·…").
+  function labelFor(el) {
+    var t = el.querySelector('.cmdk-item-title');
+    return (t ? t.textContent : el.textContent).trim();
   }
 
   // Prepend Recent pages + built-in actions when the palette opens empty.
@@ -60,6 +83,7 @@
     toggle.textContent = 'Toggle light/dark theme';
     frag.appendChild(toggle);
     results.insertBefore(frag, results.firstChild);
+    decorate();
   }
 
   function runItem(target) {
@@ -67,12 +91,17 @@
     var action = target.getAttribute('data-cmdk-action');
     if (action === 'toggle-theme') {
       close();
-      var btn = document.querySelector('[data-action="toggle-theme"]');
-      if (btn) btn.click();
+      // Admin pages render no topbar toggle button — use the shared helper.
+      if (window.gsbs && window.gsbs.toggleTheme) {
+        window.gsbs.toggleTheme();
+      } else {
+        var btn = document.querySelector('[data-action="toggle-theme"]');
+        if (btn) btn.click();
+      }
       return;
     }
     var href = target.getAttribute('href');
-    pushRecent(href, target.textContent.trim());
+    pushRecent(href, labelFor(target));
     window.location = href;
   }
 
@@ -117,6 +146,8 @@
   results.addEventListener('htmx:afterSwap', function () {
     sel = -1;
     renderLocalSections();
+    decorate();
+    input.removeAttribute('aria-activedescendant');
   });
 
   // Click on the dialog backdrop (the dialog element itself) closes it.

@@ -36,11 +36,7 @@
       el.classList.add('active');
     }
     if (el.getAttribute('data-action') === 'toggle-theme') {
-      var root = document.documentElement;
-      var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
-      root.setAttribute('data-theme', next);
-      try { localStorage.setItem('gsbs.theme', next); } catch (err) { /* private mode */ }
-      syncThemeColorMeta();
+      toggleTheme();
     }
     if (el.getAttribute('data-action') === 'toggle-sidebar') {
       document.body.classList.toggle('sidebar-open');
@@ -51,6 +47,18 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') document.body.classList.remove('sidebar-open');
   });
+
+  // Shared theme toggle — also exposed on window.gsbs so cmdk can flip the
+  // theme on admin pages, which render no topbar toggle button.
+  function toggleTheme() {
+    var root = document.documentElement;
+    var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('gsbs.theme', next); } catch (err) { /* private mode */ }
+    syncThemeColorMeta();
+  }
+  window.gsbs = window.gsbs || {};
+  window.gsbs.toggleTheme = toggleTheme;
 
   // Keep the browser-chrome color in step with the active theme.
   function syncThemeColorMeta() {
@@ -133,9 +141,7 @@
 
   /* ---- Client-side table sorting: <th data-sortable [data-sort-numeric]> ---- */
 
-  document.addEventListener('click', function (e) {
-    var th = e.target.closest('th[data-sortable]');
-    if (!th) return;
+  function sortByHeader(th) {
     var table = th.closest('table');
     var tbody = table && table.tBodies[0];
     if (!tbody) return;
@@ -156,6 +162,20 @@
       return av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' }) * dir;
     });
     rows.forEach(function (r) { tbody.appendChild(r); });
+  }
+
+  document.addEventListener('click', function (e) {
+    var th = e.target.closest('th[data-sortable]');
+    if (th) sortByHeader(th);
+  });
+
+  // Keyboard path for sortable headers (focusable via initDynamic).
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var th = e.target.closest('th[data-sortable]');
+    if (!th) return;
+    e.preventDefault();
+    sortByHeader(th);
   });
 
   /* ---- ARIA tablists: arrow-key navigation (roving tabindex) ---- */
@@ -419,6 +439,9 @@
     bindStopPropagation(root);
     applyDataWidths(root);
     initTables(root);
+    // Sortable headers are click-delegated; make them reachable by keyboard.
+    (root.querySelectorAll ? root : document).querySelectorAll('th[data-sortable]:not([tabindex])')
+      .forEach(function (th) { th.tabIndex = 0; });
   }
 
   /* ---- HTMX wiring (moved from layout.html) ---- */
@@ -436,6 +459,15 @@
     });
     document.body.addEventListener('htmx:afterSwap', function (evt) {
       initDynamic(evt.target);
+      // Surface the unread count to screen readers via the bell's label
+      // (the visual badge slot is aria-hidden).
+      if (evt.target.classList && evt.target.classList.contains('inbox-badge-slot')) {
+        var bell = evt.target.closest('.inbox-bell');
+        if (bell) {
+          var n = parseInt(evt.target.textContent, 10);
+          bell.setAttribute('aria-label', n > 0 ? 'Notifications, ' + n + ' unread' : 'Notifications');
+        }
+      }
     });
     document.body.addEventListener('audit-updated', function (evt) {
       // On the admin Activity page, refresh the visible audit table instead

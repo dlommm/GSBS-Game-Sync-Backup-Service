@@ -119,7 +119,7 @@
       <p class="cell-muted">{{.EncryptedSaves}} of {{.TotalSaves}} saves encrypted ({{.EncryptedPct}}%).
         {{if and .EncryptionEnabled (lt .EncryptedPct 100)}}Plaintext saves convert automatically the next time each one changes and syncs.{{end}}</p>
       <div class="table-wrap">
-        <table class="data-table">
+        <table class="data-table" data-table-id="settings-crypto-coverage">
           <thead><tr><th scope="col">Game</th><th scope="col">Encrypted</th></tr></thead>
           <tbody>
             {{range .CryptoGames}}
@@ -187,7 +187,7 @@
   <div class="panel-header"><h2>Active sessions</h2></div>
   {{if .Sessions}}
   <div class="table-wrap">
-    <table class="data-table">
+    <table class="data-table" data-table-id="settings-sessions">
       <thead><tr><th scope="col">Created</th><th scope="col">Last seen</th><th scope="col">Device</th><th scope="col" class="th-action"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>
         {{range .Sessions}}
