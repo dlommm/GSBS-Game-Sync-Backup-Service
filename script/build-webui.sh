@@ -13,10 +13,13 @@ npx --yes tailwindcss@3 -c tailwind.config.js -i static/src/input.css -o static/
 echo "Built ${WEBUI}/static/app.css"
 
 # Sync compiled CSS + shared static assets to client webui.
+# logo.png is the 320px wordmark owned by cmd/gen-branding on both sides —
+# do NOT copy the 512px docs icon here (413KB vs 35KB, embeds into every
+# client binary).
 mkdir -p "${CLIENT_STATIC}/fonts"
 cp "${WEBUI}/static/app.css" "${CLIENT_STATIC}/app.css"
 cp "${WEBUI}/static/theme-boot.js" "${CLIENT_STATIC}/theme-boot.js"
 cp "${WEBUI}/static/favicon.png" "${CLIENT_STATIC}/favicon.png"
-cp "${ROOT}/docs/images/gsbs-icon.png" "${CLIENT_STATIC}/logo.png"
+cp "${WEBUI}/static/logo.png" "${CLIENT_STATIC}/logo.png"
 cp "${WEBUI}/static/fonts/"*.woff2 "${CLIENT_STATIC}/fonts/"
 echo "Synced static assets to ${CLIENT_STATIC}"

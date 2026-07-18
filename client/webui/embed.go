@@ -17,3 +17,9 @@ func StaticFiles() http.FileSystem {
 	sub, _ := fs.Sub(staticFS, "static")
 	return http.FS(sub)
 }
+
+// StaticFS returns the embedded static tree rooted at static/.
+func StaticFS() fs.FS {
+	sub, _ := fs.Sub(staticFS, "static")
+	return sub
+}

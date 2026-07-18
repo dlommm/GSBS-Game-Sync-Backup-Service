@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gsbs/gsbs/pkg/webstatic"
 	"github.com/gsbs/gsbs/server/api"
 	"github.com/gsbs/gsbs/server/auth"
 	"github.com/gsbs/gsbs/server/job"
@@ -252,7 +253,7 @@ func newServerApp() (*serverApp, error) {
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiHandler)
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(webui.StaticFiles())))
+	mux.Handle("/static/", http.StripPrefix("/static/", webstatic.Handler(webui.StaticFS(), 24*time.Hour)))
 	mux.Handle("/", webHandler)
 
 	var metricsCollector *metrics.Collector

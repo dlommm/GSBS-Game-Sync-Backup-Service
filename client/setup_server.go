@@ -23,6 +23,7 @@ import (
 
 	clientsync "github.com/gsbs/gsbs/client/sync"
 	clientwebui "github.com/gsbs/gsbs/client/webui"
+	"github.com/gsbs/gsbs/pkg/webstatic"
 )
 
 const setupPortStart = 41234
@@ -38,7 +39,7 @@ var (
 func StartSetupServer() string {
 	mux := http.NewServeMux()
 
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(clientwebui.StaticFiles())))
+	mux.Handle("/static/", http.StripPrefix("/static/", webstatic.Handler(clientwebui.StaticFS(), 24*time.Hour)))
 	mux.HandleFunc("/client-logo", handleClientLogo)
 
 	mux.HandleFunc("/", handleSetupPage)
@@ -632,20 +633,17 @@ func GetSetupURL() string {
 }
 
 func resolveClientLogoPath() string {
-	// Prefer the professional master assets in assets/images/; fall back to
-	// the legacy locations for backward compatibility.
+	// assets/client-logo.png is the gen-branding derivative made for this
+	// slot. The multi-megapixel masters under assets/images/ are pipeline
+	// inputs, not servable assets — preferring them put a 501KB PNG in a
+	// 24px topbar slot on every page.
 	candidates := []string{
-		filepath.Join("assets", "images", "primary-logo.png"),
-		filepath.Join("assets", "images", "Logo-Icon-Only.png"),
 		filepath.Join("assets", "client-logo.png"),
 		filepath.Join("assets", "logo.png"),
-		filepath.Join("docs", "images", "gsbs-icon.png"),
 	}
 	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
 		candidates = append(candidates,
-			filepath.Join(exeDir, "assets", "images", "primary-logo.png"),
-			filepath.Join(exeDir, "assets", "images", "Logo-Icon-Only.png"),
 			filepath.Join(exeDir, "assets", "client-logo.png"),
 			filepath.Join(exeDir, "assets", "logo.png"),
 		)
@@ -660,6 +658,7 @@ func resolveClientLogoPath() string {
 }
 
 func handleClientLogo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=86400")
 	if p := resolveClientLogoPath(); p != "" {
 		http.ServeFile(w, r, p)
 		return
