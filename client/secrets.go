@@ -25,35 +25,40 @@ func keyringDisabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("GSBS_TOKEN_STORE")), "file")
 }
 
-// secretSet stores a secret in the OS keyring. A non-nil error means the
-// keyring is unavailable and callers should fall back to file storage.
+// secretSet stores a secret. It prefers the OS keyring; when the keyring is
+// disabled or unavailable it falls back to the machine-key-encrypted file store
+// (secret_file.go). It returns nil on success either way, so saveConfig always
+// strips the cleartext secret from config.json — a secret is never persisted in
+// plaintext.
 func secretSet(key, value string) error {
-	if keyringDisabled() {
-		return errors.New("keyring disabled via GSBS_TOKEN_STORE=file")
+	if !keyringDisabled() {
+		if err := keyring.Set(keyringService, key, value); err == nil {
+			return nil
+		}
+		// Keyring present but the write failed → encrypted file fallback.
 	}
-	return keyring.Set(keyringService, key, value)
+	return fileSecretSet(key, value)
 }
 
-// secretGet returns a secret from the OS keyring. ok is true only when the
-// keyring is available and the secret was found.
+// secretGet returns a secret from the keyring, falling back to the encrypted
+// file store. ok is true only when the secret was found.
 func secretGet(key string) (value string, ok bool) {
-	if keyringDisabled() {
-		return "", false
+	if !keyringDisabled() {
+		if v, err := keyring.Get(keyringService, key); err == nil {
+			return v, true
+		}
 	}
-	v, err := keyring.Get(keyringService, key)
-	if err != nil {
-		return "", false
-	}
-	return v, true
+	return fileSecretGet(key)
 }
 
-// secretDelete removes a secret from the OS keyring (best effort).
+// secretDelete removes a secret from both the keyring and the encrypted file
+// store (best effort).
 func secretDelete(key string) {
-	if keyringDisabled() {
-		return
+	if !keyringDisabled() {
+		if err := keyring.Delete(keyringService, key); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			// Non-fatal: the secret may not exist or the keyring is absent.
+			_ = err
+		}
 	}
-	if err := keyring.Delete(keyringService, key); err != nil && !errors.Is(err, keyring.ErrNotFound) {
-		// Non-fatal: the secret may simply not exist or the keyring is absent.
-		return
-	}
+	fileSecretDelete(key)
 }
