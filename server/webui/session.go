@@ -210,9 +210,14 @@ func ClearTOTPPendingCookie(w http.ResponseWriter) {
 	})
 }
 
-// Redirect redirects to path with status 302.
+// Redirect redirects to path with status 302. Every caller passes a
+// server-relative path; enforce that here so no tainted value can ever
+// become an open redirect ("//host" is scheme-relative and also refused).
 func Redirect(w http.ResponseWriter, r *http.Request, path string) {
-	http.Redirect(w, r, path, http.StatusFound)
+	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") || strings.HasPrefix(path, "/\\") {
+		path = "/"
+	}
+	http.Redirect(w, r, path, http.StatusFound) //nolint:gosec // G710: local-path invariant enforced above
 }
 
 // SetCSRFToken returns the CSRF token for embedding in forms, minting one only
