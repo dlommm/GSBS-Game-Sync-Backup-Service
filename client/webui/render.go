@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/logview"
@@ -85,12 +87,24 @@ func init() {
 	}
 }
 
+// defaultDesign mirrors the server WebUI's GSBS_DESIGN default so a design
+// choice can be provisioned for the local UI too (the user's stored choice
+// always wins in theme-boot.js).
+var defaultDesign = func() string {
+	switch d := strings.TrimSpace(os.Getenv("GSBS_DESIGN")); d {
+	case "hud", "crt", "hearth", "synth", "slate":
+		return d
+	}
+	return ""
+}()
+
 func newTemplateFuncs(t *template.Template) template.FuncMap {
 	return template.FuncMap{
-		"formatTime":  formatTime,
-		"formatBytes": formatBytes,
-		"add":         func(a, b int) int { return a + b },
-		"pageBlock":   pageBlock(t),
+		"formatTime":    formatTime,
+		"formatBytes":   formatBytes,
+		"add":           func(a, b int) int { return a + b },
+		"pageBlock":     pageBlock(t),
+		"designDefault": func() string { return defaultDesign },
 	}
 }
 

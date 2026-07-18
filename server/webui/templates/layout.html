@@ -11,6 +11,7 @@
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="apple-touch-icon" href="/static/favicon.png">
   <link rel="stylesheet" href="/static/app.css">
+  {{if designDefault}}<meta name="gsbs-design" content="{{designDefault}}">{{end}}
   <script src="/static/theme-boot.js"></script>
 </head>
 <body class="{{if .BodyClass}}{{.BodyClass}}{{else if .AdminNav}}admin-shell{{else}}app-shell{{end}}"

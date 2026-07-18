@@ -1,0 +1,59 @@
+# Design-preview stack: the same server image six times, one per design
+# variant (GSBS_DESIGN sets the default look; a browser's stored choice or a
+# ?design= query param still wins). Each instance has its own data volume —
+# run the first-boot wizard on whichever you're evaluating, or just compare
+# the login pages. Not for production.
+#
+#   docker compose -f docker-compose.designs.yml up --build
+#
+#   Mint Vault (default)  http://localhost:18100
+#   Night Ops             http://localhost:18101
+#   Phosphor              http://localhost:18102
+#   Hearth                http://localhost:18103
+#   Arcade                http://localhost:18104
+#   Foundry               http://localhost:18105
+
+x-gsbs: &gsbs
+  build: .
+  image: gsbs-server:design-preview
+  restart: unless-stopped
+
+services:
+  design-default:
+    <<: *gsbs
+    ports: ["18100:8080"]
+    environment: { GSBS_DB: /app/data/gsbs.db, GSBS_SAVE_ROOT: /app/data/gamesaves }
+    volumes: ["design-default-data:/app/data"]
+  design-hud:
+    <<: *gsbs
+    ports: ["18101:8080"]
+    environment: { GSBS_DB: /app/data/gsbs.db, GSBS_SAVE_ROOT: /app/data/gamesaves, GSBS_DESIGN: "hud" }
+    volumes: ["design-hud-data:/app/data"]
+  design-crt:
+    <<: *gsbs
+    ports: ["18102:8080"]
+    environment: { GSBS_DB: /app/data/gsbs.db, GSBS_SAVE_ROOT: /app/data/gamesaves, GSBS_DESIGN: "crt" }
+    volumes: ["design-crt-data:/app/data"]
+  design-hearth:
+    <<: *gsbs
+    ports: ["18103:8080"]
+    environment: { GSBS_DB: /app/data/gsbs.db, GSBS_SAVE_ROOT: /app/data/gamesaves, GSBS_DESIGN: "hearth" }
+    volumes: ["design-hearth-data:/app/data"]
+  design-synth:
+    <<: *gsbs
+    ports: ["18104:8080"]
+    environment: { GSBS_DB: /app/data/gsbs.db, GSBS_SAVE_ROOT: /app/data/gamesaves, GSBS_DESIGN: "synth" }
+    volumes: ["design-synth-data:/app/data"]
+  design-slate:
+    <<: *gsbs
+    ports: ["18105:8080"]
+    environment: { GSBS_DB: /app/data/gsbs.db, GSBS_SAVE_ROOT: /app/data/gamesaves, GSBS_DESIGN: "slate" }
+    volumes: ["design-slate-data:/app/data"]
+
+volumes:
+  design-default-data:
+  design-hud-data:
+  design-crt-data:
+  design-hearth-data:
+  design-synth-data:
+  design-slate-data:

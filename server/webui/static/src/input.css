@@ -135,6 +135,134 @@
     --shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
     --shadow-shell: 0 24px 64px rgba(0, 0, 0, 0.18);
   }
+
+  /* ── Design variants (data-design on <html>) ─────────────────────────
+     Every component consumes tokens, so a design is a token layer: set by
+     theme-boot.js from localStorage `gsbs.design`, a ?design= query param,
+     or the <meta name="gsbs-design"> default (GSBS_DESIGN env). The
+     default (no attribute) stays the shipped Mint Vault look. Each design
+     defines dark (base) and light (data-theme="light") — AA-checked. */
+
+  /* Night Ops — blue-steel tactical HUD: electric cyan, sharp radii. */
+  :root[data-design="hud"] {
+    --bg: #0b0f14; --bg-raised: #0d1218; --surface: #121924;
+    --surface-hover: #172030; --surface-active: #14263a;
+    --border: #1e2936; --border-strong: #2c3a4c;
+    --bg-gradient-a: #7fd8f5; --bg-gradient-b: #1d6d94;
+    --text: #e8eef5; --text-secondary: #a5b2c2; --text-muted: #8b98a8;
+    --accent: #35c7f0; --accent-hover: #5cd4f6; --accent-press: #23a8d1;
+    --accent-muted: rgba(53, 199, 240, 0.14); --accent-line: rgba(53, 199, 240, 0.40);
+    --text-on-accent: #04222e; --border-focus: var(--accent);
+    --info: #7f9cf5; --info-muted: rgba(127, 156, 245, 0.14); --info-line: rgba(127, 156, 245, 0.30);
+    --radius: 6px; --radius-sm: 4px; --radius-xs: 2px; --radius-lg: 10px;
+  }
+  :root[data-design="hud"][data-theme="light"] {
+    --bg: #f1f5f9; --bg-raised: #ffffff; --surface: #ffffff;
+    --surface-hover: #e9f0f6; --surface-active: #dcebf4;
+    --border: #dce4ec; --border-strong: #c3d0dc;
+    --bg-gradient-a: #c9ecfa; --bg-gradient-b: #6db7d6;
+    --text: #16202b; --text-secondary: #48586a; --text-muted: #5f7183;
+    --accent: #0b6e94; --accent-hover: #0a6284; --accent-press: #095572;
+    --accent-muted: rgba(11, 110, 148, 0.12); --accent-line: rgba(11, 110, 148, 0.35);
+    --text-on-accent: #ffffff;
+  }
+
+  /* Phosphor — CRT terminal: green-black glass, phosphor green, amber heat. */
+  :root[data-design="crt"] {
+    --bg: #0b100b; --bg-raised: #0d140d; --surface: #101810;
+    --surface-hover: #152015; --surface-active: #14261a;
+    --border: #1e2a1e; --border-strong: #2d3d2d;
+    --bg-gradient-a: #8ff0b0; --bg-gradient-b: #1f7a45;
+    --text: #e4f0e2; --text-secondary: #a7b8a5; --text-muted: #8aa08a;
+    --accent: #3ddc84; --accent-hover: #63e59d; --accent-press: #2bbd6d;
+    --accent-muted: rgba(61, 220, 132, 0.13); --accent-line: rgba(61, 220, 132, 0.40);
+    --text-on-accent: #03210f; --border-focus: var(--accent);
+    --warning: #ffb224; --warning-muted: rgba(255, 178, 36, 0.13); --warning-line: rgba(255, 178, 36, 0.35);
+    --radius: 4px; --radius-sm: 2px; --radius-xs: 2px; --radius-lg: 8px;
+  }
+  :root[data-design="crt"][data-theme="light"] {
+    --bg: #f0f5ec; --bg-raised: #ffffff; --surface: #ffffff;
+    --surface-hover: #e9f2e4; --surface-active: #dcefdb;
+    --border: #dbe6d6; --border-strong: #c2d3bc;
+    --bg-gradient-a: #c8f2d4; --bg-gradient-b: #67c088;
+    --text: #1a231a; --text-secondary: #4b5c4a; --text-muted: #637562;
+    --accent: #177a45; --accent-hover: #146c3d; --accent-press: #115e35;
+    --accent-muted: rgba(23, 122, 69, 0.12); --accent-line: rgba(23, 122, 69, 0.35);
+    --text-on-accent: #ffffff;
+    --warning: #9a6a00; --warning-muted: rgba(154, 106, 0, 0.13); --warning-line: rgba(154, 106, 0, 0.35);
+  }
+
+  /* Hearth — warm campfire save-point: night-camp dark, paper light. */
+  :root[data-design="hearth"] {
+    --bg: #17130f; --bg-raised: #1c1712; --surface: #221c16;
+    --surface-hover: #29221a; --surface-active: #2e2a1d;
+    --border: #322a20; --border-strong: #443a2c;
+    --bg-gradient-a: #f5d9a8; --bg-gradient-b: #a8763c;
+    --text: #f2ece2; --text-secondary: #bfb4a4; --text-muted: #a29683;
+    --accent: #58b585; --accent-hover: #74c49a; --accent-press: #459c70;
+    --accent-muted: rgba(88, 181, 133, 0.14); --accent-line: rgba(88, 181, 133, 0.40);
+    --text-on-accent: #0b2417; --border-focus: var(--accent);
+    --warning: #e0a458; --warning-muted: rgba(224, 164, 88, 0.14); --warning-line: rgba(224, 164, 88, 0.35);
+    --radius: 14px; --radius-sm: 10px; --radius-xs: 6px; --radius-lg: 22px;
+  }
+  :root[data-design="hearth"][data-theme="light"] {
+    --bg: #f6f1e6; --bg-raised: #fdf9f0; --surface: #fdf9f0;
+    --surface-hover: #f1e9d9; --surface-active: #e9e4cd;
+    --border: #e3dac6; --border-strong: #cfc4ab;
+    --bg-gradient-a: #f7e3b8; --bg-gradient-b: #cb9a5a;
+    --text: #2b2620; --text-secondary: #5b5348; --text-muted: #6d6459;
+    --accent: #20603f; --accent-hover: #1c5537; --accent-press: #184a30;
+    --accent-muted: rgba(32, 96, 63, 0.12); --accent-line: rgba(32, 96, 63, 0.35);
+    --text-on-accent: #f5efe2;
+    --warning: #9a6a00; --warning-muted: rgba(154, 106, 0, 0.13); --warning-line: rgba(154, 106, 0, 0.35);
+  }
+
+  /* Arcade — synthwave marquee: violet night, magenta accent, cyan data. */
+  :root[data-design="synth"] {
+    --bg: #16121f; --bg-raised: #191527; --surface: #201a2e;
+    --surface-hover: #282138; --surface-active: #2e2044;
+    --border: #2f2842; --border-strong: #413858;
+    --bg-gradient-a: #f0a6d8; --bg-gradient-b: #6d4ba6;
+    --text: #efeaf6; --text-secondary: #b3a9c6; --text-muted: #9a91ad;
+    --accent: #e05fa9; --accent-hover: #ea7fbb; --accent-press: #c74691;
+    --accent-muted: rgba(224, 95, 169, 0.15); --accent-line: rgba(224, 95, 169, 0.42);
+    --text-on-accent: #2b0a1d; --border-focus: var(--accent);
+    --info: #4cc3e0; --radius: 10px; --radius-sm: 7px; --radius-xs: 4px; --radius-lg: 16px;
+  }
+  :root[data-design="synth"][data-theme="light"] {
+    --bg: #f5f2fa; --bg-raised: #ffffff; --surface: #ffffff;
+    --surface-hover: #efe9f7; --surface-active: #ecdcf0;
+    --border: #e3dcee; --border-strong: #ccc2dd;
+    --bg-gradient-a: #f3cbe6; --bg-gradient-b: #a687d1;
+    --text: #221b2e; --text-secondary: #55496a; --text-muted: #6b5f80;
+    --accent: #b0327d; --accent-hover: #9c2c6f; --accent-press: #882661;
+    --accent-muted: rgba(176, 50, 125, 0.12); --accent-line: rgba(176, 50, 125, 0.35);
+    --text-on-accent: #ffffff;
+  }
+
+  /* Foundry — graphite studio tool: neutral steel, molten amber accent. */
+  :root[data-design="slate"] {
+    --bg: #131316; --bg-raised: #17171b; --surface: #1b1b1f;
+    --surface-hover: #222227; --surface-active: #2a2620;
+    --border: #28282e; --border-strong: #38383f;
+    --bg-gradient-a: #f2cd8c; --bg-gradient-b: #8a6a34;
+    --text: #ececf0; --text-secondary: #b0b0b8; --text-muted: #909098;
+    --accent: #e8a33d; --accent-hover: #efb75f; --accent-press: #cf8c28;
+    --accent-muted: rgba(232, 163, 61, 0.14); --accent-line: rgba(232, 163, 61, 0.40);
+    --text-on-accent: #231604; --border-focus: var(--accent);
+    --info: #6aa7e8; --radius: 8px; --radius-sm: 6px; --radius-xs: 3px; --radius-lg: 12px;
+  }
+  :root[data-design="slate"][data-theme="light"] {
+    --bg: #f4f4f5; --bg-raised: #ffffff; --surface: #ffffff;
+    --surface-hover: #ececee; --surface-active: #f3e8d7;
+    --border: #e2e2e5; --border-strong: #c9c9cf;
+    --bg-gradient-a: #f4dfb4; --bg-gradient-b: #bd9455;
+    --text: #1b1b20; --text-secondary: #4d4d56; --text-muted: #65656e;
+    --accent: #996414; --accent-hover: #875812; --accent-press: #754d10;
+    --accent-muted: rgba(153, 100, 20, 0.12); --accent-line: rgba(153, 100, 20, 0.35);
+    --text-on-accent: #ffffff;
+  }
+
   :root[data-theme="light"] html,
   html[data-theme="light"] { color-scheme: light; }
 

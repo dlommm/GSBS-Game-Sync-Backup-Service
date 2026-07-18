@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -218,8 +219,20 @@ type adminLogsData struct {
 	Query            logview.Query
 }
 
+// defaultDesign is the server-wide design variant default (GSBS_DESIGN env),
+// surfaced to theme-boot.js via <meta name="gsbs-design">. A user's stored
+// choice always wins; unknown names are ignored client-side.
+var defaultDesign = func() string {
+	switch d := strings.TrimSpace(os.Getenv("GSBS_DESIGN")); d {
+	case "hud", "crt", "hearth", "synth", "slate":
+		return d
+	}
+	return ""
+}()
+
 func newTemplateFuncs(t *template.Template) template.FuncMap {
 	return template.FuncMap{
+		"designDefault":   func() string { return defaultDesign },
 		"formatTime":      formatTime,
 		"formatBytes":     formatBytes,
 		"truncate":        truncate,
