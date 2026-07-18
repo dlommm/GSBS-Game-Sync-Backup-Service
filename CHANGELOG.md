@@ -4,6 +4,53 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
+Security, safety, performance & hygiene pass from a full-project audit.
+
+### Security
+- **SSRF blocked on notification sinks.** Webhook / Discord / ntfy URLs are now
+  delivered through a guarded HTTP client that refuses loopback, private,
+  link-local, ULA, CGNAT, and cloud-metadata addresses at connect time
+  (DNS-rebinding-safe); user-set URLs are also validated when saved. Admin sinks
+  can opt back into private targets with `GSBS_NOTIFY_ALLOW_PRIVATE=1` (self-hosted
+  LAN ntfy). Previously any signed-in user could point a webhook at an internal host.
+- **Storage accounting can no longer be spoofed.** The server counts actual stored
+  bytes; a client-declared `X-Content-Size` is ignored, so a device can't
+  under-report to evade its quota or the global limit.
+- **The client's local control server resists CSRF and DNS-rebinding.** The
+  loopback setup/dashboard server now enforces a loopback-only Host allow-list on
+  every request and a same-origin check on state-changing requests, so a web page
+  you visit can't drive `/settings`, `/api/apply-update`, `/versions/restore`, etc.
+- **Per-account login lockout.** Password and 2FA steps now apply a short,
+  progressive per-account lockout on top of the IP rate limit, keyed so it never
+  reveals whether an account exists.
+- **More endpoints rate-limited** — version download/restore, account, change
+  password (strict), enable-encryption, list-clients.
+- **Client secrets are encrypted at rest** when the OS keyring is unavailable
+  (headless / sandboxed / `GSBS_TOKEN_STORE=file`): the device token and E2E
+  passphrase are AES-GCM-wrapped with a machine key instead of left cleartext in
+  `config.json`.
+
+### Fixed
+- Save deletion removes rows in a transaction before touching files, and staged
+  saves are promoted before commit — no more row-pointing-at-missing-blob or a
+  committed hash over stale bytes; reads hash-verify unencrypted saves and fail closed.
+- `config.json` writes are fully serialized and use unique temp files, and the
+  device token is published safely across goroutines during monthly rotation.
+- Oversized saves (default > 256 MiB, `max_save_mb`) are skipped with a clear
+  error instead of being read into memory and risking an OOM.
+
+### Changed
+- Bulk pulls no longer fsync the activity log once per applied save (coalesced writes).
+- Rate limiter, `last_seen` writes, dashboard save-summary queries, and Prometheus
+  metric cardinality were all made O(1)/bounded on their hot paths.
+- **Admins can purge bad uploaded save data** — a per-finding "Purge slot" action
+  and a "purge one game across all users" tool on the Data Integrity panel.
+
+### Housekeeping
+- CI runs the test suite on macOS and over `./cmd/...`; a gofmt gate was added;
+  the Go toolchain version was aligned; Dependabot now watches Docker base images.
+  README/CONTRIBUTING corrected (v5, working lint command).
+
 ## [5.4.0] - 2026-07-15
 
 Client deep-dive release: every desktop client (Windows, macOS, Linux, Flatpak/Steam Deck)
