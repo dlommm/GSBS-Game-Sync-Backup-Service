@@ -876,6 +876,8 @@
     background: rgba(0, 0, 0, 0.5); border: 0; padding: 0; cursor: default;
   }
   .nav-burger { display: inline-flex; }
+  /* Admin has its own horizontal mobile nav — no drawer, no burger. */
+  .admin-shell .nav-burger { display: none; }
   .topbar .cmdk-trigger.topbar-search { flex: 1 1 auto; }
   .admin-sidebar { display: none; }
   .admin-mobile-nav {
@@ -969,25 +971,32 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 .game-icon { display: block; border-radius: var(--radius-sm); }
 
 /* ── Game grid + cards ── */
-.game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.9rem; }
+.game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.9rem; }
+/* Cover-forward cards: the art is the card. Steam library covers are 600×900
+   portrait — show them full-bleed at their native 2:3 instead of cropping to
+   a padded square thumbnail; the text block sits beneath. */
 .game-card {
-  position: relative; display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem;
+  position: relative; display: flex; flex-direction: column; padding: 0; overflow: hidden;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   text-decoration: none; color: inherit;
   transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
 }
 .game-card:hover { border-color: var(--border-focus); box-shadow: var(--shadow-sm); transform: translateY(-2px); }
 .game-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.game-card-cover { position: relative; }
-.game-card-cover .game-icon { width: 100%; height: auto; aspect-ratio: 1 / 1; }
+.game-card-cover { position: relative; aspect-ratio: 2 / 3; background: var(--bg-raised); overflow: hidden; }
+.game-card-cover .game-icon { width: 100%; height: 100%; }
 /* Real cover art (Steam library portrait) layered over the generated icon;
    onerror removes it so the icon shows through when there's no cover. */
 .cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; border-radius: var(--radius-sm); }
-.game-card-body { min-width: 0; }
-.game-card-title { font-weight: 600; font-size: 0.9375rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.game-card-meta { margin-top: 0.15rem; font-size: 0.8125rem; color: var(--text-secondary); }
+.game-card-cover .cover-img { border-radius: 0; transition: transform var(--transition); }
+.game-card:hover .game-card-cover .cover-img { transform: scale(1.03); }
+.game-card-body { min-width: 0; padding: 0.7rem 0.85rem 0.85rem; }
+.game-card-title {
+  font-weight: 600; font-size: 0.9375rem; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.game-card-meta { margin-top: 0.15rem; font-size: 0.8125rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .game-card-when { margin-top: 0.1rem; font-size: 0.75rem; color: var(--text-muted); }
-.game-card-ring { position: absolute; top: 0.75rem; right: 0.75rem; }
 
 /* ── Dashboard: content + right rail, recent-game row cards (mockup) ── */
 .dash-grid { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; gap: 1.25rem; align-items: start; }
@@ -1000,8 +1009,9 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 }
 .game-row-card:hover { border-color: var(--border-focus); background: var(--surface-hover); }
 .game-row-main { display: flex; align-items: flex-start; gap: 0.75rem; text-decoration: none; color: inherit; min-width: 0; position: relative; }
-.game-row-cover { position: relative; flex-shrink: 0; width: 44px; height: 44px; border-radius: var(--radius-sm); overflow: hidden; }
-.game-row-cover .game-icon { width: 44px; height: 44px; }
+/* Portrait thumb (2:3) — the art leads even in the compact dashboard rows. */
+.game-row-cover { position: relative; flex-shrink: 0; width: 54px; height: 81px; border-radius: var(--radius-sm); overflow: hidden; background: var(--bg-raised); }
+.game-row-cover .game-icon { width: 100%; height: 100%; }
 .game-row-cover .cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .game-row-info { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .game-row-title {
@@ -1036,15 +1046,19 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
   .dash-grid { grid-template-columns: 1fr; }
   .dash-rail { position: static; }
 }
-.game-card-ring .progress-ring { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); }
 
 /* ── Status indicators ──
    The absolute overlay variant is scoped to game-card covers; the bare class
    is a plain inline dot (also used by the client WebUI stat lines — an
    unscoped absolute rule here once stacked those dots at the viewport corner). */
 .status-dot { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 999px; flex-shrink: 0; }
-.game-card-cover .status-dot { position: absolute; top: 0.4rem; left: 0.4rem; box-shadow: 0 0 0 2px var(--surface); }
-.game-card-cover .status-dot.status-healthy { box-shadow: 0 0 0 2px var(--surface), 0 0 8px var(--success); }
+/* On artwork the dot needs a dark halo (a surface-colored ring reads as a
+   hole on light covers) plus a touch more size to stay legible. */
+.game-card-cover .status-dot {
+  position: absolute; top: 0.6rem; left: 0.6rem; width: 0.7rem; height: 0.7rem;
+  box-shadow: 0 0 0 2px rgba(10, 14, 13, 0.55);
+}
+.game-card-cover .status-dot.status-healthy { box-shadow: 0 0 0 2px rgba(10, 14, 13, 0.55), 0 0 8px var(--success); }
 .status-dot.status-healthy { background: var(--success); }
 .status-dot.status-stale { background: var(--warning); }
 .status-dot.status-unknown { background: var(--text-muted); }
@@ -1068,8 +1082,8 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 
 /* ── Game detail header + layout ── */
 .game-detail-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-.game-detail-cover { position: relative; width: 72px; height: 72px; flex: none; }
-.game-detail-cover .game-icon { width: 72px; height: 72px; }
+.game-detail-cover { position: relative; width: 76px; height: 114px; flex: none; border-radius: var(--radius-sm); overflow: hidden; background: var(--bg-raised); }
+.game-detail-cover .game-icon { width: 100%; height: 100%; }
 .game-detail-heading { min-width: 0; flex: 1 1 auto; }
 .game-detail-title { margin: 0; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.03em; }
 .game-detail-tags { margin-top: 0.35rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; font-size: 0.8125rem; }

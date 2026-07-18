@@ -77,6 +77,14 @@ audit, and a WebUI deep-dive (server + client) that followed it.
   devices rail reads as a quiet glance summary (full controls live on the
   Devices page), the dashboard stat tile says "Devices" to match the rest of
   the product, and the client drops "4.0h"-style timestamps.
+- Cover-art-forward game cards: My Games shows Steam library art full-bleed
+  at its native 2:3 portrait (was a padded square crop), with the sync
+  status as a haloed dot on the artwork; dashboard rows and the game-detail
+  header use matching portrait thumbnails. The file-count ring overlay was
+  retired — the art carries the card, the meta line carries the numbers.
+- The admin area gets the standard topbar: search, notification bell, theme
+  toggle, and log out now work on admin pages instead of only on the user
+  dashboard.
 
 ### Security
 - **SSRF blocked on notification sinks.** Webhook / Discord / ntfy URLs are now

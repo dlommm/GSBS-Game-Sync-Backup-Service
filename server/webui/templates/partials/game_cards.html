@@ -52,7 +52,6 @@
       <div class="game-card-meta">{{.FileCount}} file{{if ne .FileCount 1}}s{{end}} · {{formatBytes .TotalBytes}}</div>
       <div class="game-card-when">{{formatTime .LastSynced}}</div>
     </div>
-    <div class="game-card-ring" aria-hidden="true">{{progressRingSVG .FileCount $.MaxFiles 52}}</div>
   </a>
   {{end}}
 </div>

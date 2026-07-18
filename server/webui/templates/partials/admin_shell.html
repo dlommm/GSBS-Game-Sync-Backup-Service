@@ -53,6 +53,7 @@
   <a href="/dashboard" class="admin-sidebar-back">← Dashboard</a>
 </aside>
 <div class="admin-main" data-sse="/dashboard/events">
+  {{template "partials/topbar.html" .}}
   <main id="main-content" class="page-content" role="main">
     {{template "partials/alerts.html" .}}
     {{renderPageBlock .PageName "content" .}}
