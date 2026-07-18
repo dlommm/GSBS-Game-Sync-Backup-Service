@@ -14,8 +14,8 @@ func TestAppBundleRoot(t *testing.T) {
 	}{
 		{"/Applications/GSBS.app/Contents/MacOS/gsbs-client", "/Applications/GSBS.app"},
 		{"/Users/u/Applications/GSBS.app/Contents/MacOS/gsbs-client", "/Users/u/Applications/GSBS.app"},
-		{"/usr/local/bin/gsbs-client", ""},               // bare binary, no bundle
-		{"/tmp/Contents/MacOS/gsbs-client", ""},          // Contents/MacOS but no .app root
+		{"/usr/local/bin/gsbs-client", ""},                  // bare binary, no bundle
+		{"/tmp/Contents/MacOS/gsbs-client", ""},             // Contents/MacOS but no .app root
 		{"/Applications/GSBS.app/Contents/gsbs-client", ""}, // not under MacOS/
 	}
 	for _, c := range cases {

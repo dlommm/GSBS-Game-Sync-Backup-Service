@@ -724,7 +724,7 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 		WatcherHealthy: WatcherHealthy.Load(),
 		PendingUploads: snap.PendingUploads,
 		ConflictCount:  snap.ConflictCount,
-		WatchedPaths: watchCount,
+		WatchedPaths:   watchCount,
 		// Live sources, not the tray snapshot: SyncPaused is the atomic that
 		// actually gates doPull/watcher, and "metered" only matters when the
 		// skip-on-metered setting is enabled (the snapshot's Metered field is

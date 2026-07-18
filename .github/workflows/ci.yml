@@ -30,7 +30,7 @@ jobs:
       - name: Install build deps (cgo for go-sqlite3 and -race)
         run: sudo apt-get update && sudo apt-get install -y gcc
       - name: Test
-        run: go test -race -coverprofile=coverage.out ./server/... ./pkg/... ./client/...
+        run: go test -race -coverprofile=coverage.out ./server/... ./pkg/... ./client/... ./cmd/...
       - name: Upload coverage profile
         uses: actions/upload-artifact@v6
         with:
@@ -72,7 +72,7 @@ jobs:
           cache: true
       - name: Test
         # windows-latest ships mingw gcc, so the race detector works here too.
-        run: go test -race ./server/... ./pkg/... ./client/...
+        run: go test -race ./server/... ./pkg/... ./client/... ./cmd/...
 
   build-linux:
     needs: resolve-runner
@@ -104,6 +104,10 @@ jobs:
         with:
           go-version: "1.26"
           cache: true
+      - name: Test (macOS, native cgo)
+        # Exercises darwin-tagged code paths (tray, update-apply, launcher
+        # detection) that Linux/Windows jobs never compile or run.
+        run: go test ./server/... ./pkg/... ./client/... ./cmd/...
       - name: Build macOS client + server (native cgo)
         run: |
           go build -o /dev/null ./client

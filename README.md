@@ -20,8 +20,8 @@
 <table align="center">
   <tr>
     <td align="center" bgcolor="#4338ca">
-      <strong>🚀 GSBS v4 — Major release</strong><br>
-      Zero-config setup wizard · game-aware sync (pause while playing) · built-in offsite backups + one-command restore · notifications · save export/import · end-to-end encryption upgraded to Argon2id · macOS + arm64 clients
+      <strong>🚀 GSBS v5 — Major release</strong><br>
+      Redesigned web dashboard · client deep-dive (per-game tray controls, quiet hours, one-click local restore) · Steam Deck / Flatpak game-aware sync · zero-config setup wizard · built-in offsite backups + one-command restore · end-to-end encryption (Argon2id) · Windows / macOS / Linux / arm64 clients
     </td>
   </tr>
 </table>
@@ -97,7 +97,7 @@ Register on the server WebUI, create an API token, and log in from the client. G
 - **Light/dark web UI + admin**, **OpenAPI spec** at `/api/openapi.json`, and a localization framework.
 - **Clients for Windows, Linux (incl. Flatpak / arm64), and macOS.**
 
-See [CHANGELOG.md](CHANGELOG.md) for the full v4 release notes and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how conflict resolution and encryption work.
+See [CHANGELOG.md](CHANGELOG.md) for the full v5 release notes and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how conflict resolution and encryption work.
 
 The save-location manifest comes from PCGamingWiki — fresh installs pull a pre-built bundle (full ~40k-game catalog in one fetch); switch to live API sync anytime in **Admin → Settings**. The official bundle is published weekly by [VPS-Sync-GSBS](https://github.com/dlommm/VPS-Sync-GSBS). See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
 

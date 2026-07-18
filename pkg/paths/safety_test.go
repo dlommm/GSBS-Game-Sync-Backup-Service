@@ -27,8 +27,8 @@ func TestUnsafeWatchDir(t *testing.T) {
 		filepath.Join(home, ".steam"),       // all of Steam
 		filepath.Join(home, "Documents"),
 		filepath.Join(home, "Documents", "My Games"),
-		filepath.Join(home, "Library"),                        // macOS
-		filepath.Join(home, "Library", "Preferences"),         // macOS: system+app plists
+		filepath.Join(home, "Library"),                // macOS
+		filepath.Join(home, "Library", "Preferences"), // macOS: system+app plists
 		filepath.Join(home, "Library", "Application Support"), // macOS app data root
 		filepath.Join(home, "Library", "Containers"),
 		filepath.Join(home, "Library", "Caches"),

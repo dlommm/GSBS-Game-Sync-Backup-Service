@@ -29,13 +29,13 @@ The server needs CGO enabled for SQLite (`CGO_ENABLED=1`, which is the default).
 ## Running tests
 
 ```bash
-go test ./server/... ./pkg/... ./client/...
+go test ./server/... ./pkg/... ./client/... ./cmd/...
 ```
 
 With race detector and coverage (matches CI):
 
 ```bash
-go test -race -coverprofile=coverage.out ./server/... ./pkg/... ./client/...
+go test -race -coverprofile=coverage.out ./server/... ./pkg/... ./client/... ./cmd/...
 go tool cover -func=coverage.out
 ```
 
@@ -46,7 +46,7 @@ Tests live under `server/` (e.g. `server/auth/auth_test.go`, `server/store/sqlit
 CI runs [golangci-lint](https://golangci-lint.run/) with config in [.golangci.yml](.golangci.yml). Run locally before pushing:
 
 ```bash
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
 golangci-lint run --timeout=5m
 ```
 

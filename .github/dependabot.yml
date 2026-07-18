@@ -20,3 +20,11 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+
+  # Surface base-image CVEs (Dockerfile pins golang:*-alpine and alpine:* by hand).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5

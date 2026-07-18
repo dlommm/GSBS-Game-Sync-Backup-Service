@@ -61,3 +61,25 @@ func TestEncryptV2CrossFormat(t *testing.T) {
 		t.Fatal("truncated v2 payload must fail")
 	}
 }
+
+// TestGoldenV1BlobStillDecrypts freezes the legacy v1 format. The v1 envelope
+// (base64(salt||nonce||ciphertext)) carries NO KDF-parameter field, so changing
+// iter/keyLen/saltLen/nonceLen or the PBKDF2 hash would silently make every
+// existing v1 save undecryptable — data loss. This hard-coded blob was produced
+// at iter=100000; if it ever fails to decrypt, a parameter was changed and must
+// be reverted (introduce a new versioned format instead — see V2Prefix).
+func TestGoldenV1BlobStillDecrypts(t *testing.T) {
+	const goldenV1 = "kILTwGOGBD672Dp1k6FGDmtppo3E98P+yAudW4bxxVDJIfh/OgQSeS4Th2pPFB6MWzc242AU+yaD2+XcLOYsMo13hQ=="
+	const passphrase = "correct-horse-battery-staple"
+	want := "golden v1 plaintext ✓"
+	if IsV2(goldenV1) {
+		t.Fatal("golden blob must be legacy v1 (no gsbs2: prefix)")
+	}
+	got, err := Decrypt(passphrase, goldenV1)
+	if err != nil {
+		t.Fatalf("golden v1 blob no longer decrypts — a KDF parameter was changed and must be reverted: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("golden v1 decrypt = %q, want %q", got, want)
+	}
+}
