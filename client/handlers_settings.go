@@ -64,13 +64,22 @@ func settingsPageData(cfg *config) clientwebui.SettingsPageData {
 		PolicyOverrides:     overrides,
 		PassphraseSet:       cfg.EncryptionPassphrase != "",
 	}
+	// Serve the encryption state from the local account-settings cache so the
+	// page renders instantly (this used to block the render on a 3s server
+	// fetch), and refresh the cache in the background for the next load.
+	if enc, ok := loadAccountSettingsCache(cfg.ServerURL); ok {
+		data.EncryptionKnown = true
+		data.EncryptionAccountEnabled = enc
+	}
 	if c := getSyncClient(); c != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		if enc, err := c.FetchAccountSettings(ctx); err == nil {
-			data.EncryptionKnown = true
-			data.EncryptionAccountEnabled = enc
-		}
-		cancel()
+		serverURL := cfg.ServerURL
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if enc, err := c.FetchAccountSettings(ctx); err == nil {
+				saveAccountSettingsCache(serverURL, enc)
+			}
+		}()
 	}
 	return data
 }
@@ -125,10 +134,11 @@ func handleEncryptionEnable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	saveAccountSettingsCache(cfg.ServerURL, true)
-	restartSync(cfg)
-	data := settingsPageData(cfg)
-	data.Success = "End-to-end encryption enabled. Set the SAME passphrase on your other devices; existing saves convert as they next change and sync."
-	clientwebui.RenderSettingsPage(w, data)
+	// Post-Redirect-Get, and restart sync off the request goroutine:
+	// restartSync can hold syncMu for up to 12s draining the old loop, which
+	// used to hang this response (and block /api/sync-now) the whole time.
+	go restartSync(cfg)
+	http.Redirect(w, r, "/settings?enc=1", http.StatusSeeOther)
 }
 
 // validConflictPolicy reports whether p is a supported conflict policy.
@@ -181,7 +191,16 @@ func handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	if cfg == nil {
 		cfg = blankConfig()
 	}
-	clientwebui.RenderSettingsPage(w, settingsPageData(cfg))
+	data := settingsPageData(cfg)
+	// Success flashes after the Post-Redirect-Get flows (fixed messages keyed
+	// by boolean flags — never reflect raw query text into the page).
+	switch {
+	case r.URL.Query().Get("saved") == "1":
+		data.Success = "Settings saved. Sync is restarting with the new configuration."
+	case r.URL.Query().Get("enc") == "1":
+		data.Success = "End-to-end encryption enabled. Set the SAME passphrase on your other devices; existing saves convert as they next change and sync."
+	}
+	clientwebui.RenderSettingsPage(w, data)
 }
 
 func handleSettingsSave(w http.ResponseWriter, r *http.Request) {
@@ -287,10 +306,11 @@ func handleSettingsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Apply immediately by restarting sync with the new config.
-	restartSync(cfg)
+	// Apply by restarting sync with the new config — off the request
+	// goroutine: restartSync can hold syncMu for up to 12s draining the old
+	// loop, which used to hang this response (and block /api/sync-now).
+	go restartSync(cfg)
 
-	data := settingsPageData(cfg)
-	data.Success = "Settings saved. Sync restarted with the new configuration."
-	clientwebui.RenderSettingsPage(w, data)
+	// Post-Redirect-Get: respond immediately and make refresh re-submit-safe.
+	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
 }

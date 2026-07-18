@@ -32,10 +32,29 @@ func TestSetupServerRoutes(t *testing.T) {
 			if csp == "" || strings.Contains(csp, "unsafe-inline") {
 				t.Fatalf("GET %s: weak or missing CSP: %q", path, csp)
 			}
+			if cc := resp.Header.Get("Cache-Control"); cc != "no-store" {
+				t.Fatalf("GET %s: dynamic route must be Cache-Control: no-store, got %q", path, cc)
+			}
 			body, _ := io.ReadAll(resp.Body)
 			if strings.Contains(string(body), "Template error") {
 				t.Fatalf("GET %s: template error in body", path)
 			}
 		})
 	}
+
+	// Static assets keep their long-lived cache policy — the no-store
+	// middleware must not leak onto them.
+	t.Run("/static/app.css", func(t *testing.T) {
+		resp, err := http.Get(base + "/static/app.css")
+		if err != nil {
+			t.Fatalf("GET /static/app.css: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status %d", resp.StatusCode)
+		}
+		if cc := resp.Header.Get("Cache-Control"); !strings.Contains(cc, "max-age") {
+			t.Fatalf("static asset Cache-Control = %q, want a max-age policy", cc)
+		}
+	})
 }

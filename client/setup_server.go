@@ -46,6 +46,7 @@ func StartSetupServer() string {
 	mux.HandleFunc("/login", handleSetupLogin)
 	mux.HandleFunc("/open-log", handleOpenLog)
 	mux.HandleFunc("/status", handleSetupStatus)
+	mux.HandleFunc("/events", handleClientEvents)
 	mux.HandleFunc("/dashboard", handleDashboardPage)
 	mux.HandleFunc("/quick-actions", handleQuickActionsPage)
 	mux.HandleFunc("/settings", handleSettingsPage)
@@ -58,15 +59,8 @@ func StartSetupServer() string {
 	mux.HandleFunc("/logs/export.csv", handleLogsCSV)
 	mux.HandleFunc("/api/apply-update", handleApplyUpdate)
 	mux.HandleFunc("/about", handleAboutPage)
-	mux.HandleFunc("/api/sync-now", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "POST only", http.StatusMethodNotAllowed)
-			return
-		}
-		triggerSyncNow()
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"ok":true}`))
-	})
+	mux.HandleFunc("/api/sync-now", handleSyncNow)
+	mux.HandleFunc("/diagnostics/export.zip", handleDiagnosticsExport)
 	mux.HandleFunc("/games", handleAddGamePage)
 	mux.HandleFunc("/games/search", handleGamesSearch)
 	mux.HandleFunc("/games/add", handleGamesAdd)
@@ -89,7 +83,7 @@ func StartSetupServer() string {
 		setupURL = url
 		setupURLMu.Unlock()
 		srv := &http.Server{
-			Handler:           clientLocalGuard(clientSecurityHeaders(mux)),
+			Handler:           clientLocalGuard(clientSecurityHeaders(noStoreDynamic(mux))),
 			ReadHeaderTimeout: 10 * time.Second,
 			ReadTimeout:       time.Minute,
 			IdleTimeout:       2 * time.Minute,
@@ -118,6 +112,19 @@ func clientSecurityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Content-Security-Policy",
 			"default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// noStoreDynamic marks every dynamic response (HTML pages, /status JSON,
+// /partial/*, CSV exports) uncacheable so a browser or intermediary never
+// serves stale local state. Cacheable assets (/static/*, /client-logo) set
+// their own Cache-Control after this middleware runs, which overrides it.
+func noStoreDynamic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/static/") && r.URL.Path != "/client-logo" {
+			w.Header().Set("Cache-Control", "no-store")
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -253,11 +260,116 @@ func handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "folder not found on disk", http.StatusNotFound)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
 	if err := openNative(target); err != nil {
+		// Surface the failure instead of a silent "ok" — the UI used to toast
+		// "Opening folder…" even when the OS handler could not launch.
 		log.Printf("setup: open folder: %v", err)
+		_, _ = w.Write([]byte(`{"ok":false}`))
+		return
+	}
+	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
+// handleSyncNow triggers an immediate sync. It reports honestly: when no sync
+// loop is running (not logged in, sync never started) the caller gets
+// ok:false so the UI can say so instead of pretending a sync was queued.
+func handleSyncNow(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
+	if !triggerSyncNow() {
+		_, _ = w.Write([]byte(`{"ok":false,"reason":"not_running"}`))
+		return
+	}
 	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
+// handleDiagnosticsExport builds the diagnostics bundle (logs + secret-free
+// config + build summary — same zip as the tray's Export diagnostics) and
+// serves it as a download. GET so the Quick Actions card can be a plain
+// anchor; the bundle is written to the client data dir like the tray flow.
+func handleDiagnosticsExport(w http.ResponseWriter, r *http.Request) {
+	path, err := ExportDiagnostics()
+	if err != nil {
+		log.Printf("setup: export diagnostics: %v", err)
+		http.Error(w, "diagnostics export failed", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(path)+`"`)
+	http.ServeFile(w, r, path)
+}
+
+// handleClientEvents streams tray-state change notifications to the local UI
+// as SSE so open pages refresh instantly instead of polling every 5s (the
+// poll stays as a 60s fallback). Bursts of notifications are coalesced for
+// ~500ms into a single state-changed event; a 30s heartbeat keeps the
+// connection verifiably alive.
+func handleClientEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("Connection", "keep-alive")
+	h.Set("X-Accel-Buffering", "no")
+	rc := http.NewResponseController(w)
+	// Clear the per-request read deadline: the server's ReadTimeout (1m) would
+	// otherwise trip the background read and cancel this stream's context,
+	// flapping every SSE connection after a minute.
+	_ = rc.SetReadDeadline(time.Time{})
+	// Rolling write deadline, refreshed on every write: healthy streams live
+	// forever, dead peers are dropped after ~3 missed 30s heartbeats.
+	extend := func() { _ = rc.SetWriteDeadline(time.Now().Add(90 * time.Second)) }
+	extend()
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, ": connected\n\n")
+	flusher.Flush()
+
+	ch, unsubscribe := subscribeTrayStateWithCancel()
+	defer unsubscribe()
+
+	heartbeat := time.NewTicker(30 * time.Second)
+	defer heartbeat.Stop()
+	var coalesce *time.Timer
+	var coalesceC <-chan time.Time
+	defer func() {
+		if coalesce != nil {
+			coalesce.Stop()
+		}
+	}()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ch:
+			// Sync cycles fire many notifications back-to-back; batch them.
+			if coalesceC == nil {
+				coalesce = time.NewTimer(500 * time.Millisecond)
+				coalesceC = coalesce.C
+			}
+		case <-coalesceC:
+			coalesceC = nil
+			extend()
+			if _, err := fmt.Fprint(w, "event: state-changed\ndata: {}\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-heartbeat.C:
+			extend()
+			if _, err := fmt.Fprint(w, ": heartbeat\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
 }
 
 // handleCheckUpdate runs a manual update check (same data the tray uses).
@@ -772,9 +884,11 @@ type setupStatusResponse struct {
 }
 
 func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
-	cfg, _ := loadConfig()
+	// Polled every few seconds: use the mtime-invalidated caches instead of
+	// re-reading config.json + OS keyring and discovery.json on every tick.
+	cfg, _ := loadConfigCached()
 	loggedIn := cfg != nil && strings.TrimSpace(cfg.Token) != ""
-	cache := loadDiscoveryCache()
+	cache := loadDiscoveryCacheCached()
 	titles := make([]string, 0, len(cache.MatchedGames))
 	for _, g := range cache.MatchedGames {
 		name := g.Title
@@ -923,22 +1037,20 @@ func handleGamesAdd(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	name := title
-	if name == "" {
-		name = gameID
-	}
-	clientwebui.RenderPage(w, "games", clientwebui.PageData{
-		NavActive: "games",
-		Title:     "Add a game",
-		Success:   fmt.Sprintf("Added %q. Sync restarted — saves in %s will now upload on change.", name, directory),
-	})
+	// Post-Redirect-Get: a refresh must not re-submit the form. The flash is a
+	// fixed message keyed by a boolean flag (never reflect raw query text).
+	http.Redirect(w, r, "/games?added=1", http.StatusSeeOther)
 }
 
 func handleAddGamePage(w http.ResponseWriter, r *http.Request) {
-	clientwebui.RenderPage(w, "games", clientwebui.PageData{
+	data := clientwebui.PageData{
 		NavActive: "games",
 		Title:     "Add a game",
-	})
+	}
+	if r.URL.Query().Get("added") == "1" {
+		data.Success = "Game added. Sync restarted — saves in that folder will now upload on change."
+	}
+	clientwebui.RenderPage(w, "games", data)
 }
 
 func handleDashboardPage(w http.ResponseWriter, r *http.Request) {
@@ -963,6 +1075,10 @@ func handleHelpPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleAboutPage(w http.ResponseWriter, r *http.Request) {
+	serverURL := ""
+	if cfg, _ := loadConfigCached(); cfg != nil {
+		serverURL = cfg.ServerURL
+	}
 	clientwebui.RenderPage(w, "about", clientwebui.PageData{
 		NavActive: "about",
 		Title:     "About",
@@ -971,5 +1087,6 @@ func handleAboutPage(w http.ResponseWriter, r *http.Request) {
 		Commit:    Commit,
 		GOOS:      runtime.GOOS,
 		GOARCH:    runtime.GOARCH,
+		ServerURL: serverURL,
 	})
 }

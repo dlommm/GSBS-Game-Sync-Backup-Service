@@ -12,55 +12,45 @@ import (
 )
 
 func handleLogsPage(w http.ResponseWriter, r *http.Request) {
-	q := logview.ParseQuery(r)
-	sourcePath, sourcePresent := resolveClientLogSource()
-	sourceInfo := clientLogSourceInfo(sourcePath, sourcePresent)
-
-	entries := []logview.Entry{}
-	if sourcePresent {
-		loaded, err := loadClientLogEntries(sourcePath, q)
-		if err != nil {
-			sourceInfo = fmt.Sprintf("Failed to read log file: %v", err)
-		} else {
-			entries = loaded
-		}
+	data := buildLogsPageData(r)
+	data.PageData = clientwebui.PageData{
+		NavActive: "logs",
+		Title:     "Logs",
 	}
-
-	clientwebui.RenderLogsPage(w, clientwebui.LogsPageData{
-		PageData: clientwebui.PageData{
-			NavActive: "logs",
-			Title:     "Logs",
-		},
-		Entries:          entries,
-		LogSourcePath:    sourcePath,
-		LogSourcePresent: sourcePresent,
-		LogSourceInfo:    sourceInfo,
-		Query:            q,
-	})
+	clientwebui.RenderLogsPage(w, data)
 }
 
 func handleLogsPartial(w http.ResponseWriter, r *http.Request) {
+	clientwebui.RenderPartial(w, "partials/logs_table.html", buildLogsPageData(r))
+}
+
+// buildLogsPageData loads one page of filtered log entries plus the total
+// match count in the tail window (for the Newer/Older pager — same paging the
+// server admin logs page uses).
+func buildLogsPageData(r *http.Request) clientwebui.LogsPageData {
 	q := logview.ParseQuery(r)
 	sourcePath, sourcePresent := resolveClientLogSource()
 	sourceInfo := clientLogSourceInfo(sourcePath, sourcePresent)
 
 	entries := []logview.Entry{}
+	total := 0
 	if sourcePresent {
-		loaded, err := loadClientLogEntries(sourcePath, q)
+		loaded, n, err := loadClientLogEntriesPage(sourcePath, q)
 		if err != nil {
 			sourceInfo = fmt.Sprintf("Failed to read log file: %v", err)
 		} else {
 			entries = loaded
+			total = n
 		}
 	}
-
-	clientwebui.RenderPartial(w, "partials/logs_table.html", clientwebui.LogsPageData{
+	return clientwebui.LogsPageData{
 		Entries:          entries,
+		Total:            total,
 		LogSourcePath:    sourcePath,
 		LogSourcePresent: sourcePresent,
 		LogSourceInfo:    sourceInfo,
 		Query:            q,
-	})
+	}
 }
 
 // handleLogsCSV exports the client log as CSV, mirroring the server admin
@@ -109,4 +99,10 @@ func clientLogSourceInfo(path string, present bool) string {
 
 func loadClientLogEntries(path string, q logview.Query) ([]logview.Entry, error) {
 	return logview.LoadEntries(path, q, logview.ParseClientLine)
+}
+
+// loadClientLogEntriesPage returns one page of entries plus the total match
+// count within the tail window.
+func loadClientLogEntriesPage(path string, q logview.Query) ([]logview.Entry, int, error) {
+	return logview.LoadEntriesPage(path, q, logview.ParseClientLine)
 }

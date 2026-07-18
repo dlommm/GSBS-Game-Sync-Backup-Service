@@ -604,8 +604,10 @@ func formatTrayTooltip(snap TraySnapshot) string {
 	if !snap.WatcherHealthy {
 		parts = append(parts, "watcher: recovering")
 	}
-	if snap.ManifestAge > 0 {
-		parts = append(parts, "manifest: "+formatAgo(time.Now().Add(-snap.ManifestAge)))
+	// Computed lazily here (in-memory cached) instead of inside GetTraySnapshot,
+	// where it used to re-read the manifest file under the tray state lock.
+	if age := ManifestETagAge(); age > 0 {
+		parts = append(parts, "manifest: "+formatAgo(time.Now().Add(-age)))
 	}
 	if d := snap.NextRetryIn; d > 0 {
 		sec := int(d.Round(time.Second).Seconds())

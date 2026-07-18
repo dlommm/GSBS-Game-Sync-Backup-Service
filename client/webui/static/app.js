@@ -27,6 +27,20 @@
     return 'in ' + (sec / 3600).toFixed(1) + 'h';
   }
 
+  /* ---- Shared visibility gate (hidden tabs stop polling) ----
+     Wraps a repeating tick: while the tab is hidden the work is skipped, and
+     one catch-up tick runs as soon as the tab becomes visible again. */
+  function gatedTick(fn) {
+    var missed = false;
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden && missed) { missed = false; fn(); }
+    });
+    return function () {
+      if (document.hidden) { missed = true; return; }
+      fn();
+    };
+  }
+
   /* ---- Theme toggle (shared gsbs.theme key with the server WebUI) ---- */
 
   document.addEventListener('click', function (e) {
@@ -84,7 +98,17 @@
       label.textContent = 'Syncing…';
       var before = lastKnownSyncAt;
       var deadline = Date.now() + 60000;
-      fetch('/api/sync-now', { method: 'POST' }).then(function () {
+      fetch('/api/sync-now', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d || d.ok === false) {
+          // Honest failure: the sync loop isn't running (not logged in /
+          // setup unfinished) — nothing was queued, so say so.
+          btn.disabled = false;
+          label.textContent = original;
+          toast(d && d.reason === 'not_running'
+            ? 'Sync isn’t running on this PC — log in (or finish setup) first'
+            : 'Could not start a sync — see the client log', 'error', 6000);
+          return;
+        }
         (function poll() {
           if (Date.now() > deadline) {
             btn.disabled = false;
@@ -202,8 +226,13 @@
     if (!btn) return;
     fetch('/open-folder?what=game&game_id=' + encodeURIComponent(btn.getAttribute('data-open-folder')), { method: 'POST' })
       .then(function (r) {
-        if (r.ok) toast('Opening folder…', 'info', 2000);
-        else toast('Folder not found on disk', 'error');
+        if (!r.ok) { toast('Folder not found on disk', 'error'); return null; }
+        return r.json();
+      })
+      .then(function (d) {
+        if (!d) return;
+        if (d.ok) toast('Opening folder…', 'info', 2000);
+        else toast('Could not open the folder — see the client log', 'error');
       })
       .catch(function () { toast('Could not reach the local client', 'error'); });
   });
@@ -217,8 +246,15 @@
     if (!hero) return;
     var failures = 0;
     var timer = null;
+    var lastGameListSig = null;
 
     function el(id) { return document.getElementById(id); }
+    function setText(id, txt) {
+      // Only touch the DOM when the text changed: #refreshLabel is aria-live,
+      // and rewriting identical text every tick makes screen readers chatter.
+      var n = el(id);
+      if (n && n.textContent !== txt) n.textContent = txt;
+    }
     function setDot(id, ok) {
       var dot = el(id);
       if (dot) dot.className = 'status-dot ' + (ok === true ? 'dot-ok' : ok === false ? 'dot-error' : 'dot-muted');
@@ -231,7 +267,7 @@
 
     function apply(s) {
       lastKnownSyncAt = s.last_sync_at || null;
-      el('refreshLabel').textContent = 'Updated just now';
+      setText('refreshLabel', 'Updated just now');
 
       // Hero state.
       var relogin = el('reloginBtn');
@@ -365,8 +401,13 @@
       }
 
       // Matched games list — built from cloned nodes, no HTML string concat.
+      // Rebuilt only when the content actually changed: rewriting the same
+      // list every 5s churned the DOM (and, formerly, an aria-live region).
       var ul = el('gameList');
       var titles = s.game_titles || [];
+      var gameListSig = (s.logged_in ? 'in' : 'out') + '\u0000' + titles.join('\u0000');
+      if (gameListSig === lastGameListSig) return;
+      lastGameListSig = gameListSig;
       ul.textContent = '';
       if (titles.length === 0) {
         var empty = document.createElement('li');
@@ -409,10 +450,12 @@
       fetch('/status').then(function (r) { return r.json(); }).then(function (s) {
         failures = 0;
         apply(s);
-        schedule(5000);
+        // While the SSE stream is open, state changes push instantly — the
+        // poll is only a safety net, so stretch it to 60s.
+        schedule(sseOpen ? 60000 : 5000);
       }).catch(function () {
         failures++;
-        el('refreshLabel').textContent = 'Could not reach the local client — retrying…';
+        setText('refreshLabel', 'Could not reach the local client — retrying…');
         setHero('error', 'Client unreachable', 'The tray app may be shutting down. Retrying automatically.');
         schedule(Math.min(30000, 5000 * Math.pow(2, failures)));
       });
@@ -427,6 +470,26 @@
       if (document.hidden) clearTimeout(timer);
       else refresh();
     });
+
+    /* SSE from the local daemon: instant refresh on tray-state changes. On
+       any stream error EventSource reconnects by itself; until it re-opens,
+       the visibility-gated poll falls back to the normal 5s cadence. */
+    var sseOpen = false;
+    if (window.EventSource) {
+      try {
+        var es = new EventSource('/events');
+        es.addEventListener('open', function () { sseOpen = true; });
+        es.addEventListener('error', function () {
+          // EventSource retries on its own; until it re-opens, pull the
+          // fallback poll back in from 60s to the normal cadence.
+          sseOpen = false;
+          if (!document.hidden) schedule(5000);
+        });
+        es.addEventListener('state-changed', function () {
+          if (!document.hidden) refresh();
+        });
+      } catch (err) { /* plain polling remains */ }
+    }
     refresh();
   }
 
@@ -452,6 +515,9 @@
     var list = document.getElementById('discovery-games');
     var doneStep = document.getElementById('step-done');
     var discoverStep = document.getElementById('step-discover');
+    // Visibility-gated: a hidden tab stops the 2s chain and resumes (with one
+    // immediate catch-up poll) when the tab comes back.
+    var gatedPoll = gatedTick(poll);
     function poll() {
       fetch('/status').then(function (r) { return r.json(); }).then(function (s) {
         var titles = s.game_titles || [];
@@ -468,10 +534,10 @@
           return; // stop polling — discovery done
         }
         if (s.last_scan_at) status.textContent = 'Scan finished — no known games matched yet. You can add folders manually.';
-        setTimeout(poll, 2000);
-      }).catch(function () { setTimeout(poll, 4000); });
+        setTimeout(gatedPoll, 2000);
+      }).catch(function () { setTimeout(gatedPoll, 4000); });
     }
-    poll();
+    gatedPoll();
   }
 
   /* ---- Games page: catalog search ---- */
@@ -553,14 +619,17 @@
     var refreshBtn = document.getElementById('logs-refresh-btn');
     var csvBtn = document.getElementById('logs-csv-btn');
     var tailing = document.getElementById('logs-tailing');
+    var offsetInput = document.getElementById('logs-offset');
     var KEY = 'gsbs.client.logs.filters';
 
-    // Restore persisted filters (only when the URL carries none).
+    // Restore persisted filters (only when the URL carries none). The paging
+    // offset is a position, not a filter — never persisted or restored.
     try {
       if (!window.location.search) {
         var saved = JSON.parse(localStorage.getItem(KEY) || 'null');
         if (saved) {
           Object.keys(saved).forEach(function (k) {
+            if (k === 'offset') return;
             var field = form.elements[k];
             if (!field) return;
             if (field.type === 'checkbox') field.checked = !!saved[k];
@@ -574,7 +643,7 @@
       try {
         var out = {};
         Array.prototype.forEach.call(form.elements, function (f) {
-          if (!f.name) return;
+          if (!f.name || f.name === 'offset') return;
           out[f.name] = f.type === 'checkbox' ? f.checked : f.value;
         });
         localStorage.setItem(KEY, JSON.stringify(out));
@@ -597,14 +666,41 @@
       }).catch(function () { toast('Could not load logs', 'error'); });
     }
 
+    // Newer/Older paging (same [data-logs-page] pattern as the server admin
+    // logs page): buttons live inside the swapped table region, so delegate.
+    // The hidden offset input keeps the position across refreshes.
+    function currentOffset() {
+      return offsetInput ? (parseInt(offsetInput.value, 10) || 0) : 0;
+    }
+    function currentLimit() {
+      var sel = form.querySelector('select[name="limit"]');
+      return sel ? (parseInt(sel.value, 10) || 200) : 200;
+    }
+    document.addEventListener('click', function (evt) {
+      var pageBtn = evt.target.closest('[data-logs-page]');
+      if (!pageBtn || !offsetInput) return;
+      var next = pageBtn.getAttribute('data-logs-page') === 'older'
+        ? currentOffset() + currentLimit()
+        : Math.max(0, currentOffset() - currentLimit());
+      offsetInput.value = String(next);
+      refreshLogs();
+    });
+
     var timer = null;
+    // Auto-refresh ticks are visibility-gated (hidden tabs stop fetching) and
+    // only run on the newest page — refreshing while paged back would yank
+    // the view.
+    var autoTick = gatedTick(function () {
+      if (currentOffset() > 0) return;
+      refreshLogs();
+    });
     function syncAutoRefresh() {
       if (timer) { clearInterval(timer); timer = null; }
       var enabled = form.querySelector('input[name="auto"]');
       var seconds = form.querySelector('select[name="refresh"]');
       var interval = seconds ? Math.max(2000, parseInt(seconds.value || '5', 10) * 1000) : 5000;
       var on = enabled && enabled.checked;
-      if (on) timer = setInterval(refreshLogs, interval);
+      if (on) timer = setInterval(autoTick, interval);
       if (tailing) tailing.hidden = !on;
     }
 
@@ -618,7 +714,10 @@
       persist();
       syncAutoRefresh();
       updateCsvLink();
-      if (evt.target.name !== 'auto' && evt.target.name !== 'refresh') refreshLogs();
+      if (evt.target.name !== 'auto' && evt.target.name !== 'refresh') {
+        if (offsetInput) offsetInput.value = '0'; // filters changed: back to newest
+        refreshLogs();
+      }
     });
     if (refreshBtn) refreshBtn.addEventListener('click', refreshLogs);
     syncAutoRefresh();

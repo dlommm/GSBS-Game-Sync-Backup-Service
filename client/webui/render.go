@@ -65,7 +65,10 @@ type SettingsPageData struct {
 // LogsPageData holds data for the client logs viewer.
 type LogsPageData struct {
 	PageData
-	Entries          []logview.Entry
+	Entries []logview.Entry
+	// Total is how many entries matched the filters within the tail window
+	// (drives the Newer/Older pager).
+	Total            int
 	LogSourcePath    string
 	LogSourcePresent bool
 	LogSourceInfo    string
@@ -86,6 +89,7 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 	return template.FuncMap{
 		"formatTime":  formatTime,
 		"formatBytes": formatBytes,
+		"add":         func(a, b int) int { return a + b },
 		"pageBlock":   pageBlock(t),
 	}
 }

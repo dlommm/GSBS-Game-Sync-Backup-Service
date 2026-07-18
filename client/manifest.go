@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	gosync "sync"
 	"sync/atomic"
 	"time"
 
@@ -352,6 +353,7 @@ func manifestPath() string {
 // SetManifestPathForTest overrides the on-disk manifest cache path (tests only).
 func SetManifestPathForTest(path string) {
 	manifestPathOverride = path
+	resetManifestFetchedAtCache()
 }
 
 // manifestFile is the on-disk manifest cache (flat entries + optional v2 game metadata).
@@ -596,17 +598,59 @@ func SaveManifestFile(f manifestFile) error {
 		_ = os.Remove(tmpName)
 		return err
 	}
+	setManifestLastFetched(parseManifestFetchedAt(f.LastFetchedAt))
 	return nil
 }
 
-// ManifestETagAge returns how long since the manifest was last fetched, or zero if unknown.
-func ManifestETagAge() time.Duration {
-	f := LoadManifestFile()
-	if f.LastFetchedAt == "" {
-		return 0
+// manifestFetchedAt caches the manifest's LastFetchedAt timestamp in memory so
+// age reads (tray tooltip, status displays) never re-read and re-parse the
+// full on-disk manifest cache per call — it used to be loaded inside
+// GetTraySnapshot's read lock on every /status poll and menu render. Seeded
+// lazily from disk on first read, then kept fresh by SaveManifestFile (the
+// single writer path for all manifest fetch/save flows).
+var (
+	manifestFetchedAtMu     gosync.Mutex
+	manifestFetchedAtLoaded bool
+	manifestFetchedAt       time.Time
+)
+
+func parseManifestFetchedAt(raw string) time.Time {
+	if raw == "" {
+		return time.Time{}
 	}
-	t, err := time.Parse(time.RFC3339, f.LastFetchedAt)
+	t, err := time.Parse(time.RFC3339, raw)
 	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
+func setManifestLastFetched(t time.Time) {
+	manifestFetchedAtMu.Lock()
+	manifestFetchedAt = t
+	manifestFetchedAtLoaded = true
+	manifestFetchedAtMu.Unlock()
+}
+
+func resetManifestFetchedAtCache() {
+	manifestFetchedAtMu.Lock()
+	manifestFetchedAt = time.Time{}
+	manifestFetchedAtLoaded = false
+	manifestFetchedAtMu.Unlock()
+}
+
+// ManifestETagAge returns how long since the manifest was last fetched, or zero if unknown.
+// Served from the in-memory timestamp cache; the manifest file is only read
+// once to seed it.
+func ManifestETagAge() time.Duration {
+	manifestFetchedAtMu.Lock()
+	loaded, t := manifestFetchedAtLoaded, manifestFetchedAt
+	manifestFetchedAtMu.Unlock()
+	if !loaded {
+		t = parseManifestFetchedAt(LoadManifestFile().LastFetchedAt)
+		setManifestLastFetched(t)
+	}
+	if t.IsZero() {
 		return 0
 	}
 	return time.Since(t)

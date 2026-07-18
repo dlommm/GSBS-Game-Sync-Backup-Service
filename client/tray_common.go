@@ -52,16 +52,22 @@ func restartSync(cfg *config) {
 }
 
 // triggerSyncNow sends on the syncNow channel if a sync loop is running.
-func triggerSyncNow() {
+// It reports whether a loop was actually signaled: false means no sync loop
+// exists (not logged in / sync never started), so callers can surface an
+// honest "nothing happened" instead of pretending a sync was queued. A full
+// channel still returns true — a sync-now is already pending.
+func triggerSyncNow() bool {
 	syncMu.Lock()
 	ch := syncNowCh
 	syncMu.Unlock()
-	if ch != nil {
-		select {
-		case ch <- struct{}{}:
-		default:
-		}
+	if ch == nil {
+		return false
 	}
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
+	return true
 }
 
 // triggerManifestRefresh sends on the refresh channel if a sync loop is running.

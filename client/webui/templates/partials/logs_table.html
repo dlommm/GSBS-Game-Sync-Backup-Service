@@ -30,6 +30,17 @@
     </tbody>
   </table>
 </div>
+<div class="table-pager">
+  <span class="table-pager-summary">{{add .Query.Offset 1}}–{{add .Query.Offset (len .Entries)}} of {{.Total}} matched, newest first</span>
+  <div class="table-pager-links">
+    <button type="button" class="btn-ghost-sm" data-logs-page="newer" {{if eq .Query.Offset 0}}disabled{{end}}>← Newer</button>
+    <button type="button" class="btn-ghost-sm" data-logs-page="older" {{if ge (add .Query.Offset (len .Entries)) .Total}}disabled{{end}}>Older →</button>
+  </div>
+</div>
+{{else if gt .Query.Offset 0}}
+<div class="panel-empty"><p>No more log lines this far back.</p>
+  <p class="hint"><button type="button" class="btn-ghost-sm" data-logs-page="newer">← Back to newest</button></p>
+</div>
 {{else}}
 <div class="panel-empty"><p>No matching log lines for the current filters.</p></div>
 {{end}}

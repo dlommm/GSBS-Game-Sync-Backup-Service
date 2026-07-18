@@ -45,6 +45,51 @@ func loadDiscoveryCache() discoveryCache {
 	return c
 }
 
+// discCacheMem backs loadDiscoveryCacheCached: the /status poll used to read
+// and unmarshal discovery.json on every 5s tick. saveDiscoveryCache rewrites
+// the file, so path + mtime + size invalidation picks up new scans.
+var discCacheMem struct {
+	mu      sync.Mutex
+	loaded  bool
+	path    string
+	present bool // discovery.json existed at cache time
+	modTime time.Time
+	size    int64
+	cache   discoveryCache
+}
+
+// loadDiscoveryCacheCached is loadDiscoveryCache for hot read-only paths.
+// Callers MUST NOT mutate the returned value — its slices/maps are shared
+// across calls.
+func loadDiscoveryCacheCached() discoveryCache {
+	path := discoveryPath()
+	st, statErr := os.Stat(path)
+
+	m := &discCacheMem
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.loaded && m.path == path {
+		if statErr != nil && !m.present {
+			return m.cache
+		}
+		if statErr == nil && m.present && st.ModTime().Equal(m.modTime) && st.Size() == m.size {
+			return m.cache
+		}
+	}
+	m.cache = loadDiscoveryCache()
+	m.loaded = true
+	m.path = path
+	m.present = statErr == nil
+	if statErr == nil {
+		m.modTime = st.ModTime()
+		m.size = st.Size()
+	} else {
+		m.modTime = time.Time{}
+		m.size = 0
+	}
+	return m.cache
+}
+
 func saveDiscoveryCache(c discoveryCache) error {
 	dir := filepath.Dir(discoveryPath())
 	if err := os.MkdirAll(dir, 0755); err != nil {

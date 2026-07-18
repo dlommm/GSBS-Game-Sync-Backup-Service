@@ -213,6 +213,57 @@ func reconcileSecrets(c *config) {
 	}
 }
 
+// statusCfgCache backs loadConfigCached: the local WebUI /status endpoint is
+// polled every few seconds, and loadConfig() re-reads config.json AND
+// round-trips the OS keyring twice (token + passphrase via reconcileSecrets)
+// on every call — far too heavy per tick. Every config mutation goes through
+// saveConfig, which rewrites the file, so path + mtime + size invalidation
+// picks changes up on the next poll.
+var statusCfgCache struct {
+	mu      sync.Mutex
+	path    string
+	present bool // config.json existed at cache time
+	modTime time.Time
+	size    int64
+	cfg     *config
+}
+
+// loadConfigCached is loadConfig for hot read-only paths (the /status poll).
+// It reloads from disk (and keyring) only when config.json changed. Callers
+// MUST treat the returned config as read-only — it is shared across calls.
+func loadConfigCached() (*config, error) {
+	dir, _ := os.UserConfigDir()
+	path := filepath.Join(dir, "gsbs", "config.json")
+	st, statErr := os.Stat(path)
+
+	c := &statusCfgCache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cfg != nil && c.path == path {
+		if statErr != nil && !c.present {
+			return c.cfg, nil // still no file (first launch)
+		}
+		if statErr == nil && c.present && st.ModTime().Equal(c.modTime) && st.Size() == c.size {
+			return c.cfg, nil
+		}
+	}
+	cfg, err := loadConfig()
+	if err != nil {
+		return nil, err
+	}
+	c.cfg = cfg
+	c.path = path
+	c.present = statErr == nil
+	if statErr == nil {
+		c.modTime = st.ModTime()
+		c.size = st.Size()
+	} else {
+		c.modTime = time.Time{}
+		c.size = 0
+	}
+	return cfg, nil
+}
+
 // blankConfig is used when no config file exists (first launch). Empty server and token so user must login.
 func blankConfig() *config {
 	return &config{

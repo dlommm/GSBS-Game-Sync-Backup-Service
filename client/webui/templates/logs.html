@@ -20,6 +20,7 @@
     </div>
   </div>
   <form id="logs-filters" class="filter-toolbar" method="get" action="/logs">
+    <input type="hidden" name="offset" id="logs-offset" value="{{.Query.Offset}}">
     <select name="component" class="filter-select" aria-label="Application">
       <option value="all" {{if eq .Query.Component "all"}}selected{{end}}>All applications</option>
       <option value="sync" {{if eq .Query.Component "sync"}}selected{{end}}>sync</option>

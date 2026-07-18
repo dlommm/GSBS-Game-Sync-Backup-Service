@@ -86,7 +86,6 @@ type TraySnapshot struct {
 	GamesRunning   int // running games detected by game-aware sync
 	WatcherHealthy bool
 	AuthFailed     bool // true when the outbox/push is paused due to a 401 auth failure
-	ManifestAge    time.Duration
 	Games          []GameRow
 	Discovered     []GameRow
 }
@@ -202,6 +201,34 @@ func subscribeTrayState() <-chan struct{} {
 	globalTrayState.subscribers = append(globalTrayState.subscribers, ch)
 	globalTrayState.mu.Unlock()
 	return ch
+}
+
+// subscribeTrayStateWithCancel is subscribeTrayState for bounded-lifetime
+// listeners (the local WebUI /events SSE stream): the returned unsubscribe
+// removes the channel so closed connections don't accumulate subscribers.
+func subscribeTrayStateWithCancel() (<-chan struct{}, func()) {
+	ch := make(chan struct{}, 1)
+	globalTrayState.mu.Lock()
+	globalTrayState.subscribers = append(globalTrayState.subscribers, ch)
+	globalTrayState.mu.Unlock()
+	unsubscribe := func() {
+		globalTrayState.mu.Lock()
+		subs := globalTrayState.subscribers
+		for i, c := range subs {
+			if c == ch {
+				// Copy-on-remove: notifyTrayState iterates a snapshot of this
+				// slice outside the lock, so never mutate the shared backing
+				// array in place.
+				next := make([]chan struct{}, 0, len(subs)-1)
+				next = append(next, subs[:i]...)
+				next = append(next, subs[i+1:]...)
+				globalTrayState.subscribers = next
+				break
+			}
+		}
+		globalTrayState.mu.Unlock()
+	}
+	return ch, unsubscribe
 }
 
 func notifyTrayState() {
@@ -544,8 +571,10 @@ func GetTraySnapshot() TraySnapshot {
 		GamesRunning:   globalTrayState.gamesRunning,
 		WatcherHealthy: WatcherHealthy.Load(),
 		AuthFailed:     clientsync.IsOutboxAuthFailed(),
-		ManifestAge:    ManifestETagAge(),
-		Games:          games,
-		Discovered:     discovered,
+		// ManifestAge intentionally absent: it required loading + parsing the
+		// full manifest cache from disk while holding mu.RLock. Consumers that
+		// want it call ManifestETagAge() (in-memory cached) outside the lock.
+		Games:      games,
+		Discovered: discovered,
 	}
 }

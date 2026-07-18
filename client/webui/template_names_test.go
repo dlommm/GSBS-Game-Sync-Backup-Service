@@ -8,7 +8,7 @@ import (
 	"github.com/gsbs/gsbs/pkg/logview"
 )
 
-var pageNames = []string{"setup", "dashboard", "games", "quick_actions", "help", "about", "open_log", "logs", "settings", "insights"}
+var pageNames = []string{"setup", "dashboard", "games", "quick_actions", "help", "about", "open_log", "logs", "settings", "insights", "versions"}
 
 func TestParseTemplates(t *testing.T) {
 	_, err := clientwebui.ParseTemplates()
@@ -39,6 +39,17 @@ func TestRenderPages(t *testing.T) {
 						GameID: "730", PathKey: "main", DetectedAt: "2026-07-01T00:00:00Z", Policy: "last_write_wins",
 					}},
 					Outbox: []clientwebui.InsightsOutboxRow{{GameID: "730", PathKey: "main", SizeBytes: 1024, Attempts: 1}},
+				})
+			} else if name == "versions" {
+				clientwebui.RenderVersionsPage(rec, clientwebui.VersionsPageData{
+					PageData:  clientwebui.PageData{NavActive: "insights", Title: "Test"},
+					GameID:    "730",
+					PathKey:   "abc123",
+					GameTitle: "CS2",
+					Versions: []clientwebui.VersionRow{
+						{Version: 2, UpdatedAt: "2026-07-01T00:00:00Z", SizeBytes: 2048, Current: true},
+						{Version: 1, UpdatedAt: "2026-06-30T00:00:00Z", SizeBytes: 1024, ChangeBytes: 100, ClientName: "desk"},
+					},
 				})
 			} else if name == "settings" {
 				clientwebui.RenderSettingsPage(rec, clientwebui.SettingsPageData{
