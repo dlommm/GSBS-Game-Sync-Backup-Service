@@ -413,6 +413,9 @@
     var scope = root || document;
     var tables = scope.querySelectorAll ? scope.querySelectorAll('table[data-table-id]') : [];
     Array.prototype.forEach.call(tables, function (table) {
+      // The dashboard rail is a glanceable summary — no ⚙ chrome there
+      // (the same partial gets the full menu on its dedicated page).
+      if (table.closest('.dash-rail')) return;
       buildTableMenu(table);
       applyTablePrefs(table);
     });

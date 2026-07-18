@@ -102,7 +102,7 @@
   <div class="panel-body">
     <p class="cell-muted u-m0">
       Weekly job that re-hashes every stored save against its recorded checksum (client-encrypted saves are skipped — the server cannot read them).
-      {{if .IntegrityLastRun}}Last run: {{.IntegrityLastRun.StartedAt}} ({{.IntegrityLastRun.Status}}).{{else}}Not run yet.{{end}}
+      {{if .IntegrityLastRun}}Last run {{formatTime .IntegrityLastRun.StartedAt}} ({{.IntegrityLastRun.Status}}).{{else}}Not run yet.{{end}}
     </p>
     {{if .IntegrityFindings}}
     <div class="table-wrap u-mt-sm">

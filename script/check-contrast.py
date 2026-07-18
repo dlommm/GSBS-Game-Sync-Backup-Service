@@ -29,6 +29,9 @@ PAIRS = [
     ("--warning", "--surface", 3.0, "warning glyph/badge on cards"),
     ("--error", "--surface", 3.0, "error glyph/badge on cards"),
     ("--info", "--surface", 3.0, "info glyph/badge on cards"),
+    ("--os-windows", "--surface", 4.5, "OS badge text on cards (small text)"),
+    ("--os-linux", "--surface", 4.5, "OS badge text on cards (small text)"),
+    ("--os-mac", "--surface", 4.5, "OS badge text on cards (small text)"),
 ]
 
 

@@ -70,6 +70,13 @@ audit, and a WebUI deep-dive (server + client) that followed it.
   `.u-warn` uses the palette error color, OS badges are theme-aware, the
   Tailwind config no longer carries the retired indigo palette, and ~2KB of
   dead pre-redesign CSS was removed.
+- A "data voice" typography pass: machine values (stat figures, sizes,
+  timestamps, audit detail) now render in the embedded JetBrains Mono with
+  tabular figures, giving numbers a consistent register across both UIs.
+  Game-card titles clamp to two lines instead of cutting mid-word, the
+  devices rail reads as a quiet glance summary (full controls live on the
+  Devices page), the dashboard stat tile says "Devices" to match the rest of
+  the product, and the client drops "4.0h"-style timestamps.
 
 ### Security
 - **SSRF blocked on notification sinks.** Webhook / Discord / ntfy URLs are now

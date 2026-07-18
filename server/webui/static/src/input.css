@@ -370,7 +370,13 @@
     border-radius: var(--radius); transition: border-color var(--transition), box-shadow var(--transition);
   }
   .stat-card:hover { border-color: var(--border-focus); box-shadow: var(--shadow-sm); }
-  .stat-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+  /* Data voice: machine-truth values (counts, bytes, ages, versions) render
+     in the mono face with tabular figures; prose stays in the sans. The
+     product's substance IS these numbers — give them their own register. */
+  .stat-value {
+    font-family: var(--mono); font-size: 1.6rem; font-weight: 600;
+    letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums;
+  }
   .stat-label {
     margin-top: 0.25rem; font-size: 0.6875rem; font-weight: 600; color: var(--text-muted);
     text-transform: uppercase; letter-spacing: 0.06em;
@@ -410,6 +416,7 @@
   .table-wrap { overflow-x: auto; }
   .data-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
   .data-table th, .data-table td { padding: 0.625rem 1.25rem; text-align: left; border-top: 1px solid var(--border); }
+  .data-table td { font-variant-numeric: tabular-nums; }
   .data-table thead th {
     background: var(--bg-raised); color: var(--text-muted); font-weight: 600;
     font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.06em; border-top: none;
@@ -490,9 +497,10 @@
   .timeline-item { position: relative; padding-left: 1.5rem; padding-bottom: 1rem; border-left: 2px solid var(--border); margin-left: 0.5rem; }
   .timeline-item:last-child { padding-bottom: 0; }
   .timeline-dot { position: absolute; left: -5px; top: 0.25rem; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
-  .timeline-time { font-size: 0.75rem; color: var(--text-muted); }
+  .timeline-time { font-family: var(--mono); font-size: 0.6875rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
   .timeline-action { font-weight: 600; font-size: 0.875rem; }
-  .timeline-details { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.125rem; }
+  /* Raw audit detail (key=value) is machine output — present it as such. */
+  .timeline-details { font-family: var(--mono); font-size: 0.6875rem; color: var(--text-muted); margin-top: 0.125rem; word-break: break-all; }
 
   .chart-wrap { padding: 1rem 1.25rem; }
   .chart-svg { width: 100%; height: auto; max-height: 12rem; }
@@ -996,9 +1004,13 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 .game-row-cover .game-icon { width: 44px; height: 44px; }
 .game-row-cover .cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .game-row-info { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
-.game-row-title { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.game-row-title {
+  font-weight: 600; font-size: 0.9rem; overflow: hidden;
+  /* Two-line clamp: "The Witcher 3: Wild H…" mid-word cuts read badly. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
 .game-row-when { font-size: 0.75rem; color: var(--text-muted); }
-.game-row-status { display: flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; color: var(--text-secondary); }
+.game-row-status { display: flex; align-items: center; gap: 0.3rem; font-size: 0.75rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .status-glyph { display: inline-flex; color: var(--text-muted); }
 .status-glyph-ok { color: var(--success); }
 .status-glyph-warn { color: var(--warning); }
@@ -1012,6 +1024,13 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 .recent-games-more a:hover { text-decoration: underline; }
 .dash-rail .data-table th, .dash-rail .data-table td { padding: 0.45rem 0.5rem; font-size: 0.75rem; }
 .dash-rail .data-table th { white-space: nowrap; }
+/* The rail is a glanceable summary, not a data browser — quiet its header
+   row and badges down so the device names lead. */
+.dash-rail .data-table thead th { background: transparent; font-size: 0.625rem; letter-spacing: 0.08em; }
+.dash-rail .os-badge { background: transparent; padding: 0; letter-spacing: 0.03em; color: var(--text-muted); }
+/* Destructive actions don't belong in the glance rail (and don't fit) —
+   the panel's "Manage →" link leads to the full Devices page for that. */
+.dash-rail .data-table .cell-action, .dash-rail .data-table .th-action { display: none; }
 .dash-rail .panel { padding: 1rem; }
 @media (max-width: 1100px) {
   .dash-grid { grid-template-columns: 1fr; }
@@ -1079,8 +1098,8 @@ details[open] > summary .tree-twisty { transform: rotate(90deg); }
 .storage-hero-gauge .gauge { display: block; }
 .storage-hero-info { min-width: 0; }
 .storage-hero-label { font-size: 0.6875rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
-.storage-hero-value { margin-top: 0.2rem; font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
-.storage-hero-value span { color: var(--text-muted); font-weight: 500; font-size: 1rem; }
+.storage-hero-value { margin-top: 0.2rem; font-family: var(--mono); font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.storage-hero-value span { color: var(--text-muted); font-weight: 500; font-size: 0.9375rem; }
 .storage-hero-bar { margin-top: 0.6rem; max-width: 18rem; }
 
 /* ── Quick access tiles (dashboard) ── */

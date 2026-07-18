@@ -17,14 +17,18 @@
     if (sec < 5) return 'just now';
     if (sec < 60) return sec + 's ago';
     if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
-    if (sec < 86400) return (sec / 3600).toFixed(1) + 'h ago';
+    if (sec < 86400) return trimHours(sec) + 'h ago';
     return Math.floor(sec / 86400) + 'd ago';
   }
   function formatETA(sec) {
     if (!sec || sec <= 0) return 'soon';
     if (sec < 90) return 'in ' + sec + 's';
     if (sec < 5400) return 'in ' + Math.round(sec / 60) + 'm';
-    return 'in ' + (sec / 3600).toFixed(1) + 'h';
+    return 'in ' + trimHours(sec) + 'h';
+  }
+  // "4h", "4.5h" — never the "4.0h" that toFixed produced.
+  function trimHours(sec) {
+    return Math.round(sec / 360) / 10;
   }
 
   /* ---- Shared visibility gate (hidden tabs stop polling) ----
