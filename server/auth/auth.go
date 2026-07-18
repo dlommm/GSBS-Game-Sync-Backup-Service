@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/gsbs/gsbs/server/store"
 	"golang.org/x/crypto/bcrypt"
@@ -12,14 +13,31 @@ var (
 	ErrBadCredentials = errors.New("bad credentials")
 )
 
+// Per-account login lockout: 5 free attempts, then a short progressive lock.
+// The window bounds how long failures accumulate; locks never exceed maxLock so
+// a guessing attacker cannot permanently deny a victim.
+const (
+	lockoutThreshold = 6
+	lockoutWindow    = 15 * time.Minute
+	lockoutMaxLock   = 15 * time.Minute
+)
+
 // Service handles user auth and client tokens.
 type Service struct {
-	store store.Store
+	store   store.Store
+	lockout *LockoutTracker
 }
 
 func NewService(st store.Store) *Service {
-	return &Service{store: st}
+	return &Service{
+		store:   st,
+		lockout: NewLockoutTracker(lockoutThreshold, lockoutWindow, lockoutMaxLock),
+	}
 }
+
+// Lockout exposes the per-account brute-force tracker shared by the API and
+// WebUI login paths.
+func (s *Service) Lockout() *LockoutTracker { return s.lockout }
 
 // HashPassword returns a bcrypt hash of the password.
 func HashPassword(password string) (string, error) {

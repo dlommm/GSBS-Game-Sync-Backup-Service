@@ -69,8 +69,22 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// Per-account brute-force lockout. Keyed by a username hash so a locked
+	// message is shown identically for real and made-up usernames (failed
+	// Authenticate below records a failure either way) — no existence oracle.
+	lockKey := auth.AccountKey(username)
+	if locked, _ := h.auth.Lockout().Locked(lockKey); locked {
+		csrfToken := SetCSRFToken(w, r, h.secret)
+		h.render(w, "login.html", map[string]interface{}{
+			"Error":         "Too many login attempts. Please wait and try again.",
+			"AllowRegister": h.allowRegister,
+			"CSRFToken":     csrfToken,
+		})
+		return
+	}
 	userID, err := h.auth.Authenticate(r.Context(), username, password)
 	if err != nil {
+		h.auth.Lockout().Fail(lockKey)
 		logx.Logger().Warn().Str("username", username).Msg("webui login failed")
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
@@ -80,6 +94,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	h.auth.Lockout().Reset(lockKey)
 	enabled, _ := h.store.IsTOTPEnabled(r.Context(), userID)
 	if enabled {
 		SetTOTPStepCookie(w, r, h.secret, userID)
@@ -137,6 +152,17 @@ func (h *WebHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	// Per-account lockout at the second factor, keyed by the already-verified
+	// userID so an attacker who has the password can't spray TOTP codes.
+	totpLockKey := "totp:" + userID
+	if locked, _ := h.auth.Lockout().Locked(totpLockKey); locked {
+		csrfToken := SetCSRFToken(w, r, h.secret)
+		h.render(w, "login_totp.html", map[string]interface{}{
+			"Error":     "Too many attempts. Please wait and try again.",
+			"CSRFToken": csrfToken,
+		})
+		return
+	}
 	code := strings.TrimSpace(r.FormValue("code"))
 	recoveryCode := strings.TrimSpace(r.FormValue("recovery_code"))
 	if code == "" && recoveryCode == "" {
@@ -151,6 +177,7 @@ func (h *WebHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		// One-time recovery code instead of an authenticator code.
 		consumed, err := h.store.ConsumeRecoveryCode(r.Context(), userID, hashRecoveryCode(recoveryCode))
 		if err != nil || !consumed {
+			h.auth.Lockout().Fail(totpLockKey)
 			csrfToken := SetCSRFToken(w, r, h.secret)
 			h.render(w, "login_totp.html", map[string]interface{}{
 				"Error":     "Invalid or already-used recovery code.",
@@ -176,6 +203,7 @@ func (h *WebHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !auth.ValidateTOTPOnce(userID, code, secret) {
+			h.auth.Lockout().Fail(totpLockKey)
 			csrfToken := SetCSRFToken(w, r, h.secret)
 			h.render(w, "login_totp.html", map[string]interface{}{
 				"Error":     "Invalid code. Please try again.",
@@ -184,6 +212,7 @@ func (h *WebHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	h.auth.Lockout().Reset(totpLockKey)
 	ClearTOTPStepCookie(w)
 	sessionID, err := h.store.CreateSession(r.Context(), userID, r.UserAgent())
 	if err != nil {

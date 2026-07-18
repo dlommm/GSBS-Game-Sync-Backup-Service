@@ -10,11 +10,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	neturl "net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/retry"
 	"github.com/gsbs/gsbs/server/logx"
+	"github.com/gsbs/gsbs/server/netutil"
 )
 
 // Event types. A user-scoped event (UserID != "") goes to that user's sinks
@@ -88,19 +91,40 @@ type Notifier struct {
 	AdminSinks func(ctx context.Context) Sinks
 	UserSinks  func(ctx context.Context, userID string) Sinks
 
-	httpClient *http.Client
+	// safeClient refuses non-public destinations (SSRF guard) and is always
+	// used for user-configured sinks. adminClient is the same safe client
+	// unless GSBS_NOTIFY_ALLOW_PRIVATE is set, in which case operator-configured
+	// admin sinks may reach LAN hosts (e.g. a self-hosted ntfy).
+	safeClient  *http.Client
+	adminClient *http.Client
 }
 
 // New creates a Notifier and starts its delivery worker (stops with ctx).
 func New(ctx context.Context, adminSinks func(context.Context) Sinks, userSinks func(context.Context, string) Sinks) *Notifier {
+	safe := netutil.SafeHTTPClient(10 * time.Second)
+	admin := safe
+	if allowPrivateSinks() {
+		admin = &http.Client{Timeout: 10 * time.Second}
+	}
 	n := &Notifier{
-		queue:      make(chan Event, 64),
-		AdminSinks: adminSinks,
-		UserSinks:  userSinks,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		queue:       make(chan Event, 64),
+		AdminSinks:  adminSinks,
+		UserSinks:   userSinks,
+		safeClient:  safe,
+		adminClient: admin,
 	}
 	go n.worker(ctx)
 	return n
+}
+
+// allowPrivateSinks reports whether operator-configured admin sinks may target
+// private/loopback addresses (opt-in for self-hosters with a LAN webhook).
+func allowPrivateSinks() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("GSBS_NOTIFY_ALLOW_PRIVATE"))) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
 }
 
 // Notify enqueues an event; on a full queue the oldest event is dropped so
@@ -140,34 +164,36 @@ func (n *Notifier) worker(ctx context.Context) {
 
 func (n *Notifier) deliver(ctx context.Context, ev Event) {
 	seen := map[string]bool{}
-	sendAll := func(s Sinks) {
+	sendAll := func(s Sinks, client *http.Client) {
 		if s.empty() || !s.wants(ev.Type) {
 			return
 		}
 		if s.WebhookURL != "" && !seen["w"+s.WebhookURL] {
 			seen["w"+s.WebhookURL] = true
-			n.send(ctx, "webhook", s.WebhookURL, ev, n.sendWebhook)
+			n.send(ctx, client, "webhook", s.WebhookURL, ev, n.sendWebhook)
 		}
 		if s.DiscordURL != "" && !seen["d"+s.DiscordURL] {
 			seen["d"+s.DiscordURL] = true
-			n.send(ctx, "discord", s.DiscordURL, ev, n.sendDiscord)
+			n.send(ctx, client, "discord", s.DiscordURL, ev, n.sendDiscord)
 		}
 		if s.NtfyURL != "" && !seen["n"+s.NtfyURL] {
 			seen["n"+s.NtfyURL] = true
-			n.send(ctx, "ntfy", s.NtfyURL, ev, n.sendNtfy)
+			n.send(ctx, client, "ntfy", s.NtfyURL, ev, n.sendNtfy)
 		}
 	}
+	// Admin sinks may use the private-allowed client (opt-in); user sinks are
+	// always delivered through the SSRF-guarded safe client.
 	if n.AdminSinks != nil {
-		sendAll(n.AdminSinks(ctx))
+		sendAll(n.AdminSinks(ctx), n.adminClient)
 	}
 	if ev.UserID != "" && n.UserSinks != nil {
-		sendAll(n.UserSinks(ctx, ev.UserID))
+		sendAll(n.UserSinks(ctx, ev.UserID), n.safeClient)
 	}
 }
 
-func (n *Notifier) send(ctx context.Context, kind, url string, ev Event, fn func(context.Context, string, Event) error) {
+func (n *Notifier) send(ctx context.Context, client *http.Client, kind, url string, ev Event, fn func(context.Context, *http.Client, string, Event) error) {
 	err := retry.Do(ctx, retry.DefaultBackoff(), 3, func() error {
-		return fn(ctx, url, ev)
+		return fn(ctx, client, url, ev)
 	})
 	if err != nil {
 		logx.Logger().Warn().Str("component", "notify").Str("sink", kind).Str("event", ev.Type).Err(err).
@@ -175,7 +201,7 @@ func (n *Notifier) send(ctx context.Context, kind, url string, ev Event, fn func
 	}
 }
 
-func (n *Notifier) sendWebhook(ctx context.Context, url string, ev Event) error {
+func (n *Notifier) sendWebhook(ctx context.Context, client *http.Client, url string, ev Event) error {
 	payload, err := json.Marshal(map[string]string{
 		"type":  ev.Type,
 		"title": ev.Title,
@@ -185,10 +211,10 @@ func (n *Notifier) sendWebhook(ctx context.Context, url string, ev Event) error 
 	if err != nil {
 		return err
 	}
-	return n.post(ctx, url, "application/json", payload, nil)
+	return n.post(ctx, client, url, "application/json", payload, nil)
 }
 
-func (n *Notifier) sendDiscord(ctx context.Context, url string, ev Event) error {
+func (n *Notifier) sendDiscord(ctx context.Context, client *http.Client, url string, ev Event) error {
 	content := "**" + ev.Title + "**"
 	if ev.Body != "" {
 		content += "\n" + ev.Body
@@ -197,17 +223,22 @@ func (n *Notifier) sendDiscord(ctx context.Context, url string, ev Event) error 
 	if err != nil {
 		return err
 	}
-	return n.post(ctx, url, "application/json", payload, nil)
+	return n.post(ctx, client, url, "application/json", payload, nil)
 }
 
-func (n *Notifier) sendNtfy(ctx context.Context, url string, ev Event) error {
-	return n.post(ctx, url, "text/plain", []byte(ev.Body), map[string]string{
+func (n *Notifier) sendNtfy(ctx context.Context, client *http.Client, url string, ev Event) error {
+	return n.post(ctx, client, url, "text/plain", []byte(ev.Body), map[string]string{
 		"X-Title": ev.Title,
 		"X-Tags":  "video_game",
 	})
 }
 
-func (n *Notifier) post(ctx context.Context, url, contentType string, body []byte, headers map[string]string) error {
+func (n *Notifier) post(ctx context.Context, client *http.Client, url, contentType string, body []byte, headers map[string]string) error {
+	// Belt-and-suspenders scheme guard; the safe client's dialer is the
+	// authoritative SSRF defense at connect time.
+	if u, perr := neturl.Parse(url); perr != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return fmt.Errorf("notify: refusing non-http(s) sink URL")
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
@@ -216,7 +247,7 @@ func (n *Notifier) post(ctx context.Context, url, contentType string, body []byt
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := n.httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}

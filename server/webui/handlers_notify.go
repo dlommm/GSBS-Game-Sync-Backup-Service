@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gsbs/gsbs/server/logx"
+	"github.com/gsbs/gsbs/server/netutil"
 	"github.com/gsbs/gsbs/server/notify"
 	"github.com/gsbs/gsbs/server/store"
 )
@@ -44,10 +45,15 @@ func (h *WebHandler) handleUserNotifySave(w http.ResponseWriter, r *http.Request
 		DiscordURL: strings.TrimSpace(r.FormValue("notify_discord_url")),
 		NtfyURL:    strings.TrimSpace(r.FormValue("notify_ntfy_url")),
 	}
+	// Reject non-http(s) schemes and IP-literal private/loopback hosts up front
+	// (fail-fast UX); hostnames are re-checked at dial time by the SSRF-guarded
+	// client, so a user sink can never reach the server's internal network.
 	for _, u := range []string{ns.WebhookURL, ns.DiscordURL, ns.NtfyURL} {
-		if u != "" && !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
-			Redirect(w, r, "/dashboard/settings?error=invalid_notify_url")
-			return
+		if u != "" {
+			if err := netutil.ValidatePublicURL(u); err != nil {
+				Redirect(w, r, "/dashboard/settings?error=invalid_notify_url")
+				return
+			}
 		}
 	}
 	if err := h.store.SetUserNotifySettings(r.Context(), userID, ns); err != nil {

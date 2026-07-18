@@ -48,6 +48,16 @@ func waitFor(t *testing.T, cond func() bool) {
 	t.Fatal("condition not met in time")
 }
 
+// allowLoopbackForTest swaps in plain clients so the delivery-logic tests can
+// target loopback httptest servers; production always uses the SSRF-guarded
+// client (exercised separately by TestNotifier_UserSinkToLoopbackBlocked and
+// the netutil package tests).
+func allowLoopbackForTest(n *Notifier) {
+	c := &http.Client{Timeout: 3 * time.Second}
+	n.safeClient = c
+	n.adminClient = c
+}
+
 func TestNotifier_DeliversToAdminAndUserSinks(t *testing.T) {
 	adminHook := &capture{}
 	userNtfy := &capture{}
@@ -67,6 +77,7 @@ func TestNotifier_DeliversToAdminAndUserSinks(t *testing.T) {
 			return Sinks{}
 		},
 	)
+	allowLoopbackForTest(n)
 
 	n.Notify(Event{Type: EventConflict, Title: "Conflict", Body: "details", UserID: "u1"})
 	waitFor(t, func() bool { return adminHook.count() == 1 && userNtfy.count() == 1 })
@@ -103,12 +114,34 @@ func TestNotifier_EventFilter(t *testing.T) {
 		func(context.Context) Sinks {
 			return Sinks{WebhookURL: srv.URL, Events: map[string]bool{EventBackup: true}}
 		}, nil)
+	allowLoopbackForTest(n)
 
 	n.Notify(Event{Type: EventLogin, Title: "filtered out"})
 	n.Notify(Event{Type: EventBackup, Title: "kept"})
 	waitFor(t, func() bool { return hook.count() == 1 })
 	if hook.count() != 1 {
 		t.Fatalf("filter failed: %d deliveries", hook.count())
+	}
+}
+
+// TestNotifier_UserSinkToLoopbackBlocked: a user-configured sink pointing at a
+// loopback/internal address is refused by the SSRF guard and never delivered.
+func TestNotifier_UserSinkToLoopbackBlocked(t *testing.T) {
+	hook := &capture{}
+	srv := httptest.NewServer(hook.handler()) // listens on 127.0.0.1
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Note: NO allowLoopbackForTest — the production safe client is in effect.
+	n := New(ctx, nil, func(_ context.Context, _ string) Sinks {
+		return Sinks{WebhookURL: srv.URL}
+	})
+
+	n.Notify(Event{Type: EventConflict, Title: "x", UserID: "u1"})
+	time.Sleep(600 * time.Millisecond) // dial is refused instantly; give the worker time
+	if hook.count() != 0 {
+		t.Fatalf("user sink to loopback should be blocked, got %d deliveries", hook.count())
 	}
 }
 
@@ -129,6 +162,7 @@ func TestDiscordPayload(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	n := New(ctx, func(context.Context) Sinks { return Sinks{DiscordURL: srv.URL} }, nil)
+	allowLoopbackForTest(n)
 	n.Notify(Event{Type: EventTest, Title: "T", Body: "B"})
 	waitFor(t, func() bool { return hook.count() == 1 })
 	var payload map[string]string

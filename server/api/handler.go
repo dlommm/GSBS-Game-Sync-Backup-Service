@@ -429,11 +429,20 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if req.ClientName == "" {
 		req.ClientName = "client"
 	}
+	// Per-account brute-force lockout (shared with the WebUI login path). Keyed
+	// by a username hash so a locked response is identical for real and made-up
+	// usernames — no account-existence oracle.
+	lockKey := auth.AccountKey(req.Username)
+	if locked, _ := h.auth.Lockout().Locked(lockKey); locked {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many login attempts; try again later"})
+		return
+	}
 	if h.sessionSecret != "" {
 		userID, err := h.auth.Authenticate(r.Context(), req.Username, req.Password)
 		if err == nil {
 			enabled, _ := h.store.IsTOTPEnabled(r.Context(), userID)
 			if enabled {
+				h.auth.Lockout().Reset(lockKey)
 				totpToken := signTOTPToken(h.sessionSecret, userID)
 				writeJSON(w, http.StatusOK, loginResponse{TotpRequired: true, TotpToken: totpToken})
 				return
@@ -442,10 +451,12 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	loginUserID, token, err := h.auth.Login(r.Context(), req.Username, req.Password, req.ClientName, req.ClientOS)
 	if err != nil {
+		h.auth.Lockout().Fail(lockKey)
 		logx.Logger().Warn().Str("username", req.Username).Err(err).Msg("api login failed")
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "bad credentials"})
 		return
 	}
+	h.auth.Lockout().Reset(lockKey)
 	logx.Logger().Info().Str("username", req.Username).Str("client", req.ClientName).Str("os", req.ClientOS).Msg("api login ok")
 	h.notifyEvent(notify.Event{
 		Type: notify.EventDeviceRegistered, UserID: loginUserID,
@@ -518,15 +529,22 @@ func (h *Handler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired totp_token"})
 		return
 	}
+	totpLockKey := "totp:" + userID
+	if locked, _ := h.auth.Lockout().Locked(totpLockKey); locked {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts; try again later"})
+		return
+	}
 	secret, err := h.store.GetTOTPSecret(r.Context(), userID)
 	if err != nil || secret == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "2FA not enabled or invalid"})
 		return
 	}
 	if !auth.ValidateTOTPOnce(userID, strings.TrimSpace(req.Code), secret) {
+		h.auth.Lockout().Fail(totpLockKey)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid code"})
 		return
 	}
+	h.auth.Lockout().Reset(totpLockKey)
 	if req.ClientOS == "" {
 		req.ClientOS = "unknown"
 	}
@@ -576,6 +594,11 @@ func (h *Handler) withAuth(fn func(http.ResponseWriter, *http.Request, string)) 
 }
 
 func (h *Handler) handleChangePassword(w http.ResponseWriter, r *http.Request, userID string) {
+	// Verifies current_password → a credential-guessing surface. Throttle with
+	// the strict auth limiter, keyed per-account.
+	if h.rateLimited(w, r, h.authLimiter, userID, "auth") {
+		return
+	}
 	var req struct {
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
@@ -669,6 +692,9 @@ func (h *Handler) handleSaveSummaries(w http.ResponseWriter, r *http.Request, us
 }
 
 func (h *Handler) handleAccount(w http.ResponseWriter, r *http.Request, userID string) {
+	if h.rateLimited(w, r, h.generalLimiter, userID, "general") {
+		return
+	}
 	enc, err := h.store.IsEncryptionEnabled(r.Context(), userID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "account lookup failed"})
@@ -694,6 +720,9 @@ func (h *Handler) handleAccount(w http.ResponseWriter, r *http.Request, userID s
 // stolen device token must not be able to downgrade the account to plaintext
 // uploads — that stays a session-authenticated server WebUI action.
 func (h *Handler) handleEnableEncryption(w http.ResponseWriter, r *http.Request, userID string) {
+	if h.rateLimited(w, r, h.generalLimiter, userID, "general") {
+		return
+	}
 	var req struct {
 		Enabled bool `json:"enabled"`
 	}
@@ -719,6 +748,9 @@ func (h *Handler) handleEnableEncryption(w http.ResponseWriter, r *http.Request,
 }
 
 func (h *Handler) handleListClients(w http.ResponseWriter, r *http.Request, userID string) {
+	if h.rateLimited(w, r, h.generalLimiter, userID, "general") {
+		return
+	}
 	clients, err := h.store.ListClientsByUserID(r.Context(), userID)
 	if err != nil {
 		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("api list clients failed")
@@ -733,6 +765,9 @@ func (h *Handler) handleListClients(w http.ResponseWriter, r *http.Request, user
 }
 
 func (h *Handler) handleListSaveVersions(w http.ResponseWriter, r *http.Request, userID string) {
+	if h.rateLimited(w, r, h.generalLimiter, userID, "general") {
+		return
+	}
 	gameID := strings.TrimSpace(r.URL.Query().Get("game_id"))
 	pathKey := strings.TrimSpace(r.URL.Query().Get("path_key"))
 	if gameID == "" || pathKey == "" {
@@ -753,6 +788,10 @@ func (h *Handler) handleListSaveVersions(w http.ResponseWriter, r *http.Request,
 }
 
 func (h *Handler) handleGetSaveVersion(w http.ResponseWriter, r *http.Request, userID string) {
+	// Full save-version blob download (up to 50 MiB base64) — throttle like pulls.
+	if h.rateLimited(w, r, h.pullLimiter, userID, "pull") {
+		return
+	}
 	gameID := strings.TrimSpace(r.URL.Query().Get("game_id"))
 	pathKey := strings.TrimSpace(r.URL.Query().Get("path_key"))
 	versionStr := strings.TrimSpace(r.URL.Query().Get("version"))
@@ -788,6 +827,9 @@ func (h *Handler) handleGetSaveVersion(w http.ResponseWriter, r *http.Request, u
 func (h *Handler) handleRestoreSaveVersion(w http.ResponseWriter, r *http.Request, userID string) {
 	if h.readOnly {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "server is in read-only mode"})
+		return
+	}
+	if h.rateLimited(w, r, h.generalLimiter, userID, "general") {
 		return
 	}
 	var req struct {
