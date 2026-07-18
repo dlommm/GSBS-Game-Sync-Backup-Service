@@ -88,7 +88,7 @@ func StartSetupServer() string {
 		setupURL = url
 		setupURLMu.Unlock()
 		srv := &http.Server{
-			Handler:           clientSecurityHeaders(mux),
+			Handler:           clientLocalGuard(clientSecurityHeaders(mux)),
 			ReadHeaderTimeout: 10 * time.Second,
 			ReadTimeout:       time.Minute,
 			IdleTimeout:       2 * time.Minute,
@@ -119,6 +119,83 @@ func clientSecurityHeaders(next http.Handler) http.Handler {
 			"default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'")
 		next.ServeHTTP(w, r)
 	})
+}
+
+// clientLocalGuard protects the local control server (which exposes
+// state-changing endpoints like /settings/save, /settings/encryption,
+// /api/apply-update and /versions/restore) from web pages the user happens to
+// visit. Two layers:
+//
+//  1. Host allow-list (all methods) defeats DNS-rebinding: even when a hostile
+//     page rebinds its domain to 127.0.0.1, the browser still sends that page's
+//     Host header, so a non-loopback Host is rejected — which also stops a
+//     rebound origin from READING /status, /logs/export.csv, or save data.
+//  2. Same-origin check (state-changing methods) defeats CSRF: a cross-origin
+//     form or fetch POST carries a foreign Origin/Sec-Fetch-Site and is refused,
+//     even though its response is irrelevant to the attacker.
+func clientLocalGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackHost(r.Host) {
+			http.Error(w, "misdirected request", http.StatusMisdirectedRequest) // 421
+			return
+		}
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			if !isSameOriginRequest(r) {
+				http.Error(w, "cross-origin request refused", http.StatusForbidden)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// isLoopbackHost reports whether a Host header (or URL host) names a loopback
+// address. The bound port is dynamic (41234–41239), so only the host matters.
+func isLoopbackHost(host string) bool {
+	if host == "" {
+		return false
+	}
+	h := host
+	if hh, _, err := net.SplitHostPort(host); err == nil {
+		h = hh
+	}
+	h = strings.TrimSuffix(strings.TrimPrefix(h, "["), "]") // unwrap IPv6 literal
+	switch strings.ToLower(h) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	if ip := net.ParseIP(h); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	return false
+}
+
+// isSameOriginRequest reports whether a state-changing request originated from
+// the local UI itself. It trusts the Fetch-Metadata signal first, then falls
+// back to a loopback Origin/Referer; a request with none of these is refused.
+func isSameOriginRequest(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "same-origin", "none":
+		return true
+	case "same-site", "cross-site":
+		return false
+	}
+	if o := r.Header.Get("Origin"); o != "" {
+		return originIsLoopback(o)
+	}
+	if ref := r.Header.Get("Referer"); ref != "" {
+		return originIsLoopback(ref)
+	}
+	return false
+}
+
+func originIsLoopback(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	return isLoopbackHost(u.Host)
 }
 
 // openNative opens a file or folder with the platform's default handler.
