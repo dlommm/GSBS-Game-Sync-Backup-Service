@@ -482,7 +482,12 @@
   .config-grid { display: flex; flex-wrap: wrap; gap: 1rem; padding: 0 1.25rem 1rem; }
   .config-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; }
   .config-key { color: var(--text-muted); font-size: 0.8125rem; }
-  .config-val { font-weight: 500; }
+  .config-val { font-weight: 500; font-variant-numeric: tabular-nums; }
+  /* Stacked variant: aligned key/value rows for stat panels (the wrapped
+     inline pairs read raggedly when values have very different widths). */
+  .config-grid-stacked { display: grid; grid-template-columns: 1fr; gap: 0.4rem; padding: 0; }
+  .config-grid-stacked .config-item { display: flex; justify-content: space-between; gap: 1rem; }
+  .config-grid-stacked .config-val { text-align: right; }
 
   .search-wrap { padding: 0.75rem 1.25rem 0; }
   .search-input {
@@ -1247,7 +1252,11 @@ tr.row-syncing .cell-primary::after,
 
 /* ── Insights / analytics page ── */
 .analytics-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
-.bars-chart { width: 100%; }
+.bars-chart { width: 100%; height: 120px; }
+/* The SVG must fill its container exactly: with only a viewBox its auto
+   height follows the aspect ratio, overflowing fixed-height containers and
+   colliding with the axis labels below. */
+.bars-chart svg { display: block; width: 100%; height: 100%; }
 .bars-svg { width: 100%; height: 120px; display: block; }
 .health-list { list-style: none; margin: 0; padding: 0 1.25rem 1.1rem; display: flex; flex-direction: column; gap: 0.6rem; }
 .health-item { display: flex; align-items: baseline; gap: 0.6rem; font-size: 0.875rem; color: var(--text-secondary); line-height: 1.45; }
@@ -1576,7 +1585,11 @@ a.inbox-title:hover { color: var(--accent); }
 .rhythm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
 @media (max-width: 640px) { .rhythm-grid { grid-template-columns: 1fr; } }
 .bars-chart-sm { height: 70px; }
-.rhythm-axis { display: flex; justify-content: space-between; font-size: 0.625rem; color: var(--text-muted); margin-top: 0.2rem; }
+.rhythm-axis { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.625rem; color: var(--text-muted); margin-top: 0.2rem; }
+/* Bar charts: hovering a column brings it to full strength (its <title>
+   carries the exact value). */
+.bars-svg rect { transition: fill-opacity var(--transition); }
+.bars-svg rect:hover { fill-opacity: 1; }
 
 /* ══════════ Client (loopback) WebUI components ══════════ */
 .override-add { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }

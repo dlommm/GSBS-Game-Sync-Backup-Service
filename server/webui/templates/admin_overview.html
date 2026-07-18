@@ -63,7 +63,7 @@
       <li class="setup-health-item{{if .Done}} done{{end}}">
         <span class="setup-health-icon" aria-hidden="true">{{if .Done}}{{iconSVG "check" 14}}{{else}}{{iconSVG "alert" 14}}{{end}}</span>
         <span class="setup-health-label">{{.Label}}</span>
-        {{if not .Done}}<span class="setup-health-hint">{{.Hint}}</span><a class="btn-ghost-sm setup-health-fix" href="{{.Href}}">Fix →</a>{{end}}
+        {{if not .Done}}<a class="btn-ghost-sm setup-health-fix" href="{{.Href}}">Fix →</a><span class="setup-health-hint">{{.Hint}}</span>{{end}}
       </li>
       {{end}}
     </ul>

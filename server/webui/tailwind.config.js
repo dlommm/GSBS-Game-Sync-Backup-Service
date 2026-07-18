@@ -5,9 +5,18 @@
 // tokens (input.css :root) so an accidentally emitted utility can never
 // reintroduce the retired pre-v5 indigo theme.
 module.exports = {
+  // Purge scans EVERYTHING that can emit a class name: templates, the Go
+  // view helpers (SVG charts and icons are built in render.go — .chart-svg/
+  // .chart-line were silently purged for several releases, leaving the
+  // Trends line charts invisible), and the JS that builds DOM at runtime.
   content: [
     './templates/**/*.html',
+    './*.go',
+    './static/*.js',
+    './static/ext/*.js',
     '../../client/webui/templates/**/*.html',
+    '../../client/webui/static/*.js',
+    '../../client/*.go',
   ],
   theme: {
     extend: {

@@ -208,7 +208,7 @@
             <tr>
               <td class="cell-primary">{{.JobName}}</td>
               <td class="cell-muted">{{.Runs}}</td>
-              <td>{{if gt .Runs 0}}{{percentInt .Succeeded .Runs}}%{{else}}—{{end}}</td>
+              <td>{{if gt .Runs 0}}{{printf "%.0f" (percentInt .Succeeded .Runs)}}%{{else}}—{{end}}</td>
               <td class="cell-muted">{{printf "%.1fs" .AvgDurationSec}}</td>
               <td>{{if eq .LastStatus "success"}}<span class="badge-success">success</span>{{else if .LastStatus}}<span class="badge-failed">{{.LastStatus}}</span>{{else}}—{{end}}</td>
             </tr>

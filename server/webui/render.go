@@ -351,39 +351,64 @@ func signedBytes(n int64) string {
 // barsSVG renders a vertical bar chart from a per-day count series (oldest
 // first). Each bar carries a <title> for hover tooltips. The viewBox is
 // stretched to fill its container (preserveAspectRatio=none).
+// renderBars is the shared bar-chart body used by barsSVG/bytesBarsSVG:
+// single-hue magnitude encoding with a 2-unit surface gap between columns,
+// the peak column at full strength (the rest slightly recessive), measured
+// zero days as low stubs on a hairline baseline, and a native tooltip per
+// column. Colors are inline so the marks can never be lost to CSS purging.
+func renderBars(vals []float64, tips []string, width, height int, fill, ariaLabel string) template.HTML {
+	maxV, maxI := 0.0, -1
+	for i, v := range vals {
+		if v > maxV {
+			maxV, maxI = v, i
+		}
+	}
+	if maxV <= 0 {
+		maxV = 1
+	}
+	w, h := float64(width), float64(height)
+	n := float64(len(vals))
+	gap := 2.0
+	bw := (w - gap*(n-1)) / n
+	var b bytes.Buffer
+	fmt.Fprintf(&b, `<line x1="0" y1="%.1f" x2="%.1f" y2="%.1f" stroke="var(--border)" stroke-width="1"/>`, h-0.5, w, h-0.5)
+	for i, v := range vals {
+		x := float64(i) * (bw + gap)
+		bh := (h - 4) * v / maxV
+		if v > 0 && bh < 2 {
+			bh = 2
+		}
+		opacity := "0.78"
+		barFill := fill
+		if i == maxI {
+			opacity = "1"
+		}
+		if v == 0 {
+			barFill, opacity, bh = "var(--border)", "0.7", 1.5
+		}
+		fmt.Fprintf(&b, `<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s" fill-opacity="%s"><title>%s</title></rect>`,
+			x, h-1-bh, bw, bh, barFill, opacity, tips[i])
+	}
+	return template.HTML(fmt.Sprintf( //nolint:gosec // G203: SVG markup built entirely from server-computed numbers, no user input
+		`<svg class="bars-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="%s">%s</svg>`,
+		width, height, ariaLabel, b.String()))
+}
+
 func barsSVG(counts []store.DayCount, width, height int) template.HTML {
 	if len(counts) == 0 {
 		return template.HTML(`<p class="cell-muted">No activity yet.</p>`)
 	}
-	maxV := 1
-	for _, c := range counts {
-		if c.Count > maxV {
-			maxV = c.Count
-		}
-	}
-	n := len(counts)
-	gap := 1.0
-	bw := (float64(width) - gap*float64(n-1)) / float64(n)
-	var b bytes.Buffer
+	vals := make([]float64, len(counts))
+	tips := make([]string, len(counts))
 	for i, c := range counts {
-		bh := float64(height) * float64(c.Count) / float64(maxV)
-		if c.Count > 0 && bh < 2 {
-			bh = 2
-		}
-		x := float64(i) * (bw + gap)
-		y := float64(height) - bh
-		fill := "var(--accent)"
+		vals[i] = float64(c.Count)
 		if c.Count == 0 {
-			fill = "var(--border)"
-			bh = 2
-			y = float64(height) - bh
+			tips[i] = fmt.Sprintf("%s: no syncs", c.Day)
+		} else {
+			tips[i] = fmt.Sprintf("%s: %d", c.Day, c.Count)
 		}
-		fmt.Fprintf(&b, `<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s"><title>%s: %d</title></rect>`,
-			x, y, bw, bh, fill, c.Day, c.Count)
 	}
-	return template.HTML(fmt.Sprintf( //nolint:gosec // G203: SVG markup built entirely from server-computed numbers, no user input
-		`<svg class="bars-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="Sync volume by day">%s</svg>`,
-		width, height, b.String()))
+	return renderBars(vals, tips, width, height, "var(--accent)", "Sync volume by day")
 }
 
 // bytesBarsSVG renders a vertical bar chart from a per-day byte series
@@ -392,35 +417,17 @@ func bytesBarsSVG(series []store.DayBytes, width, height int) template.HTML {
 	if len(series) == 0 {
 		return ""
 	}
-	var maxV int64 = 1
-	for _, d := range series {
-		if d.Bytes > maxV {
-			maxV = d.Bytes
-		}
-	}
-	n := len(series)
-	gap := 1.0
-	bw := (float64(width) - gap*float64(n-1)) / float64(n)
-	var b bytes.Buffer
+	vals := make([]float64, len(series))
+	tips := make([]string, len(series))
 	for i, d := range series {
-		bh := float64(height) * float64(d.Bytes) / float64(maxV)
-		if d.Bytes > 0 && bh < 2 {
-			bh = 2
-		}
-		x := float64(i) * (bw + gap)
-		y := float64(height) - bh
-		fill := "var(--info)"
+		vals[i] = float64(d.Bytes)
 		if d.Bytes == 0 {
-			fill = "var(--border)"
-			bh = 2
-			y = float64(height) - bh
+			tips[i] = fmt.Sprintf("%s: nothing synced", d.Day)
+		} else {
+			tips[i] = fmt.Sprintf("%s: %s", d.Day, formatBytes(d.Bytes))
 		}
-		fmt.Fprintf(&b, `<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s"><title>%s: %s</title></rect>`,
-			x, y, bw, bh, fill, d.Day, formatBytes(d.Bytes))
 	}
-	return template.HTML(fmt.Sprintf( //nolint:gosec // G203: SVG markup built entirely from server-computed numbers, no user input
-		`<svg class="bars-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" role="img" aria-label="Data synced by day">%s</svg>`,
-		width, height, b.String()))
+	return renderBars(vals, tips, width, height, "var(--info)", "Data synced by day")
 }
 
 // monthsToDays adapts a per-month series to the DayCount shape barsSVG
@@ -621,6 +628,7 @@ func chartLineSVG(snapshots []store.StatsSnapshotRow, field string, width, heigh
 	w := float64(width)
 	h := float64(height)
 	var path bytes.Buffer
+	lastX, lastY := 0.0, 0.0
 	for i, v := range values {
 		x := pad + (w-2*pad)*float64(i)/float64(len(values)-1)
 		y := h - pad - (h-2*pad)*(v-minV)/(maxV-minV)
@@ -629,9 +637,20 @@ func chartLineSVG(snapshots []store.StatsSnapshotRow, field string, width, heigh
 		} else {
 			fmt.Fprintf(&path, " L%.1f,%.1f", x, y)
 		}
+		lastX, lastY = x, y
 	}
-	svg := fmt.Sprintf(`<svg class="chart-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" aria-hidden="true"><path class="chart-line" d="%s" fill="none" stroke-width="2"/></svg>`,
-		width, height, path.String())
+	// Area fill under the line + a hairline baseline give the trend weight;
+	// the endpoint dot marks "now". Stroke/fill are inline (with the classes
+	// kept for sizing) so the marks can never be lost to CSS purging again —
+	// the class-only stroke was silently purged for two releases.
+	line := path.String()
+	area := fmt.Sprintf("%s L%.1f,%.1f L%.1f,%.1f Z", line, lastX, h-1, pad, h-1)
+	svg := fmt.Sprintf(`<svg class="chart-svg" viewBox="0 0 %d %d" preserveAspectRatio="none" aria-hidden="true">`+
+		`<line x1="0" y1="%.1f" x2="%.1f" y2="%.1f" stroke="var(--border)" stroke-width="1"/>`+
+		`<path d="%s" fill="var(--accent)" fill-opacity="0.12" stroke="none"/>`+
+		`<path class="chart-line" d="%s" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`+
+		`<circle cx="%.1f" cy="%.1f" r="3" fill="var(--accent)"/></svg>`,
+		width, height, h-0.5, w, h-0.5, area, line, lastX, lastY)
 	return template.HTML(svg) //nolint:gosec // G203: SVG markup built entirely from server-computed numbers, no user input
 }
 
