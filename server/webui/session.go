@@ -215,14 +215,26 @@ func Redirect(w http.ResponseWriter, r *http.Request, path string) {
 	http.Redirect(w, r, path, http.StatusFound)
 }
 
-// SetCSRFToken generates a CSRF token, sets it in a signed cookie, and returns the token
-// for embedding in forms. Call on GET of any page that shows a form (login, register, dashboard, admin).
+// SetCSRFToken returns the CSRF token for embedding in forms, minting one only
+// when the request carries no valid token cookie. Reusing a still-valid token
+// (and re-signing it with a fresh expiry) keeps forms alive across partial
+// refreshes and multi-tab browsing: minting per render invalidated every form
+// rendered before the latest partial swap ("Invalid security token" 400s).
+// Call on GET of any page that shows a form (login, register, dashboard, admin).
 func SetCSRFToken(w http.ResponseWriter, r *http.Request, secret string) string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return ""
+	token := ""
+	if c, err := r.Cookie(csrfCookieName); err == nil {
+		if t, ok := csrfTokenFromCookie(c.Value, secret); ok {
+			token = t
+		}
 	}
-	token := hex.EncodeToString(b)
+	if token == "" {
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			return ""
+		}
+		token = hex.EncodeToString(b)
+	}
 	expiry := time.Now().Add(csrfDuration).Unix()
 	payload := token + "|" + strconv.FormatInt(expiry, 10)
 	sig := signSession(secret, payload)
@@ -240,6 +252,35 @@ func SetCSRFToken(w http.ResponseWriter, r *http.Request, secret string) string 
 	return token
 }
 
+// csrfTokenFromCookie verifies a CSRF cookie value (signature + expiry) and
+// returns the embedded token.
+func csrfTokenFromCookie(value, secret string) (string, bool) {
+	if value == "" {
+		return "", false
+	}
+	parts := strings.SplitN(value, ".", 2)
+	if len(parts) != 2 {
+		return "", false
+	}
+	payloadBytes, err := base64.StdEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", false
+	}
+	payload := string(payloadBytes)
+	if !hmac.Equal([]byte(signSession(secret, payload)), []byte(parts[1])) {
+		return "", false
+	}
+	idx := strings.LastIndex(payload, "|")
+	if idx < 0 {
+		return "", false
+	}
+	expiry, err := strconv.ParseInt(payload[idx+1:], 10, 64)
+	if err != nil || time.Now().Unix() > expiry {
+		return "", false
+	}
+	return payload[:idx], true
+}
+
 // ValidateCSRF returns true if the request has a valid CSRF token in the form that
 // matches the signed cookie. Call before processing any state-changing POST.
 func ValidateCSRF(r *http.Request, secret string) bool {
@@ -251,29 +292,12 @@ func ValidateCSRF(r *http.Request, secret string) bool {
 		return false
 	}
 	c, err := r.Cookie(csrfCookieName)
-	if err != nil || c.Value == "" {
-		return false
-	}
-	parts := strings.SplitN(c.Value, ".", 2)
-	if len(parts) != 2 {
-		return false
-	}
-	payloadBytes, err := base64.StdEncoding.DecodeString(parts[0])
 	if err != nil {
 		return false
 	}
-	payload := string(payloadBytes)
-	if !hmac.Equal([]byte(signSession(secret, payload)), []byte(parts[1])) {
+	token, ok := csrfTokenFromCookie(c.Value, secret)
+	if !ok {
 		return false
 	}
-	idx := strings.LastIndex(payload, "|")
-	if idx < 0 {
-		return false
-	}
-	expiry, err := strconv.ParseInt(payload[idx+1:], 10, 64)
-	if err != nil || time.Now().Unix() > expiry {
-		return false
-	}
-	token := payload[:idx]
 	return hmac.Equal([]byte(token), []byte(formToken))
 }

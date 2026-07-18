@@ -191,6 +191,33 @@ func (s *sqliteStore) UsernameByID(ctx context.Context, userID string) (string, 
 	return username, err
 }
 
+// SessionUser resolves a session to its user in one round-trip (the WebUI
+// runs this on every authed request; it replaced the serial
+// GetSessionByID + IsUserDisabled + UsernameByID triple). Returns nil when
+// the session does not exist. Touches the session's last_seen like
+// GetSessionByID does.
+func (s *sqliteStore) SessionUser(ctx context.Context, sessionID string) (*SessionUserInfo, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT u.id, u.username, COALESCE(u.role, 'user'), COALESCE(u.disabled, 0)
+		FROM sessions se JOIN users u ON u.id = se.user_id
+		WHERE se.id = ?`, sessionID)
+	var info SessionUserInfo
+	var disabled int
+	if err := row.Scan(&info.UserID, &info.Username, &info.Role, &disabled); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if info.Role != "admin" {
+		info.Role = "user"
+	}
+	info.Disabled = disabled != 0
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, _ = s.db.ExecContext(ctx, `UPDATE sessions SET last_seen = ? WHERE id = ?`, now, sessionID)
+	return &info, nil
+}
+
 // UserRole returns the user's role ("user" or "admin"). Defaults to "user" if column missing or empty.
 func (s *sqliteStore) UserRole(ctx context.Context, userID string) (string, error) {
 	var role string
@@ -1736,6 +1763,58 @@ func (s *sqliteStore) ListSaveSummaries(ctx context.Context, userID string) ([]S
 		out = append(out, ss)
 	}
 	return out, rows.Err()
+}
+
+// ListSaveSummariesForGame returns a user's save summaries for one game,
+// newest first — the point query behind the game-detail page (the full
+// ListSaveSummaries scan was filtered in Go before).
+func (s *sqliteStore) ListSaveSummariesForGame(ctx context.Context, userID, gameID string) ([]SaveSummary, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT s.game_id, s.path_key, COALESCE(s.content_size, LENGTH(s.content), 0) AS size_bytes, s.updated_at,
+		       COALESCE((SELECT gsl.game_title FROM game_save_locations gsl WHERE gsl.game_id = s.game_id LIMIT 1), s.game_id) AS game_title,
+		       COALESCE(s.content_hash, '') AS content_hash,
+		       COALESCE(s.relative_path, '') AS relative_path,
+		       COALESCE(s.encrypted, 0) AS encrypted
+		FROM saves s
+		WHERE s.user_id = ? AND s.game_id = ?
+		ORDER BY s.updated_at DESC`, userID, gameID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SaveSummary
+	for rows.Next() {
+		var ss SaveSummary
+		var enc int
+		if err := rows.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle, &ss.ContentHash, &ss.RelativePath, &enc); err != nil {
+			return nil, err
+		}
+		ss.Encrypted = enc != 0
+		out = append(out, ss)
+	}
+	return out, rows.Err()
+}
+
+// GetSaveSummary returns one save summary row, or nil when absent.
+func (s *sqliteStore) GetSaveSummary(ctx context.Context, userID, gameID, pathKey string) (*SaveSummary, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT s.game_id, s.path_key, COALESCE(s.content_size, LENGTH(s.content), 0) AS size_bytes, s.updated_at,
+		       COALESCE((SELECT gsl.game_title FROM game_save_locations gsl WHERE gsl.game_id = s.game_id LIMIT 1), s.game_id) AS game_title,
+		       COALESCE(s.content_hash, '') AS content_hash,
+		       COALESCE(s.relative_path, '') AS relative_path,
+		       COALESCE(s.encrypted, 0) AS encrypted
+		FROM saves s
+		WHERE s.user_id = ? AND s.game_id = ? AND s.path_key = ?`, userID, gameID, pathKey)
+	var ss SaveSummary
+	var enc int
+	if err := row.Scan(&ss.GameID, &ss.PathKey, &ss.SizeBytes, &ss.UpdatedAt, &ss.GameTitle, &ss.ContentHash, &ss.RelativePath, &enc); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	ss.Encrypted = enc != 0
+	return &ss, nil
 }
 
 func (s *sqliteStore) ListSaveSummariesPaginated(ctx context.Context, userID string, limit, offset int) ([]SaveSummary, int, error) {

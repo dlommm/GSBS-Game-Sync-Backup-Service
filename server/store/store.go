@@ -77,6 +77,9 @@ type Store interface {
 	CreateSession(ctx context.Context, userID, userAgent string) (sessionID string, err error)
 	// GetSessionByID returns the userID for the session and updates last_seen. Returns empty if session not found or invalid.
 	GetSessionByID(ctx context.Context, sessionID string) (userID string, err error)
+	// SessionUser resolves a session to its user (id, username, role, disabled)
+	// in one query and updates last_seen. Returns nil when the session is unknown.
+	SessionUser(ctx context.Context, sessionID string) (*SessionUserInfo, error)
 	ListSessionsByUser(ctx context.Context, userID string) ([]SessionRow, error)
 	DeleteSession(ctx context.Context, sessionID string) error
 	DeleteSessionsByUser(ctx context.Context, userID string) error
@@ -172,6 +175,10 @@ type Store interface {
 
 	// ListSaveSummaries returns lightweight save info (no content blob) with game title from manifest.
 	ListSaveSummaries(ctx context.Context, userID string) ([]SaveSummary, error)
+	// ListSaveSummariesForGame returns a user's save summaries for one game, newest first.
+	ListSaveSummariesForGame(ctx context.Context, userID, gameID string) ([]SaveSummary, error)
+	// GetSaveSummary returns one save summary row, or nil when absent.
+	GetSaveSummary(ctx context.Context, userID, gameID, pathKey string) (*SaveSummary, error)
 	// ListSaveSummariesFiltered returns saves matching query (game title, game_id, path_key).
 	ListSaveSummariesFiltered(ctx context.Context, userID, query string) ([]SaveSummary, error)
 	// ListSaveSummariesPaginated returns a page of summaries and total count. limit/offset 0 means no pagination.
@@ -581,6 +588,14 @@ type SessionRow struct {
 	CreatedAt string
 	LastSeen  string
 	UserAgent string
+}
+
+// SessionUserInfo is the per-request auth snapshot resolved by SessionUser.
+type SessionUserInfo struct {
+	UserID   string
+	Username string
+	Role     string // "user" or "admin"
+	Disabled bool
 }
 
 // SaveGameStatRow is aggregate save stats for one game (admin analytics).

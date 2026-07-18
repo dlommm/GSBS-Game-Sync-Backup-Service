@@ -254,22 +254,7 @@ func (h *WebHandler) serveAdminPCGWJobStatusPartial(w http.ResponseWriter, r *ht
 		return
 	}
 	data := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret), false)
-	h.renderPartial(w, "partials/admin_pcgw_job_status.html", map[string]interface{}{
-		"JobRunning":         data.JobRunning,
-		"JobProgressPages":   data.JobProgressPages,
-		"JobProgressTotal":   data.JobProgressTotal,
-		"JobGamesSkipped":    data.JobGamesSkipped,
-		"JobPhase":           data.JobPhase,
-		"JobAutoCatchUp":     data.JobAutoCatchUp,
-		"CSRFToken":          data.CSRFToken,
-		"JobElapsedSec":      data.JobElapsedSec,
-		"JobPagesPerSec":     data.JobPagesPerSec,
-		"JobETAMin":          data.JobETAMin,
-		"JobETASec":          data.JobETASec,
-		"JobCatalogScanMode": data.JobCatalogScanMode,
-		"JobPhaseLabel":      data.JobPhaseLabel,
-		"AvgHistPagesPerSec": data.AvgHistPagesPerSec,
-	})
+	h.renderPartial(w, "partials/admin_pcgw_job_status.html", data)
 }
 
 func (h *WebHandler) serveAdminPCGWDetail(w http.ResponseWriter, r *http.Request, pageID int64) {

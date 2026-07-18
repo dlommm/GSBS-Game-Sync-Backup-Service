@@ -312,8 +312,6 @@ func templateTestData(name string) interface{} {
 				PageName: "dashboard", Username: pd.Username, IsAdmin: pd.IsAdmin,
 				CSRFToken: pd.CSRFToken, NavActive: pd.NavActive,
 			},
-			Stats:      dashboardStats{ClientCount: 1, SaveCount: 2, GameCount: 1, TotalBytes: 1024},
-			QuotaBytes: 4096,
 		}
 	case "settings.html":
 		return settingsData{
@@ -452,15 +450,17 @@ func templateTestData(name string) interface{} {
 			AllowRegister:   true,
 			MaxStorageBytes: 0,
 			ReadOnly:        false,
-			RecentJobs: []store.JobRun{
-				{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
+			Jobs: jobsViewData{
+				RecentJobs: []store.JobRun{
+					{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
+				},
+				LastSuccessfulSyncAt: now,
+				CapStatusText:        "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
+				CSRFToken:            "csrf-test",
+				IdleRunsNeeded:       2,
+				IdleTotalETASec:      600,
+				IdlePerRunETASec:     300,
 			},
-			JobRunning:           false,
-			JobProgressPages:     0,
-			JobProgressTotal:     0,
-			JobGamesSkipped:      0,
-			LastSuccessfulSyncAt: now,
-			CapStatusText:        "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
 		}
 	case "admin_users.html":
 		return adminUsersData{
@@ -517,38 +517,37 @@ func templateTestData(name string) interface{} {
 				},
 				Pager: samplePager("/admin/partial/snapshots", "#snapshots-table-region", "snapshots"),
 			},
-			JobsTable: jobsTableView{
-				Rows: []store.JobRun{
+			Jobs: jobsViewData{
+				JobsTable: jobsTableView{
+					Rows: []store.JobRun{
+						{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
+					},
+					Pager:       samplePager("/admin/partial/jobs", "#admin-jobs-panel", "runs"),
+					JobNames:    []string{"pcgw_sync", "backup"},
+					ShowFilters: true,
+				},
+				RecentJobs: []store.JobRun{
 					{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
 				},
-				Pager:       samplePager("/admin/partial/jobs", "#admin-jobs-panel", "runs"),
-				JobNames:    []string{"pcgw_sync", "backup"},
-				ShowFilters: true,
+				LastSuccessfulSyncAt: now,
+				MaxPagesPerRun:       500,
+				MaxPagesPerRunSource: "GSBS_PCGW_MAX_PAGES_PER_RUN",
+				CapStatusText:        "Phase 2 parse/store cap: 500 pages per run (GSBS_PCGW_MAX_PAGES_PER_RUN). Phase 1 catalog scan always fetches all IDs.",
+				ShowPCGWControls:     true,
+				CSRFToken:            "csrf-test",
+				ResumableSyncRun:     &types.PCGWSyncRun{ID: "r1", Mode: "incremental", Status: "interrupted", StartedAt: now, CheckpointPhase: "ingest", CheckpointQueueCursor: 42},
+				JobElapsedSec:        120,
+				JobPagesPerSec:       2.5,
+				JobETAMin:            15,
+				JobETASec:            900,
+				JobCatalogScanMode:   "fast_probe",
+				JobPhaseLabel:        "Phase 2: Parsing game data",
+				AvgHistPagesPerSec:   3.0,
+				BundleSyncSource:     store.PCGWSyncSourceS3,
+				BundleLastFetched:    now,
+				BundleLastExported:   now,
+				BundleLastETag:       `"abc123"`,
 			},
-			RecentJobs: []store.JobRun{
-				{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
-			},
-			JobRunning:           false,
-			JobProgressPages:     0,
-			JobProgressTotal:     0,
-			JobGamesSkipped:      0,
-			LastSuccessfulSyncAt: now,
-			MaxPagesPerRun:       500,
-			MaxPagesPerRunSource: "GSBS_PCGW_MAX_PAGES_PER_RUN",
-			CapStatusText:        "Phase 2 parse/store cap: 500 pages per run (GSBS_PCGW_MAX_PAGES_PER_RUN). Phase 1 catalog scan always fetches all IDs.",
-			ShowPCGWControls:     true,
-			ResumableSyncRun:     &types.PCGWSyncRun{ID: "r1", Mode: "incremental", Status: "interrupted", StartedAt: now, CheckpointPhase: "ingest", CheckpointQueueCursor: 42},
-			JobElapsedSec:        120,
-			JobPagesPerSec:       2.5,
-			JobETAMin:            15,
-			JobETASec:            900,
-			JobCatalogScanMode:   "fast_probe",
-			JobPhaseLabel:        "Phase 2: Parsing game data",
-			AvgHistPagesPerSec:   3.0,
-			BundleSyncSource:     store.PCGWSyncSourceS3,
-			BundleLastFetched:    now,
-			BundleLastExported:   now,
-			BundleLastETag:       `"abc123"`,
 		}
 	case "admin_logs.html":
 		return adminLogsData{
@@ -727,23 +726,19 @@ func templateTestData(name string) interface{} {
 			"Pager": samplePager("/admin/partial/manifest", "#manifest-table", "entries"),
 		}
 	case "partials/admin_jobs.html":
-		return map[string]interface{}{
-			"RecentJobs": []store.JobRun{
+		return jobsViewData{
+			RecentJobs: []store.JobRun{
 				{JobName: "pcgw_sync", StartedAt: now, FinishedAt: now, Status: "success", EntriesCount: 50},
 			},
-			"JobRunning":           false,
-			"JobProgressPages":     0,
-			"JobProgressTotal":     0,
-			"JobGamesSkipped":      0,
-			"JobElapsedSec":        0,
-			"JobETAMin":            -1,
-			"JobPhaseLabel":        "",
-			"ResumableSyncRun":     (*types.PCGWSyncRun)(nil),
-			"CapStatusText":        "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
-			"CSRFToken":            "csrf-test",
-			"ShowPCGWControls":     false,
-			"LastSuccessfulSyncAt": now,
-			"JobsTable": jobsTableView{
+			JobETAMin:            -1,
+			JobETASec:            -1,
+			CapStatusText:        "Phase 2 parse/store cap: 5000 pages per run (default). Phase 1 catalog scan always fetches all IDs.",
+			CSRFToken:            "csrf-test",
+			LastSuccessfulSyncAt: now,
+			IdleRunsNeeded:       2,
+			IdleTotalETASec:      600,
+			IdlePerRunETASec:     300,
+			JobsTable: jobsTableView{
 				Pager:       samplePager("/admin/partial/jobs", "#admin-jobs-panel", "runs"),
 				JobNames:    []string{"pcgw_sync"},
 				ShowFilters: true,
@@ -781,19 +776,19 @@ func templateTestData(name string) interface{} {
 			"Pager": samplePager("/admin/partial/analytics-pcgw", "#analytics-pcgw-table", "games"),
 		}
 	case "partials/admin_pcgw_job_status.html":
-		return map[string]interface{}{
-			"JobRunning":         true,
-			"JobProgressPages":   42,
-			"JobProgressTotal":   100,
-			"JobGamesSkipped":    3,
-			"JobPhase":           "ingest",
-			"CSRFToken":          "csrf-test",
-			"JobElapsedSec":      90,
-			"JobPagesPerSec":     1.5,
-			"JobETAMin":          5,
-			"JobETASec":          300,
-			"JobPhaseLabel":      "Phase 2: Parsing game data",
-			"AvgHistPagesPerSec": 2.0,
+		return jobsViewData{
+			JobRunning:         true,
+			JobProgressPages:   42,
+			JobProgressTotal:   100,
+			JobGamesSkipped:    3,
+			JobPhase:           "ingest",
+			CSRFToken:          "csrf-test",
+			JobElapsedSec:      90,
+			JobPagesPerSec:     1.5,
+			JobETAMin:          5,
+			JobETASec:          300,
+			JobPhaseLabel:      "Phase 2: Parsing game data",
+			AvgHistPagesPerSec: 2.0,
 		}
 	case "partials/loading_skeleton.html":
 		return map[string]interface{}{}

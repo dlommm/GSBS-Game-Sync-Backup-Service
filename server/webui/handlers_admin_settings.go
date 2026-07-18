@@ -333,9 +333,18 @@ func (h *WebHandler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
+	backupCron := strings.TrimSpace(r.FormValue("backup_cron"))
+	if backupCron != "" {
+		// Validate like pcgw_cron/pcgw_bundle_cron: a typo'd expression stored
+		// raw is only discovered at schedule time, silently stopping backups.
+		if _, cronErr := cron.ParseStandard(backupCron); cronErr != nil {
+			Redirect(w, r, "/admin/settings?error=invalid_backup_cron")
+			return
+		}
+	}
 	for key, val := range map[string]string{
 		job.SettingBackupEnabled:       backupEnabledVal,
-		job.SettingBackupCron:          strings.TrimSpace(r.FormValue("backup_cron")),
+		job.SettingBackupCron:          backupCron,
 		job.SettingBackupKeep:          backupKeep,
 		job.SettingBackupIncludeCovers: backupCoversVal,
 	} {

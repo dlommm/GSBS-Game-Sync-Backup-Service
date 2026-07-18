@@ -81,21 +81,26 @@ func (h *WebHandler) getSessionUser(r *http.Request) (userID, sessionID string) 
 }
 
 func (h *WebHandler) requireSession(w http.ResponseWriter, r *http.Request) (userID, username string, ok bool) {
-	var sessionID string
-	userID, sessionID = h.getSessionUser(r)
-	if userID == "" {
+	sessionID := GetSessionID(r, h.secret)
+	if sessionID == "" {
+		Redirect(w, r, "/login")
+		return "", "", false
+	}
+	// One JOINed query instead of session + disabled + username round-trips —
+	// a dashboard load fans out to ~7 requests, so this is on the hot path.
+	info, err := h.store.SessionUser(r.Context(), sessionID)
+	if err != nil || info == nil {
 		Redirect(w, r, "/login")
 		return "", "", false
 	}
 	// Cut off disabled users: revoke their session and redirect to login.
-	if disabled, err := h.store.IsUserDisabled(r.Context(), userID); err == nil && disabled {
+	if info.Disabled {
 		_ = h.store.DeleteSession(r.Context(), sessionID)
 		ClearSession(w)
 		Redirect(w, r, "/login")
 		return "", "", false
 	}
-	username, _ = h.store.UsernameByID(r.Context(), userID)
-	return userID, username, true
+	return info.UserID, info.Username, true
 }
 
 func (h *WebHandler) requireAdmin(w http.ResponseWriter, r *http.Request) (userID, username string, ok bool) {

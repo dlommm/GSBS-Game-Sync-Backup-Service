@@ -142,17 +142,11 @@ func (h *WebHandler) serveGameDetail(w http.ResponseWriter, r *http.Request) {
 		Redirect(w, r, "/dashboard/games")
 		return
 	}
-	saves, err := h.store.ListSaveSummaries(r.Context(), userID)
+	mine, err := h.store.ListSaveSummariesForGame(r.Context(), userID, gameID)
 	if err != nil {
 		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("game detail: list saves failed")
 		Redirect(w, r, "/dashboard/games?error=load_failed")
 		return
-	}
-	var mine []store.SaveSummary
-	for _, s := range saves {
-		if s.GameID == gameID {
-			mine = append(mine, s)
-		}
 	}
 	if len(mine) == 0 {
 		Redirect(w, r, "/dashboard/games")
@@ -225,13 +219,9 @@ func (h *WebHandler) serveSaveVersionPreview(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	// Encrypted saves are opaque ciphertext on the server — nothing to preview.
-	if summaries, err := h.store.ListSaveSummaries(r.Context(), userID); err == nil {
-		for _, s := range summaries {
-			if s.GameID == gameID && s.PathKey == pathKey && s.Encrypted {
-				fmt.Fprint(w, `<p class="cell-muted">This save is end-to-end encrypted — preview is unavailable.</p>`)
-				return
-			}
-		}
+	if summary, err := h.store.GetSaveSummary(r.Context(), userID, gameID, pathKey); err == nil && summary != nil && summary.Encrypted {
+		fmt.Fprint(w, `<p class="cell-muted">This save is end-to-end encrypted — preview is unavailable.</p>`)
+		return
 	}
 
 	versions, err := h.store.ListSaveVersions(r.Context(), userID, gameID, pathKey, 1)

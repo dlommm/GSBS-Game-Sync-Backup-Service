@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/i18n"
@@ -35,10 +36,6 @@ type PageData struct {
 
 type dashboardData struct {
 	PageData
-	Stats      dashboardStats
-	Clients    []store.ClientInfo
-	Saves      []store.SaveSummary
-	QuotaBytes int64
 }
 
 type dashboardStats struct {
@@ -156,42 +153,18 @@ type adminStats struct {
 
 type adminOverviewData struct {
 	PageData
-	Stats                 adminStats
-	StatsSnapshots        []store.StatsSnapshotRow
-	SSEClients            int
-	AllowRegister         bool
-	ShowGettingStarted    bool // fresh-server hint: expand the checklist hints
-	SetupHealth           []setupHealthItem
-	SetupHealthAllDone    bool
-	MaxStorageBytes       int64
-	ReadOnly              bool
-	RecentJobs            []store.JobRun
-	JobsTable             jobsTableView // zero on overview: legacy fixed table, no pager/filters
-	JobRunning            bool
-	JobProgressPages      int
-	JobProgressTotal      int
-	JobGamesSkipped       int
-	JobPhase              string
-	JobAutoCatchUp        bool
-	LastSuccessfulSyncAt  string
-	CatalogStats          types.PCGWCatalogStats
-	MaxPagesPerRun        int
-	MaxPagesPerRunFromEnv bool
-	MaxPagesPerRunSource  string
-	CapReached            bool
-	CapStatusText         string
-	ShowPCGWControls      bool
-	ResumableSyncRun      *types.PCGWSyncRun
-	JobElapsedSec         int
-	JobPagesPerSec        float64
-	JobETAMin             int
-	JobETASec             int
-	JobCatalogScanMode    string
-	JobPhaseLabel         string
-	AvgHistPagesPerSec    float64
-	IdleRunsNeeded        int
-	IdleTotalETASec       int
-	IdlePerRunETASec      int
+	Stats              adminStats
+	StatsSnapshots     []store.StatsSnapshotRow
+	SSEClients         int
+	AllowRegister      bool
+	ShowGettingStarted bool // fresh-server hint: expand the checklist hints
+	SetupHealth        []setupHealthItem
+	SetupHealthAllDone bool
+	MaxStorageBytes    int64
+	ReadOnly           bool
+	// Jobs is the single source for the jobs panel — the same value the
+	// /admin/partial/jobs refresh renders, so the two cannot drift.
+	Jobs jobsViewData
 	// First-run onboarding: prompt the admin to choose a save-location source
 	// (prebuilt bundle vs live PCGW API) when none has been explicitly chosen.
 	ShowSourcePrompt bool
@@ -229,43 +202,10 @@ type manifestTableView struct {
 
 type adminActivityData struct {
 	PageData
-	AuditTable            auditTableView
-	FetchesTable          fetchesTableView
-	SnapshotsTable        snapshotsTableView
-	JobsTable             jobsTableView
-	RecentJobs            []store.JobRun
-	JobRunning            bool
-	JobProgressPages      int
-	JobProgressTotal      int
-	JobGamesSkipped       int
-	JobPhase              string
-	JobAutoCatchUp        bool
-	LastSuccessfulSyncAt  string
-	CatalogStats          types.PCGWCatalogStats
-	LatestSyncRun         *types.PCGWSyncRun
-	MaxPagesPerRun        int
-	MaxPagesPerRunFromEnv bool
-	MaxPagesPerRunSource  string
-	CapReached            bool
-	CapStatusText         string
-	ShowPCGWControls      bool
-	ResumableSyncRun      *types.PCGWSyncRun
-	JobElapsedSec         int
-	JobPagesPerSec        float64
-	JobETAMin             int
-	JobETASec             int
-	JobCatalogScanMode    string
-	JobPhaseLabel         string
-	AvgHistPagesPerSec    float64
-	IdleRunsNeeded        int
-	IdleTotalETASec       int
-	IdlePerRunETASec      int
-	BundleSyncSource      string
-	BundleLastFetched     string
-	BundleLastExported    string
-	BundleLastETag        string
-	BundleLastError       string
-	BundleJobRunning      bool
+	AuditTable     auditTableView
+	FetchesTable   fetchesTableView
+	SnapshotsTable snapshotsTableView
+	Jobs           jobsViewData
 }
 
 type adminLogsData struct {
@@ -563,11 +503,24 @@ func (h *WebHandler) renderPartial(w http.ResponseWriter, name string, data inte
 	h.render(w, name, data)
 }
 
+var renderBufPool = sync.Pool{New: func() interface{} { return new(bytes.Buffer) }}
+
+// render executes the template into a buffer first so a mid-render failure
+// yields a clean 500 instead of a 200 status with half a page already on the
+// wire (which HTMX would happily swap in).
 func (h *WebHandler) render(w http.ResponseWriter, name string, data interface{}) {
-	if err := h.templates.ExecuteTemplate(w, name, data); err != nil {
-		http.Error(w, "Template error", http.StatusInternalServerError)
+	buf := renderBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer renderBufPool.Put(buf)
+	if err := h.templates.ExecuteTemplate(buf, name, data); err != nil {
 		logx.Logger().Error().Str("template", name).Err(err).Msg("webui template render failed")
+		http.Error(w, "Template error", http.StatusInternalServerError)
+		return
 	}
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	}
+	_, _ = buf.WriteTo(w)
 }
 
 // renderError serves the branded error page (error.html) with the given
@@ -976,11 +929,4 @@ func maxClients(users []store.UserStatRow) int {
 		}
 	}
 	return max
-}
-
-func mathCeilDiv(a, b int) int {
-	if b <= 0 {
-		return 0
-	}
-	return int(math.Ceil(float64(a) / float64(b)))
 }

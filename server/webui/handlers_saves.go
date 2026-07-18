@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,13 +57,8 @@ func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
 	if len(versions) > 0 {
 		currentVersion = versions[0].Version
 	}
-	if summaries, err := h.store.ListSaveSummaries(r.Context(), userID); err == nil {
-		for _, s := range summaries {
-			if s.GameID == gameID && s.PathKey == pathKey {
-				gameTitle = s.GameTitle
-				break
-			}
-		}
+	if summary, err := h.store.GetSaveSummary(r.Context(), userID, gameID, pathKey); err == nil && summary != nil {
+		gameTitle = summary.GameTitle
 	}
 	errorMsg := ""
 	switch r.URL.Query().Get("error") {
@@ -155,8 +151,8 @@ func (h *WebHandler) handleRestoreVersion(w http.ResponseWriter, r *http.Request
 		Redirect(w, r, "/dashboard?error=restore_missing_params")
 		return
 	}
-	var version int
-	if _, err := fmt.Sscanf(versionStr, "%d", &version); err != nil || version < 1 {
+	version, err := strconv.Atoi(versionStr)
+	if err != nil || version < 1 {
 		Redirect(w, r, "/dashboard?error=restore_invalid_version")
 		return
 	}
@@ -183,8 +179,8 @@ func (h *WebHandler) serveSaveVersionDownload(w http.ResponseWriter, r *http.Req
 		http.Error(w, "game_id, path_key and version required", http.StatusBadRequest)
 		return
 	}
-	var version int
-	if _, err := fmt.Sscanf(versionStr, "%d", &version); err != nil || version < 1 {
+	version, err := strconv.Atoi(versionStr)
+	if err != nil || version < 1 {
 		http.Error(w, "invalid version", http.StatusBadRequest)
 		return
 	}

@@ -72,7 +72,6 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	csrfToken := SetCSRFToken(w, r, h.secret)
-	quotaBytes, _ := h.store.UserQuotaBytes(r.Context(), userID)
 	success := ""
 	if r.URL.Query().Get("revoked") == "1" {
 		success = "Client token revoked. Run gsbs-client login to reconnect."
@@ -89,7 +88,6 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 			Restored:  r.URL.Query().Get("restored") == "1",
 			Deleted:   r.URL.Query().Get("deleted") == "1",
 		},
-		QuotaBytes: quotaBytes,
 	})
 }
 

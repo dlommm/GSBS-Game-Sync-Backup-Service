@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,6 +83,12 @@ type jobsViewData struct {
 	BundleLastETag     string
 	BundleLastError    string
 	BundleJobRunning   bool
+	// PCGWSourceSetting is the raw pcgw_sync_source admin setting ("" =
+	// never explicitly chosen), for the overview's source prompt.
+	PCGWSourceSetting string
+	// JobsTable is the paged+filterable runs table (activity context only;
+	// zero value renders the legacy fixed table without pager/filters).
+	JobsTable jobsTableView
 }
 
 func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGWControls bool) jobsViewData {
@@ -248,6 +255,7 @@ func (h *WebHandler) loadJobsViewData(ctx context.Context, csrf string, showPCGW
 	data.BundleLastExported = settings[store.AdminSettingPCGWBundleLastExportedAt]
 	data.BundleLastETag = settings[store.AdminSettingPCGWBundleETag]
 	data.BundleLastError = settings[store.AdminSettingPCGWBundleLastFetchError]
+	data.PCGWSourceSetting = strings.TrimSpace(settings[store.AdminSettingPCGWSyncSource])
 	if h.jobRunner != nil {
 		data.BundleJobRunning = h.jobRunner.IsRunning("pcgw_bundle_fetch")
 	}
@@ -305,7 +313,6 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 	}
 	ctx := r.Context()
 	statsSnapshots, _ := h.store.ListStatsSnapshots(ctx, 30)
-	recentJobs, _ := h.store.ListJobRuns(ctx, "pcgw_sync", 10)
 	jobsData := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret), false)
 	sseClients := 0
 	if h.hub != nil {
@@ -327,51 +334,25 @@ func (h *WebHandler) serveAdminOverview(w http.ResponseWriter, r *http.Request) 
 	// Show the source-choice card until the admin explicitly picks one (and only
 	// when not pinned by GSBS_PCGW_SYNC_SOURCE).
 	_, sourceEnvPinned := os.LookupEnv(store.EnvPCGWSyncSource)
-	settings, _ := h.store.ListAdminSettings(ctx)
-	showSourcePrompt := !sourceEnvPinned && strings.TrimSpace(settings[store.AdminSettingPCGWSyncSource]) == ""
+	showSourcePrompt := !sourceEnvPinned && jobsData.PCGWSourceSetting == ""
 	h.render(w, "admin_overview.html", adminOverviewData{
-		ShowSourcePrompt:      showSourcePrompt,
-		PageData:              h.adminPageData(w, r, userID, username, "overview", "admin_overview"),
-		Stats:                 stats,
-		StatsSnapshots:        statsSnapshots,
-		SSEClients:            sseClients,
-		AllowRegister:         h.allowRegister,
-		ShowGettingStarted:    showGettingStarted,
-		SetupHealth:           setupHealth,
-		SetupHealthAllDone:    setupHealthAllDone,
-		MaxStorageBytes:       h.maxStorageBytes,
-		ReadOnly:              h.readOnly,
-		RecentJobs:            recentJobs,
-		JobRunning:            jobsData.JobRunning,
-		JobProgressPages:      jobsData.JobProgressPages,
-		JobProgressTotal:      jobsData.JobProgressTotal,
-		JobGamesSkipped:       jobsData.JobGamesSkipped,
-		JobPhase:              jobsData.JobPhase,
-		JobAutoCatchUp:        jobsData.JobAutoCatchUp,
-		LastSuccessfulSyncAt:  jobsData.LastSuccessfulSyncAt,
-		MaxPagesPerRun:        jobsData.MaxPagesPerRun,
-		MaxPagesPerRunFromEnv: jobsData.MaxPagesPerRunFromEnv,
-		MaxPagesPerRunSource:  jobsData.MaxPagesPerRunSource,
-		CapReached:            jobsData.CapReached,
-		CapStatusText:         jobsData.CapStatusText,
-		ShowPCGWControls:      jobsData.ShowPCGWControls,
-		ResumableSyncRun:      jobsData.ResumableSyncRun,
-		CatalogStats:          jobsData.CatalogStats,
-		JobElapsedSec:         jobsData.JobElapsedSec,
-		JobPagesPerSec:        jobsData.JobPagesPerSec,
-		JobETAMin:             jobsData.JobETAMin,
-		JobETASec:             jobsData.JobETASec,
-		JobCatalogScanMode:    jobsData.JobCatalogScanMode,
-		JobPhaseLabel:         jobsData.JobPhaseLabel,
-		AvgHistPagesPerSec:    jobsData.AvgHistPagesPerSec,
-		IdleRunsNeeded:        jobsData.IdleRunsNeeded,
-		IdleTotalETASec:       jobsData.IdleTotalETASec,
-		IdlePerRunETASec:      jobsData.IdlePerRunETASec,
-		Version:               h.gsbsVersion,
-		IntegrityFindings:     integrityFindings,
-		IntegrityCount:        integrityCount,
-		IntegrityRunning:      integrityRunning,
-		IntegrityLastRun:      integrityLastRun,
+		ShowSourcePrompt:   showSourcePrompt,
+		PageData:           h.adminPageData(w, r, userID, username, "overview", "admin_overview"),
+		Stats:              stats,
+		StatsSnapshots:     statsSnapshots,
+		SSEClients:         sseClients,
+		AllowRegister:      h.allowRegister,
+		ShowGettingStarted: showGettingStarted,
+		SetupHealth:        setupHealth,
+		SetupHealthAllDone: setupHealthAllDone,
+		MaxStorageBytes:    h.maxStorageBytes,
+		ReadOnly:           h.readOnly,
+		Jobs:               jobsData,
+		Version:            h.gsbsVersion,
+		IntegrityFindings:  integrityFindings,
+		IntegrityCount:     integrityCount,
+		IntegrityRunning:   integrityRunning,
+		IntegrityLastRun:   integrityLastRun,
 	})
 }
 
@@ -451,7 +432,7 @@ func (h *WebHandler) handleAdminIntegrityPurge(w http.ResponseWriter, r *http.Re
 		return
 	}
 	h.appendAuditBroadcast(r.Context(), actorID, actorName, "admin_purge_save", targetUser, fmt.Sprintf("game_id=%s path_key=%s", gameID, pathKey))
-	Redirect(w, r, "/admin?purged=1")
+	Redirect(w, r, "/admin?save_purged=1")
 }
 
 // handleAdminPurgeGameAllUsers deletes every save for one game_id across ALL
@@ -597,47 +578,15 @@ func (h *WebHandler) serveAdminActivity(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	ctx := r.Context()
-	jobsTable := h.buildJobsTableView(ctx, r)
 	jobsData := h.loadJobsViewData(ctx, SetCSRFToken(w, r, h.secret), true)
+	jobsData.JobsTable = h.buildJobsTableView(ctx, r)
+	jobsData.RecentJobs = jobsData.JobsTable.Rows
 	h.render(w, "admin_activity.html", adminActivityData{
-		PageData:              h.adminPageData(w, r, userID, username, "activity", "admin_activity"),
-		AuditTable:            h.buildAuditTableView(ctx, r),
-		FetchesTable:          h.buildFetchesTableView(ctx, r),
-		SnapshotsTable:        h.buildSnapshotsTableView(ctx, r),
-		JobsTable:             jobsTable,
-		RecentJobs:            jobsTable.Rows,
-		JobRunning:            jobsData.JobRunning,
-		JobProgressPages:      jobsData.JobProgressPages,
-		JobProgressTotal:      jobsData.JobProgressTotal,
-		JobGamesSkipped:       jobsData.JobGamesSkipped,
-		JobPhase:              jobsData.JobPhase,
-		JobAutoCatchUp:        jobsData.JobAutoCatchUp,
-		LastSuccessfulSyncAt:  jobsData.LastSuccessfulSyncAt,
-		CatalogStats:          jobsData.CatalogStats,
-		LatestSyncRun:         jobsData.LatestSyncRun,
-		MaxPagesPerRun:        jobsData.MaxPagesPerRun,
-		MaxPagesPerRunFromEnv: jobsData.MaxPagesPerRunFromEnv,
-		MaxPagesPerRunSource:  jobsData.MaxPagesPerRunSource,
-		CapReached:            jobsData.CapReached,
-		CapStatusText:         jobsData.CapStatusText,
-		ShowPCGWControls:      jobsData.ShowPCGWControls,
-		ResumableSyncRun:      jobsData.ResumableSyncRun,
-		JobElapsedSec:         jobsData.JobElapsedSec,
-		JobPagesPerSec:        jobsData.JobPagesPerSec,
-		JobETAMin:             jobsData.JobETAMin,
-		JobETASec:             jobsData.JobETASec,
-		JobCatalogScanMode:    jobsData.JobCatalogScanMode,
-		JobPhaseLabel:         jobsData.JobPhaseLabel,
-		AvgHistPagesPerSec:    jobsData.AvgHistPagesPerSec,
-		IdleRunsNeeded:        jobsData.IdleRunsNeeded,
-		IdleTotalETASec:       jobsData.IdleTotalETASec,
-		IdlePerRunETASec:      jobsData.IdlePerRunETASec,
-		BundleSyncSource:      jobsData.BundleSyncSource,
-		BundleLastFetched:     jobsData.BundleLastFetched,
-		BundleLastExported:    jobsData.BundleLastExported,
-		BundleLastETag:        jobsData.BundleLastETag,
-		BundleLastError:       jobsData.BundleLastError,
-		BundleJobRunning:      jobsData.BundleJobRunning,
+		PageData:       h.adminPageData(w, r, userID, username, "activity", "admin_activity"),
+		AuditTable:     h.buildAuditTableView(ctx, r),
+		FetchesTable:   h.buildFetchesTableView(ctx, r),
+		SnapshotsTable: h.buildSnapshotsTableView(ctx, r),
+		Jobs:           jobsData,
 	})
 }
 
@@ -647,41 +596,16 @@ func (h *WebHandler) serveAdminJobsPartial(w http.ResponseWriter, r *http.Reques
 	}
 	showPCGWControls := strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("context")), "activity")
 	data := h.loadJobsViewData(r.Context(), SetCSRFToken(w, r, h.secret), showPCGWControls)
-	recentJobs := data.RecentJobs
-	var jobsTable jobsTableView
 	if showPCGWControls {
 		// Activity context: paged + filterable runs table.
-		jobsTable = h.buildJobsTableView(r.Context(), r)
-		recentJobs = jobsTable.Rows
+		data.JobsTable = h.buildJobsTableView(r.Context(), r)
+		data.RecentJobs = data.JobsTable.Rows
 	}
-	h.renderPartial(w, "partials/admin_jobs.html", map[string]interface{}{
-		"RecentJobs":            recentJobs,
-		"JobsTable":             jobsTable,
-		"CatalogStats":          data.CatalogStats,
-		"LatestSyncRun":         data.LatestSyncRun,
-		"JobRunning":            data.JobRunning,
-		"JobProgressPages":      data.JobProgressPages,
-		"JobProgressTotal":      data.JobProgressTotal,
-		"JobGamesSkipped":       data.JobGamesSkipped,
-		"JobPhase":              data.JobPhase,
-		"JobAutoCatchUp":        data.JobAutoCatchUp,
-		"LastSuccessfulSyncAt":  data.LastSuccessfulSyncAt,
-		"MaxPagesPerRun":        data.MaxPagesPerRun,
-		"MaxPagesPerRunFromEnv": data.MaxPagesPerRunFromEnv,
-		"MaxPagesPerRunSource":  data.MaxPagesPerRunSource,
-		"CapReached":            data.CapReached,
-		"CapStatusText":         data.CapStatusText,
-		"ShowPCGWControls":      data.ShowPCGWControls,
-		"CSRFToken":             data.CSRFToken,
-		"ResumableSyncRun":      data.ResumableSyncRun,
-		"JobElapsedSec":         data.JobElapsedSec,
-		"JobPagesPerSec":        data.JobPagesPerSec,
-		"JobETAMin":             data.JobETAMin,
-		"JobETASec":             data.JobETASec,
-		"JobCatalogScanMode":    data.JobCatalogScanMode,
-		"JobPhaseLabel":         data.JobPhaseLabel,
-		"AvgHistPagesPerSec":    data.AvgHistPagesPerSec,
-	})
+	// The partial consumes jobsViewData directly — the full-page render and
+	// this refresh can no longer drift apart (hand-projected maps here used
+	// to silently omit the Idle*/Bundle* fields, blanking the backlog
+	// estimate on the load-triggered swap).
+	h.renderPartial(w, "partials/admin_jobs.html", data)
 }
 
 func (h *WebHandler) handleRevokeClient(w http.ResponseWriter, r *http.Request) {
@@ -916,10 +840,13 @@ func (h *WebHandler) handleSetUserQuota(w http.ResponseWriter, r *http.Request) 
 	}
 	var quotaBytes int64
 	if quotaStr != "" && quotaStr != "0" {
-		if _, err := fmt.Sscanf(quotaStr, "%d", &quotaBytes); err != nil || quotaBytes < 0 {
+		// strconv rejects trailing garbage ("10x") that Sscanf accepted.
+		n, err := strconv.ParseInt(quotaStr, 10, 64)
+		if err != nil || n < 0 {
 			Redirect(w, r, "/admin/users?error=invalid_quota")
 			return
 		}
+		quotaBytes = n
 	}
 	if err := h.store.SetUserQuota(r.Context(), targetID, quotaBytes); err != nil {
 		Redirect(w, r, "/admin/users?error=quota_failed")
@@ -930,14 +857,7 @@ func (h *WebHandler) handleSetUserQuota(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *WebHandler) serveManifestCSV(w http.ResponseWriter, r *http.Request) {
-	userID, _ := h.getSessionUser(r)
-	if userID == "" {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	username, _ := h.store.UsernameByID(r.Context(), userID)
-	if !h.isAdminUser(r.Context(), userID, username) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+	if _, _, ok := h.requireAdmin(w, r); !ok {
 		return
 	}
 	entries, err := h.store.ListGameSaveLocations(r.Context())

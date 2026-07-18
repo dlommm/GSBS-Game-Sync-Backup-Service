@@ -126,7 +126,13 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if data == nil {
-		writeCoverMiss(missPath)
+		// Don't poison the 7-day negative cache when the fetch failed only
+		// because the browser aborted the image load (scroll-away/tab close
+		// cancels r.Context); the cover may exist and the next viewer should
+		// get a real attempt.
+		if r.Context().Err() == nil {
+			writeCoverMiss(missPath)
+		}
 		http.NotFound(w, r)
 		return
 	}

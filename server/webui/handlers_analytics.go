@@ -429,11 +429,16 @@ func (h *WebHandler) serveDashboardAnalytics(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	csrfToken := SetCSRFToken(w, r, h.secret)
+	success := ""
+	if r.URL.Query().Get("ok") == "pruned" {
+		success = "Old versions pruned. Storage figures update on the next refresh."
+	}
 	h.render(w, "dashboard_analytics.html", analyticsData{
 		PageData: PageData{
 			PageName: "dashboard_analytics", Username: username,
 			IsAdmin:   h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken, NavActive: "analytics",
+			Success: success,
 		},
 		userInsights: h.buildUserInsights(r.Context(), userID, insightsWindow(r)),
 	})

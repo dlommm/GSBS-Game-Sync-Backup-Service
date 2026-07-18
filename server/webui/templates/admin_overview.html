@@ -148,7 +148,7 @@
          hx-get="/admin/partial/jobs?context=overview"
          hx-trigger="load, job-finished from:body, job-progress from:body"
          hx-swap="innerHTML">
-  {{template "partials/admin_jobs.html" .}}
+  {{template "partials/admin_jobs.html" .Jobs}}
 </section>
 
 {{if .StatsSnapshots}}

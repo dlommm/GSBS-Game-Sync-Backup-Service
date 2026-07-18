@@ -342,6 +342,8 @@ func dashboardErrorMsg(code string) string {
 		return "Import archive is missing a valid manifest."
 	case "import_failed":
 		return "Import failed. See server log."
+	case "export_empty":
+		return "Nothing to export yet — no stored saves matched this selection."
 	case "":
 		return ""
 	default:
@@ -404,6 +406,24 @@ func adminQuerySuccess(r *http.Request) string {
 	if n := q.Get("purged"); n != "" {
 		return fmt.Sprintf("Purged stored full wikitext for %s row(s).", n)
 	}
+	if q.Get("backup_started") == "1" {
+		return "Backup started in the background. Check the Jobs panel for the result."
+	}
+	if q.Get("integrity_started") == "1" {
+		return "Integrity check started in the background. Findings appear on this page when it completes."
+	}
+	if q.Get("save_purged") == "1" {
+		return "Corrupt save purged. The owning client re-uploads it on its next sync."
+	}
+	if n := q.Get("purged_game"); n != "" {
+		return fmt.Sprintf("Purged all stored saves for that game across every user (%s file(s)).", n)
+	}
+	if q.Get("source_set") == "1" {
+		return "Save-location source saved."
+	}
+	if q.Get("refreshed") == "1" {
+		return "Wikitext refetched and re-parsed."
+	}
 	if n := q.Get("reset_dead_letter"); n != "" {
 		return fmt.Sprintf("Dead-letter reset: %s page(s) unblocked and re-queued for Phase 2. Run Auto Catch-Up to process them.", n)
 	}
@@ -442,6 +462,16 @@ func adminQueryError(r *http.Request) string {
 		return "Failed to create user."
 	case "invalid_cron":
 		return "Invalid cron expression."
+	case "invalid_bundle_cron":
+		return "Invalid bundle-fetch cron expression."
+	case "invalid_backup_cron":
+		return "Invalid backup cron expression."
+	case "invalid_backup_keep":
+		return "Backup keep count must be a positive number."
+	case "invalid_stale_days":
+		return "Stale-device threshold must be a positive number of days."
+	case "invalid_retention_overrides":
+		return "Retention overrides must be a valid JSON object of game IDs to keep-counts."
 	case "invalid_title_excludes", "invalid_path_excludes":
 		return "Filter excludes must be valid JSON arrays."
 	case "save_failed", "cron_reschedule_failed":
