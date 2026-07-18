@@ -104,7 +104,13 @@ func steamRegistryRunning() func() map[string]bool {
 // reportGameSession posts one finished play session to the server (v5.2).
 // Sessions shorter than a minute are noise (launchers, crashes) and skipped.
 func reportGameSession(ctx context.Context, cfg *config, gameID string, started, ended time.Time) {
-	if ended.Sub(started) < time.Minute || cfg == nil || cfg.Token == "" || cfg.ServerURL == "" {
+	if cfg == nil || ended.Sub(started) < time.Minute {
+		return
+	}
+	// This runs on its own goroutine (spawned with `go`), so read the token and
+	// URL under the lock — they may be rewritten by monthly token rotation.
+	serverURL, token := cfg.authSnapshot()
+	if token == "" || serverURL == "" {
 		return
 	}
 	body, _ := json.Marshal(map[string]string{
@@ -112,13 +118,13 @@ func reportGameSession(ctx context.Context, cfg *config, gameID string, started,
 		"started_at": started.Format(time.RFC3339),
 		"ended_at":   ended.Format(time.RFC3339),
 	})
-	url := strings.TrimRight(cfg.ServerURL, "/") + "/api/sessions"
+	url := strings.TrimRight(serverURL, "/") + "/api/sessions"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("X-GSBS-Client-Version", Version)
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	resp, err := httpClient.Do(req)

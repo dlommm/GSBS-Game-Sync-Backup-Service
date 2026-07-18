@@ -54,8 +54,7 @@ func maybeRefreshToken(ctx context.Context, cfg *config) {
 		log.Printf("token refresh: FAILED to save rotated token: %v — re-login may be required", err)
 		return
 	}
-	cfg.Token = newToken
-	cfg.TokenRefreshedAt = now
+	cfg.setTokenAndRefresh(newToken, now)
 	log.Printf("token refresh: device token rotated (next rotation in ~%dd)", int(tokenRefreshEvery.Hours()/24))
 }
 

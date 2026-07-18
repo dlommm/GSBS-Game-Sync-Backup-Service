@@ -489,7 +489,8 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		if c, err := loadConfig(); err == nil && strings.TrimSpace(c.Token) != "" {
 			return c.Token
 		}
-		return cfg.Token
+		_, token := cfg.authSnapshot()
+		return token
 	}
 	go ListenSSE(ctx, cfg.ServerURL, sseToken, func(eventType string) {
 		switch eventType {

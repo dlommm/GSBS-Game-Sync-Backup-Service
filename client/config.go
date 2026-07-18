@@ -6,8 +6,33 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
+
+// cfgMu serializes saveConfig (its keyring writes + atomic file replace) so
+// concurrent savers can't interleave, and guards the handful of config fields
+// read or written from more than one goroutine at runtime — the device token
+// during monthly rotation. Most config access is single-threaded setup/CLI
+// code that does not touch it.
+var cfgMu sync.RWMutex
+
+// setTokenAndRefresh publishes a rotated device token to the shared config so
+// cross-goroutine readers (authSnapshot) see it without a data race.
+func (c *config) setTokenAndRefresh(token, refreshedAt string) {
+	cfgMu.Lock()
+	c.Token = token
+	c.TokenRefreshedAt = refreshedAt
+	cfgMu.Unlock()
+}
+
+// authSnapshot returns the server URL and device token under the read lock,
+// safe to call from a goroutine that may race token rotation.
+func (c *config) authSnapshot() (serverURL, token string) {
+	cfgMu.RLock()
+	defer cfgMu.RUnlock()
+	return c.ServerURL, c.Token
+}
 
 // defaultSyncInterval is the periodic pull interval when none is configured.
 // File changes are pushed immediately regardless, so this only bounds how
@@ -209,6 +234,11 @@ func defaultConfig(_ string) *config {
 }
 
 func saveConfig(c *config) error {
+	// Serialize the whole keyring-write + atomic-file-replace so two concurrent
+	// savers (e.g. token rotation and a settings save) can't interleave their
+	// keyring set/delete calls or clobber each other's file with a stale copy.
+	cfgMu.Lock()
+	defer cfgMu.Unlock()
 	dir, _ := os.UserConfigDir()
 	gsbsDir := filepath.Join(dir, "gsbs")
 	if err := os.MkdirAll(gsbsDir, 0755); err != nil {
