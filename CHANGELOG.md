@@ -4,7 +4,72 @@ All notable changes to GSBS are documented here. Format based on [Keep a Changel
 
 ## [Unreleased]
 
-Security, safety, performance & hygiene pass from a full-project audit.
+Two passes: a security/safety/performance/hygiene pass from a full-project
+audit, and a WebUI deep-dive (server + client) that followed it.
+
+### WebUI — Fixed
+- **Live updates work again.** The vendored SSE extension was the htmx 1.x
+  version and silently broke under htmx 2 — every v5.1/v5.2 live feature
+  (Live activity pulse, inbox/conflict badges, admin job progress,
+  save-updated panel refreshes) had degraded to load-only with console
+  errors. A small EventSource bridge now re-dispatches server events as DOM
+  events, restoring all of it; panel refreshes are throttled so a bulk sync
+  can't stampede the dashboard, and the stats card uses count queries instead
+  of full-table scans on every event. Verified live end-to-end.
+- The admin jobs panel's idle "Backlog estimate" no longer vanishes on the
+  first partial refresh (the refresh handler omitted those fields); the jobs
+  view-model is now passed whole so the full page and the refresh can't drift.
+- Sporadic "Invalid security token" form failures are gone: CSRF tokens are
+  reused and re-signed instead of re-minted on every render, so an inbox-bell
+  click or background panel refresh no longer invalidates open forms.
+- A template error mid-render now returns a clean 500 instead of a 200 with
+  half a page (which HTMX would swap into the DOM).
+- Scrolling away from the My Games grid no longer risks poisoning a game's
+  cover with a 7-day "no cover" marker (aborted image loads wrote the
+  negative-cache entry).
+- `backup_cron` is validated on save; missing flash messages added (empty
+  export, backup/integrity started, admin purges, invalid settings values)
+  and the corrupt-save purge no longer flashes the PCGW wikitext message.
+
+### WebUI — Performance
+- Static assets are served with content-hash ETags, `Cache-Control`, and
+  precompressed gzip (app.css: 87KB → 16KB on the wire; conditional requests
+  get 304s). Previously every navigation re-downloaded ~190KB of JS/CSS plus
+  fonts with no validators at all, on both the server and the client UI.
+- ~900KB of image bloat removed: the client binary embedded a 413KB 512px
+  icon for a 24px topbar slot (now the 35KB wordmark the branding pipeline
+  intended), the server About card embedded the 501KB primary-logo master
+  (now the 8.7KB favicon), and dev runs no longer serve half-megabyte
+  branding masters as the topbar logo.
+- Client `/status` polling no longer hits the OS keyring twice, re-reads
+  discovery.json, and re-parses the full manifest every 5 seconds — all three
+  are cached (mtime/in-memory), and the manifest age moved out of the tray
+  lock. With the new `/events` SSE stream from the local daemon, the
+  dashboard updates instantly and the fallback poll stretches to 60s —
+  a real battery win on Steam Deck with the UI open.
+- WebUI session auth dropped from 3 serial queries per request to one JOINed
+  lookup; game detail/preview/version pages use point queries instead of
+  scanning the whole library; duplicate admin-overview queries removed.
+- htmx upgraded 2.0.4 → 2.0.10.
+
+### WebUI — Improved
+- The client UI reached parity on several server-UI conveniences: logs get
+  Newer/Older pagination, Quick Actions gains a secret-safe "Export
+  diagnostics" download, settings/encryption saves respond instantly
+  (Post-Redirect-Get; the sync restart happens in the background instead of
+  freezing the page up to 12s), and "Sync now" / "Open folder" report honest
+  failures instead of always claiming success.
+- Table ⚙ menus (columns/compact/zebra) extended to 15 more tables across
+  admin users/clients, manifest, PCGW, analytics, settings, versions, and
+  devices.
+- Accessibility: cmdk results are a real listbox (arrow-key selection is
+  announced), sortable headers work by keyboard, the inbox bell exposes its
+  unread count to screen readers, and the client dashboard no longer
+  re-announces the whole games list on every poll.
+- Theme/token drift fixed: cmdk's theme toggle now works on admin pages,
+  `.u-warn` uses the palette error color, OS badges are theme-aware, the
+  Tailwind config no longer carries the retired indigo palette, and ~2KB of
+  dead pre-redesign CSS was removed.
 
 ### Security
 - **SSRF blocked on notification sinks.** Webhook / Discord / ntfy URLs are now

@@ -137,7 +137,7 @@ func handleEncryptionEnable(w http.ResponseWriter, r *http.Request) {
 	// Post-Redirect-Get, and restart sync off the request goroutine:
 	// restartSync can hold syncMu for up to 12s draining the old loop, which
 	// used to hang this response (and block /api/sync-now) the whole time.
-	go restartSync(cfg)
+	go restartSync(cfg) //nolint:gosec // G118: the restart must outlive this request by design
 	http.Redirect(w, r, "/settings?enc=1", http.StatusSeeOther)
 }
 
