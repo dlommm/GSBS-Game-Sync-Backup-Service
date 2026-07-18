@@ -138,8 +138,9 @@ func logRequests(next http.Handler, mc *metrics.Collector) http.Handler {
 			rec.status = http.StatusOK
 		}
 		if mc != nil {
-			mc.Record(r.URL.Path, rec.status)
-			mc.RecordDuration(r.URL.Path, time.Since(start))
+			mpath := metrics.NormalizePath(r.URL.Path)
+			mc.Record(mpath, rec.status)
+			mc.RecordDuration(mpath, time.Since(start))
 		}
 		logx.Logger().Info().
 			Str("component", "http").

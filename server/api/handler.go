@@ -69,6 +69,7 @@ type Handler struct {
 	readOnly        bool   // if true, reject push and delete
 	sessionSecret   string // for signing TOTP step token when 2FA enabled; empty = no API 2FA
 	version         string // server version for health endpoint
+	lastSeen        *lastSeenThrottle
 
 	manifestCache struct {
 		mu      sync.RWMutex
@@ -167,7 +168,7 @@ const manifestCacheTTL = 10 * time.Minute
 // sessionSecret is used to sign the TOTP step token when 2FA is enabled; pass the same value as WebUI session secret. Empty = no API 2FA.
 // version is included in the health response when non-empty.
 func NewHandler(st store.Store, authSvc *auth.Service, allowRegister bool, hub *sse.Hub, authLimiter, pushLimiter, pullLimiter, generalLimiter, manifestLimiter *ratelimit.Limiter, maxStorageBytes int64, readOnly bool, sessionSecret string, version string) *Handler {
-	return &Handler{store: st, auth: authSvc, allowRegister: allowRegister, hub: hub, authLimiter: authLimiter, pushLimiter: pushLimiter, pullLimiter: pullLimiter, generalLimiter: generalLimiter, manifestLimiter: manifestLimiter, maxStorageBytes: maxStorageBytes, readOnly: readOnly, sessionSecret: sessionSecret, version: version}
+	return &Handler{store: st, auth: authSvc, allowRegister: allowRegister, hub: hub, authLimiter: authLimiter, pushLimiter: pushLimiter, pullLimiter: pullLimiter, generalLimiter: generalLimiter, manifestLimiter: manifestLimiter, maxStorageBytes: maxStorageBytes, readOnly: readOnly, sessionSecret: sessionSecret, version: version, lastSeen: newLastSeenThrottle(10 * time.Minute)}
 }
 
 // InvalidateManifestCache clears the in-memory manifest cache so the next
@@ -582,10 +583,14 @@ func (h *Handler) withAuth(fn func(http.ResponseWriter, *http.Request, string)) 
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 			return
 		}
-		// Update last_seen inline (cheap single-row UPDATE; request context keeps it bounded).
-		// The reported app version drives crypto-v2 fleet auto-negotiation.
-		if err := h.store.UpdateClientLastSeen(r.Context(), clientID, r.Header.Get("X-GSBS-Client-Version")); err != nil {
-			logx.Logger().Debug().Str("client_id", clientID).Err(err).Msg("update last_seen failed")
+		// last_seen is throttled (at most once per 10m per client) so read-heavy
+		// traffic doesn't serialize behind WAL's single writer; an app-version
+		// change still writes immediately (drives crypto-v2 fleet negotiation).
+		version := r.Header.Get("X-GSBS-Client-Version")
+		if h.lastSeen.shouldWrite(clientID, version) {
+			if err := h.store.UpdateClientLastSeen(r.Context(), clientID, version); err != nil {
+				logx.Logger().Debug().Str("client_id", clientID).Err(err).Msg("update last_seen failed")
+			}
 		}
 		// Stash clientID so downstream handlers avoid a redundant ValidateToken call.
 		r = r.WithContext(context.WithValue(r.Context(), contextClientID, clientID))

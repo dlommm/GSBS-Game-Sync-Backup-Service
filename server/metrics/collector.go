@@ -39,6 +39,21 @@ func NewCollector(st store.Store, sse SSECounter) *Collector {
 	return &Collector{store: st, sse: sse}
 }
 
+// NormalizePath collapses request paths that contain high-cardinality dynamic
+// segments (game IDs, cover IDs) into a bounded set of route templates. Without
+// this, keying metrics on the raw path grows the counter map and the Prometheus
+// series set without limit as users browse games/covers.
+func NormalizePath(p string) string {
+	switch {
+	case strings.HasPrefix(p, "/covers/"):
+		return "/covers/:id"
+	case strings.HasPrefix(p, "/dashboard/games/"):
+		return "/dashboard/games/:id"
+	default:
+		return p
+	}
+}
+
 // Record increments the counter for the given path and status code.
 func (c *Collector) Record(path string, statusCode int) {
 	if c == nil {

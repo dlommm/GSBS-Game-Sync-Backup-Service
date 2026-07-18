@@ -993,24 +993,25 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 			return false, ErrGlobalLimitExceeded
 		}
 	}
+	// Promote the staged file into place BEFORE committing. If the rename
+	// fails, the transaction rolls back and both the canonical bytes and the
+	// stored hash stay at their previous, mutually-consistent values — instead
+	// of committing a new hash over a file that still holds the old bytes. The
+	// only residual window (promote succeeds, commit then fails) is rare,
+	// self-heals on the client's retry, and is caught by the read-path hash
+	// check in GetSave.
+	if stagedTmp != "" {
+		if perr := promoteStagedFile(stagedTmp, storagePath, 0o640); perr != nil {
+			_ = tx.Rollback()
+			return false, perr
+		}
+		stagedTmp = "" // renamed away; the deferred cleanup must not remove it
+	}
 	if err := tx.Commit(); err != nil {
 		return false, err
 	}
-	if stagedTmp != "" {
-		if perr := promoteStagedFile(stagedTmp, storagePath, 0o640); perr != nil {
-			// The row is committed but the canonical file still holds the
-			// previous bytes, so the stored hash disagrees with the file
-			// until the next successful push. Loud log so operators notice;
-			// the deferred remove cleans up the staged temp.
-			logx.Logger().Error().Str("component", "store").Str("user_id", userID).Str("game_id", gameID).
-				Str("path_key", pathKey).Str("path", storagePath).Err(perr).
-				Msg("GSBS: failed to promote staged save after commit; canonical file is stale")
-		} else {
-			stagedTmp = ""
-			if oldStorage != "" && oldStorage != storagePath {
-				removeSaveFile(oldStorage)
-			}
-		}
+	if storagePath != "" && oldStorage != "" && oldStorage != storagePath {
+		removeSaveFile(oldStorage)
 	}
 	return false, nil
 }
@@ -1149,6 +1150,19 @@ func (s *sqliteStore) GetSave(ctx context.Context, userID, gameID, pathKey strin
 	}
 	b.UpdatedAt = updatedAt
 	b.Encrypted = enc != 0
+	// Defense-in-depth: for an unencrypted filesystem-backed save, verify the
+	// bytes still match the recorded hash and fail closed if not, so a rare
+	// staged-file promotion/commit inconsistency can never serve stale bytes
+	// under a newer hash. Encrypted saves record the plaintext hash (the stored
+	// file is ciphertext), so they are exempt.
+	if !b.Encrypted && b.ContentHash != "" && storagePath.Valid && storagePath.String != "" {
+		if got := hashContent(b.Content); got != b.ContentHash {
+			logx.Logger().Error().Str("component", "store").Str("user_id", userID).
+				Str("game_id", gameID).Str("path_key", pathKey).
+				Msg("GSBS: stored save content hash mismatch; refusing to serve stale/corrupt bytes")
+			return nil, fmt.Errorf("save content hash mismatch")
+		}
+	}
 	return &b, nil
 }
 
@@ -1677,13 +1691,11 @@ func versionMajor(v string) int {
 func (s *sqliteStore) ListSaveSummaries(ctx context.Context, userID string) ([]SaveSummary, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.game_id, s.path_key, COALESCE(s.content_size, LENGTH(s.content), 0) AS size_bytes, s.updated_at,
-		       COALESCE(g.game_title, s.game_id) AS game_title,
+		       COALESCE((SELECT gsl.game_title FROM game_save_locations gsl WHERE gsl.game_id = s.game_id LIMIT 1), s.game_id) AS game_title,
 		       COALESCE(s.content_hash, '') AS content_hash,
 		       COALESCE(s.relative_path, '') AS relative_path,
 		       COALESCE(s.encrypted, 0) AS encrypted
 		FROM saves s
-		LEFT JOIN (SELECT DISTINCT game_id, game_title FROM game_save_locations) g
-		  ON s.game_id = g.game_id
 		WHERE s.user_id = ?
 		ORDER BY s.updated_at DESC`, userID)
 	if err != nil {
@@ -1720,12 +1732,11 @@ func (s *sqliteStore) ListSaveSummariesPaginated(ctx context.Context, userID str
 	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.game_id, s.path_key, COALESCE(s.content_size, LENGTH(s.content), 0) AS size_bytes, s.updated_at,
-		       COALESCE(g.game_title, s.game_id) AS game_title,
+		       COALESCE((SELECT gsl.game_title FROM game_save_locations gsl WHERE gsl.game_id = s.game_id LIMIT 1), s.game_id) AS game_title,
 		       COALESCE(s.content_hash, '') AS content_hash,
 		       COALESCE(s.relative_path, '') AS relative_path,
 		       COALESCE(s.encrypted, 0) AS encrypted
 		FROM saves s
-		LEFT JOIN (SELECT DISTINCT game_id, game_title FROM game_save_locations) g ON s.game_id = g.game_id
 		WHERE s.user_id = ?
 		ORDER BY s.updated_at DESC LIMIT ? OFFSET ?`, userID, limit, offset)
 	if err != nil {
@@ -1753,15 +1764,14 @@ func (s *sqliteStore) ListSaveSummariesFiltered(ctx context.Context, userID, que
 	pattern := "%" + q + "%"
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT s.game_id, s.path_key, COALESCE(s.content_size, LENGTH(s.content), 0) AS size_bytes, s.updated_at,
-		       COALESCE(g.game_title, s.game_id) AS game_title,
+		       COALESCE((SELECT gsl.game_title FROM game_save_locations gsl WHERE gsl.game_id = s.game_id LIMIT 1), s.game_id) AS game_title,
 		       COALESCE(s.content_hash, '') AS content_hash,
 		       COALESCE(s.relative_path, '') AS relative_path,
 		       COALESCE(s.encrypted, 0) AS encrypted
 		FROM saves s
-		LEFT JOIN (SELECT DISTINCT game_id, game_title FROM game_save_locations) g
-		  ON s.game_id = g.game_id
 		WHERE s.user_id = ?
-		  AND (s.game_id LIKE ? OR s.path_key LIKE ? OR COALESCE(g.game_title, s.game_id) LIKE ?
+		  AND (s.game_id LIKE ? OR s.path_key LIKE ?
+		       OR COALESCE((SELECT gsl.game_title FROM game_save_locations gsl WHERE gsl.game_id = s.game_id LIMIT 1), s.game_id) LIKE ?
 		       OR COALESCE(s.relative_path, '') LIKE ?)
 		ORDER BY s.updated_at DESC`, userID, pattern, pattern, pattern, pattern)
 	if err != nil {
