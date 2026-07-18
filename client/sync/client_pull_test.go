@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -178,6 +179,12 @@ func TestApplyOneSave_SkipsGSBSArtifactTargets(t *testing.T) {
 // A failing backup aborts the overwrite: BackupBeforeOverwrite promises the
 // previous local state survives every pull.
 func TestApplyOneSave_BackupFailureAbortsOverwrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// The failure is injected with a 0555 directory, which os.Chmod
+		// cannot enforce on Windows (ACL-based) — file creation succeeds
+		// and no backup failure occurs. The invariant is covered on POSIX.
+		t.Skip("read-only directory chmod does not block file creation on Windows")
+	}
 	if os.Getuid() == 0 {
 		t.Skip("directory permissions do not block root")
 	}
