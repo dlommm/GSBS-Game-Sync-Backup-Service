@@ -218,6 +218,31 @@ func (s *sqliteStore) SessionUser(ctx context.Context, sessionID string) (*Sessi
 	return &info, nil
 }
 
+// GetUserPref returns a per-user preference value ("" when unset).
+func (s *sqliteStore) GetUserPref(ctx context.Context, userID, key string) (string, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT value FROM user_prefs WHERE user_id = ? AND key = ?`, userID, key).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return v, err
+}
+
+// SetUserPref upserts a per-user preference; an empty value deletes the row.
+func (s *sqliteStore) SetUserPref(ctx context.Context, userID, key, value string) error {
+	if value == "" {
+		_, err := s.db.ExecContext(ctx,
+			`DELETE FROM user_prefs WHERE user_id = ? AND key = ?`, userID, key)
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO user_prefs (user_id, key, value, updated_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+		userID, key, value, time.Now().UTC().Format(time.RFC3339))
+	return err
+}
+
 // UserRole returns the user's role ("user" or "admin"). Defaults to "user" if column missing or empty.
 func (s *sqliteStore) UserRole(ctx context.Context, userID string) (string, error) {
 	var role string

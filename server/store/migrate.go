@@ -21,7 +21,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 32
+const schemaVersion = 33
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -132,10 +132,28 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{30, stepConflicts},
 		{31, stepInboxItems},
 		{32, stepGameSessions},
+		{33, stepUserPrefs},
 	}
 }
 
 // ── Step implementations ──────────────────────────────────────────────────────
+
+// stepUserPrefs stores small per-user preferences as key/value rows (v5.6):
+// first users are the appearance prefs (appearance.design / appearance.layout)
+// that follow the account onto every device, including the client's local UI.
+func stepUserPrefs(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS user_prefs (
+			user_id TEXT NOT NULL,
+			key TEXT NOT NULL,
+			value TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			PRIMARY KEY (user_id, key),
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		);
+	`)
+	return err
+}
 
 // stepGameSessions stores play sessions reported by game-aware clients
 // (v5.2): rendered as markers on the save version timeline ("saved after a

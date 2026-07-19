@@ -209,6 +209,10 @@ type Store interface {
 	// VacuumInto writes a consistent snapshot of the database to destPath
 	// (safe while the server is running; used by the backup job).
 	VacuumInto(ctx context.Context, destPath string) error
+	// GetUserPref returns a per-user preference value ("" when unset).
+	GetUserPref(ctx context.Context, userID, key string) (string, error)
+	// SetUserPref upserts a per-user preference; empty value deletes it.
+	SetUserPref(ctx context.Context, userID, key, value string) error
 	// GetUserNotifySettings / SetUserNotifySettings manage a user's personal
 	// notification sinks (webhook/Discord/ntfy + event filter).
 	GetUserNotifySettings(ctx context.Context, userID string) (UserNotifySettings, error)
