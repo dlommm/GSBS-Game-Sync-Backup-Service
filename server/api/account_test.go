@@ -104,3 +104,45 @@ func TestEncryptionEndpointEnableOnly(t *testing.T) {
 		t.Fatal("encryption must stay enabled after a rejected disable")
 	}
 }
+
+// GET /api/account carries the appearance prefs (v5.6) so the client's local
+// WebUI can render the same color scheme + layout the user picked on the
+// server.
+func TestAccountIncludesAppearance(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	svc := auth.NewService(st)
+	ctx := context.Background()
+	uid, _ := svc.RegisterUser(ctx, "u2", "password123")
+	_, token, _ := svc.Login(ctx, "u2", "password123", "test-client", "linux")
+	if err := st.SetUserPref(ctx, uid, "appearance.design", "hud"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetUserPref(ctx, uid, "appearance.layout", "dense"); err != nil {
+		t.Fatal(err)
+	}
+
+	h := NewHandler(st, svc, false, nil, nil, nil, nil, nil, nil, 0, false, "", "test")
+	req := httptest.NewRequest(http.MethodGet, "/api/account", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("account: %d %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Appearance struct {
+			Design string `json:"design"`
+			Layout string `json:"layout"`
+		} `json:"appearance"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Appearance.Design != "hud" || out.Appearance.Layout != "dense" {
+		t.Fatalf("appearance = %+v, want hud/dense", out.Appearance)
+	}
+}

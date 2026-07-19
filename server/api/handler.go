@@ -717,6 +717,11 @@ func (h *Handler) handleAccount(w http.ResponseWriter, r *http.Request, userID s
 	if quota, qerr := h.store.UserQuotaBytes(r.Context(), userID); qerr == nil {
 		resp["quota_bytes"] = quota
 	}
+	// Appearance prefs (v5.6): the client's local WebUI mirrors the color
+	// scheme + layout the user picked on the server.
+	design, _ := h.store.GetUserPref(r.Context(), userID, "appearance.design")
+	uiLayout, _ := h.store.GetUserPref(r.Context(), userID, "appearance.layout")
+	resp["appearance"] = map[string]string{"design": design, "layout": uiLayout}
 	writeJSON(w, http.StatusOK, resp)
 }
 
