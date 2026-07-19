@@ -82,6 +82,10 @@ type cryptoGameRow struct {
 
 type settingsData struct {
 	PageData
+	// Appearance picker state: "default"/"sidebar" stand in for the unset
+	// ("") stored values so the radio groups always have a selection.
+	AppearanceDesign string
+	AppearanceLayout string
 	Sessions          []store.SessionRow
 	CurrentSessionID  string
 	TOTPEnabled       bool
@@ -281,6 +285,17 @@ func pageDataWithAppearance(h *WebHandler, r *http.Request, userID string, pd Pa
 func newTemplateFuncs(t *template.Template) template.FuncMap {
 	return template.FuncMap{
 		"designDefault":   func() string { return defaultDesign },
+		"designChoices": func() []struct{ Key, Name string } {
+			return []struct{ Key, Name string }{
+				{"default", "Mint Vault"}, {"hud", "Night Ops"}, {"crt", "Phosphor"},
+				{"hearth", "Hearth"}, {"synth", "Arcade"}, {"slate", "Foundry"},
+			}
+		},
+		"layoutChoices": func() []struct{ Key, Name string } {
+			return []struct{ Key, Name string }{
+				{"sidebar", "Sidebar"}, {"topnav", "Top nav"}, {"dense", "Dense"}, {"library", "Library"},
+			}
+		},
 		"formatTime":      formatTime,
 		"formatBytes":     formatBytes,
 		"truncate":        truncate,

@@ -396,6 +396,9 @@ func adminQuerySuccess(r *http.Request) string {
 	if q.Get("saved") == "1" {
 		return "Settings saved."
 	}
+	if q.Get("appearance_saved") == "1" {
+		return "Appearance saved. It follows your account onto every device."
+	}
 	if q.Get("imported") == "1" {
 		return fmt.Sprintf("PCGW import complete (%s locations, %s games).",
 			q.Get("locations"), q.Get("games"))
@@ -460,6 +463,8 @@ func adminQueryError(r *http.Request) string {
 		return "That username is already taken."
 	case "create_user_failed":
 		return "Failed to create user."
+	case "invalid_appearance":
+		return "That appearance choice isn't available."
 	case "invalid_cron":
 		return "Invalid cron expression."
 	case "invalid_bundle_cron":

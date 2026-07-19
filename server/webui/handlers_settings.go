@@ -87,6 +87,8 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 			PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken, NavActive: "settings", Success: success, Error: errorMsg,
 		}),
+		AppearanceDesign: pickerKey(storedPref(h, r, userID, "appearance.design"), "default"),
+		AppearanceLayout: pickerKey(storedPref(h, r, userID, "appearance.layout"), "sidebar"),
 		Sessions: sessions, CurrentSessionID: GetSessionID(r, h.secret), TOTPEnabled: totpEnabled,
 		RecoveryCount:     recoveryCount,
 		EncryptionEnabled: encryptionEnabled,
@@ -526,4 +528,55 @@ func (h *WebHandler) handleRegenerateRecoveryCodes(w http.ResponseWriter, r *htt
 	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "regenerate_recovery_codes", "", "")
 	h.issueRecoveryCodes(w, r, userID, username)
+}
+
+
+// storedPref reads a raw per-user pref (no env fallback — the picker shows
+// what is stored, so "default" stays selected when nothing is).
+func storedPref(h *WebHandler, r *http.Request, userID, key string) string {
+	v, _ := h.store.GetUserPref(r.Context(), userID, key)
+	return v
+}
+
+// pickerKey maps the stored "" to the radio group's explicit default key.
+func pickerKey(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}
+
+// handleAppearanceSave stores the user's color scheme + layout choice. The
+// values follow the account: every signed-in browser and the client's local
+// pages render them after their next fetch.
+func (h *WebHandler) handleAppearanceSave(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, _, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+	design := strings.TrimSpace(r.FormValue("design"))
+	uiLayout := strings.TrimSpace(r.FormValue("layout"))
+	if design == "default" {
+		design = ""
+	}
+	if uiLayout == "sidebar" {
+		uiLayout = ""
+	}
+	if !validDesign(design) || !validLayout(uiLayout) {
+		Redirect(w, r, "/dashboard/settings?error=invalid_appearance")
+		return
+	}
+	if err := h.store.SetUserPref(r.Context(), userID, "appearance.design", design); err != nil {
+		Redirect(w, r, "/dashboard/settings?error=save_failed")
+		return
+	}
+	if err := h.store.SetUserPref(r.Context(), userID, "appearance.layout", uiLayout); err != nil {
+		Redirect(w, r, "/dashboard/settings?error=save_failed")
+		return
+	}
+	Redirect(w, r, "/dashboard/settings?appearance_saved=1")
 }

@@ -259,6 +259,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleAdminBackupRun(w, r)
 	case path == "/admin/notify/test" && r.Method == http.MethodPost:
 		h.handleAdminNotifyTest(w, r)
+	case path == "/dashboard/settings/appearance" && r.Method == http.MethodPost:
+		h.handleAppearanceSave(w, r)
 	case path == "/dashboard/settings/notifications" && r.Method == http.MethodPost:
 		h.handleUserNotifySave(w, r)
 	case path == "/dashboard/settings/language" && r.Method == http.MethodPost:

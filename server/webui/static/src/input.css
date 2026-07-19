@@ -1719,6 +1719,32 @@ a.inbox-title:hover { color: var(--accent); }
 .bars-svg rect { transition: fill-opacity var(--transition); }
 .bars-svg rect:hover { fill-opacity: 1; }
 
+/* ── Appearance picker (Settings) ── */
+.appearance-form { display: flex; flex-direction: column; gap: 0.9rem; align-items: flex-start; }
+.appearance-group { border: none; margin: 0; padding: 0; width: 100%; }
+.appearance-group legend { font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.45rem; padding: 0; }
+.swatch-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.swatch {
+  display: inline-flex; align-items: center; gap: 0.45rem; cursor: pointer;
+  padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-full);
+  font-size: 0.8125rem; background: var(--bg-raised);
+  transition: border-color var(--transition), background var(--transition);
+}
+.swatch:hover { border-color: var(--border-strong); }
+.swatch:has(input:checked) { border-color: var(--accent); background: var(--accent-muted); }
+.swatch:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swatch input { position: absolute; opacity: 0; pointer-events: none; }
+.swatch-chip { width: 0.95rem; height: 0.95rem; border-radius: 999px; flex: none; border: 1px solid rgba(0, 0, 0, 0.35); }
+/* Chip colors are each design's accent — static by design (the chip shows
+   what you'd get, independent of the currently active tokens). */
+.swatch-default .swatch-chip { background: #3fbfae; }
+.swatch-hud .swatch-chip { background: #35c7f0; }
+.swatch-crt .swatch-chip { background: #3ddc84; }
+.swatch-hearth .swatch-chip { background: #58b585; }
+.swatch-synth .swatch-chip { background: #e05fa9; }
+.swatch-slate .swatch-chip { background: #e8a33d; }
+.appearance-note { margin: 0; font-size: 0.75rem; }
+
 /* ══════════ Client (loopback) WebUI components ══════════ */
 .override-add { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
 

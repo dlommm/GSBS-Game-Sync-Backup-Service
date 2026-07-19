@@ -3,6 +3,39 @@
 {{define "settings_content"}}
 <h1 class="sr-only">Settings</h1>
 <div class="settings-grid">
+  <section class="panel settings-card" aria-labelledby="appearance-heading">
+    <div class="panel-header"><h2 id="appearance-heading">Appearance</h2></div>
+    <form method="post" action="/dashboard/settings/appearance" class="settings-card-body appearance-form">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <fieldset class="appearance-group">
+        <legend>Color scheme</legend>
+        <div class="swatch-row">
+          {{$sel := .AppearanceDesign}}
+          {{range designChoices}}
+          <label class="swatch swatch-{{.Key}}">
+            <input type="radio" name="design" value="{{.Key}}" {{if eq $sel .Key}}checked{{end}}>
+            <span class="swatch-chip" aria-hidden="true"></span><span>{{.Name}}</span>
+          </label>
+          {{end}}
+        </div>
+      </fieldset>
+      <fieldset class="appearance-group">
+        <legend>Layout</legend>
+        <div class="swatch-row">
+          {{$lsel := .AppearanceLayout}}
+          {{range layoutChoices}}
+          <label class="swatch">
+            <input type="radio" name="layout" value="{{.Key}}" {{if eq $lsel .Key}}checked{{end}}>
+            <span>{{.Name}}</span>
+          </label>
+          {{end}}
+        </div>
+      </fieldset>
+      <p class="cell-muted appearance-note">Follows your account onto every device, including the client's local pages. The dark/light toggle stays per-browser.</p>
+      <button type="submit" class="btn-primary-sm">Save appearance</button>
+    </form>
+  </section>
+
   <section class="panel settings-card">
     <div class="panel-header"><h2>Change password</h2></div>
     <form method="post" action="/dashboard/settings" class="auth-form settings-card-body">
