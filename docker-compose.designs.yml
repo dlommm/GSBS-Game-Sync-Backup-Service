@@ -12,6 +12,9 @@
 #   Hearth                http://localhost:18103
 #   Arcade                http://localhost:18104
 #   Foundry               http://localhost:18105
+#
+# Layouts can be previewed on any of them with ?layout=topnav|dense|library
+# (and ?design= switches color schemes on a running server).
 
 x-gsbs: &gsbs
   build: .

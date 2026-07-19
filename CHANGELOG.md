@@ -2,6 +2,35 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- **Appearance settings, synced to every device.** Settings → Appearance picks
+  a color scheme (Mint Vault, Night Ops, Phosphor, Hearth, Arcade, Foundry —
+  each with dark and light themes) and a layout (Sidebar, Top nav, Dense,
+  Library). The choice is stored on your account (migration 33 auto-runs) and
+  the client's local pages follow it automatically after their next sync; the
+  dark/light toggle stays per-browser. Admins can set a server-wide default
+  with `GSBS_DESIGN`, and any look can be previewed with `?design=` /
+  `?layout=` URL parameters. `docker-compose.designs.yml` runs all six color
+  schemes side by side for comparison.
+- Layouts genuinely rearrange the UI: Top nav turns the sidebar into a
+  horizontal strip (user and admin shells), Dense compresses spacing for
+  power-admin screens, and Library makes the dashboard a full-width shelf of
+  cover art.
+
+### Fixed
+- Tailwind's CSS purge only scanned templates, so styles for classes emitted
+  by Go code or runtime JS were silently stripped: the admin Trends line
+  charts have rendered invisible since v5.4.0 and toast notifications lost
+  their styling entirely. Both restored; chart marks now also carry inline
+  colors so purging can never blank them again.
+- Chart overhaul: bar charts get gaps, peak emphasis, honest zero-day stubs,
+  per-column tooltips and hover highlighting; trend lines get an area fill
+  and endpoint dot; the garbled Play-rhythm axis labels, the raw
+  `71.42857142857143%` in Job reliability, orphaned Setup-health Fix buttons,
+  and ragged Version-history rows are all fixed.
+
 ## [5.5.0] - 2026-07-18
 
 Two passes: a security/safety/performance/hygiene pass from a full-project
