@@ -6,6 +6,19 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.6.0] — 2026-07-18
+
+Make it yours: appearance settings, synced everywhere.
+
+### Highlights
+- **Settings → Appearance**: pick a color scheme (Mint Vault, Night Ops, Phosphor, Hearth, Arcade, Foundry — each with dark and light themes) and a layout (Sidebar, Top nav, Dense, Library). Your choice is stored on your account and every device follows — including the client's local pages after their next sync. The dark/light toggle stays per-browser.
+- **Layouts genuinely rearrange the UI**: Top nav turns the sidebar into a horizontal strip (user and admin), Dense compresses spacing for power-admin screens, and Library makes the dashboard a full-width shelf of cover art.
+- Preview any combination with `?design=` / `?layout=` URL parameters; admins can set a server-wide default with `GSBS_DESIGN`.
+- **Fixed**: a CSS build bug had left the admin Trends charts invisible and toasts unstyled since 5.4.0 — restored, plus a chart polish pass (tooltips, hover, honest axes, formatted percentages).
+- Migration 33 runs automatically on first start (back up first, as always).
+
+---
+
 ## [5.5.0] — 2026-07-18
 
 Hardening + WebUI deep-dive release.

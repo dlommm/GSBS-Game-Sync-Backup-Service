@@ -2,7 +2,7 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [5.6.0] - 2026-07-18
 
 ### Added
 - **Appearance settings, synced to every device.** Settings → Appearance picks
