@@ -2,9 +2,12 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [5.7.0] - 2026-07-18
 
 ### Added
+- **Visual previews in Settings → Appearance.** Every color scheme and layout
+  option now shows a miniature dashboard drawn in that choice's own palette
+  and arrangement, so picking a look is a glance instead of a guess.
 - **Custom dashboard layout (widgets).** A fifth layout in Settings →
   Appearance: arrange the dashboard yourself. "Customize layout" turns every
   panel into a movable widget — reorder with keyboard-friendly buttons or

@@ -9,29 +9,46 @@
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <fieldset class="appearance-group">
         <legend>Color scheme</legend>
-        <div class="swatch-row">
+        <div class="appearance-options">
           {{$sel := .AppearanceDesign}}
           {{range designChoices}}
-          <label class="swatch swatch-{{.Key}}">
+          <label class="appearance-option">
             <input type="radio" name="design" value="{{.Key}}" {{if eq $sel .Key}}checked{{end}}>
-            <span class="swatch-chip" aria-hidden="true"></span><span>{{.Name}}</span>
+            <span class="appearance-thumb" data-thumb-design="{{.Key}}" aria-hidden="true">
+              <span class="thumb-side"><span class="thumb-pill"></span></span>
+              <span class="thumb-main">
+                <span class="thumb-row"><span class="thumb-stat"></span><span class="thumb-stat"></span><span class="thumb-stat"></span></span>
+                <span class="thumb-panel"></span>
+                <span class="thumb-accent"></span>
+              </span>
+            </span>
+            <span class="appearance-option-name">{{.Name}}</span>
           </label>
           {{end}}
         </div>
       </fieldset>
       <fieldset class="appearance-group">
         <legend>Layout</legend>
-        <div class="swatch-row">
+        <div class="appearance-options">
           {{$lsel := .AppearanceLayout}}
           {{range layoutChoices}}
-          <label class="swatch">
+          <label class="appearance-option">
             <input type="radio" name="layout" value="{{.Key}}" {{if eq $lsel .Key}}checked{{end}}>
-            <span>{{.Name}}</span>
+            <span class="appearance-thumb appearance-thumb-layout" data-thumb-layout="{{.Key}}" aria-hidden="true">
+              <span class="thumb-side"><span class="thumb-pill"></span></span>
+              <span class="thumb-main">
+                <span class="thumb-row"><span class="thumb-stat"></span><span class="thumb-stat"></span><span class="thumb-stat"></span></span>
+                <span class="thumb-covers"><span class="thumb-cover"></span><span class="thumb-cover"></span><span class="thumb-cover"></span><span class="thumb-cover"></span></span>
+                <span class="thumb-panel"></span>
+                <span class="thumb-panel thumb-panel-b"></span>
+              </span>
+            </span>
+            <span class="appearance-option-name">{{.Name}}</span>
           </label>
           {{end}}
         </div>
       </fieldset>
-      <p class="cell-muted appearance-note">Follows your account onto every device, including the client's local pages. The dark/light toggle stays per-browser.</p>
+      <p class="cell-muted appearance-note">Follows your account onto every device, including the client's local pages. The dark/light toggle stays per-browser. Preview before saving by adding <code class="code-inline">?design=hud</code> or <code class="code-inline">?layout=library</code> to any page's address.</p>
       <button type="submit" class="btn-primary-sm">Save appearance</button>
     </form>
   </section>

@@ -6,6 +6,16 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.7.0] — 2026-07-18
+
+Arrange it yourself.
+
+### Highlights
+- **Custom dashboard layout**: a fifth layout in Settings → Appearance. "Customize layout" turns every dashboard panel into a widget — reorder with buttons or drag-and-drop, hide what you don't use, save or reset. Stored on your account like the rest of your appearance.
+- **Visual previews in the Appearance picker**: every color scheme and layout option shows a miniature dashboard in its own palette and arrangement — pick by eye.
+
+---
+
 ## [5.6.0] — 2026-07-18
 
 Make it yours: appearance settings, synced everywhere.
