@@ -78,6 +78,7 @@ var nestedTemplateRefs = []string{
 // Page-specific layout blocks referenced via {{template (printf "%s_*" .PageName) .}}.
 var pageBlockTemplates = []string{
 	"dashboard_title", "dashboard_content",
+	"widget_stats", "widget_games", "widget_activity", "widget_devices", "widget_pulse",
 	"settings_title", "settings_content",
 	"enable_2fa_title", "enable_2fa_content",
 	"recovery_codes_title", "recovery_codes_content", "recovery_codes_scripts",

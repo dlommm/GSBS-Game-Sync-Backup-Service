@@ -438,6 +438,90 @@
     window.htmx.ajax('GET', base + 'per=' + encodeURIComponent(sel.value) + '&page=1', { target: target, swap: 'innerHTML' });
   });
 
+  /* ---- Custom dashboard layout: widget arrange/hide editor ----
+     Buttons are the accessible core (move up/down, show/hide); HTML5
+     drag-drop is a pointer enhancement over the same DOM order. The state
+     lives in the DOM and is serialized into the save form's hidden fields. */
+  function initWidgetEditor() {
+    var grid = document.getElementById('dash-widgets');
+    var editBtn = document.querySelector('[data-widget-edit]');
+    if (!grid || !editBtn) return;
+    var orderInput = document.getElementById('widgets-order');
+    var hiddenInput = document.getElementById('widgets-hidden');
+
+    function widgets() {
+      return Array.prototype.slice.call(grid.querySelectorAll('.dash-widget'));
+    }
+    function syncState() {
+      var order = [], hidden = [];
+      widgets().forEach(function (el) {
+        var id = el.getAttribute('data-widget');
+        order.push(id);
+        if (el.getAttribute('data-widget-hidden') === '1') hidden.push(id);
+      });
+      orderInput.value = order.join(',');
+      hiddenInput.value = hidden.join(',');
+    }
+    syncState();
+
+    editBtn.addEventListener('click', function () {
+      document.body.classList.add('widgets-editing');
+      widgets().forEach(function (el) { el.setAttribute('draggable', 'true'); });
+    });
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('[data-widget-cancel]')) window.location.reload();
+      var move = e.target.closest('[data-widget-move]');
+      if (move) {
+        var el = move.closest('.dash-widget');
+        if (move.getAttribute('data-widget-move') === 'up' && el.previousElementSibling) {
+          grid.insertBefore(el, el.previousElementSibling);
+        } else if (move.getAttribute('data-widget-move') === 'down' && el.nextElementSibling) {
+          grid.insertBefore(el.nextElementSibling, el);
+        }
+        move.focus();
+        syncState();
+      }
+      var toggle = e.target.closest('[data-widget-toggle]');
+      if (toggle) {
+        var w = toggle.closest('.dash-widget');
+        var nowHidden = w.getAttribute('data-widget-hidden') !== '1';
+        if (nowHidden) {
+          w.setAttribute('data-widget-hidden', '1');
+        } else {
+          w.removeAttribute('data-widget-hidden');
+        }
+        toggle.textContent = nowHidden ? 'Show' : 'Hide';
+        toggle.setAttribute('aria-pressed', nowHidden ? 'true' : 'false');
+        syncState();
+      }
+    });
+
+    // Drag-drop enhancement (edit mode only — draggable is set on entry).
+    var dragging = null;
+    grid.addEventListener('dragstart', function (e) {
+      var el = e.target.closest('.dash-widget');
+      if (!el || !document.body.classList.contains('widgets-editing')) return;
+      dragging = el;
+      el.classList.add('widget-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    grid.addEventListener('dragover', function (e) {
+      if (!dragging) return;
+      e.preventDefault();
+      var over = e.target.closest('.dash-widget');
+      if (!over || over === dragging) return;
+      var rect = over.getBoundingClientRect();
+      var before = e.clientY < rect.top + rect.height / 2;
+      grid.insertBefore(dragging, before ? over : over.nextElementSibling);
+    });
+    grid.addEventListener('dragend', function () {
+      if (!dragging) return;
+      dragging.classList.remove('widget-dragging');
+      dragging = null;
+      syncState();
+    });
+  }
+
   function initDynamic(root) {
     bindStopPropagation(root);
     applyDataWidths(root);
@@ -491,6 +575,7 @@
     initBulkForm();
     initOnboardingTour();
     initSetupWizard();
+    initWidgetEditor();
   });
 
   /* ---- Live Sync Pulse (v5.1): dashboard rail stream + per-device flash ---- */

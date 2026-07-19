@@ -142,3 +142,61 @@ func TestAppearanceSaveRoundTrip(t *testing.T) {
 		t.Fatalf("design after invalid save = %q, want synth (unchanged)", v)
 	}
 }
+
+func TestWidgetsLayoutRendersStoredOrder(t *testing.T) {
+	a := newAppearanceHarness(t)
+	ctx := context.Background()
+	if err := a.h.store.SetUserPref(ctx, a.userID, "appearance.layout", "widgets"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.h.store.SetUserPref(ctx, a.userID, widgetPrefKey,
+		`{"order":["pulse","stats","games","activity","devices"],"hidden":["devices"]}`); err != nil {
+		t.Fatal(err)
+	}
+	rec := a.get(t, "/dashboard")
+	if rec.Code != 200 {
+		t.Fatalf("dashboard status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	pulse := strings.Index(body, `data-widget="pulse"`)
+	stats := strings.Index(body, `data-widget="stats"`)
+	if pulse < 0 || stats < 0 || pulse > stats {
+		t.Fatalf("stored order not rendered (pulse=%d stats=%d)", pulse, stats)
+	}
+	if !strings.Contains(body, `data-widget="devices" data-widget-hidden="1"`) {
+		t.Error("hidden widget missing its hidden flag")
+	}
+}
+
+func TestWidgetsSaveRoundTrip(t *testing.T) {
+	a := newAppearanceHarness(t)
+	ctx := context.Background()
+
+	rec := a.post(t, "/dashboard/widgets/save", url.Values{
+		"order":  {"games,stats,activity,devices,pulse"},
+		"hidden": {"pulse"},
+	})
+	if rec.Code != 302 || !strings.Contains(rec.Header().Get("Location"), "widgets_saved=1") {
+		t.Fatalf("save: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	raw, _ := a.h.store.GetUserPref(ctx, a.userID, widgetPrefKey)
+	cfg := parseWidgetConfig(raw)
+	if cfg.Order[0] != "games" || len(cfg.Hidden) != 1 || cfg.Hidden[0] != "pulse" {
+		t.Fatalf("stored config = %+v", cfg)
+	}
+
+	// Forged/invalid arrangements reject.
+	rec = a.post(t, "/dashboard/widgets/save", url.Values{"order": {"games,evil,stats,activity,devices"}})
+	if !strings.Contains(rec.Header().Get("Location"), "error=invalid_widgets") {
+		t.Fatalf("invalid save: %q", rec.Header().Get("Location"))
+	}
+
+	// Reset deletes the pref.
+	rec = a.post(t, "/dashboard/widgets/save", url.Values{"reset": {"1"}})
+	if !strings.Contains(rec.Header().Get("Location"), "widgets_saved=1") {
+		t.Fatalf("reset: %q", rec.Header().Get("Location"))
+	}
+	if raw, _ := a.h.store.GetUserPref(ctx, a.userID, widgetPrefKey); raw != "" {
+		t.Fatalf("pref after reset = %q", raw)
+	}
+}

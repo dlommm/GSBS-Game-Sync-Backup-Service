@@ -342,6 +342,33 @@
   :root[data-layout="library"] .game-row-badge { position: absolute; top: 0.6rem; left: 0.6rem; }
   :root[data-layout="library"] .game-row-actions { padding: 0 0.75rem 0.75rem; justify-content: flex-start; }
 
+  /* Custom ("widgets") — user-arranged dashboard. Two columns; the wide
+     widgets span both. Hidden widgets exist only inside edit mode. */
+  .dash-widgets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; align-items: start; }
+  .dash-widget { position: relative; min-width: 0; }
+  /* Attribute selectors, not constructed class names: dash-widget-{{.ID}}
+     is template-interpolated, so the purge scanner never sees the expanded
+     classes and would strip their rules. */
+  .dash-widget[data-widget="stats"],
+  .dash-widget[data-widget="games"],
+  .dash-widget[data-widget="activity"] { grid-column: 1 / -1; }
+  .dash-widget[data-widget-hidden="1"] { display: none; }
+  .widget-editor-bar { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+  .widget-editor-actions { display: none; align-items: center; gap: 0.5rem; }
+  .widget-controls {
+    display: none; align-items: center; gap: 0.4rem; margin-bottom: 0.4rem;
+    padding: 0.35rem 0.6rem; background: var(--bg-raised);
+    border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
+  }
+  .widget-controls-name { font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-right: auto; }
+  body.widgets-editing .widget-controls { display: flex; }
+  body.widgets-editing .widget-editor-actions { display: flex; }
+  body.widgets-editing [data-widget-edit] { display: none; }
+  body.widgets-editing .dash-widget[data-widget-hidden="1"] { display: block; opacity: 0.45; }
+  body.widgets-editing .dash-widget { cursor: grab; }
+  body.widgets-editing .dash-widget.widget-dragging { opacity: 0.5; }
+  @media (max-width: 900px) { .dash-widgets { grid-template-columns: 1fr; } }
+
   :root[data-theme="light"] html,
   html[data-theme="light"] { color-scheme: light; }
 

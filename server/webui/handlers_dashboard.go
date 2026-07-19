@@ -77,7 +77,23 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("revoked") == "1" {
 		success = "Client token revoked. Run gsbs-client login to reconnect."
 	}
+	if r.URL.Query().Get("widgets_saved") == "1" {
+		success = "Dashboard arrangement saved."
+	}
+	var widgets []dashWidgetView
+	if uiLayout == "widgets" {
+		raw, _ := h.store.GetUserPref(r.Context(), userID, widgetPrefKey)
+		cfg := parseWidgetConfig(raw)
+		hidden := map[string]bool{}
+		for _, id := range cfg.Hidden {
+			hidden[id] = true
+		}
+		for _, id := range cfg.Order {
+			widgets = append(widgets, dashWidgetView{ID: id, Name: widgetName(id), Hidden: hidden[id]})
+		}
+	}
 	h.render(w, "dashboard.html", dashboardData{
+		Widgets: widgets,
 		PageData: PageData{
 			PageName:  "dashboard",
 			Username:  username,
@@ -247,4 +263,52 @@ func (h *WebHandler) handleDashboardRevokeClient(w http.ResponseWriter, r *http.
 	h.appendAuditBroadcast(r.Context(), userID, username, "revoke_client", clientID, "")
 	logx.Logger().Info().Str("client_id", clientID).Str("username", username).Msg("webui dashboard revoke ok")
 	Redirect(w, r, "/dashboard?revoked=1")
+}
+
+// widgetName is the human label for a dashboard widget id (the editor's
+// control cluster names what it moves).
+func widgetName(id string) string {
+	switch id {
+	case "stats":
+		return "Stats"
+	case "games":
+		return "Recent games"
+	case "activity":
+		return "Recent Activity"
+	case "devices":
+		return "Your Devices"
+	case "pulse":
+		return "Live activity"
+	}
+	return id
+}
+
+// handleWidgetsSave stores the Custom layout's widget arrangement.
+func (h *WebHandler) handleWidgetsSave(w http.ResponseWriter, r *http.Request) {
+	if !ValidateCSRF(r, h.secret) {
+		http.Error(w, "Invalid security token.", http.StatusBadRequest)
+		return
+	}
+	userID, _, ok := h.requireSession(w, r)
+	if !ok {
+		return
+	}
+	if r.FormValue("reset") == "1" {
+		if err := h.store.SetUserPref(r.Context(), userID, widgetPrefKey, ""); err != nil {
+			Redirect(w, r, "/dashboard?error=widgets_save_failed")
+			return
+		}
+		Redirect(w, r, "/dashboard?widgets_saved=1")
+		return
+	}
+	cfg, valid := widgetConfigFromForm(r.FormValue("order"), r.FormValue("hidden"))
+	if !valid {
+		Redirect(w, r, "/dashboard?error=invalid_widgets")
+		return
+	}
+	if err := h.store.SetUserPref(r.Context(), userID, widgetPrefKey, cfg.marshal()); err != nil {
+		Redirect(w, r, "/dashboard?error=widgets_save_failed")
+		return
+	}
+	Redirect(w, r, "/dashboard?widgets_saved=1")
 }

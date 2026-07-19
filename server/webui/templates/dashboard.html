@@ -1,17 +1,16 @@
 {{template "layout" .}}
 {{define "dashboard_title"}}Dashboard — GSBS{{end}}
-{{define "dashboard_content"}}
-<h1 class="sr-only">Dashboard</h1>
-<div id="gsbs-tour"></div>
-<div class="dash-grid">
-<div class="dash-main">
+
+{{define "widget_stats"}}
 <section id="dashboard-stats"
          hx-get="/dashboard/partial/stats"
          hx-trigger="load, save-updated from:body throttle:2s"
          hx-swap="innerHTML">
   {{template "partials/loading_skeleton.html" .}}
 </section>
+{{end}}
 
+{{define "widget_games"}}
 <section class="panel" aria-labelledby="recent-games-heading">
   <div class="panel-header-actions">
     <h2 id="recent-games-heading">Recent games</h2>
@@ -24,7 +23,9 @@
     {{template "partials/loading_skeleton.html" .}}
   </div>
 </section>
+{{end}}
 
+{{define "widget_activity"}}
 <section class="panel" aria-labelledby="activity-heading">
   <div class="panel-header-actions">
     <h2 id="activity-heading">Recent Activity</h2>
@@ -43,9 +44,9 @@
   </div>
   <p class="panel-empty tab-empty" id="activity-tab-empty" hidden>No recent activity in this category.</p>
 </section>
-</div>
+{{end}}
 
-<aside class="dash-rail" aria-label="Contextual panels">
+{{define "widget_devices"}}
 <section class="panel" aria-labelledby="clients-heading">
   <div class="panel-header-actions">
     <h2 id="clients-heading">Your Devices</h2>
@@ -58,7 +59,9 @@
     {{template "partials/loading_skeleton.html" .}}
   </div>
 </section>
+{{end}}
 
+{{define "widget_pulse"}}
 <section class="panel" aria-labelledby="pulse-heading">
   <div class="panel-header-actions">
     <h2 id="pulse-heading">Live activity</h2>
@@ -68,6 +71,48 @@
     <li class="sync-pulse-empty">Quiet right now — saves appear here the moment a device pushes them.</li>
   </ul>
 </section>
+{{end}}
+
+{{define "dashboard_content"}}
+<h1 class="sr-only">Dashboard</h1>
+<div id="gsbs-tour"></div>
+{{if eq .Layout "widgets"}}
+<div class="widget-editor-bar">
+  <button type="button" class="btn-ghost-sm" data-widget-edit>Customize layout</button>
+  <form method="post" action="/dashboard/widgets/save" class="widget-editor-actions">
+    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+    <input type="hidden" name="order" id="widgets-order" value="">
+    <input type="hidden" name="hidden" id="widgets-hidden" value="">
+    <button type="submit" class="btn-primary-sm">Save layout</button>
+    <button type="submit" name="reset" value="1" class="btn-ghost-sm">Reset to default</button>
+    <button type="button" class="btn-ghost-sm" data-widget-cancel>Cancel</button>
+  </form>
+</div>
+<div class="dash-widgets" id="dash-widgets">
+  {{range .Widgets}}
+  <div class="dash-widget dash-widget-{{.ID}}" data-widget="{{.ID}}"{{if .Hidden}} data-widget-hidden="1"{{end}}>
+    <div class="widget-controls">
+      <span class="widget-controls-name">{{.Name}}</span>
+      <button type="button" class="btn-ghost-sm" data-widget-move="up" aria-label="Move {{.Name}} up">↑</button>
+      <button type="button" class="btn-ghost-sm" data-widget-move="down" aria-label="Move {{.Name}} down">↓</button>
+      <button type="button" class="btn-ghost-sm" data-widget-toggle aria-label="Show or hide {{.Name}}" aria-pressed="{{if .Hidden}}true{{else}}false{{end}}">{{if .Hidden}}Show{{else}}Hide{{end}}</button>
+    </div>
+    {{dashWidget .ID $}}
+  </div>
+  {{end}}
+</div>
+{{else}}
+<div class="dash-grid">
+<div class="dash-main">
+{{template "widget_stats" .}}
+{{template "widget_games" .}}
+{{template "widget_activity" .}}
+</div>
+
+<aside class="dash-rail" aria-label="Contextual panels">
+{{template "widget_devices" .}}
+{{template "widget_pulse" .}}
 </aside>
 </div>
+{{end}}
 {{end}}

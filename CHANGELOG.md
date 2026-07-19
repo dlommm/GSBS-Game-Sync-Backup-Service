@@ -2,6 +2,15 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- **Custom dashboard layout (widgets).** A fifth layout in Settings →
+  Appearance: arrange the dashboard yourself. "Customize layout" turns every
+  panel into a movable widget — reorder with keyboard-friendly buttons or
+  drag and drop, hide the panels you don't use, save or reset. The
+  arrangement is stored on your account like the rest of your appearance.
+
 ## [5.6.0] - 2026-07-18
 
 ### Added

@@ -40,8 +40,18 @@ type PageData struct {
 	AdminNav string // non-empty enables admin sidebar: overview, users, manifest, activity
 }
 
+// dashWidgetView is one dashboard widget slot in the Custom layout editor.
+type dashWidgetView struct {
+	ID     string
+	Name   string
+	Hidden bool
+}
+
 type dashboardData struct {
 	PageData
+	// Widgets is populated only for the Custom ("widgets") layout: the full
+	// arrangement in order, hidden ones flagged (the editor needs them).
+	Widgets []dashWidgetView
 }
 
 type dashboardStats struct {
@@ -251,7 +261,7 @@ func validDesign(d string) bool {
 
 func validLayout(l string) bool {
 	switch l {
-	case "", "topnav", "dense", "library":
+	case "", "topnav", "dense", "library", "widgets":
 		return true
 	}
 	return false
@@ -293,9 +303,10 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 		},
 		"layoutChoices": func() []struct{ Key, Name string } {
 			return []struct{ Key, Name string }{
-				{"sidebar", "Sidebar"}, {"topnav", "Top nav"}, {"dense", "Dense"}, {"library", "Library"},
+				{"sidebar", "Sidebar"}, {"topnav", "Top nav"}, {"dense", "Dense"}, {"library", "Library"}, {"widgets", "Custom"},
 			}
 		},
+		"dashWidget":      dashWidget(t),
 		"formatTime":      formatTime,
 		"formatBytes":     formatBytes,
 		"truncate":        truncate,
@@ -560,6 +571,22 @@ func dict(values ...interface{}) (map[string]interface{}, error) {
 		m[key] = values[i+1]
 	}
 	return m, nil
+}
+
+// dashWidget executes the "widget_<id>" define for the Custom dashboard
+// layout's ordered rendering. Ids are validated before they reach templates.
+func dashWidget(t *template.Template) func(id string, data interface{}) (template.HTML, error) {
+	return func(id string, data interface{}) (template.HTML, error) {
+		name := "widget_" + id
+		if t.Lookup(name) == nil {
+			return "", nil
+		}
+		var buf bytes.Buffer
+		if err := t.ExecuteTemplate(&buf, name, data); err != nil {
+			return "", err
+		}
+		return template.HTML(buf.String()), nil //nolint:gosec // html/template output, already escaped
+	}
 }
 
 func renderPageBlock(t *template.Template) func(pageName, block string, data interface{}) (template.HTML, error) {

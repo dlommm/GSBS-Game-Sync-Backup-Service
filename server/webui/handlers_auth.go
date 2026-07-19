@@ -342,6 +342,8 @@ func dashboardErrorMsg(code string) string {
 		return "Import archive is missing a valid manifest."
 	case "import_failed":
 		return "Import failed. See server log."
+	case "invalid_widgets", "widgets_save_failed":
+		return "Could not save the dashboard arrangement. Try again."
 	case "export_empty":
 		return "Nothing to export yet — no stored saves matched this selection."
 	case "":

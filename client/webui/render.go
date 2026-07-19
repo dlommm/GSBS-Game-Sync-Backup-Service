@@ -118,7 +118,9 @@ func clientValidDesign(d string) bool {
 
 func clientValidLayout(l string) bool {
 	switch l {
-	case "", "topnav", "dense", "library":
+	// "widgets" is accepted so the synced pref never bounces, but the local
+	// pages render it as the default arrangement (different dashboard).
+	case "", "topnav", "dense", "library", "widgets":
 		return true
 	}
 	return false
