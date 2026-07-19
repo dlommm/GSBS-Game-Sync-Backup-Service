@@ -179,8 +179,13 @@ func (h *WebHandler) serveDashboardSavesPartial(w http.ResponseWriter, r *http.R
 	}
 	cards, _, _, _ := h.buildGameCards(r.Context(), userID, "", "all", "recent")
 	total := len(cards)
-	if len(cards) > dashboardRecentGames {
-		cards = cards[:dashboardRecentGames]
+	limit := dashboardRecentGames
+	if _, uiLayout := h.appearance(r.Context(), userID); uiLayout == "library" {
+		// Library-first: the shelf is the dashboard's point — show more.
+		limit = 2 * dashboardRecentGames
+	}
+	if len(cards) > limit {
+		cards = cards[:limit]
 	}
 	h.renderPartial(w, "partials/dashboard_saves.html", map[string]interface{}{
 		"Games":      cards,

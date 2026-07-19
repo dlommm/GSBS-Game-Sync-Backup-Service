@@ -263,6 +263,85 @@
     --text-on-accent: #ffffff;
   }
 
+  /* ── Layout variants (data-layout on <html>) ─────────────────────────
+     Structural re-arrangements of the same markup. The mobile (≤900px)
+     off-canvas drawer is shared by every layout, so desktop-only rules
+     are scoped to min-width: 901px. */
+
+  /* Top-nav Wide — the sidebar becomes a horizontal nav strip; content
+     runs full width, mirroring the client UI's top navigation. */
+  @media (min-width: 901px) {
+    :root[data-layout="topnav"] .shell { flex-direction: column; }
+    :root[data-layout="topnav"] .sidebar {
+      width: 100%; flex-direction: row; align-items: center; gap: 1rem;
+      padding: 0.45rem 1.25rem; border-right: none; border-bottom: 1px solid var(--border);
+    }
+    :root[data-layout="topnav"] .sidebar-brand { padding: 0; }
+    :root[data-layout="topnav"] .sidebar-nav {
+      flex-direction: row; align-items: center; gap: 0.25rem; flex: 1;
+      overflow-x: auto; scrollbar-width: none;
+    }
+    :root[data-layout="topnav"] .sidebar-nav a { white-space: nowrap; }
+    :root[data-layout="topnav"] .sidebar-divider {
+      border: none; border-left: 1px solid var(--border);
+      height: 1.4rem; margin: 0 0.35rem; align-self: center;
+    }
+    :root[data-layout="topnav"] .page-content { max-width: 90rem; }
+    :root[data-layout="topnav"] .dash-grid { grid-template-columns: minmax(0, 1fr) 22rem; }
+    /* Admin shell follows the same shape. */
+    :root[data-layout="topnav"] .admin-sidebar {
+      width: 100%; flex-direction: row; align-items: center; gap: 0.35rem;
+      padding: 0.45rem 1.25rem; border-right: none; border-bottom: 1px solid var(--border);
+      overflow-x: auto; scrollbar-width: none;
+    }
+    :root[data-layout="topnav"] .admin-sidebar a { white-space: nowrap; }
+    :root[data-layout="topnav"] .admin-sidebar-divider { display: none; }
+    :root[data-layout="topnav"] .admin-nav-group,
+    :root[data-layout="topnav"] .admin-nav-group .admin-group-items { display: contents; }
+    :root[data-layout="topnav"] .admin-group-toggle { display: none; }
+    /* Collapsed-group state is a sidebar concept — in the strip every link shows. */
+    :root[data-layout="topnav"] .admin-nav-group.collapsed .admin-group-items { display: contents; }
+    :root[data-layout="topnav"] .admin-sidebar-brand { white-space: nowrap; }
+  }
+
+  /* Dense Ops — power-admin density: tighter spacing, more rows per
+     screen. Spacing-only; colors untouched. */
+  :root[data-layout="dense"] { --radius: 8px; --radius-sm: 5px; }
+  :root[data-layout="dense"] .page-content { padding: 1rem 1.25rem; max-width: 96rem; }
+  :root[data-layout="dense"] .panel { padding: 0.8rem 1rem; }
+  :root[data-layout="dense"] .panel-header,
+  :root[data-layout="dense"] .panel-header-actions { margin-bottom: 0.5rem; }
+  :root[data-layout="dense"] .data-table { font-size: 0.8125rem; }
+  :root[data-layout="dense"] .data-table th,
+  :root[data-layout="dense"] .data-table td { padding: 0.35rem 0.75rem; }
+  :root[data-layout="dense"] .stat-card { padding: 0.7rem 0.85rem; }
+  :root[data-layout="dense"] .stat-value { font-size: 1.25rem; }
+  :root[data-layout="dense"] .stats-row { gap: 0.5rem; margin-bottom: 0.9rem; }
+  :root[data-layout="dense"] .dash-grid { gap: 0.75rem; }
+  :root[data-layout="dense"] .game-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.6rem; }
+  :root[data-layout="dense"] .timeline-item { padding-bottom: 0.5rem; }
+  :root[data-layout="dense"] .recent-games-grid { gap: 0.5rem; }
+  :root[data-layout="dense"] .game-row-card { padding: 0.6rem; }
+
+  /* Library-first — the dashboard is your shelf: cover cards lead at
+     full width, the rail panels reflow underneath. */
+  /* align-items must reset: the grid's align-items:start would otherwise
+     shrink-wrap the column-flex children to content width. */
+  :root[data-layout="library"] .dash-grid { display: flex; flex-direction: column; align-items: stretch; }
+  :root[data-layout="library"] .dash-rail {
+    position: static; flex-direction: row; flex-wrap: wrap; align-items: stretch;
+  }
+  :root[data-layout="library"] .dash-rail .panel { flex: 1 1 20rem; }
+  :root[data-layout="library"] .recent-games-grid { grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); }
+  :root[data-layout="library"] .game-row-card { padding: 0; overflow: hidden; }
+  :root[data-layout="library"] .game-row-main { flex-direction: column; gap: 0; }
+  :root[data-layout="library"] .game-row-cover {
+    width: 100%; height: auto; aspect-ratio: 2 / 3; border-radius: 0;
+  }
+  :root[data-layout="library"] .game-row-info { padding: 0.6rem 0.75rem 0.2rem; }
+  :root[data-layout="library"] .game-row-badge { position: absolute; top: 0.6rem; left: 0.6rem; }
+  :root[data-layout="library"] .game-row-actions { padding: 0 0.75rem 0.75rem; justify-content: flex-start; }
+
   :root[data-theme="light"] html,
   html[data-theme="light"] { color-scheme: light; }
 
