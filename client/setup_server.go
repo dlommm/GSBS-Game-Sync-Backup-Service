@@ -37,6 +37,9 @@ var (
 // StartSetupServer starts a local HTTP server for the setup/login page. Call from tray onReady.
 // Listens on 127.0.0.1 only. Returns the base URL (e.g. http://127.0.0.1:41234) or "" if no port bound.
 func StartSetupServer() string {
+	// The local pages render the account's synced appearance; start from the
+	// last cached answer so the look survives offline launches.
+	applyCachedAppearance()
 	mux := http.NewServeMux()
 
 	mux.Handle("/static/", http.StripPrefix("/static/", webstatic.Handler(clientwebui.StaticFS(), 24*time.Hour)))

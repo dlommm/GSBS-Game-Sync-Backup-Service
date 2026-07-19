@@ -89,7 +89,7 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 		}),
 		AppearanceDesign: pickerKey(storedPref(h, r, userID, "appearance.design"), "default"),
 		AppearanceLayout: pickerKey(storedPref(h, r, userID, "appearance.layout"), "sidebar"),
-		Sessions: sessions, CurrentSessionID: GetSessionID(r, h.secret), TOTPEnabled: totpEnabled,
+		Sessions:         sessions, CurrentSessionID: GetSessionID(r, h.secret), TOTPEnabled: totpEnabled,
 		RecoveryCount:     recoveryCount,
 		EncryptionEnabled: encryptionEnabled,
 		Notify:            notifySettings,
@@ -529,7 +529,6 @@ func (h *WebHandler) handleRegenerateRecoveryCodes(w http.ResponseWriter, r *htt
 	h.appendAuditBroadcast(r.Context(), userID, username, "regenerate_recovery_codes", "", "")
 	h.issueRecoveryCodes(w, r, userID, username)
 }
-
 
 // storedPref reads a raw per-user pref (no env fallback — the picker shows
 // what is stored, so "default" stays selected when nothing is).

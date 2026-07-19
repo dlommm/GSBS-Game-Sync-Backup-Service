@@ -185,12 +185,13 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	// passphrase is set, so unencrypted accounts are unaffected.
 	var encKnown bool
 	err = retry.Do(ctx, retry.DefaultBackoff(), 3, func() error {
-		enc, ferr := client.FetchAccountSettings(ctx)
+		info, ferr := client.FetchAccountInfo(ctx)
 		if ferr != nil {
 			return ferr
 		}
-		client.SetEncryption(enc, cfg.EncryptionPassphrase)
-		saveAccountSettingsCache(cfg.ServerURL, enc)
+		client.SetEncryption(info.EncryptionEnabled, cfg.EncryptionPassphrase)
+		saveAccountSettingsCache(cfg.ServerURL, info.EncryptionEnabled)
+		saveAppearanceCache(cfg.ServerURL, info.Appearance.Design, info.Appearance.Layout)
 		encKnown = true
 		return nil
 	})
@@ -214,10 +215,11 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					if enc, ferr := client.FetchAccountSettings(ctx); ferr == nil {
-						client.SetEncryption(enc, cfg.EncryptionPassphrase)
-						saveAccountSettingsCache(cfg.ServerURL, enc)
-						log.Printf("account settings: recovered (encryption=%v)", enc)
+					if info, ferr := client.FetchAccountInfo(ctx); ferr == nil {
+						client.SetEncryption(info.EncryptionEnabled, cfg.EncryptionPassphrase)
+						saveAccountSettingsCache(cfg.ServerURL, info.EncryptionEnabled)
+						saveAppearanceCache(cfg.ServerURL, info.Appearance.Design, info.Appearance.Layout)
+						log.Printf("account settings: recovered (encryption=%v)", info.EncryptionEnabled)
 						return
 					}
 				}

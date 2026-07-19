@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/logview"
@@ -88,8 +89,8 @@ func init() {
 }
 
 // defaultDesign mirrors the server WebUI's GSBS_DESIGN default so a design
-// choice can be provisioned for the local UI too (the user's stored choice
-// always wins in theme-boot.js).
+// choice can be provisioned for the local UI too (the account's synced
+// choice, applied via SetAppearance, wins once fetched).
 var defaultDesign = func() string {
 	switch d := strings.TrimSpace(os.Getenv("GSBS_DESIGN")); d {
 	case "hud", "crt", "hearth", "synth", "slate":
@@ -98,13 +99,65 @@ var defaultDesign = func() string {
 	return ""
 }()
 
+// Appearance state the local pages render with: the account's synced color
+// scheme + layout, set by the client after the cache load at startup and
+// after every successful /api/account fetch.
+var (
+	appearanceMu sync.RWMutex
+	appDesign    = defaultDesign
+	appLayout    = ""
+)
+
+func clientValidDesign(d string) bool {
+	switch d {
+	case "", "hud", "crt", "hearth", "synth", "slate":
+		return true
+	}
+	return false
+}
+
+func clientValidLayout(l string) bool {
+	switch l {
+	case "", "topnav", "dense", "library":
+		return true
+	}
+	return false
+}
+
+// SetAppearance updates the design/layout the local pages render with.
+// Invalid or unknown values fall back to the default look.
+func SetAppearance(design, layout string) {
+	if !clientValidDesign(design) {
+		design = ""
+	}
+	if !clientValidLayout(layout) {
+		layout = ""
+	}
+	appearanceMu.Lock()
+	appDesign, appLayout = design, layout
+	appearanceMu.Unlock()
+}
+
+func currentDesign() string {
+	appearanceMu.RLock()
+	defer appearanceMu.RUnlock()
+	return appDesign
+}
+
+func currentLayout() string {
+	appearanceMu.RLock()
+	defer appearanceMu.RUnlock()
+	return appLayout
+}
+
 func newTemplateFuncs(t *template.Template) template.FuncMap {
 	return template.FuncMap{
 		"formatTime":    formatTime,
 		"formatBytes":   formatBytes,
 		"add":           func(a, b int) int { return a + b },
 		"pageBlock":     pageBlock(t),
-		"designDefault": func() string { return defaultDesign },
+		"designDefault": currentDesign,
+		"layoutDefault": currentLayout,
 	}
 }
 

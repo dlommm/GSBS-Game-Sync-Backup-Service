@@ -1148,6 +1148,11 @@ type AccountInfo struct {
 	EncryptionEnabled bool  `json:"encryption_enabled"`
 	UsageBytes        int64 `json:"usage_bytes"` // 0 on pre-5.4 servers
 	QuotaBytes        int64 `json:"quota_bytes"` // 0 = unlimited or pre-5.4 server
+	// Appearance prefs (absent on pre-5.6 servers; empty = default look).
+	Appearance struct {
+		Design string `json:"design"`
+		Layout string `json:"layout"`
+	} `json:"appearance"`
 }
 
 // FetchAccountInfo returns account settings plus storage usage/quota (the
