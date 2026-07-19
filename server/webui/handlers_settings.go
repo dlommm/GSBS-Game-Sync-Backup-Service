@@ -83,10 +83,10 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 	notifySettings, _ := h.store.GetUserNotifySettings(r.Context(), userID)
 	userLocale, _ := h.store.GetUserLocale(r.Context(), userID)
 	data := settingsData{
-		PageData: PageData{
+		PageData: pageDataWithAppearance(h, r, userID, PageData{
 			PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken, NavActive: "settings", Success: success, Error: errorMsg,
-		},
+		}),
 		Sessions: sessions, CurrentSessionID: GetSessionID(r, h.secret), TOTPEnabled: totpEnabled,
 		RecoveryCount:     recoveryCount,
 		EncryptionEnabled: encryptionEnabled,
@@ -206,14 +206,14 @@ func (h *WebHandler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if newPassword != confirmPassword {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "settings.html", settingsData{
-			PageData: PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "New passwords do not match", CSRFToken: csrfToken, NavActive: "settings"},
+			PageData: pageDataWithAppearance(h, r, userID, PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "New passwords do not match", CSRFToken: csrfToken, NavActive: "settings"}),
 		})
 		return
 	}
 	if len(newPassword) < 8 {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "settings.html", settingsData{
-			PageData: PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "New password must be at least 8 characters", CSRFToken: csrfToken, NavActive: "settings"},
+			PageData: pageDataWithAppearance(h, r, userID, PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "New password must be at least 8 characters", CSRFToken: csrfToken, NavActive: "settings"}),
 		})
 		return
 	}
@@ -221,14 +221,14 @@ func (h *WebHandler) handleSettings(w http.ResponseWriter, r *http.Request) {
 	if err != nil || hash == "" {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "settings.html", settingsData{
-			PageData: PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Could not verify current password", CSRFToken: csrfToken, NavActive: "settings"},
+			PageData: pageDataWithAppearance(h, r, userID, PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Could not verify current password", CSRFToken: csrfToken, NavActive: "settings"}),
 		})
 		return
 	}
 	if err := auth.CheckPassword(r.FormValue("current_password"), hash); err != nil {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "settings.html", settingsData{
-			PageData: PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Current password is wrong", CSRFToken: csrfToken, NavActive: "settings"},
+			PageData: pageDataWithAppearance(h, r, userID, PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Current password is wrong", CSRFToken: csrfToken, NavActive: "settings"}),
 		})
 		return
 	}
@@ -236,7 +236,7 @@ func (h *WebHandler) handleSettings(w http.ResponseWriter, r *http.Request) {
 		logx.Logger().Error().Err(err).Msg("webui change password failed")
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "settings.html", settingsData{
-			PageData: PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Failed to update password", CSRFToken: csrfToken, NavActive: "settings"},
+			PageData: pageDataWithAppearance(h, r, userID, PageData{PageName: "settings", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username), Error: "Failed to update password", CSRFToken: csrfToken, NavActive: "settings"}),
 		})
 		return
 	}

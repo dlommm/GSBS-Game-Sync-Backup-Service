@@ -102,11 +102,11 @@ func (h *WebHandler) serveDashboardGames(w http.ResponseWriter, r *http.Request)
 	}
 	csrfToken := SetCSRFToken(w, r, h.secret)
 	data := h.gamesData(r, userID)
-	data.PageData = PageData{
+	data.PageData = pageDataWithAppearance(h, r, userID, PageData{
 		PageName: "dashboard_games", Username: username,
 		IsAdmin:   h.isAdminUser(r.Context(), userID, username),
 		CSRFToken: csrfToken, NavActive: "games",
-	}
+	})
 	// Parse the counts as integers: the query is attacker-writable and must
 	// not inject arbitrary text into a trusted banner.
 	if n, err := strconv.Atoi(r.URL.Query().Get("imported")); err == nil && n >= 0 {
@@ -176,11 +176,11 @@ func (h *WebHandler) serveGameDetail(w http.ResponseWriter, r *http.Request) {
 
 	csrfToken := SetCSRFToken(w, r, h.secret)
 	h.render(w, "game_detail.html", gameDetailData{
-		PageData: PageData{
+		PageData: pageDataWithAppearance(h, r, userID, PageData{
 			PageName: "game_detail", Username: username,
 			IsAdmin:   h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken, NavActive: "games",
-		},
+		}),
 		GameID:           g.GameID,
 		Title:            g.Title,
 		FileCount:        g.FileCount,

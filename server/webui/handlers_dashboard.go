@@ -72,6 +72,7 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	csrfToken := SetCSRFToken(w, r, h.secret)
+	design, uiLayout := h.appearance(r.Context(), userID)
 	success := ""
 	if r.URL.Query().Get("revoked") == "1" {
 		success = "Client token revoked. Run gsbs-client login to reconnect."
@@ -83,6 +84,8 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 			IsAdmin:   h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken,
 			NavActive: "dashboard",
+			Design:    design,
+			Layout:    uiLayout,
 			Error:     dashboardErrorMsg(r.URL.Query().Get("error")),
 			Success:   success,
 			Restored:  r.URL.Query().Get("restored") == "1",

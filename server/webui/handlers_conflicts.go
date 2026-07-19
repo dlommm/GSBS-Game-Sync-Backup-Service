@@ -30,13 +30,13 @@ func (h *WebHandler) serveConflictsPage(w http.ResponseWriter, r *http.Request) 
 		success = "Conflict marked resolved. The server's copy stands."
 	}
 	h.render(w, "dashboard_conflicts.html", conflictsPageData{
-		PageData: PageData{
+		PageData: pageDataWithAppearance(h, r, userID, PageData{
 			PageName: "dashboard_conflicts", Username: username,
 			IsAdmin:   h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: SetCSRFToken(w, r, h.secret), NavActive: "conflicts",
 			Success: success,
 			Error:   dashboardErrorMsg(r.URL.Query().Get("error")),
-		},
+		}),
 		Conflicts: rows,
 		ReadOnly:  h.readOnly,
 	})

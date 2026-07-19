@@ -44,10 +44,10 @@ func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
 		logx.Logger().Error().Err(err).Msg("webui save versions list failed")
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "save_versions.html", saveVersionsData{
-			PageData: PageData{
+			PageData: pageDataWithAppearance(h, r, userID, PageData{
 				PageName: "save_versions", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
 				CSRFToken: csrfToken, NavActive: "dashboard", Error: "Failed to load versions",
-			},
+			}),
 			GameID: gameID, PathKey: pathKey,
 		})
 		return
@@ -71,10 +71,10 @@ func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
 	}
 	csrfToken := SetCSRFToken(w, r, h.secret)
 	h.render(w, "save_versions.html", saveVersionsData{
-		PageData: PageData{
+		PageData: pageDataWithAppearance(h, r, userID, PageData{
 			PageName: "save_versions", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken, NavActive: "dashboard", Error: errorMsg,
-		},
+		}),
 		GameID: gameID, PathKey: pathKey, GameTitle: gameTitle,
 		Versions: versions, CurrentVersion: currentVersion,
 		SessionNotes: h.buildSessionNotes(r.Context(), userID, gameID, versions),

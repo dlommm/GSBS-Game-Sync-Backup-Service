@@ -100,13 +100,13 @@ func (h *WebHandler) serveDashboardClientsPage(w http.ResponseWriter, r *http.Re
 	}
 	rows, online := h.loadClientRows(r.Context(), userID)
 	h.render(w, "dashboard_clients.html", dashboardClientsData{
-		PageData: PageData{
+		PageData: pageDataWithAppearance(h, r, userID, PageData{
 			PageName: "dashboard_clients", Username: username,
 			IsAdmin:   h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken, NavActive: "clients",
 			Error:   dashboardErrorMsg(r.URL.Query().Get("error")),
 			Success: success,
-		},
+		}),
 		Clients:  rows,
 		Online:   online,
 		Total:    len(rows),

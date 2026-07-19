@@ -33,10 +33,12 @@ func (h *WebHandler) loadAdminStats(ctx context.Context) adminStats {
 }
 
 func (h *WebHandler) adminPageData(w http.ResponseWriter, r *http.Request, userID, username, adminNav, pageName string) PageData {
+	design, uiLayout := h.appearance(r.Context(), userID)
 	return PageData{
 		PageName: pageName, Username: username, IsAdmin: true, CSRFToken: SetCSRFToken(w, r, h.secret),
 		NavActive: "admin-" + adminNav, AdminNav: adminNav,
 		Success: adminQuerySuccess(r), Error: adminQueryError(r),
+		Design: design, Layout: uiLayout,
 	}
 }
 

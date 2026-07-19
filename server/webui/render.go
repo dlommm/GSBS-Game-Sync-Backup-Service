@@ -2,6 +2,7 @@ package webui
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"html/template"
 	"math"
@@ -28,6 +29,10 @@ type PageData struct {
 	CSRFToken string
 	NavActive string // dashboard, settings, admin, admin-users, admin-manifest, admin-activity
 	BodyClass string
+	// Design/Layout are the signed-in user's appearance prefs, rendered as
+	// data-design / data-layout on <html> ("" = default look/layout).
+	Design string
+	Layout string
 	Error     string
 	Success   string
 	Restored  bool   // dashboard save restore flash
@@ -229,6 +234,49 @@ var defaultDesign = func() string {
 	}
 	return ""
 }()
+
+// validDesign/validLayout gate every appearance value that enters the system
+// (Settings form, API, rendering) — shared allow-lists, "" = default.
+func validDesign(d string) bool {
+	switch d {
+	case "", "hud", "crt", "hearth", "synth", "slate":
+		return true
+	}
+	return false
+}
+
+func validLayout(l string) bool {
+	switch l {
+	case "", "topnav", "dense", "library":
+		return true
+	}
+	return false
+}
+
+// appearance resolves a user's stored appearance (design, layout), falling
+// back to the server-wide GSBS_DESIGN default for the design. Invalid stored
+// values render as the default rather than erroring.
+func (h *WebHandler) appearance(ctx context.Context, userID string) (design, uiLayout string) {
+	design, _ = h.store.GetUserPref(ctx, userID, "appearance.design")
+	uiLayout, _ = h.store.GetUserPref(ctx, userID, "appearance.layout")
+	if !validDesign(design) {
+		design = ""
+	}
+	if design == "" {
+		design = defaultDesign
+	}
+	if !validLayout(uiLayout) {
+		uiLayout = ""
+	}
+	return design, uiLayout
+}
+
+// pageDataWithAppearance fills the Design/Layout fields on a page's PageData
+// from the signed-in user's stored appearance prefs.
+func pageDataWithAppearance(h *WebHandler, r *http.Request, userID string, pd PageData) PageData {
+	pd.Design, pd.Layout = h.appearance(r.Context(), userID)
+	return pd
+}
 
 func newTemplateFuncs(t *template.Template) template.FuncMap {
 	return template.FuncMap{

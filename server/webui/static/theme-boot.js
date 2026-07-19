@@ -13,27 +13,42 @@
     }
   } catch (e) { /* private mode: keep dark */ }
 
-  // Design variant (token layer): ?design= wins and persists, then the
-  // stored choice, then the server default (<meta name="gsbs-design">,
-  // set via GSBS_DESIGN). Unknown names fall back to the default look.
+  // Appearance (color scheme + layout token layers). Signed-in pages carry
+  // server-rendered data-design/data-layout from the account's prefs — that
+  // is authoritative; only an explicit ?design=/?layout= preview overrides
+  // it (without persisting). On anonymous pages (login, docker previews)
+  // the param persists, then the stored choice, then the <meta> default.
   try {
-    var DESIGNS = ['default', 'hud', 'crt', 'hearth', 'synth', 'slate'];
-    var design = null;
-    var m = /[?&]design=([a-z]+)/.exec(window.location.search);
-    if (m && DESIGNS.indexOf(m[1]) >= 0) {
-      design = m[1];
-      localStorage.setItem('gsbs.design', design);
-    }
-    if (!design) {
-      var saved = localStorage.getItem('gsbs.design');
-      if (saved && DESIGNS.indexOf(saved) >= 0) design = saved;
-    }
-    if (!design) {
-      var meta = document.querySelector('meta[name="gsbs-design"]');
-      if (meta && DESIGNS.indexOf(meta.content) >= 0) design = meta.content;
-    }
-    if (design && design !== 'default') {
-      document.documentElement.setAttribute('data-design', design);
-    }
+    var applyAxis = function (attr, param, storageKey, metaName, names, defaultName) {
+      var root = document.documentElement;
+      var serverSet = root.hasAttribute(attr);
+      var m = new RegExp('[?&]' + param + '=([a-z]+)').exec(window.location.search);
+      var value = null;
+      if (m && names.indexOf(m[1]) >= 0) {
+        value = m[1];
+        if (!serverSet) {
+          try { localStorage.setItem(storageKey, value); } catch (e2) { /* private mode */ }
+        }
+      } else if (!serverSet) {
+        var saved = null;
+        try { saved = localStorage.getItem(storageKey); } catch (e2) { saved = null; }
+        if (saved && names.indexOf(saved) >= 0) {
+          value = saved;
+        } else {
+          var meta = document.querySelector('meta[name="' + metaName + '"]');
+          if (meta && names.indexOf(meta.content) >= 0) value = meta.content;
+        }
+      }
+      if (value === null) return;
+      if (value === defaultName) {
+        root.removeAttribute(attr);
+      } else {
+        root.setAttribute(attr, value);
+      }
+    };
+    applyAxis('data-design', 'design', 'gsbs.design', 'gsbs-design',
+      ['default', 'hud', 'crt', 'hearth', 'synth', 'slate'], 'default');
+    applyAxis('data-layout', 'layout', 'gsbs.layout', 'gsbs-layout',
+      ['sidebar', 'topnav', 'dense', 'library'], 'sidebar');
   } catch (e) { /* keep default look */ }
 })();

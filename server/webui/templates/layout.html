@@ -1,6 +1,6 @@
 {{define "layout"}}
 <!DOCTYPE html>
-<html lang="{{if .Locale}}{{.Locale}}{{else}}en{{end}}">
+<html lang="{{if .Locale}}{{.Locale}}{{else}}en{{end}}"{{if .Design}} data-design="{{.Design}}"{{end}}{{if .Layout}} data-layout="{{.Layout}}"{{end}}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">

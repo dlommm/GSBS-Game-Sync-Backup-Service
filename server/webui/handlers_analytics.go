@@ -434,12 +434,12 @@ func (h *WebHandler) serveDashboardAnalytics(w http.ResponseWriter, r *http.Requ
 		success = "Old versions pruned. Storage figures update on the next refresh."
 	}
 	h.render(w, "dashboard_analytics.html", analyticsData{
-		PageData: PageData{
+		PageData: pageDataWithAppearance(h, r, userID, PageData{
 			PageName: "dashboard_analytics", Username: username,
 			IsAdmin:   h.isAdminUser(r.Context(), userID, username),
 			CSRFToken: csrfToken, NavActive: "analytics",
 			Success: success,
-		},
+		}),
 		userInsights: h.buildUserInsights(r.Context(), userID, insightsWindow(r)),
 	})
 }
