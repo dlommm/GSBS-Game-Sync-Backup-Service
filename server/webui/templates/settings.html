@@ -14,14 +14,7 @@
           {{range designChoices}}
           <label class="appearance-option">
             <input type="radio" name="design" value="{{.Key}}" {{if eq $sel .Key}}checked{{end}}>
-            <span class="appearance-thumb" data-thumb-design="{{.Key}}" aria-hidden="true">
-              <span class="thumb-side"><span class="thumb-pill"></span></span>
-              <span class="thumb-main">
-                <span class="thumb-row"><span class="thumb-stat"></span><span class="thumb-stat"></span><span class="thumb-stat"></span></span>
-                <span class="thumb-panel"></span>
-                <span class="thumb-accent"></span>
-              </span>
-            </span>
+            <img class="appearance-preview" src="/static/previews/design-{{.Key}}.jpg" alt="" loading="lazy">
             <span class="appearance-option-name">{{.Name}}</span>
           </label>
           {{end}}
@@ -34,15 +27,7 @@
           {{range layoutChoices}}
           <label class="appearance-option">
             <input type="radio" name="layout" value="{{.Key}}" {{if eq $lsel .Key}}checked{{end}}>
-            <span class="appearance-thumb appearance-thumb-layout" data-thumb-layout="{{.Key}}" aria-hidden="true">
-              <span class="thumb-side"><span class="thumb-pill"></span></span>
-              <span class="thumb-main">
-                <span class="thumb-row"><span class="thumb-stat"></span><span class="thumb-stat"></span><span class="thumb-stat"></span></span>
-                <span class="thumb-covers"><span class="thumb-cover"></span><span class="thumb-cover"></span><span class="thumb-cover"></span><span class="thumb-cover"></span></span>
-                <span class="thumb-panel"></span>
-                <span class="thumb-panel thumb-panel-b"></span>
-              </span>
-            </span>
+            <img class="appearance-preview" src="/static/previews/layout-{{.Key}}.jpg" alt="" loading="lazy">
             <span class="appearance-option-name">{{.Name}}</span>
           </label>
           {{end}}
@@ -135,11 +120,11 @@
       <h3 class="cell-muted u-title-sm u-mt-sm">Encryption format</h3>
       {{if .CryptoV2Ready}}
       <p class="crypto-status tone-ok-text"><span class="status-glyph status-glyph-ok">{{iconSVG "check" 13}}</span>
-        Your whole fleet supports modern encryption — new encrypted saves use the Argon2id (gsbs2) format.</p>
+        <span>Your whole fleet supports modern encryption — new encrypted saves use the Argon2id (gsbs2) format.</span></p>
       {{else if .CryptoBlockers}}
       <p class="crypto-status"><span class="status-glyph status-glyph-warn">{{iconSVG "alert" 13}}</span>
-        Encrypted saves stay on the legacy format until every device is on v4+.
-        Waiting on: <strong>{{range $i, $n := .CryptoBlockers}}{{if $i}}, {{end}}{{$n}}{{end}}</strong> — update those clients and the switch happens automatically.</p>
+        <span>Encrypted saves stay on the legacy format until every device is on v4+.
+        Waiting on: <strong>{{range $i, $n := .CryptoBlockers}}{{if $i}}, {{end}}{{$n}}{{end}}</strong> — update those clients and the switch happens automatically.</span></p>
       {{else}}
       <p class="crypto-status cell-muted">Connect a device to determine the fleet's encryption format.</p>
       {{end}}

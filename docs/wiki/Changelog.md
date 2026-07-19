@@ -6,6 +6,14 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [5.7.1] — 2026-07-18
+
+### Highlights
+- The Appearance picker now shows **real dashboard screenshots** for every color scheme and layout — pick your look by eye, right in Settings.
+- Fixed the garbled text columns in the Settings encryption-format status.
+
+---
+
 ## [5.7.0] — 2026-07-18
 
 Arrange it yourself.

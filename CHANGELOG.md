@@ -2,6 +2,18 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [5.7.1] - 2026-07-18
+
+### Changed
+- Settings → Appearance now previews every choice with a real dashboard
+  screenshot rendered in that scheme's palette or that layout's arrangement
+  (generated from demo data — no third-party artwork ships in the binary),
+  replacing the abstract mini-thumbnails.
+
+### Fixed
+- The Settings encryption-format status no longer renders as broken text
+  columns (flex layout was splitting the prose into separate items).
+
 ## [5.7.0] - 2026-07-18
 
 ### Added
