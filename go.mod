@@ -4,12 +4,12 @@ go 1.25.0
 
 require (
 	fyne.io/systray v1.12.2
-	github.com/fsnotify/fsnotify v1.7.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/gen2brain/beeep v0.11.2
 	github.com/godbus/dbus/v5 v5.2.2
-	github.com/klauspost/compress v1.18.6
+	github.com/klauspost/compress v1.19.1
 	github.com/lxn/walk v0.0.0-20210112085537-c389da54e794
-	github.com/mattn/go-sqlite3 v1.14.22
+	github.com/mattn/go-sqlite3 v1.14.48
 	github.com/minio/minio-go/v7 v7.2.1
 	github.com/pquerna/otp v1.5.0
 	github.com/robfig/cron/v3 v3.0.1
@@ -17,10 +17,10 @@ require (
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 	github.com/stretchr/testify v1.11.1
 	github.com/zalando/go-keyring v0.2.8
-	golang.org/x/crypto v0.53.0
-	golang.org/x/image v0.43.0
-	golang.org/x/mod v0.37.0
-	golang.org/x/sys v0.46.0
+	golang.org/x/crypto v0.54.0
+	golang.org/x/image v0.44.0
+	golang.org/x/mod v0.38.0
+	golang.org/x/sys v0.47.0
 	golang.org/x/time v0.15.0
 )
 
@@ -53,7 +53,7 @@ require (
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 	gopkg.in/Knetic/govaluate.v3 v3.0.0 // indirect
 	gopkg.in/ini.v1 v1.67.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
