@@ -50,7 +50,13 @@ func main() {
 				log.Printf("steam %s: %v", id, err)
 				continue
 			}
-			pageIDInt, _ := strconv.ParseInt(pid, 10, 64)
+			pageIDInt, convErr := strconv.ParseInt(pid, 10, 64)
+			if convErr != nil {
+				// Discarding this left pageIDInt at 0 and the run failed later
+				// with a baffling "page 0" error instead of naming the cause.
+				log.Printf("steam %s: unexpected page id %q from PCGW: %v", id, pid, convErr)
+				continue
+			}
 			runOne(ctx, client, st, pageIDInt)
 		}
 		return

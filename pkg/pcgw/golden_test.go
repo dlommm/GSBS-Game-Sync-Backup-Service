@@ -34,7 +34,10 @@ func TestGoldenSubnautica2Sections(t *testing.T) {
 	}
 	for _, l := range locs {
 		for _, p := range l.Paths {
-			if strings.Contains(p, "{{p") || strings.HasSuffix(p, "}}") && !strings.Contains(p, "<") {
+			// Parenthesized: && binds tighter than ||, so the unparenthesized
+			// form only ever applied the "<" exemption to the HasSuffix half and
+			// let "{{p"-containing paths through unchecked.
+			if (strings.Contains(p, "{{p") || strings.HasSuffix(p, "}}")) && !strings.Contains(p, "<") {
 				t.Errorf("malformed path %q for system %q", p, l.System)
 			}
 		}

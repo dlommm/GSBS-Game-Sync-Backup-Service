@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -19,12 +20,16 @@ import (
 const (
 	max429Retries     = 5
 	default429Backoff = 60 * time.Second
-	max5xxRetries     = 3
-	init5xxBackoff    = 1 * time.Second
-	max5xxBackoffDur  = 30 * time.Second
-	defaultBaseURL    = "https://www.pcgamingwiki.com"
-	defaultUserAgent  = "GSBS/1.0 (https://github.com/gsbs/gsbs; game-save-sync)"
-	defaultRateLimit  = 2 * time.Second
+	// maxRetryAfter caps an honored Retry-After. A hostile or misconfigured
+	// upstream could otherwise park the whole sync for the job's full 24 h
+	// deadline, silently.
+	maxRetryAfter    = 15 * time.Minute
+	max5xxRetries    = 3
+	init5xxBackoff   = 1 * time.Second
+	max5xxBackoffDur = 30 * time.Second
+	defaultBaseURL   = "https://www.pcgamingwiki.com"
+	defaultUserAgent = "GSBS/1.0 (https://github.com/gsbs/gsbs; game-save-sync)"
+	defaultRateLimit = 2 * time.Second
 )
 
 // Client talks to PCGamingWiki MediaWiki API.
@@ -87,17 +92,23 @@ func (c *Client) waitBetweenRequests(ctx context.Context) error {
 	if c == nil {
 		return nil
 	}
+	// Reserve this request's slot under the lock, then sleep WITHOUT it.
+	// Sleeping while holding the mutex blocked every other caller in an
+	// uninterruptible wait — they could not observe their own context being
+	// canceled until the sleeper finished.
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	rl := c.rateLimitDuration()
+	next := time.Now()
 	if !c.lastRequest.IsZero() {
-		if wait := rl - time.Since(c.lastRequest); wait > 0 {
-			if err := sleepCtx(ctx, wait); err != nil {
-				return err
-			}
+		if earliest := c.lastRequest.Add(rl); earliest.After(next) {
+			next = earliest
 		}
 	}
-	c.lastRequest = time.Now()
+	c.lastRequest = next
+	c.mu.Unlock()
+	if wait := time.Until(next); wait > 0 {
+		return sleepCtx(ctx, wait)
+	}
 	return nil
 }
 
@@ -142,8 +153,15 @@ func (c *Client) getWith429Retry(ctx context.Context, req *http.Request) (*http.
 			if s := resp.Header.Get("Retry-After"); s != "" {
 				if sec, err2 := strconv.Atoi(s); err2 == nil && sec > 0 {
 					backoff = time.Duration(sec) * time.Second
+					// Cap it: an honored Retry-After of hours parked the whole
+					// sync for the full 24 h job deadline with nothing logged.
+					if backoff > maxRetryAfter {
+						log.Printf("pcgw: upstream Retry-After of %s exceeds the %s cap; using the cap", backoff, maxRetryAfter)
+						backoff = maxRetryAfter
+					}
 				}
 			}
+			log.Printf("pcgw: rate limited (429), backing off %s (attempt %d/%d)", backoff, retries429+1, max429Retries)
 			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 			retries429++

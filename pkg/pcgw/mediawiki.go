@@ -32,7 +32,11 @@ func (c *Client) GetPageRevision(ctx context.Context, pageID string) (*PageRevis
 	var out struct {
 		Query struct {
 			Pages map[string]struct {
-				Missing   string `json:"missing"`
+				// Pointer, not string: under formatversion=1 MediaWiki emits
+				// `"missing": ""` for an absent page, so a string field reads
+				// as "" whether the key is present or not and the check below
+				// never fired. Non-nil means the key was present.
+				Missing   *string `json:"missing"`
 				Revisions []struct {
 					RevID     int64  `json:"revid"`
 					Timestamp string `json:"timestamp"`
@@ -55,7 +59,7 @@ func (c *Client) GetPageRevision(ctx context.Context, pageID string) (*PageRevis
 		return nil, fmt.Errorf("mediawiki API error: %s", info)
 	}
 	for _, page := range out.Query.Pages {
-		if page.Missing != "" || len(page.Revisions) == 0 {
+		if page.Missing != nil || len(page.Revisions) == 0 {
 			return nil, fmt.Errorf("page %s not found", pageID)
 		}
 		return &PageRevision{
@@ -87,9 +91,11 @@ func (c *Client) ResolveRedirect(ctx context.Context, pageID string) (targetPage
 				To   string `json:"to"`
 			} `json:"redirects"`
 			Pages map[string]struct {
-				PageID  int64  `json:"pageid"`
-				Title   string `json:"title"`
-				Missing string `json:"missing"`
+				PageID int64  `json:"pageid"`
+				Title  string `json:"title"`
+				// See GetPageRevision: a pointer is what actually detects a
+				// missing page under formatversion=1.
+				Missing *string `json:"missing"`
 			} `json:"pages"`
 		} `json:"query"`
 	}
@@ -99,7 +105,7 @@ func (c *Client) ResolveRedirect(ctx context.Context, pageID string) (targetPage
 	var resolvedID int64
 	var resolvedTitle string
 	for idStr, page := range out.Query.Pages {
-		if page.Missing != "" {
+		if page.Missing != nil {
 			return "", "", fmt.Errorf("page %s not found", pageID)
 		}
 		resolvedID = page.PageID

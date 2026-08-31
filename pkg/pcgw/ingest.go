@@ -125,7 +125,10 @@ func IngestPageWithRevision(ctx context.Context, client *Client, pageID int64, p
 	case len(failed) < len(rawSections):
 		result.Bundle.ParseStatus = "partial"
 	default:
-		result.Bundle.ParseStatus = "partial"
+		// Every section failed. This branch also said "partial", so "failed"
+		// was unreachable whenever the page fetch itself succeeded — the
+		// opposite of the documented contract.
+		result.Bundle.ParseStatus = "failed"
 	}
 	return result, nil
 }
