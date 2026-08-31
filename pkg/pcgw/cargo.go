@@ -22,7 +22,7 @@ const listGamePagesFields = infoboxGameFields
 
 // FetchInfoboxGame returns Infobox_game Cargo rows for a page ID.
 func (c *Client) FetchInfoboxGame(ctx context.Context, pageID string) (map[string]interface{}, error) {
-	where := fmt.Sprintf("Infobox_game._pageID=\"%s\"", pageID)
+	where := "Infobox_game._pageID=" + cargoQuote(pageID)
 	rows, err := c.CargoQuery(ctx, "Infobox_game", infoboxGameFields, where, 1, 0)
 	if err != nil {
 		return nil, err
@@ -35,7 +35,7 @@ func (c *Client) FetchInfoboxGame(ctx context.Context, pageID string) (map[strin
 
 // FetchAvailability returns Availability Cargo rows for a page ID when present.
 func (c *Client) FetchAvailability(ctx context.Context, pageID string) (map[string]interface{}, error) {
-	where := fmt.Sprintf("Availability._pageID=\"%s\"", pageID)
+	where := "Availability._pageID=" + cargoQuote(pageID)
 	fields := "Availability._pageID=PageID,Availability.Steam_AppID=SteamAppID," +
 		"Availability.GOGcom_ID=GOGID,Availability.Epic_Games_Store_ID=EpicID," +
 		"Availability.Microsoft_Store_ID=MicrosoftID,Availability.Ubisoft_Connect_ID=UbisoftID"

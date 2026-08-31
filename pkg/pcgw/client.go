@@ -188,12 +188,41 @@ func isTransientNetworkError(err error) bool {
 	return false
 }
 
+// cargoQuote renders a value as a Cargo where-clause string literal with the
+// quoting characters escaped.
+//
+// The where clauses were built by plain string interpolation, so a quote in
+// operator input — reachable through pcgw-fetch -steam-appid — changed the
+// remote query's shape. Corruption rather than exposure, but an injection point
+// in a public method all the same.
+func cargoQuote(v string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(v) + `"`
+}
+
+// isNumericID reports whether s is a non-empty run of ASCII digits.
+func isNumericID(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // GetPageIDBySteamAppID returns the PCGW page ID for a Steam App ID.
 func (c *Client) GetPageIDBySteamAppID(ctx context.Context, steamAppID string) (string, error) {
+	// Steam App IDs are always numeric; rejecting anything else is stricter
+	// than escaping and keeps malformed operator input from reaching the wiki.
+	if !isNumericID(steamAppID) {
+		return "", fmt.Errorf("invalid Steam AppID %q: expected digits", steamAppID)
+	}
 	rows, err := c.CargoQuery(ctx,
 		"Infobox_game",
 		"Infobox_game._pageID=PageID",
-		"Infobox_game.Steam_AppID HOLDS \""+steamAppID+"\"",
+		"Infobox_game.Steam_AppID HOLDS "+cargoQuote(steamAppID),
 		0, 0,
 	)
 	if err != nil {
@@ -219,8 +248,11 @@ func (c *Client) RedirectBySteamAppID(ctx context.Context, steamAppID string) (s
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("redirect API returned %d", resp.StatusCode)
 	}
-	if loc := resp.Header.Get("Location"); loc != "" {
-		return loc, nil
+	// doGet FOLLOWS redirects, so by the time we hold the response the Location
+	// header is long gone — reading it here could never succeed. The final URL
+	// of the redirect chain is the page we actually want.
+	if resp.Request != nil && resp.Request.URL != nil {
+		return resp.Request.URL.String(), nil
 	}
 	return "", fmt.Errorf("no redirect for appid %s", steamAppID)
 }

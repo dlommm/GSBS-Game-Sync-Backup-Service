@@ -39,6 +39,16 @@ func SplitWikiSections(wikitext string) map[string]wikiSection {
 		title := wikitext[idx[i][2]:idx[i][3]]
 		body := wikitext[start:end]
 		key := NormalizeSectionKey(title)
+		if prev, exists := out[key]; exists {
+			// Several titles normalize to one key: a page with both "Game data"
+			// and "Save game data location" (both -> game_data), or any two
+			// unknown sections (both -> other). Overwriting kept only the last
+			// section's wikitext, silently dropping the other — including
+			// legacy table-format save paths. Concatenate so nothing is lost.
+			prev.body = prev.body + "\n" + body
+			out[key] = prev
+			continue
+		}
 		out[key] = wikiSection{rawTitle: title, body: body}
 	}
 	return out

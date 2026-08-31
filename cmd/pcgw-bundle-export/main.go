@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gsbs/gsbs/pkg/atomicio"
 	"github.com/gsbs/gsbs/server/store"
 )
 
@@ -42,13 +43,16 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Atomic writes throughout: a crash mid-export previously left a
+	// half-written bundle sitting next to a valid index, which consuming
+	// servers would then fetch and fail to import.
 	gzPath := filepath.Join(*outDir, "manifest.json.gz")
-	if err := os.WriteFile(gzPath, data, 0o644); err != nil {
+	if err := atomicio.WriteFile(gzPath, data, 0o644); err != nil {
 		log.Fatal(err)
 	}
 
 	rawMeta, _ := json.MarshalIndent(meta, "", "  ")
-	if err := os.WriteFile(metaPath, rawMeta, 0o644); err != nil {
+	if err := atomicio.WriteFile(metaPath, rawMeta, 0o644); err != nil {
 		log.Fatal(err)
 	}
 
@@ -72,14 +76,22 @@ func main() {
 		indexPath := filepath.Join(*outDir, "index.json")
 		var prevIndex store.PCGWBundleIndex
 		if raw, err := os.ReadFile(indexPath); err == nil {
-			_ = json.Unmarshal(raw, &prevIndex)
+			// Do NOT ignore this error. A truncated index.json parsed as the
+			// zero value, so the next export republished manifest_version 1 and
+			// broke every consumer that gates on a monotonically increasing
+			// version. Refuse rather than silently restart versioning.
+			if err := json.Unmarshal(raw, &prevIndex); err != nil {
+				log.Fatalf("read %s: %v (refusing to restart versioning from 1 — restore or delete the file deliberately)", indexPath, err)
+			}
+		} else if !os.IsNotExist(err) {
+			log.Fatalf("read %s: %v", indexPath, err)
 		}
 		nextIndex, err := store.AdvanceBundleIndex(prevIndex, meta.FullSHA256, len(data), *baseURL, meta.ExportedAt)
 		if err != nil {
 			log.Fatalf("advance index: %v", err)
 		}
 		rawIndex, _ := json.MarshalIndent(nextIndex, "", "  ")
-		if err := os.WriteFile(indexPath, rawIndex, 0o644); err != nil {
+		if err := atomicio.WriteFile(indexPath, rawIndex, 0o644); err != nil {
 			log.Fatal(err)
 		}
 		fmt.Printf("Wrote %s (manifest_version=%d)\n", indexPath, nextIndex.ManifestVersion)
