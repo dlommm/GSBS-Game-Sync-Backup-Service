@@ -38,9 +38,7 @@ func runExportCommand(args []string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
-	if enc, err := client.FetchAccountSettings(ctx); err == nil {
-		client.SetEncryption(enc, cfg.EncryptionPassphrase)
-	}
+	applyAccountEncryption(ctx, client, cfg)
 
 	saves, err := client.DownloadAll(ctx, *game)
 	if err != nil {

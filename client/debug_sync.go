@@ -121,7 +121,20 @@ func runDebugSync(gameID string, dryRun bool) {
 				fmt.Printf("  watching: %s\n", root)
 				syncAll := syncAllForWatchPath(wp)
 				_ = filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
-					if walkErr != nil || d.IsDir() {
+					if walkErr != nil {
+						return nil
+					}
+					if d.IsDir() {
+						// Same top-level restriction the real sync path uses
+						// (reconcile.go): only named-file rules stay at the top
+						// level; plain folder rules recurse. The old code walked
+						// subdirectories and then stopped at the FIRST match
+						// anywhere, so a non-recursive multi-file rule could push
+						// a single file out of an excluded subdirectory under a
+						// path_key derived from the wrong relative path.
+						if !wp.Recursive && len(wp.IncludePatterns) > 0 && path != root {
+							return filepath.SkipDir
+						}
 						return nil
 					}
 					rel, err := filepath.Rel(root, path)
@@ -148,9 +161,6 @@ func runDebugSync(gameID string, dryRun bool) {
 						AbsPath:      path,
 						Bytes:        info.Size(),
 					})
-					if !wp.Recursive {
-						return filepath.SkipAll
-					}
 					return nil
 				})
 			}
@@ -184,9 +194,12 @@ func runDebugSync(gameID string, dryRun bool) {
 		fmt.Fprintln(os.Stderr, "sync client:", err)
 		os.Exit(1)
 	}
-	if enc, err := client.FetchAccountSettings(ctx); err == nil {
-		client.SetEncryption(enc, cfg.EncryptionPassphrase)
-	}
+	applyAccountEncryption(ctx, client, cfg)
+	// debug-sync pushes real save data to the real server, so it must run under
+	// the same first-push conflict guard as the normal sync loop. Without it a
+	// push blind-overwrites the server slot instead of getting the 409 that
+	// protects another machine's newer save.
+	client.SetConflictGuard(true)
 
 	fmt.Println("\nPushing...")
 	var ok, fail int
