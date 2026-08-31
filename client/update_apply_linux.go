@@ -36,6 +36,7 @@ func applyUpdatePlatform(stagedPath string) error {
 }
 
 func applyStagedBinary(stagedPath string) error {
+	waitForPreviousInstance()
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -81,7 +82,7 @@ func applyStagedBinary(stagedPath string) error {
 	_ = os.Remove(oldPath)
 	_ = os.Remove(stagedPath)
 
-	cmd := exec.Command(exe, "--minimized")
+	cmd := exec.Command(exe, "--minimized", postUpdateRelaunchFlag)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {

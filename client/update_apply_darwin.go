@@ -53,6 +53,7 @@ func appBundleRoot(exe string) string {
 }
 
 func applyStagedBinary(stagedPath string) error {
+	waitForPreviousInstance()
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -117,9 +118,9 @@ func applyStagedBinary(stagedPath string) error {
 	// Relaunch: through LaunchServices for a bundle, directly otherwise.
 	var cmd *exec.Cmd
 	if bundle != "" {
-		cmd = exec.Command("open", bundle, "--args", "--minimized")
+		cmd = exec.Command("open", bundle, "--args", "--minimized", postUpdateRelaunchFlag)
 	} else {
-		cmd = exec.Command(exe, "--minimized")
+		cmd = exec.Command(exe, "--minimized", postUpdateRelaunchFlag)
 	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

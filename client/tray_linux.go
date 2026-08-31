@@ -14,12 +14,7 @@ import (
 var trayCtrl *TrayController
 
 func runTray() {
-	release := acquireSingleInstance()
-	if release == nil {
-		notifyAlreadyRunning()
-		os.Exit(0)
-	}
-	defer release()
+	defer acquireSingleInstanceOrExit()()
 	systray.Run(onReadyLinux, onExitLinux)
 }
 

@@ -104,6 +104,15 @@ func main() {
 		return
 	}
 
+	// Console mode must take the single-instance lock too. It never did, so a
+	// --console run alongside the tray gave two sync loops contending on the
+	// push-hash cache and the outbox.
+	releaseInstance, err := acquireSingleInstanceWait(0)
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+	defer releaseInstance()
+
 	cfg, err := loadConfig()
 	if err != nil {
 		log.Fatal("config:", err)

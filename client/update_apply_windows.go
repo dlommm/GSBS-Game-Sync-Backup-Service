@@ -52,7 +52,7 @@ if not errorlevel 1 goto launch
 rem Swap failed; restore the previous binary.
 move /Y "%[3]s" "%[2]s" >nul 2>&1
 :launch
-start "" "%[2]s" --minimized
+start "" "%[2]s" --minimized --post-update
 del "%%~f0"
 `, stagedPath, exe, exe+".old")
 	if err := os.WriteFile(batch, []byte(script), 0600); err != nil {
