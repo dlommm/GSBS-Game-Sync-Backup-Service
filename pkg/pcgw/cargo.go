@@ -77,16 +77,18 @@ func (c *Client) ListGamePages(ctx context.Context, limit, offset int) ([]PageIn
 			Title:       title,
 			SteamAppIDs: parseCargoMultiValue(r["SteamAppID"]),
 			GOGID:       parseCargoSingleValue(r["GOGID"]),
-			EpicID:      parseCargoSingleValue(r["EpicID"]),
-			UbisoftID:   parseCargoSingleValue(r["UbisoftID"]),
 			CoverURL:    parseCargoSingleValue(r["CoverURL"]),
 			CoverImage:  parseCargoSingleValue(r["Cover"]),
 			Developers:  parseCargoMultiValue(r["Developers"]),
 			Publishers:  parseCargoMultiValue(r["Publishers"]),
 			AvailableOn: parseCargoMultiValue(r["AvailableOn"]),
 			Engines:     parseCargoMultiValue(r["Engines"]),
-			HLTBID:      parseInfoboxID(r, "HLTB", "HowLongToBeat"),
-			IGDBID:      parseInfoboxID(r, "IGDB"),
+			// EpicID, UbisoftID, HLTBID, and IGDBID are deliberately NOT read
+			// here. Infobox_game carries none of them, and listGamePagesFields
+			// never requested them, so these reads always produced "" while
+			// looking like they populated the launcher-matching maps. HLTB and
+			// IGDB come from the infobox and Epic/Ubisoft from the availability
+			// rows — both are extracted during wikitext ingest instead.
 		})
 	}
 	return pages, nil

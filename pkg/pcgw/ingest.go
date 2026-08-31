@@ -66,11 +66,26 @@ func IngestPageWithRevision(ctx context.Context, client *Client, pageID int64, p
 	}
 
 	result.Bundle.Infobox = ParseInfoboxGame(wikitext)
-	if hltb := result.Bundle.Infobox["HLTB"]; hltb != "" {
+	// Look these up case-insensitively: the wiki writes lowercase parameter
+	// names ("hltb", "igdb"), so indexing by the Cargo column names returned
+	// nothing on every page and both IDs were always empty.
+	if hltb := InfoboxValue(result.Bundle.Infobox, "hltb", "howlongtobeat"); hltb != "" {
 		result.Bundle.PageInfo.HLTBID = hltb
 	}
-	if igdb := result.Bundle.Infobox["IGDB"]; igdb != "" {
+	if igdb := InfoboxValue(result.Bundle.Infobox, "igdb"); igdb != "" {
 		result.Bundle.PageInfo.IGDBID = igdb
+	}
+	// Epic and Ubisoft IDs live in the {{Availability/row}} templates, not in
+	// the infobox. Nothing populated them before: the Cargo query never
+	// requested them either, so byEpic/byUbisoft were permanently empty and
+	// Epic/Heroic/Ubisoft installs could only ever match by title.
+	if epicID, ubisoftID := AvailabilityStoreIDs(wikitext); epicID != "" || ubisoftID != "" {
+		if result.Bundle.PageInfo.EpicID == "" {
+			result.Bundle.PageInfo.EpicID = epicID
+		}
+		if result.Bundle.PageInfo.UbisoftID == "" {
+			result.Bundle.PageInfo.UbisoftID = ubisoftID
+		}
 	}
 
 	rawSections := SplitWikiSections(wikitext)
