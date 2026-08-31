@@ -66,6 +66,30 @@ func (s *Service) RegisterUser(ctx context.Context, username, password string) (
 	return s.store.CreateUser(ctx, username, hash)
 }
 
+// dummyBcryptHash is a valid bcrypt hash of a value no user can have. Login and
+// Authenticate compare against it when the username does not exist, so an
+// unknown username costs the same ~50-250 ms as a real one.
+//
+// Without it, unknown usernames returned before any bcrypt work while real ones
+// paid a full compare — response timing cleanly separated real accounts from
+// fake ones despite the deliberately identical error bodies.
+var dummyBcryptHash = func() string {
+	h, err := bcrypt.GenerateFromPassword([]byte("gsbs-timing-equalizer"), bcrypt.DefaultCost)
+	if err != nil {
+		return ""
+	}
+	return string(h)
+}()
+
+// equalizeUnknownUserTiming burns the same bcrypt work a real comparison would,
+// so an unknown username is indistinguishable from a wrong password by timing.
+func equalizeUnknownUserTiming(password string) {
+	if dummyBcryptHash == "" {
+		return
+	}
+	_ = bcrypt.CompareHashAndPassword([]byte(dummyBcryptHash), []byte(password))
+}
+
 // isUserDisabled returns true if the user account is disabled.
 func (s *Service) isUserDisabled(ctx context.Context, userID string) bool {
 	ok, err := s.store.IsUserDisabled(ctx, userID)
@@ -76,9 +100,11 @@ func (s *Service) isUserDisabled(ctx context.Context, userID string) bool {
 func (s *Service) Login(ctx context.Context, username, password, clientName, clientOS string) (userID, clientToken string, err error) {
 	uid, hash, err := s.store.UserByUsername(ctx, username)
 	if err != nil {
+		equalizeUnknownUserTiming(password)
 		return "", "", ErrBadCredentials
 	}
 	if s.isUserDisabled(ctx, uid) {
+		equalizeUnknownUserTiming(password)
 		return "", "", ErrBadCredentials
 	}
 	if err := CheckPassword(password, hash); err != nil {
@@ -96,9 +122,11 @@ func (s *Service) Login(ctx context.Context, username, password, clientName, cli
 func (s *Service) Authenticate(ctx context.Context, username, password string) (userID string, err error) {
 	uid, hash, err := s.store.UserByUsername(ctx, username)
 	if err != nil {
+		equalizeUnknownUserTiming(password)
 		return "", ErrBadCredentials
 	}
 	if s.isUserDisabled(ctx, uid) {
+		equalizeUnknownUserTiming(password)
 		return "", ErrBadCredentials
 	}
 	if err := CheckPassword(password, hash); err != nil {

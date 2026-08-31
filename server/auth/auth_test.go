@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/gsbs/gsbs/server/store"
 )
@@ -102,5 +103,43 @@ func TestAuthenticate(t *testing.T) {
 	_, err = svc.Authenticate(ctx, "bob", "wrong")
 	if err != ErrBadCredentials {
 		t.Errorf("expected ErrBadCredentials, got %v", err)
+	}
+}
+
+// An unknown username must cost the same bcrypt work as a real one: returning
+// before any comparison made response timing a clean account-existence oracle
+// despite the deliberately identical error bodies.
+func TestLoginTimingDoesNotRevealUnknownUsernames(t *testing.T) {
+	if testing.Short() {
+		t.Skip("timing measurement")
+	}
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	svc := NewService(st)
+
+	if _, err := svc.RegisterUser(ctx, "realuser", "correct-horse-battery"); err != nil {
+		t.Fatal(err)
+	}
+
+	measure := func(username string) time.Duration {
+		const runs = 5
+		start := time.Now()
+		for i := 0; i < runs; i++ {
+			_, _, _ = svc.Login(ctx, username, "wrong-password", "dev", "linux")
+		}
+		return time.Since(start) / runs
+	}
+
+	real := measure("realuser")
+	unknown := measure("nosuchuser")
+
+	// Both paths do one bcrypt compare, so they land in the same order of
+	// magnitude. The pre-fix gap was ~1000x (no bcrypt at all vs a full compare).
+	if unknown*4 < real {
+		t.Errorf("unknown-username login is far faster than a real one (%v vs %v): timing oracle", unknown, real)
 	}
 }

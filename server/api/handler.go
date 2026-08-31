@@ -441,7 +441,16 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if h.sessionSecret != "" {
 		userID, err := h.auth.Authenticate(r.Context(), req.Username, req.Password)
 		if err == nil {
-			enabled, _ := h.store.IsTOTPEnabled(r.Context(), userID)
+			enabled, totpErr := h.store.IsTOTPEnabled(r.Context(), userID)
+			if totpErr != nil {
+				// Fail closed: swallowing this let a routine SQLITE_BUSY during
+				// the login of a TOTP-enabled account issue a full device token
+				// on the password alone, skipping the second factor entirely.
+				logx.Logger().Error().Str("username", req.Username).Err(totpErr).
+					Msg("api login: TOTP-enabled lookup failed; refusing login")
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "login temporarily unavailable; try again"})
+				return
+			}
 			if enabled {
 				h.auth.Lockout().Reset(lockKey)
 				totpToken := signTOTPToken(h.sessionSecret, userID)

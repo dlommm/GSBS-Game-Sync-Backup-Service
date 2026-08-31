@@ -95,7 +95,20 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.auth.Lockout().Reset(lockKey)
-	enabled, _ := h.store.IsTOTPEnabled(r.Context(), userID)
+	enabled, totpErr := h.store.IsTOTPEnabled(r.Context(), userID)
+	if totpErr != nil {
+		// Fail closed: swallowing this let a transient SQLITE_BUSY create a full
+		// session for a TOTP-enabled account on the password alone.
+		logx.Logger().Error().Str("username", username).Err(totpErr).
+			Msg("webui login: TOTP-enabled lookup failed; refusing login")
+		csrfToken := SetCSRFToken(w, r, h.secret)
+		h.render(w, "login.html", map[string]interface{}{
+			"Error":         "Login is temporarily unavailable. Please try again.",
+			"AllowRegister": h.allowRegister,
+			"CSRFToken":     csrfToken,
+		})
+		return
+	}
 	if enabled {
 		SetTOTPStepCookie(w, r, h.secret, userID)
 		Redirect(w, r, "/login/totp")
