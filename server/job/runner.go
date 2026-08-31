@@ -163,6 +163,14 @@ func (r *Runner) TryRunPCGWSync(ctx context.Context) (bool, error) {
 	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{})
 }
 
+// TryRunPCGWSyncPage refreshes a single PCGW page through the runner, so it
+// participates in the same dedup and shutdown drain as every other job. The
+// admin single-page refresh used to spawn a bare goroutine instead, which could
+// run alongside a full sync and be killed mid-write by a restart.
+func (r *Runner) TryRunPCGWSyncPage(ctx context.Context, pageID int64) (bool, error) {
+	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{SinglePage: pageID})
+}
+
 // RunPCGWSync starts an incremental PCGW sync in the background.
 func (r *Runner) RunPCGWSync(ctx context.Context) (bool, error) {
 	return r.tryRunPCGWSync(ctx, PCGWSyncOptions{})

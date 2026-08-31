@@ -31,6 +31,11 @@ type exportEntry struct {
 type exportManifest struct {
 	Format  string        `json:"format"` // "gsbs-export/1"
 	Entries []exportEntry `json:"entries"`
+	// Omitted lists "game_id/path_key" for saves that could not be read and are
+	// therefore NOT in this archive. Skipping them silently made an incomplete
+	// archive indistinguishable from a complete one — the worst property a
+	// backup can have.
+	Omitted []string `json:"omitted,omitempty"`
 }
 
 // handleExportZip streams a zip of the latest save content — one game
@@ -72,9 +77,16 @@ func (h *WebHandler) handleExportZip(w http.ResponseWriter, r *http.Request) {
 	manifest := exportManifest{Format: "gsbs-export/1"}
 	used := map[string]bool{}
 	anyEncrypted := false
+	var omitted []string
 	for _, s := range selected {
 		blob, err := h.store.GetSave(r.Context(), userID, s.GameID, s.PathKey)
 		if err != nil || blob == nil {
+			// Record the gap. Silently skipping meant the "backup" was
+			// incomplete with nothing anywhere to say so.
+			logx.Logger().Error().Str("user_id", userID).
+				Str("game_id", s.GameID).Str("path_key", s.PathKey).Err(err).
+				Msg("export: save unreadable, omitted from archive")
+			omitted = append(omitted, s.GameID+"/"+s.PathKey)
 			continue
 		}
 		rel := s.RelativePath
@@ -121,10 +133,18 @@ func (h *WebHandler) handleExportZip(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	manifest.Omitted = omitted
 	if mf, err := zw.Create(exportManifestName); err == nil {
 		enc := json.NewEncoder(mf)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(manifest)
+	}
+	if len(omitted) > 0 {
+		if wf, err := zw.Create("INCOMPLETE.txt"); err == nil {
+			_, _ = io.WriteString(wf, fmt.Sprintf(
+				"WARNING: this archive is INCOMPLETE.\n\n%d save(s) could not be read from the server and are not included:\n  %s\n\nSee \"omitted\" in %s.\n",
+				len(omitted), strings.Join(omitted, "\n  "), exportManifestName))
+		}
 	}
 	if anyEncrypted {
 		if rf, err := zw.Create("README.txt"); err == nil {
@@ -132,7 +152,11 @@ func (h *WebHandler) handleExportZip(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = zw.Close()
-	h.appendAuditBroadcast(r.Context(), userID, username, "export_saves", gameID, fmt.Sprintf("%d files", len(manifest.Entries)))
+	detail := fmt.Sprintf("%d files", len(manifest.Entries))
+	if len(omitted) > 0 {
+		detail += fmt.Sprintf(" (%d omitted — unreadable)", len(omitted))
+	}
+	h.appendAuditBroadcast(r.Context(), userID, username, "export_saves", gameID, detail)
 }
 
 // sanitizeZipPath produces a safe archive member path from a save's relative

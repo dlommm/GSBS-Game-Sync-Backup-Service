@@ -34,6 +34,13 @@ func loadEnvFile(path string) error {
 		if key == "" {
 			return fmt.Errorf("env file %s: line %d has empty key", path, lineNo)
 		}
+		// Do NOT override a variable already set in the process environment.
+		// The inverse (what this used to do) means a stray --env-file silently
+		// beats explicit systemd/Docker configuration, which is the opposite of
+		// the dotenv convention every operator expects.
+		if _, present := os.LookupEnv(key); present {
+			continue
+		}
 		_ = os.Setenv(key, strings.TrimSpace(value))
 	}
 	if err := scanner.Err(); err != nil {

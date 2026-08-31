@@ -891,7 +891,7 @@ func (h *WebHandler) serveManifestCSV(w http.ResponseWriter, r *http.Request) {
 		if e.IsConfig {
 			configVal = "true"
 		}
-		_ = wr.Write([]string{e.GameID, e.GameTitle, e.Platform, e.PathTemplate, configVal, e.Source, e.UpdatedAt})
+		_ = writeCSVRow(wr, e.GameID, e.GameTitle, e.Platform, e.PathTemplate, configVal, e.Source, e.UpdatedAt)
 	}
 	wr.Flush()
 }

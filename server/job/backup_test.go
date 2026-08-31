@@ -146,3 +146,48 @@ func keys(m map[string][]byte) []string {
 	}
 	return out
 }
+
+// A backup directory inside a directory the backup archives makes every run
+// archive its predecessors — the archive grows geometrically until the disk
+// fills. It must be refused, not run nightly on a cron.
+func TestRunBackup_RefusesDirInsideSaveRoot(t *testing.T) {
+	dir := t.TempDir()
+	saveRoot := filepath.Join(dir, "gamesaves")
+	if err := os.MkdirAll(saveRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GSBS_SAVE_ROOT", saveRoot)
+	st, err := store.NewSQLite(filepath.Join(dir, "gsbs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	_, err = RunBackup(context.Background(), st, BackupConfig{Dir: filepath.Join(saveRoot, "backups")})
+	if err == nil {
+		t.Fatal("expected RunBackup to refuse a backup dir inside the save root")
+	}
+	if !strings.Contains(err.Error(), "which the backup archives") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// The common layout — backups/ beside gsbs.db — must keep working: the archive
+// takes a DB snapshot plus gsbs-keys, not the whole database directory.
+func TestRunBackup_AllowsDirBesideDatabase(t *testing.T) {
+	dir := t.TempDir()
+	saveRoot := filepath.Join(dir, "gamesaves")
+	if err := os.MkdirAll(saveRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GSBS_SAVE_ROOT", saveRoot)
+	st, err := store.NewSQLite(filepath.Join(dir, "gsbs.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	if _, err := RunBackup(context.Background(), st, BackupConfig{Dir: filepath.Join(dir, "backups")}); err != nil {
+		t.Fatalf("RunBackup: %v", err)
+	}
+}

@@ -156,7 +156,7 @@ func (h *WebHandler) serveAdminLogsCSV(w http.ResponseWriter, r *http.Request) {
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{"time", "app", "level", "event", "summary", "context", "raw"})
 	for _, e := range entries {
-		_ = cw.Write([]string{e.Timestamp, e.Component, e.Level, e.Event, e.Summary, e.Context, e.Raw})
+		_ = writeCSVRow(cw, e.Timestamp, e.Component, e.Level, e.Event, e.Summary, e.Context, e.Raw)
 	}
 	cw.Flush()
 }

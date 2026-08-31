@@ -38,6 +38,19 @@ func (t *lastSeenThrottle) shouldWrite(clientID, version string) bool {
 	if rec, ok := t.seen[clientID]; ok && rec.version == version && now.Sub(rec.at) < t.ttl {
 		return false
 	}
+	t.pruneLocked(now)
 	t.seen[clientID] = lastSeenRec{at: now, version: version}
 	return true
+}
+
+// pruneLocked drops entries older than the throttle window. Without it the map
+// only ever grew: one permanent entry per client id ever seen, so client churn
+// (reinstalls, ephemeral containers) leaked memory for the process lifetime.
+// An entry past its ttl can no longer suppress a write, so dropping it is free.
+func (t *lastSeenThrottle) pruneLocked(now time.Time) {
+	for id, rec := range t.seen {
+		if now.Sub(rec.at) >= t.ttl {
+			delete(t.seen, id)
+		}
+	}
 }

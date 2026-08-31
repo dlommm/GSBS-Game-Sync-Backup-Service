@@ -2302,7 +2302,13 @@ func (s *sqliteStore) AppendAudit(ctx context.Context, actorUserID, actorUsernam
 	return err
 }
 
-// ListAuditLog returns the most recent audit entries. sinceID is optional for cursor pagination (returns rows before that id).
+// ListAuditLog returns the most recent audit entries. sinceID is optional for
+// cursor pagination (returns rows ordered after that id's position).
+//
+// The cursor compares (at, id) against the cursor row's own values rather than
+// comparing the random hex id with "<". Ordering is by time, so comparing ids
+// paginated by a value unrelated to the sort order — pages could repeat or skip
+// rows entirely.
 func (s *sqliteStore) ListAuditLog(ctx context.Context, limit int, sinceID string) ([]AuditRow, error) {
 	if limit <= 0 {
 		limit = 50
@@ -2311,10 +2317,14 @@ func (s *sqliteStore) ListAuditLog(ctx context.Context, limit int, sinceID strin
 	var err error
 	if sinceID != "" {
 		rows, err = s.db.QueryContext(ctx,
-			`SELECT id, at, actor_user_id, actor_username, action, COALESCE(target_id, ''), COALESCE(details, '') FROM audit_log WHERE id < ? ORDER BY at DESC LIMIT ?`, sinceID, limit)
+			`SELECT id, at, actor_user_id, actor_username, action, COALESCE(target_id, ''), COALESCE(details, '')
+			 FROM audit_log
+			 WHERE (at, id) < (SELECT at, id FROM audit_log WHERE id = ?)
+			 ORDER BY at DESC, id DESC LIMIT ?`, sinceID, limit)
 	} else {
 		rows, err = s.db.QueryContext(ctx,
-			`SELECT id, at, actor_user_id, actor_username, action, COALESCE(target_id, ''), COALESCE(details, '') FROM audit_log ORDER BY at DESC LIMIT ?`, limit)
+			`SELECT id, at, actor_user_id, actor_username, action, COALESCE(target_id, ''), COALESCE(details, '')
+			 FROM audit_log ORDER BY at DESC, id DESC LIMIT ?`, limit)
 	}
 	if err != nil {
 		return nil, err

@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gsbs/gsbs/pkg/pcgw"
 	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/gsbs/gsbs/server/job"
 	"github.com/gsbs/gsbs/server/logx"
@@ -305,10 +304,22 @@ func (h *WebHandler) handleAdminPCGWRefresh(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	go func() { //nolint:gosec // G118: background page refresh outlives the admin request by design
-		client := pcgw.NewClient()
-		_, _ = job.PCGWSyncPage(context.Background(), h.store, client, pageID)
-	}()
+	// Run through the job runner: the bare goroutine this replaces bypassed the
+	// runner's dedup and its shutdown drain, so a refresh could run alongside a
+	// full sync and be killed mid-write by a restart.
+	if h.jobRunner == nil {
+		Redirect(w, r, fmt.Sprintf("/admin/pcgw/%d?error=refresh_failed", pageID))
+		return
+	}
+	if _, err := h.jobRunner.TryRunPCGWSyncPage(context.Background(), pageID); err != nil {
+		if errors.Is(err, job.ErrJobAlreadyRunning) {
+			Redirect(w, r, fmt.Sprintf("/admin/pcgw/%d?error=busy", pageID))
+			return
+		}
+		logx.Logger().Error().Int64("page_id", pageID).Err(err).Msg("admin: pcgw single-page refresh")
+		Redirect(w, r, fmt.Sprintf("/admin/pcgw/%d?error=refresh_failed", pageID))
+		return
+	}
 	h.appendAuditBroadcast(r.Context(), userID, username, "pcgw_refresh", strconv.FormatInt(pageID, 10), "")
 	Redirect(w, r, fmt.Sprintf("/admin/pcgw/%d?refreshed=1", pageID))
 }

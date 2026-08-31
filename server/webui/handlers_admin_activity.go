@@ -162,7 +162,7 @@ func (h *WebHandler) serveAdminAuditCSV(w http.ResponseWriter, r *http.Request) 
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{"time", "actor", "action", "target", "details"})
 	for _, a := range rows {
-		_ = cw.Write([]string{a.At, a.ActorUsername, a.Action, a.TargetID, a.Details})
+		_ = writeCSVRow(cw, a.At, a.ActorUsername, a.Action, a.TargetID, a.Details)
 	}
 	cw.Flush()
 }

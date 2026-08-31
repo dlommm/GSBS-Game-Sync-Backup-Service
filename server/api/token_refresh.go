@@ -2,7 +2,8 @@ package api
 
 import (
 	"net/http"
-	"time"
+
+	"github.com/gsbs/gsbs/server/store"
 )
 
 func (h *Handler) handleTokenRefresh(w http.ResponseWriter, r *http.Request, userID string) {
@@ -19,8 +20,12 @@ func (h *Handler) handleTokenRefresh(w http.ResponseWriter, r *http.Request, use
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "refresh failed"})
 		return
 	}
+	// Report the lifetime this server actually enforces. Hardcoding 90 days
+	// meant an operator who shortened GSBS_TOKEN_MAX_AGE had clients schedule
+	// their refresh long after the token had already expired — a hard logout
+	// instead of a rotation.
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"token":      newToken,
-		"expires_in": int((90 * 24 * time.Hour).Seconds()),
+		"expires_in": int(store.TokenMaxAge().Seconds()),
 	})
 }

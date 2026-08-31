@@ -78,6 +78,14 @@ type Handler struct {
 	allowRegister   atomic.Bool
 	maxStorageBytes atomic.Int64 // 0 = unlimited
 
+	// readiness caches the /api/health?ready=1 database check (see
+	// readinessProbe): the endpoint is unauthenticated and unthrottled.
+	readiness struct {
+		mu  sync.Mutex
+		at  time.Time
+		err error
+	}
+
 	// manifestLogSlots bounds the detached best-effort fetch-logging
 	// goroutines. Each does up to three SQLite round trips funnelled through
 	// the single writer, so an unbounded spawn parked one goroutine per
@@ -133,8 +141,16 @@ func (h *Handler) notifyQuota(userID string, before, after, quota int64, blocked
 		if h.quotaAlerted.m == nil {
 			h.quotaAlerted.m = make(map[string]time.Time)
 		}
+		// Drop entries past the dedup window: they can no longer suppress an
+		// alert, and keeping them made the map grow permanently with every user
+		// that ever hit its quota.
+		for uid, at := range h.quotaAlerted.m {
+			if time.Since(at) >= quotaAlertDedupWindow {
+				delete(h.quotaAlerted.m, uid)
+			}
+		}
 		last, seen := h.quotaAlerted.m[userID]
-		if seen && time.Since(last) < 6*time.Hour {
+		if seen && time.Since(last) < quotaAlertDedupWindow {
 			h.quotaAlerted.mu.Unlock()
 			return
 		}
@@ -196,6 +212,10 @@ func (h *Handler) SetMaxStorageBytes(v int64) { h.maxStorageBytes.Store(v) }
 func (h *Handler) registrationAllowed() bool { return h.allowRegister.Load() }
 
 func (h *Handler) globalStorageLimit() int64 { return h.maxStorageBytes.Load() }
+
+// quotaAlertDedupWindow is how long a per-user "quota exceeded" alert suppresses
+// repeats (the client outbox retries blocked pushes every couple of minutes).
+const quotaAlertDedupWindow = 6 * time.Hour
 
 // maxConcurrentManifestFetchLogs caps the detached fetch-logging goroutines.
 const maxConcurrentManifestFetchLogs = 8
@@ -349,10 +369,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	// Optional readiness: ?ready=1 checks DB connectivity for load balancers.
+	// The endpoint is unauthenticated and unthrottled, so the result is cached
+	// briefly — otherwise anyone could drive one SQLite query per request.
 	if r.URL.Query().Get("ready") == "1" {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		_, err := h.store.CountUsers(ctx)
+		err := h.readinessProbe(ctx)
 		if err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			writeHealthJSON(w, "unhealthy", h.version, "error")
@@ -364,6 +386,24 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	writeHealthJSON(w, "ok", h.version, "")
+}
+
+// readinessTTL bounds how stale a cached readiness answer may be. A load
+// balancer polling every second still gets a fresh-enough verdict, while a
+// flood of anonymous probes costs one query per window rather than one each.
+const readinessTTL = time.Second
+
+// readinessProbe reports database reachability, reusing a recent answer.
+func (h *Handler) readinessProbe(ctx context.Context) error {
+	h.readiness.mu.Lock()
+	defer h.readiness.mu.Unlock()
+	if !h.readiness.at.IsZero() && time.Since(h.readiness.at) < readinessTTL {
+		return h.readiness.err
+	}
+	_, err := h.store.CountUsers(ctx)
+	h.readiness.err = err
+	h.readiness.at = time.Now()
+	return err
 }
 
 func writeHealthJSON(w http.ResponseWriter, status, version, dbStatus string) {
@@ -652,6 +692,10 @@ func (h *Handler) withAuth(fn func(http.ResponseWriter, *http.Request, string)) 
 		}
 		userID, clientID, err := h.auth.ValidateToken(r.Context(), token)
 		if err != nil {
+			// Every validation is a DB query, so a flood of garbage tokens hit
+			// SQLite 1:1 with no limiter in front. Throttle the FAILURES only,
+			// keyed by client IP, so legitimate traffic is untouched.
+			h.rateLimited(w, r, h.authLimiter, netutil.ClientIP(r), "auth")
 			logx.Logger().Warn().Str("path", r.URL.Path).Err(err).Msg("api auth failed")
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 			return
@@ -687,6 +731,13 @@ func (h *Handler) handleChangePassword(w http.ResponseWriter, r *http.Request, u
 	}
 	if req.NewPassword == "" || len(req.NewPassword) < 8 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "new password must be at least 8 characters"})
+		return
+	}
+	// Same bcrypt 72-byte ceiling register and login enforce. Without it a long
+	// password reached bcrypt.GenerateFromPassword, which rejects it, and the
+	// user got a misleading 500 instead of a clear validation error.
+	if len(req.NewPassword) > 72 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password too long"})
 		return
 	}
 	hash, err := h.store.UserPasswordHash(r.Context(), userID)
@@ -1129,7 +1180,16 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 	// upsert transaction (see SaveMeta.QuotaBytes) and counts version
 	// history. Both apply the grandfather rule: an already-over user is only
 	// blocked from growing, never from shrinking or replacing.
-	existingSize, _ := h.store.GetSaveContentSize(r.Context(), userID, gameID, pathKey)
+	existingSize, sizeErr := h.store.GetSaveContentSize(r.Context(), userID, gameID, pathKey)
+	if sizeErr != nil {
+		// Fail closed like the checks around it. Swallowing this treated the
+		// existing slot as 0 bytes, so the delta was overstated and the push
+		// could be rejected with a 413 the client outbox then retried forever.
+		logx.Logger().Error().Str("user_id", userID).Err(sizeErr).
+			Str("operation", "existing_size_check").Msg("api push storage check failed")
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "storage check failed"})
+		return
+	}
 	delta := int64(len(content)) - existingSize
 	// Global storage limit pre-check (0 = unlimited)
 	if limit := h.globalStorageLimit(); limit > 0 {

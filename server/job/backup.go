@@ -190,6 +190,30 @@ func (r *Runner) runBackup(parentCtx context.Context) {
 	}
 }
 
+// isInsideDir reports whether target is at or below parent, comparing resolved
+// absolute paths so symlinks and "../" cannot hide the nesting.
+func isInsideDir(parent, target string) (bool, error) {
+	pAbs, err := filepath.Abs(parent)
+	if err != nil {
+		return false, err
+	}
+	tAbs, err := filepath.Abs(target)
+	if err != nil {
+		return false, err
+	}
+	if resolved, rerr := filepath.EvalSymlinks(pAbs); rerr == nil {
+		pAbs = resolved
+	}
+	if resolved, rerr := filepath.EvalSymlinks(tAbs); rerr == nil {
+		tAbs = resolved
+	}
+	rel, err := filepath.Rel(pAbs, tAbs)
+	if err != nil {
+		return false, err
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)), nil
+}
+
 // RunBackup performs one backup with the given configuration.
 func RunBackup(ctx context.Context, st store.Store, cfg BackupConfig) (BackupResult, error) {
 	var res BackupResult
@@ -199,6 +223,21 @@ func RunBackup(ctx context.Context, st store.Store, cfg BackupConfig) (BackupRes
 	}
 	if err := os.MkdirAll(cfg.Dir, 0o700); err != nil {
 		return res, fmt.Errorf("create backup dir: %w", err)
+	}
+	// A backup directory inside a directory being archived makes every run
+	// archive its predecessors: the archive grows geometrically until the disk
+	// fills. Refuse rather than let that run nightly on a cron.
+	// Only the directories actually walked into the archive count. The database
+	// directory is NOT one of them — the archive takes a vacuumed snapshot plus
+	// the gsbs-keys subdirectory — so a backups/ folder living beside gsbs.db
+	// (the common layout) stays fine.
+	for _, src := range []string{st.SaveRootPath(), filepath.Join(filepath.Dir(dbPath), "gsbs-keys"), cfg.CoversDir} {
+		if src == "" {
+			continue
+		}
+		if inside, err := isInsideDir(src, cfg.Dir); err == nil && inside {
+			return res, fmt.Errorf("backup dir %s is inside %s, which the backup archives — each run would archive the previous backups; move it outside", cfg.Dir, src)
+		}
 	}
 
 	staging, err := os.MkdirTemp(cfg.Dir, ".staging-*")

@@ -25,9 +25,11 @@ func (e Event) Format() string {
 
 // subscriber is one SSE client connection.
 type subscriber struct {
-	ch       chan Event
-	clientID string
-	userID   string
+	ch chan Event
+	// userID is the only identity a subscription carries. A separate clientID
+	// field held the same value and slow-client logs printed it as "client_id",
+	// which reads as a device id and sent anyone debugging to the wrong table.
+	userID string
 	// seq orders subscriptions for cap eviction. A counter (not a
 	// timestamp): wall-clock resolution is coarse enough on some
 	// platforms that back-to-back subscribes tie, making "oldest"
@@ -99,10 +101,9 @@ func (h *Hub) SubscribeCapped(userID string, maxPerUser int) (<-chan Event, func
 
 	h.nextSeq++
 	sub := &subscriber{
-		ch:       make(chan Event, 16),
-		clientID: userID,
-		userID:   userID,
-		seq:      h.nextSeq,
+		ch:     make(chan Event, 16),
+		userID: userID,
+		seq:    h.nextSeq,
 	}
 	h.subscribers[sub] = struct{}{}
 	h.mu.Unlock()
@@ -130,7 +131,7 @@ func (h *Hub) BroadcastToUser(userID string, evt Event) {
 		select {
 		case sub.ch <- evt:
 		default:
-			logx.Logger().Warn().Str("component", "sse").Str("client_id", sub.clientID).
+			logx.Logger().Warn().Str("component", "sse").Str("user_id", sub.userID).
 				Msg("sse: dropping event for slow client")
 		}
 	}
@@ -167,7 +168,7 @@ func (h *Hub) Broadcast(evt Event) {
 		select {
 		case sub.ch <- evt:
 		default:
-			logx.Logger().Warn().Str("component", "sse").Str("client_id", sub.clientID).
+			logx.Logger().Warn().Str("component", "sse").Str("user_id", sub.userID).
 				Msg("sse: dropping event for slow client")
 		}
 	}

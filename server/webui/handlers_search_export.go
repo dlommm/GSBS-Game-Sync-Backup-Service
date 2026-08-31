@@ -104,11 +104,11 @@ func (h *WebHandler) handleExportSaves(w http.ResponseWriter, r *http.Request, f
 		cw := csv.NewWriter(w)
 		_ = cw.Write([]string{"game_id", "game_title", "path_key", "relative_path", "size_bytes", "updated_at", "encrypted", "content_hash"})
 		for _, s := range saves {
-			_ = cw.Write([]string{
+			_ = writeCSVRow(cw,
 				s.GameID, s.GameTitle, s.PathKey, s.RelativePath,
 				strconv.FormatInt(s.SizeBytes, 10), s.UpdatedAt,
 				strconv.FormatBool(s.Encrypted), s.ContentHash,
-			})
+			)
 		}
 		cw.Flush()
 	}

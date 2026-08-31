@@ -241,12 +241,15 @@ func (h *WebHandler) serveSaveVersionPreview(w http.ResponseWriter, r *http.Requ
 		truncated = true
 	}
 	if !looksTextual(content) {
-		fmt.Fprintf(w, `<p class="cell-muted">This looks like a binary save file (%s) — preview is unavailable.</p>`, formatBytes(blob.ContentSize))
+		// GetSaveVersion does not populate ContentSize, so reading it here
+		// always rendered "0 B". The version's own byte count is what the
+		// reader wants anyway.
+		fmt.Fprintf(w, `<p class="cell-muted">This looks like a binary save file (%s) — preview is unavailable.</p>`, formatBytes(int64(len(blob.Content))))
 		return
 	}
 	fmt.Fprintf(w, `<pre class="preview-pre">%s</pre>`, template.HTMLEscapeString(string(content)))
 	if truncated {
-		fmt.Fprintf(w, `<p class="cell-muted">Showing first %s of %s.</p>`, formatBytes(previewMaxBytes), formatBytes(blob.ContentSize))
+		fmt.Fprintf(w, `<p class="cell-muted">Showing first %s of %s.</p>`, formatBytes(previewMaxBytes), formatBytes(int64(len(blob.Content))))
 	}
 }
 
