@@ -30,7 +30,7 @@ jobs:
       value: ${{ steps.ver.outputs.value }}
       commit_date: ${{ steps.ver.outputs.commit_date }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
       - name: Resolve version
@@ -55,8 +55,8 @@ jobs:
     needs: [version, resolve-runner]
     runs-on: ${{ needs.resolve-runner.outputs.linux }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -69,15 +69,15 @@ jobs:
     needs: [version, resolve-runner]
     runs-on: ${{ needs.resolve-runner.outputs.linux }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
       - name: Install Linux tray build deps
         run: sudo apt-get update && sudo apt-get install -y $LINUX_CLIENT_DEPS
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
           args: --timeout=5m
@@ -86,12 +86,12 @@ jobs:
     needs: [version, resolve-runner, test, lint]
     runs-on: ${{ needs.resolve-runner.outputs.linux }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Install Linux tray build deps
@@ -115,7 +115,7 @@ jobs:
         # if it can't register (e.g. restricted runner), the arm64 AppImage is
         # simply skipped below — arm64 still ships as .deb + raw binary.
         continue-on-error: true
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
       - name: Build AppImage (amd64 required, arm64 best-effort)
@@ -134,7 +134,7 @@ jobs:
           RELEASED_AT: ${{ needs.version.outputs.commit_date }}
         run: ./script/release-assets.sh "$VERSION" dist
       - name: Upload linux artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: release-linux
           path: |
@@ -151,12 +151,12 @@ jobs:
     needs: [version, test, lint]
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Build macOS binaries (native cgo; unsigned)
@@ -173,7 +173,7 @@ jobs:
             tar -czf "dist/gsbs-server-darwin-${arch}.tar.gz" -C dist "gsbs-server-darwin-${arch}"
           done
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: release-macos
           path: |
@@ -186,12 +186,12 @@ jobs:
     needs: [version, test, lint]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Install goversioninfo (embeds exe icon + version)
@@ -239,7 +239,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.tag }}
         run: ./script/release-assets.sh "$VERSION" dist
       - name: Upload windows artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: release-windows
           path: |
@@ -257,8 +257,8 @@ jobs:
       HAS_GPG: ${{ secrets.GSBS_GPG_PRIVATE != '' }}
       HAS_DEPLOY: ${{ secrets.GSBS_FLATPAK_DEPLOY_KEY != '' }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
@@ -317,19 +317,19 @@ jobs:
     needs: [version, resolve-runner, test, lint, build-linux, build-windows]
     runs-on: ${{ needs.resolve-runner.outputs.linux }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -350,19 +350,19 @@ jobs:
       id-token: write # build-provenance attestation (Sigstore keyless signing)
       attestations: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Download linux artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: release-linux
           path: dist
       - name: Download windows artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: release-windows
           path: dist
       - name: Download macOS artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: release-macos
           path: dist
@@ -374,7 +374,7 @@ jobs:
       - name: Attest build provenance
         # Signed, verifiable statements that these exact artifacts were built
         # by this workflow from this commit (verify: gh attestation verify).
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/gsbs-server-*
