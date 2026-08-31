@@ -211,3 +211,36 @@ func TestApplyOneSave_BackupFailureAbortsOverwrite(t *testing.T) {
 	require.NoError(t, readErr)
 	assert.Equal(t, "local", string(data), "overwrite must not proceed when the backup failed")
 }
+
+// "Use server version" must write the server copy even when the local file is
+// definitively newer. keep_server on its own returns PullConflict there — the
+// resolve wrote nothing while ResolveConflict cleared the conflict anyway, so
+// the user saw the conflict vanish with the local file untouched.
+func TestApplyOneSave_ForceApplyOverridesConflict(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "save.dat")
+	require.NoError(t, os.WriteFile(target, []byte("local-newer"), 0644))
+
+	// Local mtime is now; the server copy is a day old and differs.
+	serverTime := time.Now().Add(-24 * time.Hour).UTC().Format(time.RFC3339)
+
+	c := newPullTestClient(t)
+	opts := DefaultPullOptions()
+	opts.ConflictPolicy = "keep_server"
+
+	applied, err := c.applyOneSaveEncrypted("g1", "pk1", serverTime, b64("server-data"), target, opts, false, "")
+	require.NoError(t, err)
+	require.False(t, applied, "keep_server alone must surface a conflict, not overwrite newer local data")
+	data, err := os.ReadFile(target)
+	require.NoError(t, err)
+	assert.Equal(t, "local-newer", string(data))
+
+	opts.ForceApply = true
+	opts.BackupBeforeOverwrite = true
+	applied, err = c.applyOneSaveEncrypted("g1", "pk1", serverTime, b64("server-data"), target, opts, false, "")
+	require.NoError(t, err)
+	require.True(t, applied, "ForceApply must write the server copy the user explicitly chose")
+	data, err = os.ReadFile(target)
+	require.NoError(t, err)
+	assert.Equal(t, "server-data", string(data))
+}

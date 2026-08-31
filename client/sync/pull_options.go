@@ -17,6 +17,12 @@ type PullOptions struct {
 	// PolicyFor, when set, returns a per-game conflict policy; empty falls
 	// back to ConflictPolicy.
 	PolicyFor func(gameID string) string
+	// ForceApply writes the server copy even when the policy would surface a
+	// conflict. It is only for an explicit, per-slot user decision ("use the
+	// server version" from the tray or web UI) — the automatic sync paths must
+	// leave it false so a definitively-newer local save is never clobbered
+	// without the user saying so.
+	ForceApply bool
 }
 
 // policyFor resolves the effective conflict policy for one game.

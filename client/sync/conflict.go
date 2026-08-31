@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -154,11 +155,31 @@ func ResolveConflict(ctx context.Context, client *Client, gameID, pathKey string
 		if err != nil {
 			return err
 		}
+		if len(out.Saves) == 0 {
+			return fmt.Errorf("resolve use_server: server has no save for game=%s path_key=%s", gameID, pathKey)
+		}
 		for _, item := range out.Saves {
 			opts := DefaultPullOptions()
 			opts.ConflictPolicy = "keep_server"
-			if err := client.applyOneSave(item.GameID, item.PathKey, item.UpdatedAt, item.Content, absPath, opts); err != nil {
+			// keep_server still refuses to overwrite a local file that is
+			// definitively newer than the server copy — correct for automatic
+			// sync, wrong here. Without ForceApply a user who kept playing
+			// before picking "use server" saw the conflict disappear while the
+			// local file was never touched.
+			opts.ForceApply = true
+			// The local copy is being discarded on the user's instruction, so
+			// keep a backup of it rather than dropping it silently.
+			opts.BackupBeforeOverwrite = true
+			// Pass the encryption flag and server hash through: applyOneSave
+			// hardcodes encrypted=false, which wrote ciphertext to disk as the
+			// save for E2E-encrypted accounts and skipped pull verification.
+			applied, err := client.applyOneSaveEncrypted(item.GameID, item.PathKey, item.UpdatedAt, item.Content, absPath, opts, item.Encrypted, item.ContentHash)
+			if err != nil {
 				return err
+			}
+			if !applied {
+				// Never clear a conflict the resolve did not actually settle.
+				return fmt.Errorf("resolve use_server: server version was not applied for game=%s path_key=%s (path %s)", gameID, pathKey, absPath)
 			}
 		}
 	}

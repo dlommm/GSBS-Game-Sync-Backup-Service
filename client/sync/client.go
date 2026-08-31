@@ -783,6 +783,10 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 	if decision == PullSkip {
 		return false, nil
 	}
+	if decision == PullConflict && opts.ForceApply {
+		// The user resolved this specific conflict in favour of the server.
+		decision = PullApply
+	}
 	if decision == PullConflict {
 		RecordConflict(ConflictRecord{
 			GameID: gameID, PathKey: pathKey, FilePath: absPath,
