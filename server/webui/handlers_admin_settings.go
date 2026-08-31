@@ -169,14 +169,6 @@ func (h *WebHandler) handleAdminChooseSource(w http.ResponseWriter, r *http.Requ
 		Redirect(w, r, "/admin?error=save_failed")
 		return
 	}
-	// Manual mode is manual-only by default: disable the scheduled PCGW crawl so
-	// the operator triggers syncs on demand (unless pinned by env). The admin can
-	// re-enable a schedule from Settings afterward.
-	if source == store.PCGWSyncSourceAPI {
-		if _, pinned := os.LookupEnv("GSBS_PCGW_CRON"); !pinned {
-			_ = h.store.SetAdminSetting(r.Context(), store.AdminSettingPCGWCron, "")
-		}
-	}
 	// Apply the new source to the cron schedule (bundle fetch vs. none).
 	if h.pcgwCron != nil {
 		if err := h.pcgwCron.Reschedule(r.Context()); err != nil {
@@ -226,22 +218,10 @@ func (h *WebHandler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Requ
 
 	seedFromBundle := false
 	if _, ok := os.LookupEnv(store.EnvPCGWSyncSource); !ok {
-		prevSettings, _ := h.store.ListAdminSettings(ctx)
-		prevSource := store.PCGWSyncSourceFromSettings(prevSettings)
 		syncSource := normalizeSyncSourceForm(r.FormValue("pcgw_sync_source"))
 		if err := h.store.SetAdminSetting(ctx, store.AdminSettingPCGWSyncSource, syncSource); err != nil {
 			Redirect(w, r, "/admin/settings?error=save_failed")
 			return
-		}
-		// Switching INTO manual mode seeds the mirror once from the S3 bundle so
-		// the operator doesn't trigger a full PCGW crawl just to get current data,
-		// and disables the scheduled crawl (manual-only by default; the cron field
-		// above is honored on subsequent saves if the admin re-enables it).
-		if syncSource == store.PCGWSyncSourceAPI && prevSource != store.PCGWSyncSourceAPI {
-			seedFromBundle = true
-			if _, pinned := os.LookupEnv("GSBS_PCGW_CRON"); !pinned {
-				_ = h.store.SetAdminSetting(ctx, store.AdminSettingPCGWCron, "")
-			}
 		}
 	}
 
@@ -424,11 +404,10 @@ func (h *WebHandler) handleAdminSettingsSave(w http.ResponseWriter, r *http.Requ
 }
 
 // normalizeSyncSourceForm maps a sync-source form value to its canonical stored
-// form. Anything that isn't explicitly "api" (manual) — including "s3", the
-// legacy "github", or an empty/unknown value — resolves to the S3 bundle source.
-func normalizeSyncSourceForm(v string) string {
-	if strings.TrimSpace(strings.ToLower(v)) == store.PCGWSyncSourceAPI {
-		return store.PCGWSyncSourceAPI
-	}
+// form. Every value resolves to the S3 bundle source: the direct-API mode is
+// retired (PCGamingWiki denies Cargo queries to anonymous users), so a form
+// that still posts "api" — a stale tab, a scripted client — must not be able to
+// put the install back into a mode that cannot work.
+func normalizeSyncSourceForm(string) string {
 	return store.PCGWSyncSourceS3
 }

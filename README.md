@@ -178,11 +178,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for lint, coverage, and conventions.
 
 ## Server configuration
 
-PCGW data: fresh installs default to **S3 manifest bundle** sync (`pcgw_sync_source=s3`) — the server fetches a pre-built bundle from public object storage (Cloudflare R2) on a schedule (ETag-aware, versioned `index.json`). Existing installs with PCGW data stay on **API sync** until changed in **Admin → Settings**. See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
+PCGW data: every install uses **S3 manifest bundle** sync (`pcgw_sync_source=s3`) — the server fetches a pre-built bundle from public object storage (Cloudflare R2) on a schedule (ETag-aware, versioned `index.json`). See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
 
-Bundle fetch cron defaults to weekly Monday 03:00 (`GSBS_PCGW_BUNDLE_CRON`). API sync schedule: set `GSBS_PCGW_CRON` in Docker/compose (default `0 3 * * 1`, weekly Monday 03:00; use `""` to disable). When env vars are **not** set, admins configure schedules in the WebUI under **Admin → Settings**.
+> **Direct PCGW API sync is retired.** PCGamingWiki removed the `runcargoqueries` right from anonymous users, so the Cargo queries the catalog scan depends on return `permissiondenied` for every install. Servers still set to `pcgw_sync_source=api` are migrated to the bundle source automatically on upgrade.
 
-Two-phase PCGW API sync: Phase 1 enumerates all PCGW game IDs into `pcgw_catalog`; Phase 2 fetches only missing, failed/partial, and changed pages. Set `GSBS_PCGW_MAX_PAGES_PER_RUN` to cap the Phase 2 ingest budget per run (default 5000). Interrupted runs save a checkpoint and resume automatically on the next sync.
+Bundle fetch cron defaults to weekly Monday 03:00 (`GSBS_PCGW_BUNDLE_CRON`). When the env var is **not** set, admins configure the schedule in the WebUI under **Admin → Settings**.
 
 Save storage: set `GSBS_SAVE_ROOT` (e.g. `/app/data/gamesaves` on the same Docker volume as `GSBS_DB`) to store save files on disk instead of SQLite BLOBs. Clients must send `X-Relative-Path` on push when filesystem storage is enabled. See [docs/DOCKER.md](docs/DOCKER.md) for all environment variables.
 

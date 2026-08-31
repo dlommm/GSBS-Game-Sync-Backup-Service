@@ -14,7 +14,11 @@ const (
 	// PCGWSyncSourceGitHub is the legacy name for the bundle source, kept as a
 	// backward-compat alias for existing installs (normalized to s3 on read).
 	PCGWSyncSourceGitHub = "github"
-	// PCGWSyncSourceAPI crawls the PCGW API directly (manual mode).
+	// PCGWSyncSourceAPI crawled the PCGW API directly (manual mode). RETIRED:
+	// PCGamingWiki removed the runcargoqueries right from anonymous users, so
+	// the catalog scan the mode depends on returns permissiondenied for every
+	// install. The constant is kept so stored and env values can still be
+	// recognized and normalized to the bundle source.
 	PCGWSyncSourceAPI = "api"
 )
 
@@ -83,9 +87,9 @@ type PCGWImportResult struct {
 	NoOp              bool
 }
 
-// PCGWSyncSourceFromSettings returns the canonical sync source: "s3" or "api"
-// (default "s3" for unset fresh installs). The legacy value "github" is accepted
-// from the env var or admin_settings and normalized to "s3".
+// PCGWSyncSourceFromSettings returns the canonical sync source, which is always
+// "s3" now that the direct-API mode is retired. The legacy values "github" and
+// "api" are accepted from the env var or admin_settings and normalized to "s3".
 func PCGWSyncSourceFromSettings(settings map[string]string) string {
 	if v, ok := os.LookupEnv(EnvPCGWSyncSource); ok {
 		if src, ok := normalizePCGWSyncSource(v); ok {
@@ -101,14 +105,13 @@ func PCGWSyncSourceFromSettings(settings map[string]string) string {
 }
 
 // normalizePCGWSyncSource maps a raw source value to its canonical form. It
-// accepts "s3", "api", and the legacy "github" (→ "s3"). ok is false for
-// unrecognized values so callers fall through to the default.
+// accepts "s3" and the retired "github" and "api" values, all of which resolve
+// to the bundle source. ok is false for unrecognized values so callers fall
+// through to the default.
 func normalizePCGWSyncSource(v string) (string, bool) {
 	switch strings.TrimSpace(strings.ToLower(v)) {
-	case PCGWSyncSourceS3, PCGWSyncSourceGitHub:
+	case PCGWSyncSourceS3, PCGWSyncSourceGitHub, PCGWSyncSourceAPI:
 		return PCGWSyncSourceS3, true
-	case PCGWSyncSourceAPI:
-		return PCGWSyncSourceAPI, true
 	default:
 		return "", false
 	}

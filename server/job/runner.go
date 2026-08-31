@@ -607,28 +607,14 @@ func (r *Runner) runPCGWBundleFetch(parentCtx context.Context, jobName string, o
 		}
 	}
 
-	// Failure fallback: when the bundle is unreachable or not published yet (and
-	// we're in S3 bundle mode), run an API sync so the server still gets fresh
-	// save-location data. The bundle's merged version is left untouched — it is
-	// only advanced after a successful import — so once the bundle becomes
-	// reachable again the next run resumes catch-up from where it left off.
+	// No API fallback on failure: the direct-API sync is retired (PCGamingWiki
+	// denies Cargo queries to anonymous users), so falling back to it would
+	// only turn one failure into two. The bundle's merged version is left
+	// untouched — it is only advanced after a successful import — so the next
+	// cron resumes catch-up from where it left off.
 	if status == JobFailed {
-		settings, _ := r.store.ListAdminSettings(jobCtx)
-		if store.PCGWSyncSourceFromSettings(settings) == store.PCGWSyncSourceS3 {
-			// Seeded gate: a fresh install whose first bundle fetch fails must
-			// NOT fall back to a full API crawl — a fleet of empty servers doing
-			// that would flood PCGamingWiki. Retry the bundle on the next cron.
-			if seeded, seedErr := r.store.IsPCGWBundleSeeded(jobCtx); seedErr == nil && !seeded {
-				logx.Logger().Warn().Err(fetchErr).
-					Msg("bundle fetch failed and PCGW mirror is empty — API fallback disabled; will retry bundle on next cron (or import a bundle file via Admin)")
-			} else {
-				logx.Logger().Warn().Err(fetchErr).Msg("bundle fetch failed; falling back to API sync to keep data fresh")
-				// Detached for the same reason as the incremental fallback above.
-				if _, err := r.TryRunPCGWSync(context.Background()); err != nil && !errors.Is(err, ErrJobAlreadyRunning) {
-					logx.Logger().Warn().Err(err).Msg("bundle fetch: API fallback failed to start")
-				}
-			}
-		}
+		logx.Logger().Warn().Err(fetchErr).
+			Msg("bundle fetch failed; will retry on the next cron (or import a bundle file via Admin)")
 	}
 
 	r.finishJobRun(runID, jobName, status, errMsg, entries)

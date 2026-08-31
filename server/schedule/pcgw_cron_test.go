@@ -40,7 +40,10 @@ func TestPCGWCron_View_LegacyGitHubNormalizesToS3(t *testing.T) {
 	require.Equal(t, store.PCGWSyncSourceS3, view.SyncSource, "legacy github must normalize to s3")
 }
 
-func TestPCGWCron_View_APISource(t *testing.T) {
+// The direct-API sync source is retired: PCGamingWiki denies Cargo queries to
+// anonymous users, so an install still holding "api" must resolve to the bundle
+// source rather than schedule a crawl that can only fail.
+func TestPCGWCron_View_RetiredAPISourceResolvesToBundle(t *testing.T) {
 	st, err := store.NewSQLite(":memory:")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = st.Close() })
@@ -51,9 +54,9 @@ func TestPCGWCron_View_APISource(t *testing.T) {
 	pc := NewPCGWCron(cron.New(), st, nil)
 	view := pc.View(ctx)
 
-	require.Equal(t, store.PCGWSyncSourceAPI, view.SyncSource)
-	require.False(t, view.NextRun.IsZero())
-	require.Equal(t, store.DefaultPCGWCron, view.Expr)
+	require.Equal(t, store.PCGWSyncSourceS3, view.SyncSource)
+	require.True(t, view.NextRun.IsZero(), "no API crawl may be scheduled")
+	require.False(t, view.BundleNext.IsZero(), "the bundle fetch must be scheduled instead")
 }
 
 func TestPCGWCron_View_BundleCronEnvOverride(t *testing.T) {

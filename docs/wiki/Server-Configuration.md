@@ -64,7 +64,7 @@
 
 | Variable | Default | Description |
 |---|---|---|
-| `GSBS_PCGW_SYNC_SOURCE` | (from DB) | `github` or `api`. Fresh installs default to GitHub bundle fetch. |
+| `GSBS_PCGW_SYNC_SOURCE` | (from DB) | `s3` (manifest bundle). The retired `api` and legacy `github` values normalize to `s3`. |
 | `GSBS_PCGW_BUNDLE_URL` | Official gsbs-manifest URL | Full bundle URL |
 | `GSBS_PCGW_BUNDLE_DELTA_URL` | Official delta URL | Delta bundle for seeded servers |
 | `GSBS_PCGW_BUNDLE_CRON` | `0 3 * * 1` | Bundle fetch schedule when source is `github` |

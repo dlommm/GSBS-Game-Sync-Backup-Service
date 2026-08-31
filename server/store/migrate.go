@@ -22,7 +22,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 34
+const schemaVersion = 35
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -135,10 +135,32 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{32, stepGameSessions},
 		{33, stepUserPrefs},
 		{34, stepSaveVersionsEncrypted},
+		{35, stepRetirePCGWAPISource},
 	}
 }
 
 // ── Step implementations ──────────────────────────────────────────────────────
+
+// stepRetirePCGWAPISource migrates installs off the direct-API sync source.
+// PCGamingWiki removed the runcargoqueries right from anonymous users, so the
+// catalog scan that mode depends on now returns permissiondenied on every run —
+// the mode cannot work for anyone. stepPCGWBundleSettings defaulted every
+// install that already had crawled data to "api", so this is most pre-S3
+// servers.
+func stepRetirePCGWAPISource(tx *sql.Tx) error {
+	res, err := tx.Exec(
+		`UPDATE admin_settings SET value = ? WHERE key = ? AND value = ?`,
+		PCGWSyncSourceS3, AdminSettingPCGWSyncSource, PCGWSyncSourceAPI,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		logx.Logger().Info().Str("component", "migration").
+			Msg("GSBS migrate step 35: PCGW sync source moved from the retired direct-API mode to the manifest bundle")
+	}
+	return nil
+}
 
 // stepSaveVersionsEncrypted gives save_versions its own encrypted flag. Without
 // it, RestoreSaveVersion had no way to know whether a stored version held

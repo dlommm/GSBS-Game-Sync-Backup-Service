@@ -160,10 +160,20 @@ func TestPCGWSyncSourceFromSettings_LegacyGitHubNormalized(t *testing.T) {
 	require.Equal(t, PCGWSyncSourceS3, src)
 }
 
+// The env var still takes precedence over admin_settings, but "api" is retired:
+// PCGamingWiki denies Cargo queries to anonymous users, so every recognized
+// value now resolves to the bundle source.
 func TestPCGWSyncSourceFromSettings_EnvOverride(t *testing.T) {
 	t.Setenv(EnvPCGWSyncSource, PCGWSyncSourceAPI)
 	src := PCGWSyncSourceFromSettings(map[string]string{AdminSettingPCGWSyncSource: PCGWSyncSourceGitHub})
-	require.Equal(t, PCGWSyncSourceAPI, src)
+	require.Equal(t, PCGWSyncSourceS3, src)
+}
+
+// A stored "api" value from a pre-retirement install must read back as the
+// bundle source even before migration 35 has run.
+func TestPCGWSyncSourceFromSettings_RetiredAPIValue(t *testing.T) {
+	src := PCGWSyncSourceFromSettings(map[string]string{AdminSettingPCGWSyncSource: PCGWSyncSourceAPI})
+	require.Equal(t, PCGWSyncSourceS3, src)
 }
 
 func TestPCGWBundleCronFromSettings_EnvEmptyDisables(t *testing.T) {

@@ -33,7 +33,7 @@ Clients watch save folders, upload on change, and pull existing saves when a gam
 - **Crash-safe canonical saves** — atomic disk writes when using `GSBS_SAVE_ROOT`
 - **Client manifest pagination (3.0.1)** — full catalog download for large game libraries
 
-Switch sync mode anytime in **Admin → Settings** (`s3` bundle vs direct PCGW API). See [docs/MANIFEST_BUNDLE.md](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/MANIFEST_BUNDLE.md).
+PCGW data comes from the `s3` manifest bundle; the direct PCGW API mode is retired (PCGamingWiki denies Cargo queries to anonymous users). See [docs/MANIFEST_BUNDLE.md](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/MANIFEST_BUNDLE.md).
 
 ## What's in this image
 
@@ -82,7 +82,7 @@ Mount a volume at `/app/data` and set `GSBS_DB=/app/data/gsbs.db`. All state (us
 | `GSBS_SESSION_SECRET` | **Required in production.** Signs WebUI session cookies. |
 | `GSBS_DB` | Database path. Use `/app/data/gsbs.db` with a volume. |
 | `GSBS_ADDR` | Listen address (default `:8080`). |
-| `GSBS_PCGW_SYNC_SOURCE` | `s3` (default, manifest bundle) or `api` (direct PCGW crawl). |
+| `GSBS_PCGW_SYNC_SOURCE` | `s3` (manifest bundle). The retired `api` value normalizes to `s3`. |
 | `GSBS_PCGW_BUNDLE_URL` | Full bundle URL (default: official CDN). |
 | `GSBS_PCGW_BUNDLE_INDEX_URL` | Version index URL (auto-derived from bundle URL if unset). |
 | `GSBS_PCGW_BUNDLE_CRON` | Bundle fetch schedule when source is `s3` (default weekly Monday 03:00). |

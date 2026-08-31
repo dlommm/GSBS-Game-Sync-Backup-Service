@@ -29,10 +29,6 @@
           <input type="radio" name="pcgw_sync_source" value="s3" {{if eq .PCGWSyncSource "s3"}}checked{{end}} {{if .PCGWSyncSourceEnvOverride}}disabled{{end}}>
           <span>S3 manifest bundle (recommended)</span>
         </label>
-        <label class="radio-label">
-          <input type="radio" name="pcgw_sync_source" value="api" {{if eq .PCGWSyncSource "api"}}checked{{end}} {{if .PCGWSyncSourceEnvOverride}}disabled{{end}}>
-          <span>Manual (direct PCGW API sync)</span>
-        </label>
       </div>
     </div>
 

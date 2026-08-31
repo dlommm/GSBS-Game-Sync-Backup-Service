@@ -90,41 +90,25 @@ func (p *PCGWCron) Reschedule(ctx context.Context) error {
 		p.fullEntryID = 0
 	}
 
-	if syncSource == store.PCGWSyncSourceS3 {
-		bundleExpr, bundleDisabled := p.resolveBundleCron(settings)
-		if bundleDisabled {
-			logx.Logger().Info().Str("component", "cron").Msg("cron: PCGW bundle fetch disabled")
-		} else {
-			id, err := p.cron.AddFunc(bundleExpr, func() {
-				if _, err := p.runner.TryRunPCGWBundleFetch(context.Background(), false); err != nil {
-					logx.Logger().Error().Str("component", "cron").Err(err).Msg("cron: pcgw bundle fetch")
-				}
-			})
-			if err != nil {
-				return err
-			}
-			p.bundleEntryID = id
-			logx.Logger().Info().Str("component", "cron").Str("expr", bundleExpr).
-				Msg("cron: PCGW bundle fetch scheduled")
-		}
+	// The bundle fetch is the only scheduled PCGW job: the direct-API sync is
+	// retired, so PCGWSyncSourceFromSettings never resolves to anything else.
+	bundleExpr, bundleDisabled := p.resolveBundleCron(settings)
+	if bundleDisabled {
+		logx.Logger().Info().Str("component", "cron").Msg("cron: PCGW bundle fetch disabled")
 	} else {
-		expr, disabled, source, _ := p.resolveAPISync(ctx, settings)
-		if disabled {
-			logx.Logger().Info().Str("component", "cron").Msg("cron: PCGW sync disabled (manual mode)")
-		} else {
-			id, err := p.cron.AddFunc(expr, func() {
-				if _, err := p.runner.RunPCGWSync(context.Background()); err != nil {
-					logx.Logger().Error().Str("component", "cron").Err(err).Msg("cron: pcgw sync")
-				}
-			})
-			if err != nil {
-				return err
+		id, err := p.cron.AddFunc(bundleExpr, func() {
+			if _, err := p.runner.TryRunPCGWBundleFetch(context.Background(), false); err != nil {
+				logx.Logger().Error().Str("component", "cron").Err(err).Msg("cron: pcgw bundle fetch")
 			}
-			p.entryID = id
-			logx.Logger().Info().Str("component", "cron").Str("expr", expr).Str("source", source).
-				Msg("cron: PCGW sync scheduled")
+		})
+		if err != nil {
+			return err
 		}
+		p.bundleEntryID = id
+		logx.Logger().Info().Str("component", "cron").Str("expr", bundleExpr).
+			Msg("cron: PCGW bundle fetch scheduled")
 	}
+	_ = syncSource
 
 	if fullExpr := strings.TrimSpace(os.Getenv("GSBS_PCGW_FULL_CRON")); fullExpr != "" {
 		fid, err := p.cron.AddFunc(fullExpr, func() {
