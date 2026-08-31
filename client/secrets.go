@@ -43,12 +43,33 @@ func secretSet(key, value string) error {
 // secretGet returns a secret from the keyring, falling back to the encrypted
 // file store. ok is true only when the secret was found.
 func secretGet(key string) (value string, ok bool) {
+	v, ok, _ := secretGetStatus(key)
+	return v, ok
+}
+
+// secretGetStatus is secretGet with the extra answer callers need before they
+// treat a missing secret as "the user has none": unavailable reports that the
+// credential store could not be READ, as opposed to the secret genuinely not
+// being there.
+//
+// Conflating the two was destructive. On Linux, an autostarted client racing
+// the Secret Service at login saw a read failure, loaded a blank token, and a
+// later auto-save then called secretDelete — permanently destroying the real
+// stored token and force-logging the user out.
+func secretGetStatus(key string) (value string, ok bool, unavailable bool) {
 	if !keyringDisabled() {
-		if v, err := keyring.Get(keyringService, key); err == nil {
-			return v, true
+		v, err := keyring.Get(keyringService, key)
+		if err == nil {
+			return v, true, false
+		}
+		if !errors.Is(err, keyring.ErrNotFound) {
+			unavailable = true
 		}
 	}
-	return fileSecretGet(key)
+	if v, found := fileSecretGet(key); found {
+		return v, true, false
+	}
+	return "", false, unavailable
 }
 
 // secretDelete removes a secret from both the keyring and the encrypted file

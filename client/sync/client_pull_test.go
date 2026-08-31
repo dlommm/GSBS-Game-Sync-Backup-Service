@@ -244,3 +244,66 @@ func TestApplyOneSave_ForceApplyOverridesConflict(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "server-data", string(data))
 }
+
+// An existing but unreadable local file must never be treated as absent: doing
+// so skipped the conflict check, the skew window, and BackupBeforeOverwrite, so
+// a newer local save was overwritten with no backup.
+func TestApplyOneSave_UnreadableLocalIsNotTreatedAsAbsent(t *testing.T) {
+	dir := t.TempDir()
+	// A directory standing where the save file should be is unreadable as a
+	// file for every user, so this also covers the root-in-container case where
+	// chmod 0000 would be bypassed.
+	target := filepath.Join(dir, "save.dat")
+	require.NoError(t, os.Mkdir(target, 0755))
+
+	c := newPullTestClient(t)
+	opts := DefaultPullOptions()
+	opts.BackupBeforeOverwrite = true
+
+	applied, err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, "")
+	require.NoError(t, err)
+	assert.False(t, applied, "must not overwrite local data it cannot read or back up")
+
+	fi, err := os.Stat(target)
+	require.NoError(t, err)
+	assert.True(t, fi.IsDir(), "the existing path must be left alone")
+}
+
+// readLocalForPull must keep the three states apart: a genuinely absent file is
+// still "absent" (first pulls must not be blocked), a readable one returns its
+// bytes, and only a present-but-unreadable one sets unreadable.
+func TestReadLocalForPullDistinguishesAbsentFromUnreadable(t *testing.T) {
+	dir := t.TempDir()
+
+	_, exists, _, unreadable := readLocalForPull(filepath.Join(dir, "missing.dat"))
+	assert.False(t, exists, "absent file must report absent")
+	assert.False(t, unreadable, "absent file is not unreadable")
+
+	readable := filepath.Join(dir, "readable.dat")
+	require.NoError(t, os.WriteFile(readable, []byte("hello"), 0644))
+	data, exists, mtime, unreadable := readLocalForPull(readable)
+	assert.True(t, exists)
+	assert.False(t, unreadable)
+	assert.Equal(t, "hello", string(data))
+	assert.False(t, mtime.IsZero())
+
+	t.Run("permission denied", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root bypasses file permissions")
+		}
+		locked := filepath.Join(dir, "locked.dat")
+		require.NoError(t, os.WriteFile(locked, []byte("secret"), 0644))
+		require.NoError(t, os.Chmod(locked, 0000))
+		t.Cleanup(func() { _ = os.Chmod(locked, 0644) })
+		_, exists, _, unreadable := readLocalForPull(locked)
+		assert.True(t, exists, "an unreadable file still exists")
+		assert.True(t, unreadable)
+	})
+
+	// A directory in the save's place is unreadable as a file for everyone.
+	asDir := filepath.Join(dir, "dir.dat")
+	require.NoError(t, os.Mkdir(asDir, 0755))
+	_, exists, _, unreadable = readLocalForPull(asDir)
+	assert.True(t, exists)
+	assert.True(t, unreadable)
+}

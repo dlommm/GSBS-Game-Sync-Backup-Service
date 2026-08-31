@@ -67,6 +67,14 @@ type pendingPush struct {
 	ruleKey  string
 	relPath  string
 	filePath string
+	// seq identifies this specific queued push. pushDebounced clears the
+	// pending entry only when it still holds the seq it was scheduled for:
+	// the cleanup used to be unconditional, so a save queued WHILE a push was
+	// in flight was erased from w.pending and FlushPending / FlushPendingFor
+	// could no longer see it. If the process then exited in that window and
+	// the file's mtime sat inside the 2-minute skew window, startup reconcile
+	// skipped it too, and the save was not uploaded until it changed again.
+	seq uint64
 }
 
 // Watcher watches local directories and uploads matching file changes to the server.
@@ -79,6 +87,7 @@ type Watcher struct {
 	pathMap       map[string]pathEntry
 	timers        map[string]*time.Timer
 	pending       map[string]pendingPush
+	pendingSeq    uint64              // monotonic id for queued pushes (see pendingPush.seq)
 	emptyRetries  map[string]bool     // filePath -> true when re-checking a previously-empty file
 	settleRetries map[string]int      // filePath -> re-arm count while the file keeps changing mid-read
 	installRoots  map[string][]string // manifest game_id -> install folders for <game-install-folder>
@@ -330,6 +339,15 @@ func (w *Watcher) RemoveStalePaths(watchPaths []WatchPath) {
 	}
 }
 
+// stagePendingLocked records a queued push under a fresh sequence number and
+// returns it. Callers must hold w.mu.
+func (w *Watcher) stagePendingLocked(p pendingPush) uint64 {
+	w.pendingSeq++
+	p.seq = w.pendingSeq
+	w.pending[p.filePath] = p
+	return p.seq
+}
+
 // FlushPending runs all debounced pushes immediately (e.g. on shutdown).
 func (w *Watcher) FlushPending(ctx context.Context) {
 	w.mu.Lock()
@@ -343,7 +361,7 @@ func (w *Watcher) FlushPending(ctx context.Context) {
 	for filePath, t := range timers {
 		t.Stop()
 		if p, ok := pending[filePath]; ok {
-			w.pushDebounced(ctx, p.gameID, p.pathKey, p.ruleKey, p.relPath, p.filePath)
+			w.pushDebounced(ctx, p.gameID, p.pathKey, p.ruleKey, p.relPath, p.filePath, p.seq)
 		}
 	}
 }
@@ -499,9 +517,9 @@ func (w *Watcher) handleEvent(ctx context.Context, ev fsnotify.Event) {
 	filePath := ev.Name
 	gameID := matched.GameID
 	ruleKey := matched.RuleKey
-	w.pending[filePath] = pendingPush{gameID: gameID, pathKey: pathKey, ruleKey: ruleKey, relPath: relPath, filePath: filePath}
+	seq := w.stagePendingLocked(pendingPush{gameID: gameID, pathKey: pathKey, ruleKey: ruleKey, relPath: relPath, filePath: filePath})
 	w.timers[filePath] = time.AfterFunc(debounceDelay, func() {
-		w.pushDebounced(ctx, gameID, pathKey, ruleKey, relPath, filePath)
+		w.pushDebounced(ctx, gameID, pathKey, ruleKey, relPath, filePath, seq)
 	})
 	w.mu.Unlock()
 	logSyncInfo("watcher_queued", "game_id", gameID, "path_key", pathKey, "relative_path", relPath, "file", filePath)
@@ -577,15 +595,15 @@ func (w *Watcher) rescan(ctx context.Context) {
 
 				w.mu.Lock()
 				if _, alreadyQueued := w.timers[capturedPath]; !alreadyQueued {
-					w.pending[capturedPath] = pendingPush{
+					seq := w.stagePendingLocked(pendingPush{
 						gameID:   gID,
 						pathKey:  pk,
 						ruleKey:  rk,
 						relPath:  capturedRelPath,
 						filePath: capturedPath,
-					}
+					})
 					w.timers[capturedPath] = time.AfterFunc(debounceDelay, func() {
-						w.pushDebounced(ctx, gID, pk, rk, capturedRelPath, capturedPath)
+						w.pushDebounced(ctx, gID, pk, rk, capturedRelPath, capturedPath, seq)
 					})
 					queued++
 				}
@@ -615,15 +633,20 @@ func pushPathKey(ruleKey, relPath string, patterns []string, syncAll bool) strin
 	return ruleKey
 }
 
-func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, relPath, filePath string) {
+func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, relPath, filePath string, seq uint64) {
 	requeued := false
 	defer func() {
 		if requeued {
 			return
 		}
 		w.mu.Lock()
-		delete(w.timers, filePath)
-		delete(w.pending, filePath)
+		// Only clear the entry this call was scheduled for. A newer write that
+		// arrived while the push was in flight has its own seq and must stay
+		// queued, or FlushPending would never see it.
+		if cur, ok := w.pending[filePath]; !ok || cur.seq == seq {
+			delete(w.timers, filePath)
+			delete(w.pending, filePath)
+		}
 		w.mu.Unlock()
 	}()
 	if w.IsPaused != nil && w.IsPaused() {
@@ -635,9 +658,9 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 	// the final save state uploads once after the session ends.
 	if w.DeferPush != nil && w.DeferPush(gameID) {
 		w.mu.Lock()
-		w.pending[filePath] = pendingPush{gameID: gameID, pathKey: pathKey, ruleKey: ruleKey, relPath: relPath, filePath: filePath}
+		reseq := w.stagePendingLocked(pendingPush{gameID: gameID, pathKey: pathKey, ruleKey: ruleKey, relPath: relPath, filePath: filePath})
 		w.timers[filePath] = time.AfterFunc(gameDeferRecheck, func() {
-			w.pushDebounced(ctx, gameID, pathKey, ruleKey, relPath, filePath)
+			w.pushDebounced(ctx, gameID, pathKey, ruleKey, relPath, filePath, reseq)
 		})
 		requeued = true
 		w.mu.Unlock()
@@ -720,10 +743,9 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 			}
 			// Schedule one more debounce re-check.
 			w.emptyRetries[filePath] = true
-			p := pendingPush{gameID: gameID, pathKey: pathKey, ruleKey: ruleKey, relPath: relPath, filePath: filePath}
-			w.pending[filePath] = p
+			reseq := w.stagePendingLocked(pendingPush{gameID: gameID, pathKey: pathKey, ruleKey: ruleKey, relPath: relPath, filePath: filePath})
 			w.timers[filePath] = time.AfterFunc(debounceDelay, func() {
-				w.pushDebounced(ctx, gameID, pathKey, ruleKey, relPath, filePath)
+				w.pushDebounced(ctx, gameID, pathKey, ruleKey, relPath, filePath, reseq)
 			})
 			requeued = true
 			w.mu.Unlock()
@@ -752,9 +774,9 @@ func (w *Watcher) pushDebounced(ctx context.Context, gameID, pathKey, ruleKey, r
 		retries := w.settleRetries[filePath]
 		if retries < maxSettleRetries {
 			w.settleRetries[filePath] = retries + 1
-			w.pending[filePath] = pendingPush{gameID: gameID, pathKey: pathKey, ruleKey: ruleKey, relPath: relPath, filePath: filePath}
+			reseq := w.stagePendingLocked(pendingPush{gameID: gameID, pathKey: pathKey, ruleKey: ruleKey, relPath: relPath, filePath: filePath})
 			w.timers[filePath] = time.AfterFunc(debounceDelay, func() {
-				w.pushDebounced(ctx, gameID, pathKey, ruleKey, relPath, filePath)
+				w.pushDebounced(ctx, gameID, pathKey, ruleKey, relPath, filePath, reseq)
 			})
 			requeued = true
 			w.mu.Unlock()

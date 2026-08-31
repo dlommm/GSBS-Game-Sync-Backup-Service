@@ -310,6 +310,34 @@ func (c *Client) DownloadAll(ctx context.Context, gameID string) ([]DownloadedSa
 	return out, nil
 }
 
+// readLocalForPull reads the local file behind a pull decision, separating the
+// three outcomes that decision needs: absent, readable, and present but
+// unreadable.
+//
+// Collapsing the last into "absent" — which a bare `os.ReadFile(...); err == nil`
+// does — skipped the conflict check, the skew window, and
+// BackupBeforeOverwrite, so an unreadable or transiently locked local save that
+// was NEWER than the server copy got silently overwritten with no backup.
+func readLocalForPull(absPath string) (data []byte, exists bool, mtime time.Time, unreadable bool) {
+	fi, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, time.Time{}, false
+		}
+		// Something is there that we cannot inspect (permissions, a broken
+		// mount). Never assume it is absent.
+		return nil, true, time.Time{}, true
+	}
+	if fi.IsDir() {
+		return nil, true, fi.ModTime(), true
+	}
+	d, readErr := os.ReadFile(absPath)
+	if readErr != nil {
+		return nil, true, fi.ModTime(), true
+	}
+	return d, true, fi.ModTime(), false
+}
+
 // FileHash returns SHA256 hex of file content.
 func FileHash(content []byte) string {
 	h := sha256.Sum256(content)
@@ -573,21 +601,21 @@ func (c *Client) applyFromSummaries(ctx context.Context, summaries *SummaryRespo
 		if elig == paths.SkipNotInstalled || elig == paths.SkipNoAnchor {
 			continue
 		}
+		localData, localExists, localMtime, localUnreadable := readLocalForPull(absPath)
+		if localUnreadable {
+			logSyncWarn("pull_skip_local_unreadable", "game_id", s.GameID, "path_key", s.PathKey, "path", absPath)
+			stats.Skipped++
+			continue
+		}
 		localHash := ""
-		localExists := false
-		var localMtime time.Time
-		if data, err := os.ReadFile(absPath); err == nil {
-			localExists = true
-			localHash = FileHash(data)
+		if localExists {
+			localHash = FileHash(localData)
 			// s.ContentHash is the plaintext change hash (see ContentChangeHash),
 			// so this fast-path skip now works for encrypted saves too — local
 			// plaintext matches the server's recorded plaintext hash.
 			if s.ContentHash != "" && localHash == s.ContentHash {
 				stats.Skipped++
 				continue
-			}
-			if fi, err := os.Stat(absPath); err == nil {
-				localMtime = fi.ModTime()
 			}
 		}
 		serverTime, _ := time.Parse(time.RFC3339, s.UpdatedAt)
@@ -764,17 +792,14 @@ func (c *Client) applyOneSaveEncrypted(gameID, pathKey, updatedAt, contentB64, a
 	if elig == paths.SkipNotInstalled || elig == paths.SkipNoAnchor {
 		return false, nil
 	}
+	localData, localExists, localMtime, localUnreadable := readLocalForPull(absPath)
+	if localUnreadable {
+		logSyncWarn("pull_skip_local_unreadable", "game_id", gameID, "path_key", pathKey, "path", absPath)
+		return false, nil
+	}
 	localHash := ""
-	localExists := false
-	var localData []byte
-	var localMtime time.Time
-	if data, err := os.ReadFile(absPath); err == nil {
-		localExists = true
-		localData = data
-		localHash = FileHash(data)
-		if fi, err := os.Stat(absPath); err == nil {
-			localMtime = fi.ModTime()
-		}
+	if localExists {
+		localHash = FileHash(localData)
 	}
 	serverTime, _ := time.Parse(time.RFC3339, updatedAt)
 	// Same one-clock translation as the summaries path.

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,6 +132,11 @@ type config struct {
 	QuietHoursStart             string            `json:"quiet_hours_start,omitempty"`         // "22:30" local; with quiet_hours_end, sync defers in the window
 	QuietHoursEnd               string            `json:"quiet_hours_end,omitempty"`
 	WatchPaths                  []watchPath       `json:"watch_paths"`
+
+	// secretsUnavailable is set when the credential store could not be read
+	// while this config was loaded. saveConfig must not delete a stored secret
+	// it was merely unable to see. Never serialized.
+	secretsUnavailable bool `json:"-"`
 }
 
 // notifyPerUploadEnabled returns the per-upload toast setting (default true —
@@ -196,15 +202,22 @@ func reconcileSecrets(c *config) {
 		if err := secretSet(secretToken, c.Token); err == nil {
 			migrated = true
 		}
-	} else if v, ok := secretGet(secretToken); ok {
+	} else if v, ok, unavailable := secretGetStatus(secretToken); ok {
 		c.Token = v
+	} else if unavailable {
+		c.secretsUnavailable = true
 	}
 	if c.EncryptionPassphrase != "" {
 		if err := secretSet(secretPassphrase, c.EncryptionPassphrase); err == nil {
 			migrated = true
 		}
-	} else if v, ok := secretGet(secretPassphrase); ok {
+	} else if v, ok, unavailable := secretGetStatus(secretPassphrase); ok {
 		c.EncryptionPassphrase = v
+	} else if unavailable {
+		c.secretsUnavailable = true
+	}
+	if c.secretsUnavailable {
+		log.Printf("secrets: credential store unreachable — keeping stored secrets untouched this session")
 	}
 	// If secrets were just migrated into the keyring, rewrite the file without
 	// them. saveConfig re-stores to the keyring (idempotent) and strips them.
@@ -307,14 +320,17 @@ func saveConfig(c *config) error {
 		if err := secretSet(secretToken, c.Token); err == nil {
 			toWrite.Token = ""
 		}
-	} else {
+	} else if !c.secretsUnavailable {
+		// Only delete when we know the secret is genuinely absent. If the
+		// credential store could not be read, an empty token here means "we
+		// could not see it", and deleting would destroy a perfectly good one.
 		secretDelete(secretToken)
 	}
 	if c.EncryptionPassphrase != "" {
 		if err := secretSet(secretPassphrase, c.EncryptionPassphrase); err == nil {
 			toWrite.EncryptionPassphrase = ""
 		}
-	} else {
+	} else if !c.secretsUnavailable {
 		secretDelete(secretPassphrase)
 	}
 
