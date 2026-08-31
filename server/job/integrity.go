@@ -90,11 +90,7 @@ func (r *Runner) runIntegrityCheck(parentCtx context.Context) {
 			Msg("job runner: integrity_check finished")
 	}
 
-	if runID != "" {
-		if err := r.store.LogJobFinish(jobCtx, runID, status, errMsg, result.Checked); err != nil {
-			logx.Logger().Error().Str("component", "job").Str("job", integrityJobName).Err(err).Msg("job runner: log finish")
-		}
-	}
+	r.finishJobRun(runID, integrityJobName, status, errMsg, result.Checked)
 	if r.hub != nil {
 		r.hub.Broadcast(sse.Event{Type: "job-finished", Data: `{"job":"` + integrityJobName + `","status":"` + status + `"}`})
 	}

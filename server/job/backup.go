@@ -181,9 +181,7 @@ func (r *Runner) runBackup(parentCtx context.Context) {
 			Msg("job runner: backup complete")
 	}
 
-	if runID != "" {
-		_ = r.store.LogJobFinish(jobCtx, runID, status, detail, result.Files)
-	}
+	r.finishJobRun(runID, "backup", status, detail, result.Files)
 	if r.hub != nil {
 		r.hub.Broadcast(sse.Event{Type: "job-finished", Data: `{"job":"backup","status":"` + status + `"}`})
 	}

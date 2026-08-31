@@ -16,6 +16,26 @@ import (
 // ErrJobAlreadyRunning is returned when a sync is requested while one is in progress.
 var ErrJobAlreadyRunning = errors.New("job already running")
 
+// finishJobRunTimeout bounds the detached write that closes out a job_runs row.
+const finishJobRunTimeout = 10 * time.Second
+
+// finishJobRun records a terminal job status on a context detached from the
+// job's own. A job that ended via its own timeout or via CancelAll carries a
+// canceled context, and writing the terminal status through it is rejected —
+// leaving the job_runs row stuck "running". HasRunningJob has no staleness
+// window, so that wedges every later cron and manual run with
+// ErrJobAlreadyRunning until the server restarts and reconciles.
+func (r *Runner) finishJobRun(runID, jobName, status, errMsg string, count int) {
+	if runID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), finishJobRunTimeout)
+	defer cancel()
+	if err := r.store.LogJobFinish(ctx, runID, status, errMsg, count); err != nil {
+		logx.Logger().Error().Str("component", "job").Str("job", jobName).Err(err).Msg("job runner: log finish")
+	}
+}
+
 const (
 	autoCatchUpMaxCycles       = 25
 	autoCatchUpNoProgressLimit = 2
@@ -430,11 +450,7 @@ func (r *Runner) runPCGWSync(parentCtx context.Context, jobName string, opts PCG
 		logx.Logger().Info().Str("component", "job").Int("entries", count).Msg("job runner: pcgw_sync success")
 	}
 
-	if runID != "" {
-		if err := r.store.LogJobFinish(jobCtx, runID, status, errMsg, count); err != nil {
-			logx.Logger().Error().Str("component", "job").Str("job", jobName).Err(err).Msg("job runner: log finish")
-		}
-	}
+	r.finishJobRun(runID, jobName, status, errMsg, count)
 
 	if r.hub != nil {
 		r.hub.Broadcast(sse.Event{Type: "job-finished", Data: `{"job":"pcgw_sync","status":"` + status + `"}`})
@@ -581,7 +597,11 @@ func (r *Runner) runPCGWBundleFetch(parentCtx context.Context, jobName string, o
 	if fetchErr == nil && status == JobSuccess {
 		settings, _ := r.store.ListAdminSettings(jobCtx)
 		if store.PCGWBundleIncrementalFallbackFromSettings(settings) {
-			if _, err := r.TryRunPCGWSync(jobCtx); err != nil && !errors.Is(err, ErrJobAlreadyRunning) {
+			// Detached: jobCtx's deferred cancel fires as soon as this function
+			// returns, milliseconds after the fallback goroutine starts. The
+			// spawned sync registers its own cancelFunc, so CancelAll and the
+			// shutdown drain still reach it.
+			if _, err := r.TryRunPCGWSync(context.Background()); err != nil && !errors.Is(err, ErrJobAlreadyRunning) {
 				logx.Logger().Warn().Err(err).Msg("bundle fetch: incremental fallback failed to start")
 			}
 		}
@@ -603,18 +623,15 @@ func (r *Runner) runPCGWBundleFetch(parentCtx context.Context, jobName string, o
 					Msg("bundle fetch failed and PCGW mirror is empty — API fallback disabled; will retry bundle on next cron (or import a bundle file via Admin)")
 			} else {
 				logx.Logger().Warn().Err(fetchErr).Msg("bundle fetch failed; falling back to API sync to keep data fresh")
-				if _, err := r.TryRunPCGWSync(jobCtx); err != nil && !errors.Is(err, ErrJobAlreadyRunning) {
+				// Detached for the same reason as the incremental fallback above.
+				if _, err := r.TryRunPCGWSync(context.Background()); err != nil && !errors.Is(err, ErrJobAlreadyRunning) {
 					logx.Logger().Warn().Err(err).Msg("bundle fetch: API fallback failed to start")
 				}
 			}
 		}
 	}
 
-	if runID != "" {
-		if err := r.store.LogJobFinish(jobCtx, runID, status, errMsg, entries); err != nil {
-			logx.Logger().Error().Str("component", "job").Str("job", jobName).Err(err).Msg("job runner: log finish")
-		}
-	}
+	r.finishJobRun(runID, jobName, status, errMsg, entries)
 
 	if syncRunID != "" {
 		// games_ok carries the change count (rows added/updated this sync), which
