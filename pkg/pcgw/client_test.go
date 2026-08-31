@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -146,10 +147,19 @@ func TestListGamePagesParsesRows(t *testing.T) {
 	}
 }
 
-func TestListGamePagesIntegration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("live PCGW API")
+// Live-API tests are opt-in via GSBS_LIVE_PCGW_TESTS=1. -short is not enough of
+// a gate: CI runs the suite without it, so an upstream policy change turns every
+// push red. PCGamingWiki removed the runcargoqueries right from anonymous users,
+// so this particular test now fails for everyone without credentials.
+func requireLivePCGW(t *testing.T) {
+	t.Helper()
+	if testing.Short() || os.Getenv("GSBS_LIVE_PCGW_TESTS") != "1" {
+		t.Skip("live PCGW API (set GSBS_LIVE_PCGW_TESTS=1 to run)")
 	}
+}
+
+func TestListGamePagesIntegration(t *testing.T) {
+	requireLivePCGW(t)
 	pages, err := NewClient().ListGamePages(context.Background(), 3, 0)
 	if err != nil {
 		t.Fatalf("ListGamePages: %v", err)
