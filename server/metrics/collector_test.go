@@ -1,8 +1,11 @@
 package metrics
 
 import (
+	"fmt"
+	"net/http"
 	"strconv"
 	"testing"
+	"time"
 )
 
 func TestNormalizePath(t *testing.T) {
@@ -31,5 +34,34 @@ func TestCollectorRecordBounded(t *testing.T) {
 	c.counts.Range(func(_, _ any) bool { n++; return true })
 	if n != 1 {
 		t.Fatalf("expected 1 bounded series, got %d", n)
+	}
+}
+
+// The server is internet-facing and every unmatched path used to get its own
+// counter, so scanner traffic grew the map and the Prometheus series set
+// without limit.
+func TestCollectorFoldsNotFoundPathsIntoOneSeries(t *testing.T) {
+	c := NewCollector(nil, nil)
+	for i := 0; i < 1000; i++ {
+		c.Record(fmt.Sprintf("/wp-admin/%d.php", i), http.StatusNotFound)
+	}
+	if got := c.countKeys.Load(); got != 1 {
+		t.Errorf("404 flood produced %d series, want 1", got)
+	}
+}
+
+// Real routes still get their own series, and the hard cap backstops anything
+// that slips past the 404 fold (e.g. a scanner that gets 200s or 500s).
+func TestCollectorCapsDistinctSeries(t *testing.T) {
+	c := NewCollector(nil, nil)
+	for i := 0; i < maxDistinctSeries*3; i++ {
+		c.Record(fmt.Sprintf("/api/thing/%d", i), http.StatusOK)
+		c.RecordDuration(fmt.Sprintf("/api/thing/%d", i), time.Millisecond)
+	}
+	if got := c.countKeys.Load(); got > maxDistinctSeries+1 {
+		t.Errorf("count series %d exceeds cap %d", got, maxDistinctSeries)
+	}
+	if got := c.durationKeys.Load(); got > maxDistinctSeries+1 {
+		t.Errorf("duration series %d exceeds cap %d", got, maxDistinctSeries)
 	}
 }

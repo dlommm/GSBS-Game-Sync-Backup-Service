@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/pcgw"
+	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/gsbs/gsbs/server/logx"
 )
 
@@ -90,11 +91,30 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Unknown IDs stop here, before anything is written or retained. The
+	// endpoint is unauthenticated and unthrottled, so without this check a
+	// scanner walking numeric IDs created a permanent .miss file and a
+	// permanent coverFetchLocks entry per ID — unbounded inode and memory
+	// growth, plus an outbound CDN fetch attempt each time.
+	game, err := h.coverGame(r.Context(), id)
+	if err != nil || game == nil {
+		http.NotFound(w, r)
+		return
+	}
+
 	// Cache miss — fetch under a per-game lock and re-check inside it.
 	muIface, _ := coverFetchLocks.LoadOrStore(id, &sync.Mutex{})
 	mu := muIface.(*sync.Mutex)
 	mu.Lock()
-	defer mu.Unlock()
+	defer func() {
+		mu.Unlock()
+		// Release the lock entry too: it exists only to collapse a concurrent
+		// burst for one game. Keeping it forever made the map grow with every
+		// distinct ID ever requested. A racing fetcher that already took this
+		// mutex still holds a valid one; the worst case is one redundant fetch,
+		// which the re-checks above absorb.
+		coverFetchLocks.Delete(id)
+	}()
 	if isFile(jpgPath) {
 		h.serveCoverFile(w, r, jpgPath)
 		return
@@ -105,7 +125,7 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var data []byte
-	appID := h.steamAppIDForGame(r.Context(), id)
+	appID := steamAppIDForCoverGame(game)
 	if appID != "" {
 		var err error
 		if data, err = fetchSteamCover(r.Context(), appID); err != nil {
@@ -117,7 +137,7 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 	// when the game record carries one. Same proxy + permanent-cache pattern,
 	// so PCGW is hit at most once per game.
 	if data == nil {
-		if url := h.pcgwCoverURL(r.Context(), id); url != "" {
+		if url := strings.TrimSpace(game.CoverURL); url != "" {
 			var err error
 			if data, err = fetchAllowlistedCover(r.Context(), url); err != nil {
 				logx.Logger().Debug().Str("game_id", id).Str("url", url).Err(err).Msg("pcgw cover fetch failed")
@@ -152,13 +172,19 @@ func (h *WebHandler) serveCoverFile(w http.ResponseWriter, r *http.Request, path
 	http.ServeFile(w, r, path)
 }
 
-func (h *WebHandler) steamAppIDForGame(ctx context.Context, id string) string {
+// coverGame loads the PCGW game record behind a cover ID, or nil when the
+// server does not know that ID.
+func (h *WebHandler) coverGame(ctx context.Context, id string) (*types.PCGWGame, error) {
 	pageID, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
-		return ""
+		return nil, err
 	}
-	g, err := h.store.GetPCGWGame(ctx, pageID)
-	if err != nil || g == nil {
+	return h.store.GetPCGWGame(ctx, pageID)
+}
+
+// steamAppIDForCoverGame picks the first usable Steam App ID for a game record.
+func steamAppIDForCoverGame(g *types.PCGWGame) string {
+	if g == nil {
 		return ""
 	}
 	ids := g.SteamAppIDs
@@ -174,19 +200,6 @@ func (h *WebHandler) steamAppIDForGame(ctx context.Context, id string) string {
 		}
 	}
 	return ""
-}
-
-// pcgwCoverURL returns the game's PCGW-hosted cover URL, if any.
-func (h *WebHandler) pcgwCoverURL(ctx context.Context, id string) string {
-	pageID, err := strconv.ParseInt(id, 10, 64)
-	if err != nil {
-		return ""
-	}
-	g, err := h.store.GetPCGWGame(ctx, pageID)
-	if err != nil || g == nil {
-		return ""
-	}
-	return strings.TrimSpace(g.CoverURL)
 }
 
 // coverAllowedHosts is the fixed set of hosts the cover proxy will fetch from

@@ -23,10 +23,23 @@ type Collector struct {
 	store store.Store
 	sse   SSECounter
 	// key: "path|code" -> count
-	counts sync.Map
+	counts    sync.Map
+	countKeys atomic.Int64
 	// key: path -> *durationSumCount (for request duration summary)
-	durations sync.Map
+	durations    sync.Map
+	durationKeys atomic.Int64
 }
+
+// maxDistinctSeries bounds how many label sets each metric map may hold. Real
+// deployments have well under a hundred routes; the cap exists because the
+// server is internet-facing and every unmatched path used to get its own
+// counter, so scanner traffic grew both the map and the Prometheus series set
+// without limit. Anything beyond the cap is folded into overflowPath.
+const maxDistinctSeries = 512
+
+// overflowPath collects requests whose path is not a real route: unmatched
+// paths (404s) and anything arriving after the cap is reached.
+const overflowPath = "/other"
 
 type durationSumCount struct {
 	sumSeconds float64
@@ -59,8 +72,23 @@ func (c *Collector) Record(path string, statusCode int) {
 	if c == nil {
 		return
 	}
+	// A 404 path is by definition not a route, so it never earns a series of
+	// its own — that is exactly the scanner traffic that made this unbounded.
+	if statusCode == http.StatusNotFound {
+		path = overflowPath
+	}
 	key := fmt.Sprintf("%s|%d", path, statusCode)
-	v, _ := c.counts.LoadOrStore(key, new(int64))
+	if v, ok := c.counts.Load(key); ok {
+		atomic.AddInt64(v.(*int64), 1)
+		return
+	}
+	if c.countKeys.Load() >= maxDistinctSeries {
+		key = fmt.Sprintf("%s|%d", overflowPath, statusCode)
+	}
+	v, loaded := c.counts.LoadOrStore(key, new(int64))
+	if !loaded {
+		c.countKeys.Add(1)
+	}
 	atomic.AddInt64(v.(*int64), 1)
 }
 
@@ -69,7 +97,17 @@ func (c *Collector) RecordDuration(path string, d time.Duration) {
 	if c == nil {
 		return
 	}
-	v, _ := c.durations.LoadOrStore(path, &durationSumCount{})
+	v, ok := c.durations.Load(path)
+	if !ok {
+		if c.durationKeys.Load() >= maxDistinctSeries {
+			path = overflowPath
+		}
+		var loaded bool
+		v, loaded = c.durations.LoadOrStore(path, &durationSumCount{})
+		if !loaded {
+			c.durationKeys.Add(1)
+		}
+	}
 	dc := v.(*durationSumCount)
 	dc.mu.Lock()
 	dc.sumSeconds += d.Seconds()

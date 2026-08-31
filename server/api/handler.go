@@ -71,6 +71,12 @@ type Handler struct {
 	version         string // server version for health endpoint
 	lastSeen        *lastSeenThrottle
 
+	// manifestLogSlots bounds the detached best-effort fetch-logging
+	// goroutines. Each does up to three SQLite round trips funnelled through
+	// the single writer, so an unbounded spawn parked one goroutine per
+	// manifest request — each holding a 10 s timeout — under any flood.
+	manifestLogSlots chan struct{}
+
 	manifestCache struct {
 		mu      sync.RWMutex
 		entries []types.GameSaveLocation
@@ -168,7 +174,45 @@ const manifestCacheTTL = 10 * time.Minute
 // sessionSecret is used to sign the TOTP step token when 2FA is enabled; pass the same value as WebUI session secret. Empty = no API 2FA.
 // version is included in the health response when non-empty.
 func NewHandler(st store.Store, authSvc *auth.Service, allowRegister bool, hub *sse.Hub, authLimiter, pushLimiter, pullLimiter, generalLimiter, manifestLimiter *ratelimit.Limiter, maxStorageBytes int64, readOnly bool, sessionSecret string, version string) *Handler {
-	return &Handler{store: st, auth: authSvc, allowRegister: allowRegister, hub: hub, authLimiter: authLimiter, pushLimiter: pushLimiter, pullLimiter: pullLimiter, generalLimiter: generalLimiter, manifestLimiter: manifestLimiter, maxStorageBytes: maxStorageBytes, readOnly: readOnly, sessionSecret: sessionSecret, version: version, lastSeen: newLastSeenThrottle(10 * time.Minute)}
+	return &Handler{store: st, auth: authSvc, allowRegister: allowRegister, hub: hub, authLimiter: authLimiter, pushLimiter: pushLimiter, pullLimiter: pullLimiter, generalLimiter: generalLimiter, manifestLimiter: manifestLimiter, maxStorageBytes: maxStorageBytes, readOnly: readOnly, sessionSecret: sessionSecret, version: version, lastSeen: newLastSeenThrottle(10 * time.Minute), manifestLogSlots: make(chan struct{}, maxConcurrentManifestFetchLogs)}
+}
+
+// maxConcurrentManifestFetchLogs caps the detached fetch-logging goroutines.
+const maxConcurrentManifestFetchLogs = 8
+
+// logManifestFetchAsync records a manifest fetch without blocking the response.
+//
+// Values are captured BEFORE the goroutine: *http.Request must not be touched
+// after the handler returns (the server reuses it), so only plain strings and
+// ints cross the goroutine boundary. The work is dropped rather than queued
+// when every slot is busy — this is best-effort telemetry, and an unbounded
+// spawn let a manifest flood park a goroutine and three SQLite round trips per
+// request.
+func (h *Handler) logManifestFetchAsync(fetchToken string, entriesCount int) {
+	if h.manifestLogSlots == nil {
+		return
+	}
+	select {
+	case h.manifestLogSlots <- struct{}{}:
+	default:
+		return
+	}
+	go func() { //nolint:gosec // G118: deliberately detached best-effort logging; request values captured before the goroutine
+		defer func() { <-h.manifestLogSlots }()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		clientID, clientName, username := "", "", ""
+		if fetchToken != "" {
+			if uid, cid, cname, _, authErr := h.store.ClientByToken(ctx, fetchToken); authErr == nil {
+				clientID = cid
+				clientName = cname
+				if uname, err := h.store.UsernameByID(ctx, uid); err == nil {
+					username = uname
+				}
+			}
+		}
+		_ = h.store.LogManifestFetch(ctx, clientID, clientName, username, entriesCount)
+	}()
 }
 
 // InvalidateManifestCache clears the in-memory manifest cache so the next
@@ -1363,26 +1407,7 @@ func (h *Handler) handleManifest(w http.ResponseWriter, r *http.Request) {
 		logx.Logger().Debug().Int("entries", len(entries)).Str("include", include).Msg("api manifest full")
 	}
 
-	// Log the fetch (best-effort). Values are captured BEFORE the goroutine:
-	// *http.Request must not be touched after the handler returns (the server
-	// reuses it), so only plain strings/ints cross the goroutine boundary.
-	fetchToken := getToken(r)
-	entriesCount := len(entries)
-	go func() { //nolint:gosec // G118: deliberately detached best-effort logging; request values captured before the goroutine
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		clientID, clientName, username := "", "", ""
-		if fetchToken != "" {
-			if uid, cid, cname, _, authErr := h.store.ClientByToken(ctx, fetchToken); authErr == nil {
-				clientID = cid
-				clientName = cname
-				if uname, err := h.store.UsernameByID(ctx, uid); err == nil {
-					username = uname
-				}
-			}
-		}
-		_ = h.store.LogManifestFetch(ctx, clientID, clientName, username, entriesCount)
-	}()
+	h.logManifestFetchAsync(getToken(r), len(entries))
 
 	total := len(entries)
 	manifestLimit, manifestOffset := parseLimitOffset(r)
