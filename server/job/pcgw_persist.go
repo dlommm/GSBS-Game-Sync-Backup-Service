@@ -119,6 +119,16 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	finishRun := func(status, errMsg string) {
 		_ = st.FinishPCGWSyncRun(context.Background(), runID, status, errMsg, stats)
 	}
+	// checkpointOnCancel saves resume progress from a cancellation path. It must
+	// NOT use the job's ctx: that context is already canceled by the time these
+	// branches run, so the write was rejected and up to a full budget of pages
+	// of progress was lost on every cancel — the resume the code intends never
+	// happened. finishRun above detaches for the same reason.
+	checkpointOnCancel := func(write func(context.Context)) {
+		cpCtx, cpCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cpCancel()
+		write(cpCtx)
+	}
 
 	// ─── Single-page mode (unchanged) ────────────────────────────────────────
 	if opts.SinglePage > 0 {
@@ -167,7 +177,9 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 		phase1, tailGrew, catalogScanMode, err = runCatalogPhase(ctx, st, client, runID, opts, reportEx, &stats)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				_ = st.UpdatePCGWSyncRunCheckpoint(ctx, runID, 0, stats)
+				checkpointOnCancel(func(cpCtx context.Context) {
+					_ = st.UpdatePCGWSyncRunCheckpoint(cpCtx, runID, 0, stats)
+				})
 				finishRun(ctxStatus(ctx), ctx.Err().Error())
 				return totalUpserted, ctx.Err()
 			}
@@ -202,7 +214,9 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 			phase1, err = RunCatalogScan(ctx, st, client, runID, phase1ReasonCatalogIncomplete, reportEx)
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					_ = st.UpdatePCGWSyncRunCheckpoint(ctx, runID, 0, stats)
+					checkpointOnCancel(func(cpCtx context.Context) {
+						_ = st.UpdatePCGWSyncRunCheckpoint(cpCtx, runID, 0, stats)
+					})
 					finishRun(ctxStatus(ctx), ctx.Err().Error())
 					return totalUpserted, ctx.Err()
 				}
@@ -404,7 +418,9 @@ func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, report
 	for i := startCursor; i < len(queue); i++ {
 		select {
 		case <-ctx.Done():
-			_ = st.UpdatePCGWSyncRunPhase2Progress(ctx, runID, processed, i)
+			checkpointOnCancel(func(cpCtx context.Context) {
+				_ = st.UpdatePCGWSyncRunPhase2Progress(cpCtx, runID, processed, i)
+			})
 			finishRun(ctxStatus(ctx), ctx.Err().Error())
 			return totalUpserted, ctx.Err()
 		default:

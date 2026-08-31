@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gsbs/gsbs/server/api"
 	"github.com/gsbs/gsbs/server/auth"
@@ -19,23 +20,39 @@ import (
 
 // WebHandler serves the WebUI (login, register, dashboard, admin).
 type WebHandler struct {
-	store           store.Store
-	auth            *auth.Service
-	secret          string
-	adminUsername   string
-	allowRegister   bool
-	templates       *template.Template
-	hub             *sse.Hub
-	apiHandler      *api.Handler
-	jobRunner       *job.Runner
-	pcgwCron        *schedule.PCGWCron
-	gsbsVersion     string
-	maxStorageBytes int64
-	readOnly        bool
-	loginLimiter    *ratelimit.Limiter
-	coverRoot       string
-	notifyFn        func(notify.Event)
+	store         store.Store
+	auth          *auth.Service
+	secret        string
+	adminUsername string
+	templates     *template.Template
+	hub           *sse.Hub
+	apiHandler    *api.Handler
+	jobRunner     *job.Runner
+	pcgwCron      *schedule.PCGWCron
+	gsbsVersion   string
+	readOnly      bool
+	loginLimiter  *ratelimit.Limiter
+	coverRoot     string
+	notifyFn      func(notify.Event)
+
+	// allowRegister and maxStorageBytes are read live rather than captured at
+	// process start. The setup wizard is their only writer and it runs AFTER
+	// startup, so an operator who unchecked "allow registration" during setup
+	// found /register still open — and the storage limit still unset — until
+	// the server was restarted, with nothing saying a restart was needed.
+	allowRegister   atomic.Bool
+	maxStorageBytes atomic.Int64
 }
+
+// SetAllowRegister updates the registration policy for subsequent requests.
+func (h *WebHandler) SetAllowRegister(v bool) { h.allowRegister.Store(v) }
+
+// SetMaxStorageBytes updates the global storage limit for subsequent requests.
+func (h *WebHandler) SetMaxStorageBytes(v int64) { h.maxStorageBytes.Store(v) }
+
+func (h *WebHandler) registrationAllowed() bool { return h.allowRegister.Load() }
+
+func (h *WebHandler) globalStorageLimit() int64 { return h.maxStorageBytes.Load() }
 
 // SetNotifier wires the notification system into the WebUI handler.
 func (h *WebHandler) SetNotifier(fn func(notify.Event)) {
@@ -50,14 +67,16 @@ func (h *WebHandler) notifyEvent(ev notify.Event) {
 
 // NewWebHandler creates a WebHandler. loginLimiter may be nil (no rate limit on WebUI login).
 func NewWebHandler(st store.Store, authSvc *auth.Service, secret, adminUsername string, allowRegister bool, hub *sse.Hub, apiHandler *api.Handler, jobRunner *job.Runner, pcgwCron *schedule.PCGWCron, gsbsVersion string, maxStorageBytes int64, readOnly bool, loginLimiter *ratelimit.Limiter) *WebHandler {
-	return &WebHandler{
+	h := &WebHandler{
 		store: st, auth: authSvc, secret: secret, adminUsername: adminUsername,
-		allowRegister: allowRegister, templates: parseTemplates(), hub: hub,
+		templates: parseTemplates(), hub: hub,
 		apiHandler: apiHandler, jobRunner: jobRunner, pcgwCron: pcgwCron, gsbsVersion: gsbsVersion,
-		maxStorageBytes: maxStorageBytes,
-		readOnly:        readOnly, loginLimiter: loginLimiter,
+		readOnly: readOnly, loginLimiter: loginLimiter,
 		coverRoot: coverRootFromEnv(),
 	}
+	h.allowRegister.Store(allowRegister)
+	h.maxStorageBytes.Store(maxStorageBytes)
+	return h
 }
 
 func (h *WebHandler) isAdminUser(ctx context.Context, userID, username string) bool {

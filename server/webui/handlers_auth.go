@@ -19,7 +19,7 @@ func (h *WebHandler) serveLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	csrfToken := SetCSRFToken(w, r, h.secret)
 	h.render(w, "login.html", map[string]interface{}{
-		"AllowRegister": h.allowRegister,
+		"AllowRegister": h.registrationAllowed(),
 		"CSRFToken":     csrfToken,
 	})
 }
@@ -33,7 +33,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
 			"Error":         "Too many login attempts. Please wait and try again.",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -44,7 +44,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
 			"Error":         "Username and password required",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -53,7 +53,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
 			"Error":         "Username too long",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -64,7 +64,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
 			"Error":         "Invalid password length",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -77,7 +77,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
 			"Error":         "Too many login attempts. Please wait and try again.",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -89,7 +89,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
 			"Error":         "Invalid username or password",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -104,7 +104,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
 			"Error":         "Login is temporarily unavailable. Please try again.",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -120,7 +120,7 @@ func (h *WebHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "login.html", map[string]interface{}{
 			"Error":         "Login failed. Please try again.",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -247,13 +247,13 @@ func (h *WebHandler) handleLoginTOTP(w http.ResponseWriter, r *http.Request) {
 func (h *WebHandler) serveRegister(w http.ResponseWriter, r *http.Request) {
 	csrfToken := SetCSRFToken(w, r, h.secret)
 	h.render(w, "register.html", map[string]interface{}{
-		"AllowRegister": h.allowRegister,
+		"AllowRegister": h.registrationAllowed(),
 		"CSRFToken":     csrfToken,
 	})
 }
 
 func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
-	if !h.allowRegister {
+	if !h.registrationAllowed() {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "register.html", map[string]interface{}{
 			"Error":         "Registration is currently disabled by the server administrator.",
@@ -270,7 +270,7 @@ func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "register.html", map[string]interface{}{
 			"Error":         "Too many attempts. Please wait and try again.",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -282,7 +282,7 @@ func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "register.html", map[string]interface{}{
 			"Error":         "Username and password required",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -291,7 +291,7 @@ func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "register.html", map[string]interface{}{
 			"Error":         "Username too long",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -300,7 +300,7 @@ func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "register.html", map[string]interface{}{
 			"Error":         "Password must be 8–72 characters",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -309,7 +309,7 @@ func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "register.html", map[string]interface{}{
 			"Error":         "Passwords do not match",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return
@@ -320,7 +320,7 @@ func (h *WebHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
 		csrfToken := SetCSRFToken(w, r, h.secret)
 		h.render(w, "register.html", map[string]interface{}{
 			"Error":         "Username already taken",
-			"AllowRegister": h.allowRegister,
+			"AllowRegister": h.registrationAllowed(),
 			"CSRFToken":     csrfToken,
 		})
 		return

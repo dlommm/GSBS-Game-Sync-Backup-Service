@@ -2,6 +2,7 @@ package webui
 
 import (
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -150,6 +151,28 @@ func (h *WebHandler) handleSetupSubmit(w http.ResponseWriter, r *http.Request) {
 	for k, v := range settings {
 		if err := h.store.SetAdminSetting(ctx, k, v); err != nil {
 			logx.Logger().Warn().Str("key", k).Err(err).Msg("setup: save setting")
+		}
+	}
+
+	// Apply the wizard's choices to the running process. These used to be read
+	// once at startup, which is BEFORE the wizard runs — so unchecking "allow
+	// registration" left /register and /api/register open, and the storage
+	// limit unset, until someone restarted the server. Env vars still win, so
+	// only settings the operator can actually control here are applied.
+	if _, envPinned := os.LookupEnv("GSBS_ALLOW_REGISTER"); !envPinned {
+		h.SetAllowRegister(allowRegister)
+		if h.apiHandler != nil {
+			h.apiHandler.SetAllowRegister(allowRegister)
+		}
+	}
+	if _, envPinned := os.LookupEnv("GSBS_MAX_STORAGE_BYTES"); !envPinned {
+		if raw, ok := settings[store.AdminSettingMaxStorageBytes]; ok {
+			if n, convErr := strconv.ParseInt(raw, 10, 64); convErr == nil && n >= 0 {
+				h.SetMaxStorageBytes(n)
+				if h.apiHandler != nil {
+					h.apiHandler.SetMaxStorageBytes(n)
+				}
+			}
 		}
 	}
 

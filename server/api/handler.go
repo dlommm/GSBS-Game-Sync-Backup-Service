@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/savepath"
@@ -58,18 +59,24 @@ const maxAuthBody = 1 << 20
 type Handler struct {
 	store           store.Store
 	auth            *auth.Service
-	allowRegister   bool
 	hub             *sse.Hub
 	authLimiter     *ratelimit.Limiter
 	pushLimiter     *ratelimit.Limiter
 	pullLimiter     *ratelimit.Limiter
 	generalLimiter  *ratelimit.Limiter
 	manifestLimiter *ratelimit.Limiter
-	maxStorageBytes int64  // 0 = unlimited
 	readOnly        bool   // if true, reject push and delete
 	sessionSecret   string // for signing TOTP step token when 2FA enabled; empty = no API 2FA
 	version         string // server version for health endpoint
 	lastSeen        *lastSeenThrottle
+
+	// allowRegister and maxStorageBytes are read live rather than captured at
+	// process start. The setup wizard is their only writer and it runs AFTER
+	// startup, so an operator who unchecked "allow registration" during setup
+	// found /api/register still open — and the storage limit still unset —
+	// until the server was restarted.
+	allowRegister   atomic.Bool
+	maxStorageBytes atomic.Int64 // 0 = unlimited
 
 	// manifestLogSlots bounds the detached best-effort fetch-logging
 	// goroutines. Each does up to three SQLite round trips funnelled through
@@ -174,8 +181,21 @@ const manifestCacheTTL = 10 * time.Minute
 // sessionSecret is used to sign the TOTP step token when 2FA is enabled; pass the same value as WebUI session secret. Empty = no API 2FA.
 // version is included in the health response when non-empty.
 func NewHandler(st store.Store, authSvc *auth.Service, allowRegister bool, hub *sse.Hub, authLimiter, pushLimiter, pullLimiter, generalLimiter, manifestLimiter *ratelimit.Limiter, maxStorageBytes int64, readOnly bool, sessionSecret string, version string) *Handler {
-	return &Handler{store: st, auth: authSvc, allowRegister: allowRegister, hub: hub, authLimiter: authLimiter, pushLimiter: pushLimiter, pullLimiter: pullLimiter, generalLimiter: generalLimiter, manifestLimiter: manifestLimiter, maxStorageBytes: maxStorageBytes, readOnly: readOnly, sessionSecret: sessionSecret, version: version, lastSeen: newLastSeenThrottle(10 * time.Minute), manifestLogSlots: make(chan struct{}, maxConcurrentManifestFetchLogs)}
+	h := &Handler{store: st, auth: authSvc, hub: hub, authLimiter: authLimiter, pushLimiter: pushLimiter, pullLimiter: pullLimiter, generalLimiter: generalLimiter, manifestLimiter: manifestLimiter, readOnly: readOnly, sessionSecret: sessionSecret, version: version, lastSeen: newLastSeenThrottle(10 * time.Minute), manifestLogSlots: make(chan struct{}, maxConcurrentManifestFetchLogs)}
+	h.allowRegister.Store(allowRegister)
+	h.maxStorageBytes.Store(maxStorageBytes)
+	return h
 }
+
+// SetAllowRegister updates the registration policy for subsequent requests.
+func (h *Handler) SetAllowRegister(v bool) { h.allowRegister.Store(v) }
+
+// SetMaxStorageBytes updates the global storage limit for subsequent requests.
+func (h *Handler) SetMaxStorageBytes(v int64) { h.maxStorageBytes.Store(v) }
+
+func (h *Handler) registrationAllowed() bool { return h.allowRegister.Load() }
+
+func (h *Handler) globalStorageLimit() int64 { return h.maxStorageBytes.Load() }
 
 // maxConcurrentManifestFetchLogs caps the detached fetch-logging goroutines.
 const maxConcurrentManifestFetchLogs = 8
@@ -407,7 +427,7 @@ func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if h.rateLimited(w, r, h.authLimiter, netutil.ClientIP(r), "auth") {
 		return
 	}
-	if !h.allowRegister {
+	if !h.registrationAllowed() {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "registration is disabled"})
 		return
 	}
@@ -1112,7 +1132,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 	existingSize, _ := h.store.GetSaveContentSize(r.Context(), userID, gameID, pathKey)
 	delta := int64(len(content)) - existingSize
 	// Global storage limit pre-check (0 = unlimited)
-	if h.maxStorageBytes > 0 {
+	if limit := h.globalStorageLimit(); limit > 0 {
 		total, err := h.store.TotalStorageUsage(r.Context())
 		if err != nil {
 			logx.Logger().Error().
@@ -1123,7 +1143,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "storage check failed"})
 			return
 		}
-		if total+delta > h.maxStorageBytes && delta > 0 {
+		if total+delta > limit && delta > 0 {
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "global storage limit exceeded"})
 			return
 		}
@@ -1267,7 +1287,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		Encrypted:        encrypted,
 		RelativePath:     relPath,
 		QuotaBytes:       userQuota,
-		GlobalLimitBytes: h.maxStorageBytes,
+		GlobalLimitBytes: h.globalStorageLimit(),
 	}
 	skipped, err := h.store.UpsertSaveWithMeta(r.Context(), userID, gameID, pathKey, content, meta)
 	if err != nil {

@@ -27,6 +27,13 @@ import (
 // no-op, success, or a hard error) return handled=true.
 func pcgwBundleFetchIndexed(ctx context.Context, st store.Store, settings map[string]string, indexURL string, opts PCGWBundleFetchOptions) (BundleFetchResult, bool, error) {
 	storedIndexETag := strings.TrimSpace(settings[store.AdminSettingPCGWBundleIndexETag])
+	if opts.ForceFull {
+		// Force a real download rather than sending the stored ETag: on 304 the
+		// body is empty, and the parse below then failed with "unexpected end
+		// of JSON input" instead of re-importing. The legacy path already
+		// clears the ETag for ForceFull for exactly this reason.
+		storedIndexETag = ""
+	}
 	merged := parseVersion(settings[store.AdminSettingPCGWBundleMergedVersion])
 
 	idxData, idxETag, notModified, err := fetchBundleHTTP(ctx, indexURL, storedIndexETag)

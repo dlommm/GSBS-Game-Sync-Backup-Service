@@ -261,7 +261,7 @@ func (h *WebHandler) handleImportSaves(w http.ResponseWriter, r *http.Request) {
 			RelativePath:     e.RelativePath,
 			Encrypted:        e.Encrypted,
 			QuotaBytes:       userQuota,
-			GlobalLimitBytes: h.maxStorageBytes,
+			GlobalLimitBytes: h.globalStorageLimit(),
 		}
 		if e.Encrypted {
 			// The plaintext hash cannot be recomputed server-side; trust the

@@ -111,6 +111,19 @@ func runRestore(args []string) error {
 	if counts["gsbs.db"] == 0 {
 		return errors.New("archive contains no gsbs.db — aborting (nothing was started)")
 	}
+	// Remove any WAL/SHM sidecars left over from the database that used to live
+	// here. A backup archive never contains them (the entry allowlist above
+	// rejects those names), so anything present belongs to the OLD database.
+	// Restoring with --force over a live data dir otherwise left SQLite to
+	// recover the restored file against a WAL that is not its own, which can
+	// corrupt it or resurrect pages from the database being replaced — in the
+	// disaster-recovery tool itself.
+	for _, sidecar := range []string{"gsbs.db-wal", "gsbs.db-shm"} {
+		path := filepath.Join(absDest, sidecar)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove stale %s (it does not belong to the restored database): %w", sidecar, err)
+		}
+	}
 	// Tighten the keys directory (created 0750 above, but it must be 0700).
 	if counts["gsbs-keys"] > 0 {
 		_ = os.Chmod(filepath.Join(absDest, "gsbs-keys"), 0o700)

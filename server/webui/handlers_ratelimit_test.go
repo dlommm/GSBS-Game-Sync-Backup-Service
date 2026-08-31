@@ -16,12 +16,13 @@ import (
 // deny branch, which must return before any store access.
 func newRateLimitTestHandler(t *testing.T) *WebHandler {
 	t.Helper()
-	return &WebHandler{
-		secret:        testSecret,
-		templates:     parseTemplates(),
-		allowRegister: true,
-		loginLimiter:  ratelimit.New(1, time.Minute),
+	h := &WebHandler{
+		secret:       testSecret,
+		templates:    parseTemplates(),
+		loginLimiter: ratelimit.New(1, time.Minute),
 	}
+	h.SetAllowRegister(true)
+	return h
 }
 
 // authedPost builds a POST with a valid CSRF cookie+token pair and any extra
