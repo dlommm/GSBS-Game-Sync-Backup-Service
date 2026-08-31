@@ -17,6 +17,11 @@ import (
 // (~/.config, ~/.local/share, ~/.cache, Documents, %APPDATA%, …). A directory
 // strictly *below* one of those roots (e.g. ~/.local/share/MyGame) is safe.
 func (r *Resolver) UnsafeWatchDir(absDir string) bool {
+	s := r.snapshot()
+	return s.unsafeWatchDir(absDir)
+}
+
+func (r Resolver) unsafeWatchDir(absDir string) bool {
 	absDir = strings.TrimSpace(absDir)
 	if absDir == "" || !filepath.IsAbs(absDir) {
 		return true
@@ -44,7 +49,12 @@ func (r *Resolver) UnsafeWatchDir(absDir string) bool {
 // is the clean way to sync a game that saves a known file directly in $HOME or
 // the Windows user profile, without ever sweeping up unrelated files.
 func (r *Resolver) UnsafeWatchTarget(dir string, syncAll, recursive bool, patterns []string) bool {
-	if !r.UnsafeWatchDir(dir) {
+	s := r.snapshot()
+	return s.unsafeWatchTarget(dir, syncAll, recursive, patterns)
+}
+
+func (r Resolver) unsafeWatchTarget(dir string, syncAll, recursive bool, patterns []string) bool {
+	if !r.unsafeWatchDir(dir) {
 		return false // a specific subfolder — safe
 	}
 	if syncAll || recursive || len(patterns) == 0 {
@@ -78,7 +88,7 @@ func isBroadPattern(p string) bool {
 // unsafeRoots is the set of cleaned directories that are too broad to watch.
 // It is derived from the resolver's own roots so it adapts to custom $HOME /
 // $XDG_* values (including the Flatpak sandbox, where XDG dirs are redirected).
-func (r *Resolver) unsafeRoots() map[string]bool {
+func (r Resolver) unsafeRoots() map[string]bool {
 	set := make(map[string]bool)
 	add := func(p string) {
 		p = strings.TrimSpace(p)

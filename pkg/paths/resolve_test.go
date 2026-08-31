@@ -1,12 +1,16 @@
 package paths
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func testResolver() *Resolver {
@@ -340,5 +344,87 @@ func TestExpandHeroic(t *testing.T) {
 	got := r.expandOne("<Heroic-folder>/Games", Linux)
 	if got != "/home/user/.config/heroic/Games" {
 		t.Fatalf("got %q", got)
+	}
+}
+
+// Replace must be safe against concurrent readers: the client shares one
+// resolver between the watcher supervisor, startup reconcile, and the tray
+// rescan, and the old *r = *updated copy let them observe torn values.
+// Run with -race.
+func TestResolverReplaceIsRaceFreeUnderConcurrentReads(t *testing.T) {
+	r := NewResolver()
+	r.Home = "/home/a"
+	r.SteamLibraries = []string{"/lib/a"}
+
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				_ = r.ResolveAll("<SteamLibrary-folder>/save", Linux)
+				_ = r.ResolveAllForGame("<game-install-folder>/save", Linux, []string{"/games/x"})
+				_ = r.UnsafeWatchTarget("/home/a/.config", false, false, []string{"cfg.ini"})
+			}
+		}()
+	}
+
+	for i := 0; i < 200; i++ {
+		updated := NewResolver()
+		updated.Home = fmt.Sprintf("/home/%d", i)
+		updated.SteamLibraries = []string{fmt.Sprintf("/lib/%d", i), fmt.Sprintf("/lib2/%d", i)}
+		r.Replace(updated)
+	}
+	close(done)
+	wg.Wait()
+
+	// The final replacement is fully visible, not half-applied.
+	got := r.ResolveAll("<SteamLibrary-folder>/save", Linux)
+	require.Len(t, got, 2)
+}
+
+// Replace must copy every data field. copyFieldsFrom enumerates fields by hand
+// (it cannot assign the whole struct without writing mu, which would race the
+// unguarded read in snapshot), so this guards against a new field being added
+// to Resolver and silently not being replaced.
+func TestResolverReplaceCopiesEveryField(t *testing.T) {
+	dst := NewResolver()
+	updated := NewResolver()
+
+	// Fill every exported field of `updated` with a distinct non-zero value.
+	v := reflect.ValueOf(updated).Elem()
+	typ := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		f := v.Field(i)
+		if !f.CanSet() {
+			continue // mu
+		}
+		switch f.Kind() {
+		case reflect.String:
+			f.SetString("/replaced/" + typ.Field(i).Name)
+		case reflect.Slice:
+			f.Set(reflect.ValueOf([]string{"/replaced/" + typ.Field(i).Name}))
+		default:
+			t.Fatalf("unhandled field kind %s for %s", f.Kind(), typ.Field(i).Name)
+		}
+	}
+
+	dst.Replace(updated)
+
+	got := reflect.ValueOf(dst).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		if !got.Field(i).CanSet() {
+			continue
+		}
+		name := typ.Field(i).Name
+		if !reflect.DeepEqual(got.Field(i).Interface(), v.Field(i).Interface()) {
+			t.Errorf("field %s not replaced: got %v, want %v", name, got.Field(i), v.Field(i))
+		}
 	}
 }

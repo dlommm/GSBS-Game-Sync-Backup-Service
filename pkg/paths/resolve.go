@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 )
 
 // OS type for path resolution.
@@ -29,6 +30,16 @@ func CurrentOS() OS {
 
 // Resolver holds known roots (Steam, Ubisoft, GOG, Epic, Xbox, etc.) for placeholder expansion.
 type Resolver struct {
+	// mu guards whole-resolver replacement via Replace. The client shares one
+	// Resolver between the watcher supervisor, startup reconcile, and the tray
+	// rescan, and refreshes it when config or discovery changes; replacing the
+	// fields unsynchronized let readers observe torn slice/string values and
+	// resolve saves to the wrong directory mid-sync.
+	//
+	// It is nil for resolvers that are built, used, and discarded on one
+	// goroutine (tests, one-shot CLI paths), where no synchronization is needed.
+	mu *sync.RWMutex
+
 	SteamLibraries []string // Steam library roots (e.g. C:\Program Files (x86)\Steam, /home/user/.steam/steam)
 	UbisoftConnect string   // Ubisoft Connect install path
 	GOGGalaxy      string   // GOG Galaxy install path (e.g. C:\Program Files (x86)\GOG Galaxy)
@@ -82,6 +93,7 @@ func NewResolver() *Resolver {
 	}
 	xdgCacheHome := getXDGCacheHome(home, localAppData)
 	r := &Resolver{
+		mu:             &sync.RWMutex{},
 		Home:           home,
 		LocalAppData:   localAppData,
 		AppData:        appData,
@@ -180,13 +192,76 @@ func GetSteamLibraryRoots(home string) []string {
 	return appendSteamLibrariesFromVDF(roots)
 }
 
+// snapshot returns a consistent copy of the resolver's fields. Every read path
+// goes through it, so a concurrent Replace can never be observed half-applied.
+// The copy is then used lock-free, which also keeps the nested resolve/safety
+// calls below free of re-entrant locking.
+func (r *Resolver) snapshot() Resolver {
+	if r.mu == nil {
+		return *r
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return *r
+}
+
+// Replace atomically swaps in another resolver's fields. Callers that share a
+// resolver across goroutines must use it instead of assigning through the
+// pointer.
+func (r *Resolver) Replace(updated *Resolver) {
+	if r == nil || updated == nil {
+		return
+	}
+	snap := updated.snapshot()
+	if r.mu == nil {
+		r.copyFieldsFrom(snap)
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.copyFieldsFrom(snap)
+}
+
+// copyFieldsFrom assigns every data field, deliberately leaving mu alone: mu is
+// set once at construction and must never be written again, or the unguarded
+// read of it in snapshot would itself be a race.
+//
+// TestResolverReplaceCopiesEveryField fails if a new field is added here.
+func (r *Resolver) copyFieldsFrom(src Resolver) {
+	r.SteamLibraries = src.SteamLibraries
+	r.UbisoftConnect = src.UbisoftConnect
+	r.GOGGalaxy = src.GOGGalaxy
+	r.EpicGames = src.EpicGames
+	r.XboxApp = src.XboxApp
+	r.UserID = src.UserID
+	r.Home = src.Home
+	r.LocalAppData = src.LocalAppData
+	r.AppData = src.AppData
+	r.Heroic = src.Heroic
+	r.Lutris = src.Lutris
+	r.ProgramData = src.ProgramData
+	r.ProgramFiles = src.ProgramFiles
+	r.EAApp = src.EAApp
+	r.Bottles = src.Bottles
+	r.Prism = src.Prism
+	r.FlatpakSteam = src.FlatpakSteam
+	r.XDGCacheHome = src.XDGCacheHome
+	r.InstalledSteam = src.InstalledSteam
+}
+
 // Resolve expands placeholders in a path template for the given OS (first matching Steam library).
 func (r *Resolver) Resolve(template string, targetOS OS) []string {
-	return r.ResolveAll(template, targetOS)
+	s := r.snapshot()
+	return s.resolveAll(template, targetOS)
 }
 
 // ResolveAll expands placeholders and returns all valid path candidates (every Steam library).
 func (r *Resolver) ResolveAll(template string, targetOS OS) []string {
+	s := r.snapshot()
+	return s.resolveAll(template, targetOS)
+}
+
+func (r Resolver) resolveAll(template string, targetOS OS) []string {
 	template = strings.TrimSpace(template)
 	if template == "" {
 		return nil
@@ -219,6 +294,11 @@ func (r *Resolver) ResolveAll(template string, targetOS OS) []string {
 
 // ResolveAllForGame expands placeholders and resolves <game-install-folder> using per-game install roots.
 func (r *Resolver) ResolveAllForGame(template string, targetOS OS, installRoots []string) []string {
+	s := r.snapshot()
+	return s.resolveAllForGame(template, targetOS, installRoots)
+}
+
+func (r Resolver) resolveAllForGame(template string, targetOS OS, installRoots []string) []string {
 	template = strings.TrimSpace(template)
 	if template == "" {
 		return nil
@@ -236,7 +316,7 @@ func (r *Resolver) ResolveAllForGame(template string, targetOS OS, installRoots 
 			}
 			root = strings.TrimRight(root, `/\`)
 			expanded := strings.ReplaceAll(template, "<game-install-folder>", root)
-			for _, p := range r.ResolveAll(expanded, targetOS) {
+			for _, p := range r.resolveAll(expanded, targetOS) {
 				if p != "" && !seen[p] {
 					seen[p] = true
 					out = append(out, p)
@@ -245,7 +325,7 @@ func (r *Resolver) ResolveAllForGame(template string, targetOS OS, installRoots 
 		}
 		return out
 	}
-	return r.ResolveAll(template, targetOS)
+	return r.resolveAll(template, targetOS)
 }
 
 func cleanResolvedPath(p string) string {
@@ -255,14 +335,14 @@ func cleanResolvedPath(p string) string {
 	return filepath.Clean(p)
 }
 
-func (r *Resolver) expandWithSteamRoot(template, root string, targetOS OS) string {
+func (r Resolver) expandWithSteamRoot(template, root string, targetOS OS) string {
 	s := template
 	s = replaceEnv(s, "<SteamLibrary-folder>", root)
 	return cleanResolvedPath(r.expandOne(s, targetOS))
 }
 
 // expandOne returns one absolute path from one template.
-func (r *Resolver) expandOne(template string, targetOS OS) string {
+func (r Resolver) expandOne(template string, targetOS OS) string {
 	s := template
 	// Windows-style env vars
 	s = replaceEnv(s, "%USERPROFILE%", r.Home)
@@ -313,7 +393,7 @@ func (r *Resolver) expandOne(template string, targetOS OS) string {
 	return cleanResolvedPath(s)
 }
 
-func (r *Resolver) programFilesX86() string {
+func (r Resolver) programFilesX86() string {
 	if runtime.GOOS == "windows" {
 		if p := os.Getenv("ProgramFiles(x86)"); p != "" {
 			return p
@@ -333,7 +413,7 @@ func replaceEnv(s, key, value string) string {
 	return strings.ReplaceAll(s, key, value)
 }
 
-func (r *Resolver) publicFolder() string {
+func (r Resolver) publicFolder() string {
 	if runtime.GOOS == "windows" {
 		if p := os.Getenv("PUBLIC"); p != "" {
 			return p

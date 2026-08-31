@@ -127,8 +127,11 @@ func refreshResolver(cfg *config, r *paths.Resolver) {
 	if r == nil {
 		return
 	}
-	updated := configureResolverFromConfig(cfg)
-	*r = *updated
+	// Replace, not *r = *updated: the resolver is shared with the watcher
+	// supervisor, startup reconcile, and the tray rescan, which read it
+	// concurrently. An unsynchronized whole-struct copy let them observe torn
+	// slice/string values and resolve saves to the wrong directory mid-sync.
+	r.Replace(configureResolverFromConfig(cfg))
 }
 
 func buildPullContext(cfg *config) paths.PullContext {
