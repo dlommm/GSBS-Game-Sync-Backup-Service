@@ -31,7 +31,7 @@
 | `GSBS_SERVICE_LOG_PATH` | `C:\ProgramData\GSBS\logs\server.log` (Windows service mode) | Preferred file path for server logs (used by service mode and by console mode when set) |
 | `GSBS_LOG_FILE` | (unset) | Legacy/compatibility file path for server logs when `GSBS_SERVICE_LOG_PATH` is not set |
 | `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token lifetime (default 90 days) |
-| `GSBS_TRUST_PROXY` | (unset) | Trust `X-Forwarded-For` / `X-Real-IP` from reverse proxy |
+| `GSBS_TRUST_PROXY` | (unset) | Number of trusted reverse proxies in front; enables `X-Forwarded-For` / `X-Real-IP` |
 | `GSBS_TOTP_KEY_FILE` | `<db dir>/gsbs-keys/totp.key` | At-rest encryption key file for 2FA secrets (auto-created 0600). **Back it up with the database** |
 | `GSBS_BACKUP_DIR` | `<db dir>/backups` | Destination for scheduled backups; setting it also enables the schedule |
 | `GSBS_BACKUP_CRON` | `0 5 * * *` | Backup schedule override (admin setting otherwise) |
@@ -129,7 +129,7 @@ server {
 
 **Traefik:** See [compose-traefik.yml](https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/blob/main/docs/examples/compose-traefik.yml).
 
-Set `GSBS_TRUST_PROXY=1` when behind a proxy so the server trusts `X-Forwarded-For` for rate limiting.
+Set `GSBS_TRUST_PROXY=1` when behind a proxy so the server trusts `X-Forwarded-For` for rate limiting. The value is the number of proxies you control: the client IP is taken that many hops from the right of the chain, because each proxy appends the peer it saw. Raise it only if you genuinely run a chain (e.g. `2` for a CDN in front of your own proxy) — a value larger than the real chain lets callers spoof their IP.
 
 ---
 

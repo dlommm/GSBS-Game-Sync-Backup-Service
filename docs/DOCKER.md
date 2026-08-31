@@ -107,7 +107,7 @@ If you see *no matching manifest for linux/amd64* (e.g. an older image was pushe
 | `GSBS_RATE_LIMIT_PULL` | `60,1m` | Pull rate limit per user. |
 | `GSBS_RATE_LIMIT_MANIFEST` | `60,1m` | Manifest rate limit. |
 | `GSBS_RATE_LIMIT_GENERAL` | `300,1m` | General API rate limit per user. |
-| `GSBS_TRUST_PROXY` | (unset) | When set, trust `X-Forwarded-For` / `X-Real-IP` for client IP. |
+| `GSBS_TRUST_PROXY` | (unset) | Number of trusted reverse proxies in front; enables `X-Forwarded-For` / `X-Real-IP` for client IP. |
 | `GSBS_TOKEN_MAX_AGE` | `2160h` | Max client token age (90 days). |
 | `GSBS_METRICS_TOKEN` | (unset) | Bearer token required for `/metrics` when set. |
 | `GSBS_PCGW_CRON` | `0 3 * * 1` | Cron expression for PCGW incremental sync. **Overrides** admin Settings when set (including `""` to disable). When unset, schedule comes from admin Settings (`pcgw_cron`, default weekly Monday 03:00). |
