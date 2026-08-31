@@ -1126,7 +1126,21 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 				}
 			}
 		}
-		if gameDataOK && len(entries) > 0 {
+		if gameDataOK {
+			// Replace even when the page now yields NO entries. Running this
+			// only when entries existed meant a PCGW edit that removed or
+			// corrected a wrong save path left the old rows in place forever,
+			// and clients kept syncing the retired location indefinitely.
+			//
+			// The gameDataOK gate is what makes this safe: a parse failure must
+			// never be mistaken for "upstream removed the paths". A clear is
+			// logged because it is the one outcome that removes client-visible
+			// data.
+			if len(entries) == 0 {
+				logx.Logger().Warn().Str("component", "pcgw").
+					Int64("page_id", b.PageID).Str("game_id", gameID).
+					Msg("pcgw persist: page parsed with no save locations — clearing stale manifest entries")
+			}
 			if err := st.ReplaceGameSaveLocationsForGame(ctx, gameID, entries); err != nil {
 				return 0, err
 			}

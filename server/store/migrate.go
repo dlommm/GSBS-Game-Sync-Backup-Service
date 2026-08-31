@@ -77,6 +77,13 @@ func (s *sqliteStore) migrate() error {
 // If the step returns errMigDryRun the transaction is rolled back and the version is NOT
 // advanced; the server continues normally and the step will re-run on the next startup.
 func (s *sqliteStore) runMigrationStep(step migrationStep) error {
+	// Any filesystem work a step queues runs only after the transaction commits.
+	// Blob renames and deletes issued mid-transaction are not covered by the
+	// rollback: a later failure left rows pointing at missing files and the
+	// deleted bytes permanently gone.
+	s.pendingBlobOps = nil
+	defer func() { s.pendingBlobOps = nil }()
+
 	tx, err := s.db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -94,7 +101,65 @@ func (s *sqliteStore) runMigrationStep(step migrationStep) error {
 		_ = tx.Rollback()
 		return fmt.Errorf("set user_version=%d: %w", step.version, err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.runPendingBlobOps(step.version)
+	return nil
+}
+
+// blobOp is one filesystem mutation deferred until after a migration commits.
+//
+// A rename also records the row that now points at the new path, so a rename
+// that fails after the commit can be repaired by pointing the row back at the
+// file that is actually on disk. Doing the rename inside the transaction used
+// to give that check for free; deferring it must not lose it.
+type blobOp struct {
+	kind    string // "rename" or "remove"
+	from    string
+	to      string
+	userID  string
+	gameID  string
+	pathKey string
+}
+
+// runPendingBlobOps applies the deferred filesystem work. Failures are logged,
+// not fatal: the database is already correct and consistent at this point, and
+// the worst case is an orphaned or not-yet-moved blob file.
+func (s *sqliteStore) runPendingBlobOps(stepVersion int) {
+	for _, op := range s.pendingBlobOps {
+		var err error
+		switch op.kind {
+		case "rename":
+			if mkErr := os.MkdirAll(filepath.Dir(op.to), 0o750); mkErr != nil {
+				err = mkErr
+			} else {
+				err = os.Rename(op.from, op.to)
+			}
+			if err != nil {
+				// The row already points at op.to but the file is still at
+				// op.from. Point the row back so it references the file that
+				// actually exists.
+				if _, upErr := s.db.Exec(
+					`UPDATE saves SET storage_path = ? WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+					op.from, op.userID, op.gameID, op.pathKey); upErr != nil {
+					logx.Logger().Error().Str("component", "migration").Int("step", stepVersion).
+						Str("path", op.from).Err(upErr).
+						Msg("GSBS migration: blob rename failed AND the row could not be pointed back — restore from backup")
+					continue
+				}
+			}
+		case "remove":
+			if err = os.Remove(op.from); os.IsNotExist(err) {
+				err = nil
+			}
+		}
+		if err != nil {
+			logx.Logger().Warn().Str("component", "migration").Int("step", stepVersion).
+				Str("op", op.kind).Str("path", op.from).Err(err).
+				Msg("GSBS migration: deferred blob operation failed (database is already consistent)")
+		}
+	}
 }
 
 // migrationSteps returns all schema migration steps in version order.
@@ -1096,16 +1161,21 @@ func migReadSaveContent(tx *sql.Tx, userID, gameID, pathKey string) ([]byte, err
 
 // migRenameBlobFile moves a save blob from its current absolute path to the canonical
 // path for the new path_key under saveRoot. Returns the new absolute path on success.
-func migRenameBlobFile(saveRoot, userID, gameID, oldPath, newPathKey string) (string, error) {
+// migRenameBlobFile resolves the blob's new absolute path and QUEUES the rename
+// for after the migration commits. Renaming inside the transaction was not
+// covered by the rollback: a later group's error rolled the rows back while the
+// file stayed moved, leaving rows pointing at missing files.
+func (s *sqliteStore) migRenameBlobFile(saveRoot, userID, gameID, oldPath, newPathKey string) (string, error) {
 	newRel := filepath.Join(gameID, newPathKey)
 	newAbs, err := savepath.JoinUserGamePath(saveRoot, userID, gameID, newRel)
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Dir(newAbs), 0o750); err != nil {
-		return "", err
-	}
-	return newAbs, os.Rename(oldPath, newAbs)
+	s.pendingBlobOps = append(s.pendingBlobOps, blobOp{
+		kind: "rename", from: oldPath, to: newAbs,
+		userID: userID, gameID: gameID, pathKey: newPathKey,
+	})
+	return newAbs, nil
 }
 
 // stepMergeOSSlots is migration step 16.
@@ -1257,7 +1327,7 @@ func (s *sqliteStore) stepMergeOSSlots(tx *sql.Tx) error {
 			newRelPath := filepath.Join(m.gameID, gk.targetKey)
 			newStoragePath := m.storagePath
 			if m.storagePath != "" && s.saveRoot != "" {
-				if abs, err := migRenameBlobFile(s.saveRoot, m.userID, m.gameID, m.storagePath, gk.targetKey); err == nil {
+				if abs, err := s.migRenameBlobFile(s.saveRoot, m.userID, m.gameID, m.storagePath, gk.targetKey); err == nil {
 					newStoragePath = abs
 				} else {
 					logx.Logger().Warn().Str("component", "migration").Err(err).
@@ -1331,7 +1401,12 @@ func (s *sqliteStore) stepMergeOSSlots(tx *sql.Tx) error {
 				return fmt.Errorf("stepMergeOSSlots: delete loser save: %w", err)
 			}
 			if loser.storagePath != "" {
-				_ = os.Remove(loser.storagePath)
+				// Queued, not removed here: the loser's bytes have just been
+				// copied into save_versions, but a rollback of a LATER group
+				// would restore the row that references this file while the
+				// file itself was already gone — permanent loss of that slot's
+				// current bytes.
+				s.pendingBlobOps = append(s.pendingBlobOps, blobOp{kind: "remove", from: loser.storagePath})
 			}
 			totalVersions++
 		}
@@ -1360,7 +1435,7 @@ func (s *sqliteStore) stepMergeOSSlots(tx *sql.Tx) error {
 			newRelPath := filepath.Join(survivor.gameID, gk.targetKey)
 			newStoragePath := survivor.storagePath
 			if survivor.storagePath != "" && s.saveRoot != "" {
-				if abs, err := migRenameBlobFile(s.saveRoot, survivor.userID, survivor.gameID, survivor.storagePath, gk.targetKey); err == nil {
+				if abs, err := s.migRenameBlobFile(s.saveRoot, survivor.userID, survivor.gameID, survivor.storagePath, gk.targetKey); err == nil {
 					newStoragePath = abs
 				} else {
 					logx.Logger().Warn().Str("component", "migration").Err(err).

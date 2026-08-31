@@ -26,6 +26,11 @@ type sqliteStore struct {
 	saveRoot         string // non-empty enables filesystem storage (GSBS_SAVE_ROOT)
 	dbPath           string // original path, used to skip migration sleep for :memory: DBs
 
+	// pendingBlobOps holds filesystem mutations a migration step wants applied
+	// only after its transaction commits. Migrations run serially on a single
+	// goroutine before the server serves anything, so this needs no locking.
+	pendingBlobOps []blobOp
+
 	// Lazily-loaded at-rest encryption key for the TOTP column (secretbox.go).
 	totpKeyOnce  sync.Once
 	totpKeyBytes []byte
