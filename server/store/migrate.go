@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gsbs/gsbs/pkg/crypto"
 	"github.com/gsbs/gsbs/pkg/savepath"
 	"github.com/gsbs/gsbs/pkg/types"
 	"github.com/gsbs/gsbs/server/logx"
@@ -21,7 +22,7 @@ import (
 
 // schemaVersion is the current database schema version.
 // To add a new migration: append a migrationStep to migrationSteps() and increment this constant.
-const schemaVersion = 33
+const schemaVersion = 34
 
 // errMigDryRun is returned by a migration step that was invoked with GSBS_DRY_RUN_MIGRATION=1.
 // runMigrationStep rolls back the transaction and treats this as a non-fatal skip (user_version
@@ -133,10 +134,49 @@ func (s *sqliteStore) migrationSteps() []migrationStep {
 		{31, stepInboxItems},
 		{32, stepGameSessions},
 		{33, stepUserPrefs},
+		{34, stepSaveVersionsEncrypted},
 	}
 }
 
 // ── Step implementations ──────────────────────────────────────────────────────
+
+// stepSaveVersionsEncrypted gives save_versions its own encrypted flag. Without
+// it, RestoreSaveVersion had no way to know whether a stored version held
+// ciphertext, so restoring any version of an E2E-encrypted save cleared the
+// slot's encrypted flag and the client then wrote the ciphertext to disk as
+// the save file.
+//
+// Backfill is deliberately conservative in both directions. V2 ciphertext is
+// self-identifying (crypto.V2Prefix), so those rows are certain. Legacy
+// ciphertext carries no prefix — it is bare base64 — so it is only inferred
+// for slots whose current save is encrypted AND whose bytes contain nothing
+// outside the base64 alphabet, which real (binary) save files effectively
+// never satisfy. A row left wrongly at 0 reproduces the original corruption;
+// a row wrongly set to 1 surfaces as a loud decrypt failure on the client, so
+// where the two are in tension this errs toward 1.
+func stepSaveVersionsEncrypted(tx *sql.Tx) error {
+	if _, err := tx.Exec(`ALTER TABLE save_versions ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate") {
+			return err
+		}
+		return nil
+	}
+	_, err := tx.Exec(`
+		UPDATE save_versions SET encrypted = 1
+		WHERE substr(CAST(content AS TEXT), 1, ?) = ?
+		   OR (
+		        LENGTH(content) > 0
+		        AND CAST(content AS TEXT) NOT GLOB '*[^A-Za-z0-9+/=]*'
+		        AND EXISTS (
+		              SELECT 1 FROM saves s
+		              WHERE s.user_id = save_versions.user_id
+		                AND s.game_id = save_versions.game_id
+		                AND s.path_key = save_versions.path_key
+		                AND s.encrypted = 1
+		        )
+		      )`, len(crypto.V2Prefix), crypto.V2Prefix)
+	return err
+}
 
 // stepUserPrefs stores small per-user preferences as key/value rows (v5.6):
 // first users are the appearance prefs (appearance.design / appearance.layout)

@@ -115,3 +115,36 @@ func TestSQLite_SaveVersionHashDedup(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, versions, 1)
 }
+
+// Restoring a version of an E2E-encrypted save must keep the slot marked
+// encrypted and keep the version's plaintext content hash. Before save_versions
+// grew its own encrypted column, restore passed an empty SaveMeta: the slot came
+// back with encrypted=0 and a hash of the ciphertext, so the client wrote the
+// ciphertext to disk as the save on its next pull.
+func TestSQLite_RestoreEncryptedVersionKeepsFlagAndHash(t *testing.T) {
+	st, err := NewSQLite(":memory:")
+	require.NoError(t, err)
+	defer st.Close()
+	ctx := context.Background()
+
+	userID, err := st.CreateUser(ctx, "u", "h")
+	require.NoError(t, err)
+
+	// v1 and v2 are ciphertext; the meta hash is the client's plaintext hash.
+	_, err = st.UpsertSaveWithMeta(ctx, userID, "g1", "pk1", []byte("gsbs2:Y2lwaGVyMQ=="),
+		&SaveMeta{Encrypted: true, ContentHash: "plainhash1"})
+	require.NoError(t, err)
+	_, err = st.UpsertSaveWithMeta(ctx, userID, "g1", "pk1", []byte("gsbs2:Y2lwaGVyMg=="),
+		&SaveMeta{Encrypted: true, ContentHash: "plainhash2"})
+	require.NoError(t, err)
+
+	require.NoError(t, st.RestoreSaveVersion(ctx, userID, "g1", "pk1", 1))
+
+	var encrypted bool
+	var hash string
+	require.NoError(t, st.(*sqliteStore).db.QueryRowContext(ctx,
+		`SELECT encrypted, content_hash FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+		userID, "g1", "pk1").Scan(&encrypted, &hash))
+	assert.True(t, encrypted, "restored slot must stay marked encrypted")
+	assert.Equal(t, "plainhash1", hash, "restored slot must keep the version's plaintext hash")
+}

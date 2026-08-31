@@ -999,9 +999,9 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 		}
 	}
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO save_versions (user_id, game_id, path_key, version, content, updated_at, content_hash, client_id, change_bytes)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		userID, gameID, pathKey, nextVer, content, now, contentHash, nullIfEmpty(clientID), changeBytes,
+		`INSERT INTO save_versions (user_id, game_id, path_key, version, content, updated_at, content_hash, client_id, change_bytes, encrypted)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		userID, gameID, pathKey, nextVer, content, now, contentHash, nullIfEmpty(clientID), changeBytes, encrypted,
 	)
 	if err != nil {
 		_ = tx.Rollback()
@@ -1393,7 +1393,21 @@ func (s *sqliteStore) RestoreSaveVersion(ctx context.Context, userID, gameID, pa
 	if err != nil || blob == nil {
 		return fmt.Errorf("version not found")
 	}
+	// Carry the version's own encrypted flag and content hash onto the restored
+	// slot. Restoring with an empty SaveMeta cleared encrypted and rehashed the
+	// ciphertext, so an E2E-encryption user who restored an old version got a
+	// slot the client then wrote to disk as ciphertext, plus broken dedup.
 	meta := &SaveMeta{}
+	var verHash sql.NullString
+	var verEncrypted sql.NullBool
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT content_hash, encrypted FROM save_versions WHERE user_id = ? AND game_id = ? AND path_key = ? AND version = ?`,
+		userID, gameID, pathKey, version,
+	).Scan(&verHash, &verEncrypted); err != nil {
+		return err
+	}
+	meta.ContentHash = verHash.String
+	meta.Encrypted = verEncrypted.Bool
 	if s.filesystemEnabled() {
 		var relPath sql.NullString
 		err := s.db.QueryRowContext(ctx,
