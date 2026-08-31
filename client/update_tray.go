@@ -20,6 +20,31 @@ var (
 	updateCheckPeriod = 24 * time.Hour
 )
 
+// beginUpdateOp atomically claims the single update slot shared by the tray and
+// the local web UI, returning a release func and whether the claim succeeded.
+//
+// The tray's apply path never checked the flag at all and the web path
+// check-then-acted across two separate lock sections, so a tray apply and a web
+// apply could run at once — writing the same .part file and swapping the
+// running binary concurrently.
+func beginUpdateOp() (release func(), ok bool) {
+	updateMu.Lock()
+	defer updateMu.Unlock()
+	if updateInProgress {
+		return nil, false
+	}
+	updateInProgress = true
+	released := false
+	return func() {
+		updateMu.Lock()
+		if !released {
+			released = true
+			updateInProgress = false
+		}
+		updateMu.Unlock()
+	}, true
+}
+
 func (c *TrayController) wireUpdateMenu(parent *systray.MenuItem) {
 	addItem := func(title, tooltip string) *systray.MenuItem {
 		if parent != nil {
@@ -192,6 +217,13 @@ func (c *TrayController) runUpdateApply() {
 		c.openReleasePage()
 		return
 	}
+	// Claim the shared update slot so this cannot run alongside a web-UI apply.
+	release, ok := beginUpdateOp()
+	if !ok {
+		_ = beeep.Notify("GSBS", "An update operation is already in progress.", "")
+		return
+	}
+	defer release()
 	c.mApplyUpdate.SetTitle("Downloading update...")
 	c.mApplyUpdate.Disable()
 	path, err := DownloadUpdate(info)

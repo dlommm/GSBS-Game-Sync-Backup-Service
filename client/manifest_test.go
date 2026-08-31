@@ -471,3 +471,48 @@ func TestManifestCacheComplete_MislabeledV2Cache(t *testing.T) {
 	// ...and an empty cache is incomplete.
 	assert.False(t, manifestCacheComplete(manifestFile{Source: "v2"}))
 }
+
+// A delta is per-game authoritative. Upserting rule by rule left a rule that
+// upstream changed or removed in the cache forever, so the client kept watching
+// and pushing a retired save location.
+func TestMergeManifestDeltaDropsRetiredRules(t *testing.T) {
+	existing := []types.GameSaveLocation{
+		{GameID: "g1", Platform: "windows", PathTemplate: "<old>/save"},
+		{GameID: "g1", Platform: "windows", PathTemplate: "<also-old>/config"},
+		{GameID: "g2", Platform: "windows", PathTemplate: "<g2>/save"},
+	}
+	// Upstream corrected g1 down to a single, different rule.
+	delta := []types.GameSaveLocation{
+		{GameID: "g1", Platform: "windows", PathTemplate: "<corrected>/save"},
+	}
+
+	got := MergeManifestDelta(existing, delta)
+
+	var g1 []string
+	var sawG2 bool
+	for _, e := range got {
+		switch e.GameID {
+		case "g1":
+			g1 = append(g1, e.PathTemplate)
+		case "g2":
+			sawG2 = true
+		}
+	}
+	if len(g1) != 1 || g1[0] != "<corrected>/save" {
+		t.Errorf("g1 entries = %v, want only the corrected rule", g1)
+	}
+	if !sawG2 {
+		t.Error("a game the delta never mentioned must be preserved")
+	}
+}
+
+func TestMergeManifestDeltaEmptyCases(t *testing.T) {
+	existing := []types.GameSaveLocation{{GameID: "g1", PathTemplate: "a"}}
+	if got := MergeManifestDelta(existing, nil); len(got) != 1 {
+		t.Errorf("empty delta must leave the cache alone, got %d", len(got))
+	}
+	delta := []types.GameSaveLocation{{GameID: "g9", PathTemplate: "b"}}
+	if got := MergeManifestDelta(nil, delta); len(got) != 1 || got[0].GameID != "g9" {
+		t.Errorf("empty cache must take the delta, got %v", got)
+	}
+}

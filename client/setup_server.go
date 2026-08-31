@@ -47,7 +47,7 @@ func StartSetupServer() string {
 
 	mux.HandleFunc("/", handleSetupPage)
 	mux.HandleFunc("/login", handleSetupLogin)
-	mux.HandleFunc("/open-log", handleOpenLog)
+	mux.HandleFunc("/open-log", requireSameOrigin(handleOpenLog))
 	mux.HandleFunc("/status", handleSetupStatus)
 	mux.HandleFunc("/events", handleClientEvents)
 	mux.HandleFunc("/dashboard", handleDashboardPage)
@@ -63,7 +63,7 @@ func StartSetupServer() string {
 	mux.HandleFunc("/api/apply-update", handleApplyUpdate)
 	mux.HandleFunc("/about", handleAboutPage)
 	mux.HandleFunc("/api/sync-now", handleSyncNow)
-	mux.HandleFunc("/diagnostics/export.zip", handleDiagnosticsExport)
+	mux.HandleFunc("/diagnostics/export.zip", requireSameOrigin(handleDiagnosticsExport))
 	mux.HandleFunc("/games", handleAddGamePage)
 	mux.HandleFunc("/games/search", handleGamesSearch)
 	mux.HandleFunc("/games/add", handleGamesAdd)
@@ -159,6 +159,25 @@ func clientLocalGuard(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// requireSameOrigin enforces the same-origin check on EVERY method, not just
+// the mutating ones clientLocalGuard covers.
+//
+// The guard deliberately lets plain GET navigations through so a bookmarked or
+// typed link to the local UI works. That is wrong for an endpoint with a side
+// effect — launching a native application, writing a diagnostics zip per hit —
+// which any web page the user has open could otherwise trigger against the
+// loopback ports. A direct navigation still passes (Sec-Fetch-Site: none);
+// only a cross-site request is refused.
+func requireSameOrigin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !isSameOriginRequest(r) {
+			http.Error(w, "cross-origin request refused", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
 }
 
 // isLoopbackHost reports whether a Host header (or URL host) names a loopback
@@ -295,6 +314,10 @@ func handleSyncNow(w http.ResponseWriter, r *http.Request) {
 // serves it as a download. GET so the Quick Actions card can be a plain
 // anchor; the bundle is written to the client data dir like the tray flow.
 func handleDiagnosticsExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	path, err := ExportDiagnostics()
 	if err != nil {
 		log.Printf("setup: export diagnostics: %v", err)

@@ -103,12 +103,34 @@ func saveDiscoveryCache(c discoveryCache) error {
 	if err != nil {
 		return err
 	}
-	tmp := discoveryPath() + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
+	// A unique temp name, not a fixed "<path>.tmp": two concurrent savers on
+	// the fixed name tore each other's temp file.
+	dst := discoveryPath()
+	f, err := os.CreateTemp(filepath.Dir(dst), filepath.Base(dst)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, discoveryPath())
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }() // no-op once the rename succeeds
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, dst)
 }
+
+// discoveryCacheMu serializes read-modify-write sequences on discovery.json.
+// runDiscovery holds a minutes-long cycle (launcher scans plus network
+// lookups), and without this the tray's toggle could land in the middle of it
+// and be overwritten by the stale snapshot the scan started from — a game the
+// user disabled mid-scan silently resumed uploading.
+var discoveryCacheMu sync.Mutex
 
 // OnDiscoveryResult is called after discovery with count of newly matched games. Tray may show notification.
 var OnDiscoveryResult func(newGames int)
@@ -151,6 +173,8 @@ func activeGameIDSet() map[string]bool {
 
 // toggleDiscoveredGame enables or disables sync for a discovered game_id.
 func toggleDiscoveredGame(gameID string, enabled bool) error {
+	discoveryCacheMu.Lock()
+	defer discoveryCacheMu.Unlock()
 	cache := loadDiscoveryCache()
 	disabled := make(map[string]bool)
 	for _, id := range cache.DisabledGameIDs {
@@ -304,14 +328,20 @@ func runDiscovery(manifestEntries []types.GameSaveLocation) int {
 		}
 	}
 
-	disabled := make(map[string]bool)
-	for _, id := range prev.DisabledGameIDs {
-		disabled[id] = true
-	}
 	matchedSet := make(map[string]bool)
 	for _, id := range matchedIDs {
 		matchedSet[id] = true
 	}
+	// The scan above took minutes; re-read the user-owned fields instead of
+	// writing back the snapshot it started from, and hold the cache lock across
+	// the read-modify-write so a toggle cannot interleave.
+	discoveryCacheMu.Lock()
+	current := loadDiscoveryCache()
+	disabled := make(map[string]bool, len(current.DisabledGameIDs))
+	for _, id := range current.DisabledGameIDs {
+		disabled[id] = true
+	}
+
 	discoveryMu.Lock()
 	discoveryState.MatchedGameIDs = matchedSet
 	discoveryState.MatchedGames = matched
@@ -319,19 +349,23 @@ func runDiscovery(manifestEntries []types.GameSaveLocation) int {
 	discoveryState.InstalledSteam = installedSteamAppIDs(installed)
 	discoveryMu.Unlock()
 
+	firstRunShown := current.FirstRunSummaryShown
 	cache := discoveryCache{
 		InstalledGames:       installed,
 		MatchedGameIDs:       matchedIDs,
 		MatchedGames:         matched,
-		DisabledGameIDs:      prev.DisabledGameIDs,
+		DisabledGameIDs:      current.DisabledGameIDs,
 		IDMap:                idMap,
-		FirstRunSummaryShown: prev.FirstRunSummaryShown,
+		FirstRunSummaryShown: firstRunShown,
 	}
 	_ = saveDiscoveryCache(cache)
+	discoveryCacheMu.Unlock()
 
-	if !prev.FirstRunSummaryShown && len(matched) > 0 {
+	if !firstRunShown && len(matched) > 0 {
+		discoveryCacheMu.Lock()
 		cache.FirstRunSummaryShown = true
 		_ = saveDiscoveryCache(cache)
+		discoveryCacheMu.Unlock()
 		if OnFirstRunDiscovery != nil {
 			OnFirstRunDiscovery(matched)
 		}

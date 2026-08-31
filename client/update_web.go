@@ -27,7 +27,6 @@ func handleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 
 	updateMu.Lock()
 	info := pendingUpdate
-	busy := updateInProgress
 	updateMu.Unlock()
 	if info == nil {
 		w.WriteHeader(http.StatusConflict)
@@ -42,21 +41,16 @@ func handleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"manual_url": ReleasePageURL(repo)})
 		return
 	}
-	if busy {
+	// One atomic claim instead of a check-then-act across two lock sections,
+	// so this cannot start alongside a tray-initiated apply.
+	release, ok := beginUpdateOp()
+	if !ok {
 		w.WriteHeader(http.StatusConflict)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "an update operation is already in progress"})
 		return
 	}
-
-	updateMu.Lock()
-	updateInProgress = true
-	updateMu.Unlock()
 	go func() {
-		defer func() {
-			updateMu.Lock()
-			updateInProgress = false
-			updateMu.Unlock()
-		}()
+		defer release()
 		path, err := DownloadUpdate(info)
 		if err != nil {
 			log.Printf("update (webui): download failed: %v", err)

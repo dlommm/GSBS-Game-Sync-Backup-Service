@@ -524,7 +524,18 @@ func ApplyManifestDeletions(entries []types.GameSaveLocation, deleted []string) 
 	return out
 }
 
-// MergeManifestDelta merges delta entries into existing by game_id, platform, and rule identity.
+// MergeManifestDelta merges delta entries into existing, replacing a game's
+// entries wholesale rather than upserting rule by rule.
+//
+// A delta is per-GAME authoritative: /api/manifest/v2 paginates by game (never
+// splitting one across pages) and the server rewrites all of a game's rows
+// together with a single timestamp, so every entry a delta carries for a game
+// is that game's complete current set.
+//
+// Merging on (gameID, platform, ruleID) was upsert-only, so a rule that
+// upstream CHANGED or REMOVED left its old entry in the cache forever: the
+// client kept watching and pushing a retired save location, and nothing
+// scheduled a corrective full download.
 func MergeManifestDelta(existing, delta []types.GameSaveLocation) []types.GameSaveLocation {
 	if len(delta) == 0 {
 		return existing
@@ -532,30 +543,17 @@ func MergeManifestDelta(existing, delta []types.GameSaveLocation) []types.GameSa
 	if len(existing) == 0 {
 		return delta
 	}
-	key := func(e types.GameSaveLocation) string {
-		ruleID := e.PathTemplate
-		if len(e.SaveRules) == 1 {
-			ruleID = saverule.RuleKey(e.GameID, e.SaveRules[0])
-		} else if len(e.SaveRules) > 1 {
-			ruleID = saverule.RuleKey(e.GameID, e.SaveRules[0]) + "+" + fmt.Sprintf("%d", len(e.SaveRules))
-		}
-		return e.GameID + "\x00" + e.Platform + "\x00" + ruleID
-	}
-	index := make(map[string]int, len(existing))
-	for i, e := range existing {
-		index[key(e)] = i
-	}
-	out := make([]types.GameSaveLocation, len(existing))
-	copy(out, existing)
+	replaced := make(map[string]bool, len(delta))
 	for _, e := range delta {
-		k := key(e)
-		if i, ok := index[k]; ok {
-			out[i] = e
-		} else {
+		replaced[e.GameID] = true
+	}
+	out := make([]types.GameSaveLocation, 0, len(existing)+len(delta))
+	for _, e := range existing {
+		if !replaced[e.GameID] {
 			out = append(out, e)
 		}
 	}
-	return out
+	return append(out, delta...)
 }
 
 // SaveManifestToDisk writes flat entries to disk, preserving v2 metadata when present.
