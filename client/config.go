@@ -298,6 +298,31 @@ func defaultConfig(_ string) *config {
 	}
 }
 
+// cfgUpdateMu serializes whole read-modify-write sequences on config.json.
+//
+// saveConfig alone only makes the WRITE atomic. Two callers that each loaded
+// the config, changed a different field, and saved still ended with the last
+// writer silently discarding the other's change — the tray's pause toggle and a
+// web-UI settings save did exactly that. It is deliberately a different mutex
+// from cfgMu (which saveConfig takes) so this never re-enters.
+var cfgUpdateMu sync.Mutex
+
+// updateConfig applies mutate to the on-disk config as one atomic
+// read-modify-write and returns the saved config.
+func updateConfig(mutate func(*config)) (*config, error) {
+	cfgUpdateMu.Lock()
+	defer cfgUpdateMu.Unlock()
+	c, err := loadConfig()
+	if err != nil {
+		return nil, err
+	}
+	mutate(c)
+	if err := saveConfig(c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
 func saveConfig(c *config) error {
 	// Serialize the whole keyring-write + atomic-file-replace so two concurrent
 	// savers (e.g. token rotation and a settings save) can't interleave their

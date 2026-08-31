@@ -272,6 +272,10 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 			}
 		}
 		if sync.MaybeEvictStaleHashCache(knownSlotKeys) {
+			// The client was constructed before this point and holds its own
+			// copy; without dropping it the next push re-persists the cleared
+			// entries and the eviction is undone.
+			client.ResetPushHashCache()
 			log.Printf("sync: path_key scheme updated — push hash cache cleared; files will be re-checked on next change")
 		}
 	}

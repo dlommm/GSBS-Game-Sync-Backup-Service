@@ -637,9 +637,10 @@ func (c *TrayController) startClickHandlers() {
 			paused := !SyncPaused.Load()
 			c.cancelSnoozeTimer() // manual toggle overrides any running snooze
 			SyncPaused.Store(paused)
-			if cfg, _ := loadConfig(); cfg != nil {
-				cfg.SyncPaused = paused
-				_ = saveConfig(cfg)
+			// One atomic read-modify-write: loading, setting the flag, and
+			// saving as separate steps let a concurrent settings save discard
+			// the toggle (or vice versa).
+			if cfg, err := updateConfig(func(cfg *config) { cfg.SyncPaused = paused }); err == nil && cfg != nil {
 				c.setCfg(cfg)
 			}
 			c.mPause.SetTitle(pauseResumeMenuTitle(paused))

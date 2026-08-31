@@ -299,6 +299,11 @@ func handleSettingsSave(w http.ResponseWriter, r *http.Request) {
 	// toast gate should not wait for the sync loop swap).
 	SetNotifyPrefs(cfg.effectiveNotificationLevel(), cfg.notifyPerUploadEnabled())
 
+	// The pause flag is owned by the tray toggle, not this form. Take it from
+	// the live atomic so saving unrelated settings cannot resurrect a stale
+	// paused/resumed value read when this page was rendered.
+	cfg.SyncPaused = SyncPaused.Load()
+
 	if err := saveConfig(cfg); err != nil {
 		data := settingsPageData(cfg)
 		data.Error = "Could not save settings: " + err.Error()

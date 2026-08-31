@@ -910,6 +910,18 @@ func (c *Client) ShouldSkipPush(gameID, pathKey, hash string) bool {
 	return c.lastPushedHash[c.pushSlotKey(gameID, pathKey)] == hash
 }
 
+// ResetPushHashCache drops the client's in-memory copy of the push-hash cache.
+//
+// MaybeEvictStaleHashCache clears only the package-level cache and the file.
+// The client keeps its own snapshot, taken at construction, and re-persists the
+// whole thing on the next markPushed — silently undoing the eviction, so the
+// path_key-migration heal it exists for never actually happened.
+func (c *Client) ResetPushHashCache() {
+	c.pushMu.Lock()
+	c.lastPushedHash = make(map[string]string)
+	c.pushMu.Unlock()
+}
+
 func (c *Client) markPushed(gameID, pathKey, hash string) {
 	c.pushMu.Lock()
 	if c.lastPushedHash == nil {

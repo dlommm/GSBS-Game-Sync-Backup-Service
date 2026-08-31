@@ -483,16 +483,22 @@ func RecordDiscovery(matched []discovery.MatchedGame, newCount int) {
 			Status:      GameStatusOK,
 		}
 	}
+	// The discovered list holds games that are installed but NOT yet syncing.
+	// The condition here was inverted: a row was dropped only when the game had
+	// stopped being detected AND was already syncing, so games that started
+	// syncing stuck in the 8-slot list and uninstalled ones were kept forever.
 	for id := range globalTrayState.discovered {
-		if seen[id] {
-			if row := globalTrayState.discovered[id]; row != nil {
-				row.Disabled = isGameDisabled(id)
-				row.SyncReason = string(readiness[id].Reason)
-			}
+		if _, synced := globalTrayState.games[id]; synced {
+			delete(globalTrayState.discovered, id) // now syncing: it belongs to the games list
 			continue
 		}
-		if _, synced := globalTrayState.games[id]; synced {
-			delete(globalTrayState.discovered, id)
+		if !seen[id] {
+			delete(globalTrayState.discovered, id) // no longer detected as installed
+			continue
+		}
+		if row := globalTrayState.discovered[id]; row != nil {
+			row.Disabled = isGameDisabled(id)
+			row.SyncReason = string(readiness[id].Reason)
 		}
 	}
 	globalTrayState.mu.Unlock()
