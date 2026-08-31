@@ -54,6 +54,9 @@ func appBundleRoot(exe string) string {
 
 func applyStagedBinary(stagedPath string) error {
 	waitForPreviousInstance()
+	if err := verifyStagedBinary(stagedPath); err != nil {
+		return err
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -114,6 +117,7 @@ func applyStagedBinary(stagedPath string) error {
 	}
 	_ = os.Remove(oldPath)
 	_ = os.Remove(stagedPath)
+	_ = os.Remove(stagedDigestPath(stagedPath))
 
 	// Relaunch: through LaunchServices for a bundle, directly otherwise.
 	var cmd *exec.Cmd

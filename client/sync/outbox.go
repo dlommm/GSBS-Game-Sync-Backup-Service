@@ -141,6 +141,15 @@ func loadOutboxContent(entry *OutboxEntry, client *Client) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Write-stability gate, matching the watcher's push path: a game doing a
+	// slow in-place write can be mid-save while this read runs, and the retry
+	// would upload a torn snapshot. Re-stat and defer to the next retry if the
+	// file moved under us.
+	if after, statErr := os.Stat(entry.FilePath); statErr != nil {
+		return nil, statErr
+	} else if after.Size() != info.Size() || !after.ModTime().Equal(info.ModTime()) {
+		return nil, fmt.Errorf("outbox file is being written (changed during read); deferring to the next retry")
+	}
 	if entry.ContentHash != "" {
 		hash, err := client.ContentChangeHash(content)
 		if err != nil {

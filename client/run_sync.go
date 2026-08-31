@@ -136,7 +136,9 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	cachedManifest := LoadManifestFile()
 	since := ""
 	if !lastManifestFetch.IsZero() && manifestCacheComplete(cachedManifest) {
-		since = lastManifestFetch.UTC().Format(time.RFC3339)
+		// Derived from the entries' own server-stamped updated_at, not the
+		// local clock: see DeltaSince.
+		since = DeltaSince(manifestEntries)
 	}
 	if res, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude, false); err == nil {
 		if !res.NotModified {
@@ -539,11 +541,8 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		cachedManifest := LoadManifestFile()
 		since := ""
 		if !forceFull && manifestCacheComplete(cachedManifest) {
-			if lastFetch := cachedManifest.LastFetchedAt; lastFetch != "" {
-				if t, err := time.Parse(time.RFC3339, lastFetch); err == nil {
-					since = t.UTC().Format(time.RFC3339)
-				}
-			}
+			// Server-stamped cursor, same reason as the startup fetch.
+			since = DeltaSince(cachedManifest.Entries)
 		}
 		if res, err := fetchManifestWithRetry(ctx, cfg.ServerURL, cfg.Token, since, manifestInclude, forceFull); err == nil {
 			if !res.NotModified {

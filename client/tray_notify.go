@@ -232,11 +232,25 @@ func notifyAlreadyRunning() {
 }
 
 func truncateMsg(s string, max int) string {
-	s = strings.TrimSpace(s)
-	if len(s) <= max {
+	return truncateDisplay(strings.TrimSpace(s), max, "...")
+}
+
+// truncateDisplay shortens s to at most max RUNES, appending ellipsis when it
+// has to cut.
+//
+// Slicing by byte index splits multi-byte UTF-8 sequences mid-character, so any
+// non-ASCII game title — accents, CJK, the "—" many titles contain — rendered
+// as mojibake in the tray. Every tray label goes through here.
+func truncateDisplay(s string, max int, ellipsis string) string {
+	r := []rune(s)
+	if len(r) <= max {
 		return s
 	}
-	return strings.TrimSpace(s[:max-3]) + "..."
+	keep := max - len([]rune(ellipsis))
+	if keep < 0 {
+		keep = 0
+	}
+	return strings.TrimSpace(string(r[:keep])) + ellipsis
 }
 
 func recordSyncStatsForNotify(games, saves int) {

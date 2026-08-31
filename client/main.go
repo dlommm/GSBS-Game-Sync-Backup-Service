@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/gen2brain/beeep"
 	"github.com/gsbs/gsbs/client/sync"
@@ -123,7 +124,9 @@ func main() {
 
 	syncNow := make(chan struct{})
 	refreshManifest := make(chan struct{})
+	syncDone := make(chan struct{})
 	go func() {
+		defer close(syncDone)
 		if err := runSync(ctx, cfg, syncNow, refreshManifest); err != nil {
 			log.Fatal(err)
 		}
@@ -133,8 +136,19 @@ func main() {
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig
 	cancel()
+	// Wait for the sync loop to drain. Returning straight after cancel() killed
+	// its 10 s shutdown flush mid-write, so pending pushes were lost until the
+	// next start's reconcile picked them up.
+	select {
+	case <-syncDone:
+	case <-time.After(headlessShutdownGrace):
+		log.Println("shutdown: sync loop did not finish in time")
+	}
 	log.Println("shutdown")
 }
+
+// headlessShutdownGrace bounds the wait for the sync loop's own shutdown flush.
+const headlessShutdownGrace = 15 * time.Second
 
 func consoleMode() bool {
 	for _, a := range os.Args[1:] {

@@ -131,9 +131,6 @@ func updateServerLabel(m *systray.MenuItem, url string) {
 		m.SetTitle("Server: (not set) — click Login to connect")
 		return
 	}
-	label := url
-	if len(label) > 40 {
-		label = label[:37] + "..."
-	}
+	label := truncateDisplay(url, 40, "...")
 	m.SetTitle("Server: " + label)
 }

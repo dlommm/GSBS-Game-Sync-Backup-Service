@@ -520,9 +520,7 @@ func formatDiscoveredRow(g GameRow) string {
 	if title == "" {
 		title = g.GameID
 	}
-	if len(title) > 22 {
-		title = title[:19] + "..."
-	}
+	title = truncateDisplay(title, 22, "...")
 	// For games that won't sync, show the reason inline so the user knows why.
 	if notReady && !g.Disabled {
 		return prefix + title + " — " + SyncReason(g.SyncReason).Friendly()
@@ -532,9 +530,7 @@ func formatDiscoveredRow(g GameRow) string {
 		sub = g.MatchReason
 	}
 	if sub != "" {
-		if len(sub) > 12 {
-			sub = sub[:10] + ".."
-		}
+		sub = truncateDisplay(sub, 12, "..")
 		return prefix + title + " · " + sub
 	}
 	return prefix + title
@@ -559,9 +555,7 @@ func formatGameRow(g GameRow) string {
 	if title == "" {
 		title = g.GameID
 	}
-	if len(title) > 28 {
-		title = title[:25] + "..."
-	}
+	title = truncateDisplay(title, 28, "...")
 	if g.LastSyncAt.IsZero() {
 		return prefix + title
 	}

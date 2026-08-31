@@ -428,6 +428,12 @@ func handleCheckUpdate(w http.ResponseWriter, r *http.Request) {
 		updateMu.Lock()
 		pendingUpdate = result.Info
 		updateMu.Unlock()
+		// Reflect the result in the tray as well. Without this the web UI could
+		// find an update while the tray's install item stayed hidden, so the
+		// user was told an update existed with no way to apply it from the tray.
+		if OnUpdateCheckResult != nil {
+			OnUpdateCheckResult(result.Info)
+		}
 	}()
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{"ok":true,"status":"started"}`))

@@ -408,6 +408,35 @@ func LoadManifestCache() ([]types.GameSaveLocation, time.Time) {
 	return f.Entries, lastFetched
 }
 
+// DeltaSince returns the value to send as since= on the next manifest fetch:
+// the newest updated_at the SERVER stamped on any cached entry.
+//
+// The cursor must be in server time. Using the client's own clock compared
+// entries the server timestamped against a locally generated instant, so a
+// client running fast asked for changes after a moment that had not happened
+// yet on the server and permanently missed every entry written inside the skew.
+// Returns "" when no cached entry carries a usable timestamp, which makes the
+// caller fall back to a full fetch.
+func DeltaSince(entries []types.GameSaveLocation) string {
+	var newest time.Time
+	for _, e := range entries {
+		if e.UpdatedAt == "" {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, e.UpdatedAt)
+		if err != nil {
+			continue
+		}
+		if t.After(newest) {
+			newest = t
+		}
+	}
+	if newest.IsZero() {
+		return ""
+	}
+	return newest.UTC().Format(time.RFC3339)
+}
+
 // LoadManifestFile returns the full on-disk manifest cache.
 func LoadManifestFile() manifestFile {
 	data, err := os.ReadFile(manifestPath())

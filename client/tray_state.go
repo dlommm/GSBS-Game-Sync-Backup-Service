@@ -291,10 +291,7 @@ func gameTitleFor(gameID string) string {
 			return g.Title
 		}
 	}
-	if len(gameID) > 24 {
-		return gameID[:21] + "..."
-	}
-	return gameID
+	return truncateDisplay(gameID, 24, "...")
 }
 
 // ensureGameRow returns (creating if needed) the row for gameID. The caller

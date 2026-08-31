@@ -154,7 +154,11 @@ func runList(dryRunPull bool) {
 			req.Header.Set("Authorization", "Bearer "+cfg.Token)
 			listHTTP := &http.Client{Timeout: 30 * time.Second}
 			resp, err := listHTTP.Do(req)
-			if err == nil && resp.StatusCode == http.StatusOK {
+			if err == nil && resp.StatusCode != http.StatusOK {
+				// Close it: only the 200 branch below did, so any non-200 leaked
+				// the connection.
+				resp.Body.Close()
+			} else if err == nil {
 				var out struct {
 					Saves []struct {
 						GameID  string `json:"game_id"`

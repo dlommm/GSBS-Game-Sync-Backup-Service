@@ -207,7 +207,13 @@ func updateFromManifest(rel *ghRelease) UpdateCheckResult {
 	}
 
 	client := &http.Client{Timeout: 20 * time.Second}
-	req, _ := http.NewRequest(http.MethodGet, manifestURL, nil)
+	req, err := http.NewRequest(http.MethodGet, manifestURL, nil)
+	if err != nil {
+		// A malformed URL used to leave req nil and panic the whole client on
+		// the very next line.
+		log.Printf("update: bad manifest URL %q: %v", manifestURL, err)
+		return UpdateCheckResult{Status: "network_error", Message: "bad manifest URL: " + err.Error()}
+	}
 	req.Header.Set("User-Agent", updateUserAgent)
 	resp, err := client.Do(req)
 	if err != nil {
@@ -386,8 +392,53 @@ func DownloadUpdate(info *UpdateInfo) (string, error) {
 		_ = os.Remove(tmp)
 		return "", err
 	}
+	// Record the verified digest beside the staged binary. The apply helper is
+	// a SEPARATE process that starts later and previously copied whatever was
+	// at this path with no re-check; the sidecar lets it confirm it is applying
+	// the same bytes that were verified at download.
+	if err := os.WriteFile(stagedDigestPath(dest), []byte(sum), 0o600); err != nil {
+		log.Printf("update: could not record staged digest: %v", err)
+	}
 	log.Printf("update: downloaded %s (%d bytes)", dest, n)
 	return dest, nil
+}
+
+// stagedDigestPath is the sidecar holding the verified SHA-256 of a staged
+// update binary.
+func stagedDigestPath(stagedPath string) string { return stagedPath + ".sha256" }
+
+// verifyStagedBinary re-checks a staged update against the digest recorded at
+// download time, immediately before it replaces the running binary.
+//
+// The threat model here is same-user, so this is defense in depth rather than a
+// trust boundary — but the staged file sits in a user-writable directory and
+// the apply helper had no check at all, so a corrupted or swapped file was
+// copied over the running binary without complaint.
+func verifyStagedBinary(stagedPath string) error {
+	want, err := os.ReadFile(stagedDigestPath(stagedPath))
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Staged by an older version that wrote no sidecar: proceed, since
+			// refusing would strand that update permanently.
+			log.Printf("update: no recorded digest for %s; applying unverified", stagedPath)
+			return nil
+		}
+		return err
+	}
+	f, err := os.Open(stagedPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, io.LimitReader(f, maxUpdateBytes+1)); err != nil {
+		return err
+	}
+	got := hex.EncodeToString(hasher.Sum(nil))
+	if !strings.EqualFold(got, strings.TrimSpace(string(want))) {
+		return fmt.Errorf("staged update failed verification: expected %s, got %s", strings.TrimSpace(string(want)), got)
+	}
+	return nil
 }
 
 // ApplyUpdate replaces the running binary and restarts the client.

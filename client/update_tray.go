@@ -77,7 +77,12 @@ func versionMenuTitle() string {
 	return title
 }
 
+// OnUpdateCheckResult, when set, refreshes the tray's update menu from an
+// update check that did not originate in the tray (currently the local web UI).
+var OnUpdateCheckResult func(info *UpdateInfo)
+
 func (c *TrayController) startUpdateHandlers() {
+	OnUpdateCheckResult = c.setUpdateMenuVisible
 	go func() {
 		for range c.mCheckUpdate.ClickedCh {
 			c.runUpdateCheck(true)
@@ -121,6 +126,11 @@ func (c *TrayController) runUpdateCheck(manual bool) {
 		return
 	}
 	updateInProgress = true
+	// Stamp at the START. Stamping on completion made the throttle window run
+	// from the end of one check to the start of the next, so a ticker firing at
+	// exactly updateCheckPeriod always arrived a few seconds early and was
+	// skipped — 24-hour auto-checks effectively ran every ~48 hours.
+	lastUpdateCheck = time.Now()
 	updateMu.Unlock()
 
 	if manual {
@@ -131,7 +141,6 @@ func (c *TrayController) runUpdateCheck(manual bool) {
 	defer func() {
 		updateMu.Lock()
 		updateInProgress = false
-		lastUpdateCheck = time.Now()
 		updateMu.Unlock()
 		if manual {
 			c.mCheckUpdate.SetTitle("Check for updates...")

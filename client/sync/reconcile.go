@@ -4,6 +4,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/gsbs/gsbs/pkg/atomicio"
 )
 
 // ReconcileLocalToServer scans each watched path's resolved local files and uploads
@@ -22,6 +25,11 @@ import (
 // otherwise never upload until the file changed again). Any other difference
 // is skipped; pull/conflict logic owns those.
 // Runs serially; intended for startup only. Respects ctx cancellation.
+//
+// orphanTempMaxAge is how old an atomic-write temp file must be before a sweep
+// removes it — comfortably longer than any single save write.
+const orphanTempMaxAge = time.Hour
+
 func ReconcileLocalToServer(ctx context.Context, watchPaths []WatchPath, client *Client, serverState map[string]ServerSaveInfo) int {
 	if serverState == nil {
 		logSyncWarn("reconcile_skipped_no_server_state", "reason", "server hashes unavailable; refusing blind uploads")
@@ -42,6 +50,12 @@ func ReconcileLocalToServer(ctx context.Context, watchPaths []WatchPath, client 
 		info, err := os.Stat(dir)
 		if err != nil || !info.IsDir() {
 			continue
+		}
+		// Startup is the natural moment to clear atomic-write temp files a
+		// crash orphaned in a watched directory: nothing else ever removed
+		// them. The age gate leaves any write currently in flight alone.
+		if n := atomicio.SweepOrphans(dir, orphanTempMaxAge); n > 0 {
+			logSyncInfo("reconcile_swept_orphan_temps", "dir", dir, "removed", n)
 		}
 		err = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
 			if walkErr != nil {

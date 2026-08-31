@@ -184,7 +184,10 @@ func runLogin() {
 	username = strings.TrimSpace(username)
 	fmt.Print("Password: ")
 	password, _ := reader.ReadString('\n')
-	password = strings.TrimSpace(password)
+	// Strip ONLY the line terminator. TrimSpace also ate leading and trailing
+	// spaces, violating the documented never-trim invariant: a password with
+	// edge whitespace worked in the web UI and failed from the CLI.
+	password = strings.TrimRight(password, "\r\n")
 	clientName := cfg.ClientName
 	if clientName == "" {
 		clientName = defaultClientName()

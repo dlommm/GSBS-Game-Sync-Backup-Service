@@ -178,6 +178,12 @@ func (p *Poller) scan() {
 			return // best-effort: a failed scan changes nothing
 		}
 		seen = RunningGames(procs, p.Roots())
+		if seen == nil {
+			// RunningGames may return a nil map. The ExtraRunning merge below
+			// writes into it, which would panic — latent today only because the
+			// two signals are currently mutually exclusive.
+			seen = map[string]bool{}
+		}
 	}
 	// Merge auxiliary signals (e.g. Steam's registry RunningAppID under
 	// Flatpak, where the process scan is blocked by the PID namespace).

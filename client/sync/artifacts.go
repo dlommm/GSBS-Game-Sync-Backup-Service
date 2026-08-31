@@ -3,6 +3,8 @@ package sync
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/gsbs/gsbs/pkg/atomicio"
 )
 
 // IsGSBSArtifact reports whether the file is a GSBS-generated artifact
@@ -12,5 +14,7 @@ import (
 // the watcher and reconcile would upload our own backups as new save slots.
 func IsGSBSArtifact(path string) bool {
 	base := strings.ToLower(filepath.Base(path))
-	return strings.HasSuffix(base, ".gsbs.bak") || strings.HasSuffix(base, ".gsbs.tmp")
+	// The temp suffix comes from atomicio itself so the two cannot drift: they
+	// already had, and the filter matched no real temp file at all.
+	return strings.HasSuffix(base, ".gsbs.bak") || strings.HasSuffix(base, atomicio.TempSuffix)
 }

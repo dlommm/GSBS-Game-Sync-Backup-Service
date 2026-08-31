@@ -301,6 +301,16 @@ func (c *Client) DownloadAll(ctx context.Context, gameID string) ([]DownloadedSa
 			if err != nil {
 				return nil, fmt.Errorf("decrypt %s/%s: %w (is the encryption passphrase configured?)", s.GameID, s.PathKey, err)
 			}
+			// Verify the server-advertised plaintext hash, exactly as the pull
+			// path does. Skipping it meant `gsbs-client export` — the tool
+			// people reach for precisely when they do not trust their setup —
+			// would happily archive corrupted bytes.
+			if s.ContentHash != "" {
+				if got := FileHash(content); got != s.ContentHash {
+					return nil, fmt.Errorf("download integrity: content hash mismatch %s/%s (server advertised %s, got %s)",
+						s.GameID, s.PathKey, s.ContentHash, got)
+				}
+			}
 			out = append(out, DownloadedSave{
 				GameID: s.GameID, PathKey: s.PathKey, RelativePath: s.RelativePath,
 				Content: content, UpdatedAt: entry.UpdatedAt,
