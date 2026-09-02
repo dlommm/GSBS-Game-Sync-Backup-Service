@@ -67,6 +67,7 @@
        here, so published builds never ship a stale version. Keeping this
        list current is still preferred: it is what software centers show. -->
   <releases>
+    <release version="6.0.0" date="2026-09-02"/>
     <release version="5.7.1" date="2026-07-18"/>
     <release version="5.7.0" date="2026-07-18"/>
     <release version="5.6.0" date="2026-07-18"/>

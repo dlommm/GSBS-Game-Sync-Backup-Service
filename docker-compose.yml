@@ -3,7 +3,7 @@ services:
     # Pinned, not :latest — `docker compose pull && up -d` on a floating tag can
     # silently jump major versions and run migrations you did not choose. Bump
     # this deliberately when you upgrade.
-    image: dendlomm/gsbs-server:5.7.1
+    image: dendlomm/gsbs-server:6.0.0
     container_name: gsbs-server
     restart: unless-stopped
     expose:

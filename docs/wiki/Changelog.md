@@ -6,6 +6,25 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [6.0.0] — 2026-09-02
+
+A full-project audit: 62 fixes across the server, the clients, and save-location data.
+
+### Highlights
+- **Security**: the login rate limiter was bypassable behind a reverse proxy, a transient database error could let a login skip two-factor authentication, and response timing revealed which usernames exist. All three are fixed, along with three unauthenticated endpoints that could be driven without bound.
+- **Your saves are safer**: restoring an old version of an end-to-end-encrypted save used to corrupt it; "use server version" could clear a conflict without actually restoring anything; an unreadable local save could be overwritten with no backup; and a save edited while a push was in flight could be dropped. All fixed.
+- **Auto-update no longer leaves you unprotected**: a client that updated itself could exit on startup thinking another copy was already running, leaving the machine with nothing watching or backing up until you noticed.
+- **Save locations for Epic, Ubisoft, GOG and more**: store IDs that were silently never populated now are, and a wiki-parsing bug that dropped legacy save paths outright is fixed — so more games resolve to the right folder.
+- **The PCGamingWiki direct-API sync mode is retired.** PCGamingWiki withdrew anonymous access to the queries it depended on, so it had been failing on every server that used it. All servers now use the manifest bundle, and existing settings are converted automatically.
+- Migrations 34 and 35 run automatically on first start (back up first, as always).
+
+### Upgrading
+- **`GSBS_TRUST_PROXY` now counts proxy hops** instead of being a simple on/off. One reverse proxy? Nothing to change. Two or more (a CDN in front of your own nginx, say)? Set it to the number you control, e.g. `GSBS_TRUST_PROXY=2`. See [Server Configuration](Server-Configuration).
+- If you pin the server image in your compose file, update the tag to `6.0.0`.
+- Clients update themselves. An older client keeps working against a 6.0.0 server.
+
+---
+
 ## [5.7.1] — 2026-07-18
 
 ### Highlights

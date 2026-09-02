@@ -20,7 +20,7 @@ docker compose up -d
 Pin a version instead of `:latest` in production:
 
 ```yaml
-image: dendlomm/gsbs-server:2.0.0
+image: dendlomm/gsbs-server:6.0.0
 ```
 
 After upgrading to **v2.0.0**, the server runs schema migrations on startup; back up your DB first (see [DOCKER.md](DOCKER.md#data-backup)). Clients with tokens created before 2.0 continue to work unless a password change or 2FA disable occurred (those now revoke all tokens — re-login required).
@@ -58,6 +58,7 @@ Installers are for first install; ongoing updates use the raw binary via auto-up
 
 | Version | Change |
 |---------|--------|
+| **6.0.0** | Schema migrations 34 and 35 run on first start — back up the DB. **`GSBS_TRUST_PROXY` now counts trusted proxy hops** instead of being a boolean: one reverse proxy needs no change (any non-integer value still means one), but with two or more in front of the server set it to the number you control (e.g. `GSBS_TRUST_PROXY=2`), or the rate limiter keys on your own edge proxy and throttles all users as one. This closes a bypass that left login, register, and TOTP effectively unthrottled. **The direct PCGamingWiki API sync source is retired** — PCGamingWiki withdrew anonymous Cargo access, so the mode was failing on every install; migration 35 converts stored `pcgw_sync_source=api` to the bundle source automatically and the admin radio no longer offers it. Restoring a version of an **encrypted** save previously corrupted it (migration 34 adds the missing `encrypted` column); slots restored before upgrading may need one more push to converge. The shipped `docker-compose.yml` pins the server image — update the tag to `6.0.0` when you upgrade. |
 | **4.0.0** | **`GSBS_SESSION_SECRET` is now optional** — if unset the server generates one into `gsbs-keys/session.secret` (back it up with the DB). A *set* value must still be 32+ chars and not a placeholder or the server won't start; replace weak ones (`openssl rand -base64 32`; rotating logs out WebUI sessions). The web **setup wizard** activates only on servers with no users, so upgrades are unaffected. The `.deb` no longer depends on `libayatana-appindicator3`. **Storage quotas now count version history** and are enforced atomically — dashboard usage will appear higher (grandfathered: over-quota users can still shrink/replace). History tables are pruned by default (`GSBS_*_RETENTION_DAYS`, 0 = keep forever). |
 | **3.2.0** | Schema migration (v21): `save_versions` gains `client_id` and `change_bytes`. Back up DB first. |
 | **3.0.0** | Fresh installs default to manifest **bundle sync** (GitHub mode); existing installs keep API sync. Encrypted saves re-upload **once** after upgrade (change detection moved to plaintext hashes), then converge. Disk-backed saves now fsync (crash-safe). |

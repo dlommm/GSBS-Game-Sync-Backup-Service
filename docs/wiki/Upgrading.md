@@ -53,7 +53,7 @@ The server runs any pending schema migrations automatically on startup.
 
 ```yaml
 # In docker-compose.yml
-image: dendlomm/gsbs-server:2.0.0
+image: dendlomm/gsbs-server:6.0.0
 ```
 
 Bump the tag deliberately and restart:
@@ -188,6 +188,7 @@ The server is always backward-compatible with older clients. Newer server featur
 
 | Version | Key changes | Action required |
 |---|---|---|
+| **6.0.0** | Full-project audit: rate-limiter bypass behind a proxy, a 2FA-skip on transient DB errors, and a login timing oracle all closed; encrypted-save version restore no longer corrupts the save; "use server version" actually restores it; a self-update can no longer leave the machine with no running client. The direct PCGamingWiki API sync source is retired (upstream withdrew anonymous access) — all servers use the manifest bundle. | **Back up DB first.** Migrations 34 and 35 run on startup. **`GSBS_TRUST_PROXY` now counts proxy hops** — no change for a single reverse proxy; set it to the number you control if two or more sit in front of the server. Stored `pcgw_sync_source=api` converts automatically. |
 | **4.0.0** | Session-secret strength is enforced at startup; TOTP/register rate limiting; client fsync durability; `.deb` drops the appindicator dependency; quotas count version history (enforced atomically); history tables pruned by default; integrity job, log rotation, disk-full protection added. | `GSBS_SESSION_SECRET` is now **optional** (auto-generated into `gsbs-keys/`); a *set* value still must be 32+ chars or the server won't start — replace weak ones. The setup wizard only appears on fresh servers, so upgrades go straight to login. |
 | **3.2.0** | My Games / Insights / Devices pages; per-version device + byte-change tracking. | **Back up DB first.** Schema migration (v21) runs on startup. |
 | **3.0.0** | Manifest bundle sync (GitHub mode) for fresh installs; encrypted-save dedup via plaintext hashes; crash-safe disk-backed saves; first-push overwrite guard. | Encrypted saves re-upload once after upgrade, then converge. No action needed. |
