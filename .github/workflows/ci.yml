@@ -11,13 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  resolve-runner:
-    uses: ./.github/workflows/runner-resolve.yml
-    secrets: inherit
-
   test:
-    needs: resolve-runner
-    runs-on: ${{ needs.resolve-runner.outputs.linux }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -62,7 +57,6 @@ jobs:
           govulncheck ./...
 
   test-windows:
-    needs: resolve-runner
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -75,8 +69,7 @@ jobs:
         run: go test -race ./server/... ./pkg/... ./client/... ./cmd/...
 
   build-linux:
-    needs: resolve-runner
-    runs-on: ${{ needs.resolve-runner.outputs.linux }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -137,8 +130,7 @@ jobs:
         run: ./script/build.sh "$VERSION" dist windows-amd64
 
   lint:
-    needs: resolve-runner
-    runs-on: ${{ needs.resolve-runner.outputs.linux }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6

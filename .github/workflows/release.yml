@@ -46,14 +46,9 @@ jobs:
           echo "value=${RAW}" >> "$GITHUB_OUTPUT"
           echo "commit_date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
 
-  resolve-runner:
-    needs: version
-    uses: ./.github/workflows/runner-resolve.yml
-    secrets: inherit
-
   test:
-    needs: [version, resolve-runner]
-    runs-on: ${{ needs.resolve-runner.outputs.linux }}
+    needs: version
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -66,8 +61,8 @@ jobs:
         run: go test -race ./server/... ./pkg/... ./client/...
 
   lint:
-    needs: [version, resolve-runner]
-    runs-on: ${{ needs.resolve-runner.outputs.linux }}
+    needs: version
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -83,8 +78,8 @@ jobs:
           args: --timeout=5m
 
   build-linux:
-    needs: [version, resolve-runner, test, lint]
-    runs-on: ${{ needs.resolve-runner.outputs.linux }}
+    needs: [version, test, lint]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -314,8 +309,8 @@ jobs:
           git push --force origin publish:gh-pages
 
   docker:
-    needs: [version, resolve-runner, test, lint, build-linux, build-windows]
-    runs-on: ${{ needs.resolve-runner.outputs.linux }}
+    needs: [version, test, lint, build-linux, build-windows]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

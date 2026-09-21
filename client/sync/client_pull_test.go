@@ -312,6 +312,12 @@ func TestReadLocalForPullDistinguishesAbsentFromUnreadable(t *testing.T) {
 	assert.False(t, mtime.IsZero())
 
 	t.Run("permission denied", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			// os.Chmod only toggles the read-only attribute on Windows; it
+			// cannot make a file unreadable, so there is nothing to assert.
+			// The directory case below covers unreadable on every platform.
+			t.Skip("mode 0000 does not deny reads on Windows")
+		}
 		if os.Geteuid() == 0 {
 			t.Skip("root bypasses file permissions")
 		}

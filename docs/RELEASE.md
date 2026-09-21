@@ -50,38 +50,19 @@ Configure in repository **Settings → Secrets and variables → Actions**:
 
 CI (`ci.yml`) does not use Docker secrets. See [DOCKER.md](DOCKER.md) for local image builds.
 
-## Self-hosted runner (optional)
+## Runners
 
-Linux CI and release jobs prefer a **self-hosted** runner when one is **online**; otherwise they fall back to `ubuntu-latest`. Windows release builds always use `windows-latest`.
+Every job runs on a GitHub-hosted runner: Linux jobs on `ubuntu-latest`, Windows
+builds on `windows-latest`, macOS builds on `macos-14`. There is nothing to
+register or keep online.
 
-Resolution runs in `.github/workflows/runner-resolve.yml` at the start of each workflow (always on `ubuntu-latest`) so jobs never queue on an offline self-hosted runner.
-
-**Runner setup**
-
-1. Register the runner on the repo with label `self-hosted` (GitHub’s default).
-2. Install on the host: **Docker** (with Buildx for multi-arch release images), **Go 1.25** (or let `setup-go` install it), **Node 22+**, GitHub Actions runner **≥ 2.327.1** (required for Node 24 action runtimes), and Linux build deps (`gcc` for the cgo go-sqlite3 server build, `file` for AppImage tooling; the tray is pure-Go and needs no appindicator/GTK dev packages). Jobs use `sudo apt-get` when deps are missing. AppImage builds use `APPIMAGE_EXTRACT_AND_RUN` (no FUSE required).
-3. Ensure the runner user can run `sudo` non-interactively for apt, or pre-install the packages above.
-4. **Mark the runner online** when it starts (so CI routes Linux jobs here instead of GitHub-hosted):
-
-   ```bash
-   # On the runner host — requires gh CLI + repo admin auth
-   ./script/ci-runner-online.sh true
-   ```
-
-   Hook into your runner service (systemd example):
-
-   ```ini
-   ExecStartPre=/path/to/GSBS/script/ci-runner-online.sh true
-   ExecStopPost=/path/to/GSBS/script/ci-runner-online.sh false
-   ```
-
-   Or set repository variable **GSBS_RUNNER_ONLINE** to `true` manually in GitHub → Settings → Variables.
-
-**Optional:** add secret **GSBS_RUNNER_CHECK_TOKEN** (classic PAT with `repo` scope) to auto-detect online runners via API instead of the variable.
-
-**Force GitHub-hosted Linux**
-
-Set repository variable **GSBS_USE_SELF_HOSTED** to `false` (Settings → Secrets and variables → Actions → Variables).
+GSBS previously routed Linux jobs to a self-hosted runner when one was marked
+online, resolved by a `runner-resolve.yml` reusable workflow. That was removed:
+the runner was deregistered while its `GSBS_RUNNER_ONLINE` repo variable stayed
+`true`, so every Linux job — CI *and* release — queued forever against a runner
+that no longer existed, with no failure to alert on. Pinning `ubuntu-latest`
+directly removes the class of failure. If you reintroduce a self-hosted runner,
+gate it on a liveness check that fails fast rather than a manually-set variable.
 
 ## Local fallback
 
