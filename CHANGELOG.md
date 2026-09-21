@@ -2,9 +2,9 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [6.0.0] - 2026-09-02
+## [6.0.0] - 2026-09-21
 
-Major release: a full-project audit of the server, the clients, and the shared PCGamingWiki packages — 62 fixes spanning authentication, data integrity, concurrency, resource exhaustion, and observability. One sync source is retired, and two behavior changes need operator attention (see **Upgrade notes** below). Migrations 34 and 35 run automatically on first start.
+Major release: a full-project audit of the server, the clients, and the shared PCGamingWiki packages — 67 fixes spanning authentication, data integrity, path containment, concurrency, resource exhaustion, and observability. One sync source is retired, and two behavior changes need operator attention (see **Upgrade notes** below). Migrations 34 and 35 run automatically on first start.
 
 ### Removed
 
@@ -17,6 +17,8 @@ Major release: a full-project audit of the server, the clients, and the shared P
 - **Login response timing revealed which usernames exist.** An unknown username returned before any bcrypt work while a real one paid a full ~50–250 ms compare, cleanly separating real accounts from fake ones despite deliberately identical error bodies. Both paths now compare against a static dummy hash, so an unknown username costs the same as a wrong password; the disabled-account path is equalized too.
 - **Three unauthenticated paths could be driven without bound.** Manifest-fetch logging spawned one detached goroutine per request, each making up to three SQLite round trips through the single writer (now capped at 8 concurrent loggers, dropping records rather than queueing — it is best-effort telemetry). The unauthenticated, unthrottled cover endpoint created a permanent `.miss` file and a permanent lock entry for any all-digit id, so a scanner walking ids produced unbounded inode and memory growth plus outbound CDN fetches (unknown ids now 404 before anything is written). Metrics counted every request under its raw path, growing both the counter map and the Prometheus series set without limit (404 paths fold into one `/other` series, and each metric map is capped at 512 label sets).
 - Failed token validations are now throttled, so a garbage-token flood no longer reaches SQLite 1:1. `/api/health?ready=1` caches its database check for a second. CSV exports neutralize leading `=`, `+`, `-`, `@` (and tab/CR) so wiki-sourced titles and client-supplied log context cannot execute as formulas in an admin's spreadsheet. Cargo where-clauses escape operator input (reachable via `pcgw-fetch -steam-appid`) instead of interpolating it, and Steam App IDs are validated as digits. Two side-effecting client GETs — open-log, which launches a native application, and diagnostics-export, which writes a zip per hit — now require same-origin on every method, not just mutating ones; any web page could previously reach them on the loopback port.
+- **Relative-path validation accepted Windows traversal on Linux.** Validation only rejected the `/`-separated forms, so a `..\` or drive-rooted path supplied by a client passed the Linux check and was joined into storage. Both separator conventions are now checked, and storage joins reject user and game IDs that carry a directory component.
+- **A symlink could redirect a downloaded save outside the watched folder.** The client only checked that a write path was lexically contained in the watch root, which a symlinked ancestor defeats. It now resolves existing symlink ancestors and refuses paths that escape the root before it creates directories or writes a backup.
 
 ### Fixed — data integrity
 
@@ -27,6 +29,8 @@ Major release: a full-project audit of the server, the clients, and the shared P
 - **A save queued while a push was in flight was erased.** The deferred cleanup deleted the pending entry unconditionally, so the queued save vanished and the flush paths could no longer see it; if the process exited in that window and the mtime sat inside the 2-minute skew window, startup reconcile skipped it too. Queued pushes now carry a sequence number and the cleanup only clears the entry it was scheduled for.
 - **A stored device token could be destroyed by a keyring read failure.** A read error was indistinguishable from "no secret stored", so a client autostarted on Linux while the Secret Service was still coming up loaded a blank token — and a later silent config save then deleted the real stored token, force-logging the user out. Read failures are now reported separately, and saving never deletes a secret it was merely unable to see.
 - **The client's manifest delta merge kept retired save locations forever.** The v2 delta merge was upsert-only, so a rule changed or removed upstream left its old entry cached and the client kept watching and pushing a retired location. A delta is per-game authoritative, so a game the delta mentions is now replaced wholesale. On the server side, a re-ingested page that parses cleanly but yields no save locations now clears the game's manifest entries instead of leaving the old rows in place.
+- **Concurrent uploads could bypass conflict protection.** Upload preconditions were evaluated before the store transaction opened, so two clients racing on the same expected version both passed the check and the loser's bytes overwrote the winner's. Preconditions are now checked inside the write transaction, ahead of deduplication and filesystem staging, and the losing request gets a 409.
+- **Distinct save slots sharing a filename shared one physical file.** Two slots whose saves had the same relative filename resolved to the same stored path, so writing one changed the other. New writes use slot-specific hashed filenames; storage paths already recorded stay readable, and a shared legacy file is retained while anything still references it.
 
 ### Fixed — server
 
@@ -58,6 +62,7 @@ Major release: a full-project audit of the server, the clients, and the shared P
 - **Production compose ran `dendlomm/gsbs-server:latest`**, so a routine `pull && up -d` could silently jump major versions and run their migrations. The tag is now pinned and bumped deliberately each release.
 - The container entrypoint chowned only the volume root and the database, so a root-owned `gamesaves/` subtree — from an older root-running image or a host-side copy — was never repaired and every save write failed with `EACCES`, with nothing in the container output to explain it. A depth-limited scan now repairs it once, keeping the fast path for healthy volumes.
 - The Go Report Card badge pointed at the module path rather than the repository, so it never rendered.
+- **A release build could ship a server without working SQLite support.** Building the Windows client left `CGO_ENABLED=0` set for the Linux server build that followed in the same run, producing a server binary whose SQLite driver was inert. Linux builds now enable CGO explicitly, and a release-script regression test covers the compiler settings.
 
 ### Changed
 

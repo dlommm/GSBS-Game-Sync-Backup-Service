@@ -6,13 +6,14 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
-## [6.0.0] — 2026-09-02
+## [6.0.0] — 2026-09-21
 
-A full-project audit: 62 fixes across the server, the clients, and save-location data.
+A full-project audit: 67 fixes across the server, the clients, and save-location data.
 
 ### Highlights
 - **Security**: the login rate limiter was bypassable behind a reverse proxy, a transient database error could let a login skip two-factor authentication, and response timing revealed which usernames exist. All three are fixed, along with three unauthenticated endpoints that could be driven without bound.
 - **Your saves are safer**: restoring an old version of an end-to-end-encrypted save used to corrupt it; "use server version" could clear a conflict without actually restoring anything; an unreadable local save could be overwritten with no backup; and a save edited while a push was in flight could be dropped. All fixed.
+- **Saves stay inside their own folders**: a malicious or malformed path from a client could previously escape into other storage on Linux, and a symlinked folder could redirect a downloaded save outside the folder you asked GSBS to watch. Both paths are now validated properly. Two save slots that happened to share a filename also shared one file on disk; they no longer do.
 - **Auto-update no longer leaves you unprotected**: a client that updated itself could exit on startup thinking another copy was already running, leaving the machine with nothing watching or backing up until you noticed.
 - **Save locations for Epic, Ubisoft, GOG and more**: store IDs that were silently never populated now are, and a wiki-parsing bug that dropped legacy save paths outright is fixed — so more games resolve to the right folder.
 - **The PCGamingWiki direct-API sync mode is retired.** PCGamingWiki withdrew anonymous access to the queries it depended on, so it had been failing on every server that used it. All servers now use the manifest bundle, and existing settings are converted automatically.
