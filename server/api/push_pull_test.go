@@ -24,6 +24,69 @@ func sha256Hex(b []byte) string {
 	return hex.EncodeToString(h[:])
 }
 
+// Simulate another writer committing after the HTTP handler's advisory hash
+// check, but before its write reaches the store transaction.
+type interveningPushStore struct {
+	store.Store
+}
+
+func (s *interveningPushStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pathKey string, content []byte, meta *store.SaveMeta) (bool, error) {
+	if _, err := s.Store.UpsertSaveWithMeta(ctx, userID, gameID, pathKey, []byte("other device"), &store.SaveMeta{}); err != nil {
+		return false, err
+	}
+	return s.Store.UpsertSaveWithMeta(ctx, userID, gameID, pathKey, content, meta)
+}
+
+func TestPushConflictAfterAdvisoryCheck(t *testing.T) {
+	t.Setenv("GSBS_SAVE_ROOT", "")
+	for _, precondition := range []string{"X-GSBS-If-Hash", "X-GSBS-If-Absent"} {
+		t.Run(precondition, func(t *testing.T) {
+			st, err := store.NewSQLite(":memory:")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = st.Close() })
+			ctx := context.Background()
+			user, err := st.CreateUser(ctx, "u", "h")
+			if err != nil {
+				t.Fatal(err)
+			}
+			header := "1"
+			if precondition == "X-GSBS-If-Hash" {
+				if _, err := st.UpsertSaveWithMeta(ctx, user, "g", "p", []byte("initial"), &store.SaveMeta{}); err != nil {
+					t.Fatal(err)
+				}
+				header = sha256Hex([]byte("initial"))
+			}
+			wrapped := &interveningPushStore{Store: st}
+			h := NewHandler(wrapped, auth.NewService(wrapped), false, nil, nil, nil, nil, nil, nil, 0, false, "", "test")
+			req := httptest.NewRequest(http.MethodPost, "/api/saves", strings.NewReader("my device"))
+			req.Header.Set("X-Game-ID", "g")
+			req.Header.Set("X-Path-Key", "p")
+			req.Header.Set("X-Content-Hash", sha256Hex([]byte("my device")))
+			req.Header.Set(precondition, header)
+			rec := httptest.NewRecorder()
+			h.handlePush(rec, req, user)
+			if rec.Code != http.StatusConflict {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			var conflict struct {
+				CurrentHash string `json:"current_hash"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &conflict); err != nil {
+				t.Fatal(err)
+			}
+			if conflict.CurrentHash != sha256Hex([]byte("other device")) {
+				t.Fatalf("conflict hash = %q", conflict.CurrentHash)
+			}
+			blob, err := st.GetSave(ctx, user, "g", "p")
+			if err != nil || blob == nil || string(blob.Content) != "other device" {
+				t.Fatalf("concurrent save lost: blob=%+v err=%v", blob, err)
+			}
+		})
+	}
+}
+
 func TestPushGzipAndHashDedup(t *testing.T) {
 	st, err := store.NewSQLite(":memory:")
 	if err != nil {

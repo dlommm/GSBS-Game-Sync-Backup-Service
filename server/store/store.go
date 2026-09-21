@@ -446,6 +446,9 @@ type SaveMeta struct {
 	ClientID     string
 	Encrypted    bool
 	RelativePath string // validated client-relative path when GSBS_SAVE_ROOT is set
+	// Preconditions are checked while holding the database write transaction.
+	IfHash   string
+	IfAbsent bool
 
 	// QuotaBytes / GlobalLimitBytes (0 = unlimited) make UpsertSaveWithMeta
 	// enforce storage limits inside its transaction against total stored
@@ -454,6 +457,14 @@ type SaveMeta struct {
 	QuotaBytes       int64
 	GlobalLimitBytes int64
 }
+
+// SaveConflictError reports a precondition that no longer matches the slot.
+type SaveConflictError struct {
+	CurrentHash    string
+	CurrentVersion int
+}
+
+func (e *SaveConflictError) Error() string { return "save precondition failed" }
 
 // GameEncryptedCounts is per-game encrypted coverage (Encryption Center, v5.2).
 type GameEncryptedCounts struct {

@@ -81,6 +81,78 @@ func TestSQLite_FilesystemSave(t *testing.T) {
 	}
 }
 
+func TestFilesystemSlotsWithSameRelativePath(t *testing.T) {
+	t.Setenv("GSBS_SAVE_ROOT", t.TempDir())
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := context.Background()
+	user, err := st.CreateUser(ctx, "u", "h")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, slot := range []string{"slot-one", "slot-two"} {
+		if _, err := st.UpsertSaveWithMeta(ctx, user, "game", slot, []byte(slot), &SaveMeta{RelativePath: "save.dat"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, slot := range []string{"slot-one", "slot-two"} {
+		blob, err := st.GetSave(ctx, user, "game", slot)
+		if err != nil || blob == nil || string(blob.Content) != slot {
+			t.Fatalf("slot %s was overwritten: blob=%+v err=%v", slot, blob, err)
+		}
+	}
+	if err := st.DeleteSave(ctx, user, "game", "slot-one"); err != nil {
+		t.Fatal(err)
+	}
+	blob, err := st.GetSave(ctx, user, "game", "slot-two")
+	if err != nil || blob == nil || string(blob.Content) != "slot-two" {
+		t.Fatalf("deleting one slot damaged another: blob=%+v err=%v", blob, err)
+	}
+}
+
+func TestFilesystemUpdatePreservesSharedLegacyPath(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("GSBS_SAVE_ROOT", root)
+	st, err := NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	ctx := context.Background()
+	user, err := st.CreateUser(ctx, "u", "h")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, slot := range []string{"one", "two"} {
+		if _, err := st.UpsertSaveWithMeta(ctx, user, "g", slot, []byte("legacy"), &SaveMeta{RelativePath: "save.dat"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	legacyPath := filepath.Join(root, user, "g", "save.dat")
+	if err := os.WriteFile(legacyPath, []byte("legacy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.(*sqliteStore).db.Exec(`UPDATE saves SET storage_path = ? WHERE user_id = ?`, legacyPath, user); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertSaveWithMeta(ctx, user, "g", "one", []byte("updated"), &SaveMeta{RelativePath: "save.dat"}); err != nil {
+		t.Fatal(err)
+	}
+	blob, err := st.GetSave(ctx, user, "g", "two")
+	if err != nil || blob == nil || string(blob.Content) != "legacy" {
+		t.Fatalf("remaining legacy reference damaged: blob=%+v err=%v", blob, err)
+	}
+	if _, err := st.UpsertSaveWithMeta(ctx, user, "g", "two", []byte("also updated"), &SaveMeta{RelativePath: "save.dat"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("unreferenced legacy file not removed: %v", err)
+	}
+}
+
 func TestAtomicWriteFileSync(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "slot.dat")

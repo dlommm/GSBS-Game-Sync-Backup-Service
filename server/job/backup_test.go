@@ -3,6 +3,8 @@ package job
 import (
 	"archive/tar"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
@@ -52,18 +54,10 @@ func TestRunBackup_RoundTrip(t *testing.T) {
 	}
 
 	got := extractArchive(t, res.Path)
-	if !strings.Contains(string(got["gamesaves/"+filepath.ToSlash(filepath.Join(userID, "g1", "saves", "slot.dat"))]), "precious-save-bytes") {
-		// Fall back: locate the save by suffix (layout detail may vary).
-		found := false
-		for name, data := range got {
-			if strings.HasPrefix(name, "gamesaves/") && strings.HasSuffix(name, "slot.dat") && string(data) == string(saveContent) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("save file missing from archive; entries: %v", keys(got))
-		}
+	slotHash := sha256.Sum256([]byte("pk1"))
+	saveEntry := filepath.ToSlash(filepath.Join("gamesaves", userID, "g1", ".gsbs-slots", hex.EncodeToString(slotHash[:])))
+	if data, ok := got[saveEntry]; !ok || string(data) != string(saveContent) {
+		t.Fatalf("save file missing or corrupt in archive: entry=%s bytes=%q; entries: %v", saveEntry, data, keys(got))
 	}
 	if _, ok := got["gsbs.db"]; !ok {
 		t.Fatalf("gsbs.db missing from archive; entries: %v", keys(got))

@@ -105,7 +105,8 @@ build_windows() {
 }
 
 build_linux() {
-  export GOOS=linux GOARCH=amd64
+  # The SQLite server requires cgo even after the Windows client disabled it.
+  export GOOS=linux GOARCH=amd64 CGO_ENABLED=1
   go build -trimpath -ldflags "$LDFLAGS" -o "${OUT_DIR}/gsbs-server-linux-amd64" ./server
   echo "Built gsbs-server-linux-amd64"
   if [ "$HOST_GOOS" = "linux" ]; then

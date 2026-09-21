@@ -55,6 +55,30 @@ func TestApplyOneSave_IntegrityMismatchWritesNothing(t *testing.T) {
 	assert.NoFileExists(t, target+".gsbs.bak", "no backup may be written on integrity failure")
 }
 
+func TestApplyOneSave_SymlinkEscapeWritesNothing(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(root, "linked")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	target := filepath.Join(link, "save.dat")
+	require.NoError(t, os.WriteFile(target, []byte("local"), 0644))
+	ageFile(t, target)
+
+	c := newPullTestClient(t)
+	opts := DefaultPullOptions()
+	opts.BackupBeforeOverwrite = true
+	opts.WatchRoot = func(gameID, pathKey string) string { return root }
+	applied, err := c.applyOneSaveEncrypted("g1", "pk1", serverNow(), b64("server-data"), target, opts, false, "")
+	require.ErrorContains(t, err, "escapes watch root")
+	assert.False(t, applied)
+	data, err := os.ReadFile(target)
+	require.NoError(t, err)
+	assert.Equal(t, "local", string(data))
+	assert.NoFileExists(t, target+".gsbs.bak")
+}
+
 // The matching hash is accepted and the file is written.
 func TestApplyOneSave_IntegrityMatchApplies(t *testing.T) {
 	dir := t.TempDir()

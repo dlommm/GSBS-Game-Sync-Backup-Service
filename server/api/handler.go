@@ -1346,12 +1346,24 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request, userID stri
 		ClientID:         clientID,
 		Encrypted:        encrypted,
 		RelativePath:     relPath,
+		IfHash:           strings.TrimSpace(r.Header.Get("X-GSBS-If-Hash")),
+		IfAbsent:         r.Header.Get("X-GSBS-If-Absent") == "1",
 		QuotaBytes:       userQuota,
 		GlobalLimitBytes: h.globalStorageLimit(),
 	}
 	skipped, err := h.store.UpsertSaveWithMeta(r.Context(), userID, gameID, pathKey, content, meta)
 	if err != nil {
+		var conflict *store.SaveConflictError
 		switch {
+		case errors.As(err, &conflict):
+			reason := "if_absent"
+			if meta.IfHash != "" {
+				reason = "if_hash"
+			}
+			h.recordConflict(r, userID, gameID, pathKey, reason, contentHash, conflict.CurrentHash, conflict.CurrentVersion)
+			writeJSON(w, http.StatusConflict, map[string]interface{}{
+				"error": "conflict", "current_hash": conflict.CurrentHash, "current_version": conflict.CurrentVersion,
+			})
 		case errors.Is(err, store.ErrQuotaExceeded):
 			h.notifyQuota(userID, 0, 0, userQuota, true)
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "storage quota exceeded"})

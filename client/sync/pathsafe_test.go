@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -27,4 +28,40 @@ func TestValidateWriteUnderRoot(t *testing.T) {
 			t.Fatalf("empty root should skip validation: %v", err)
 		}
 	})
+}
+
+func TestValidateWriteUnderRootSymlinks(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(root, "linked")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	for _, suffix := range []string{"save.sav", filepath.Join("new", "nested", "save.sav")} {
+		if err := ValidateWriteUnderRoot(filepath.Join(link, suffix), root); err == nil {
+			t.Fatalf("allowed symlink escape for %s", suffix)
+		}
+	}
+	// A configured root may itself be a symlink; its descendants are valid.
+	if err := ValidateWriteUnderRoot(filepath.Join(link, "new", "save.sav"), link); err != nil {
+		t.Fatalf("rejected symlinked watch root: %v", err)
+	}
+	inside := filepath.Join(root, "inside")
+	if err := os.Mkdir(inside, 0755); err != nil {
+		t.Fatal(err)
+	}
+	internalLink := filepath.Join(root, "internal")
+	if err := os.Symlink(inside, internalLink); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateWriteUnderRoot(filepath.Join(internalLink, "save.sav"), root); err != nil {
+		t.Fatalf("rejected internal symlink: %v", err)
+	}
+	broken := filepath.Join(root, "broken")
+	if err := os.Symlink(filepath.Join(outside, "missing"), broken); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateWriteUnderRoot(filepath.Join(broken, "save.sav"), root); err == nil {
+		t.Fatal("allowed dangling symlink")
+	}
 }

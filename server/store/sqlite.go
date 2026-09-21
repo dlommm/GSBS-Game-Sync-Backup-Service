@@ -913,30 +913,55 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 			encrypted = 1
 		}
 		relPath = strings.TrimSpace(meta.RelativePath)
-		existing, _ := s.GetSaveHash(ctx, userID, gameID, pathKey)
-		if existing != "" && existing == contentHash {
-			return true, nil
-		}
 	}
 	if s.filesystemEnabled() {
 		if relPath == "" {
 			return false, fmt.Errorf("relative path required when GSBS_SAVE_ROOT is set")
 		}
 	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if meta != nil {
+		var existing string
+		err := tx.QueryRowContext(ctx,
+			`SELECT COALESCE(content_hash, '') FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+			userID, gameID, pathKey).Scan(&existing)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return false, err
+		}
+		if (meta.IfHash != "" && existing != meta.IfHash) ||
+			(meta.IfHash == "" && meta.IfAbsent && existing != "" && existing != contentHash) {
+			conflict := &SaveConflictError{CurrentHash: existing}
+			if err := tx.QueryRowContext(ctx,
+				`SELECT COALESCE(MAX(version), 0) FROM save_versions WHERE user_id = ? AND game_id = ? AND path_key = ?`,
+				userID, gameID, pathKey).Scan(&conflict.CurrentVersion); err != nil {
+				return false, err
+			}
+			return false, conflict
+		}
+		if existing != "" && existing == contentHash {
+			return true, nil
+		}
+	}
 	var storagePath, stagedTmp, oldStorage string
 	var dbContent interface{} = content
 	if s.filesystemEnabled() {
 		var old sql.NullString
-		_ = s.db.QueryRowContext(ctx,
+		err := tx.QueryRowContext(ctx,
 			`SELECT storage_path FROM saves WHERE user_id = ? AND game_id = ? AND path_key = ?`,
 			userID, gameID, pathKey,
 		).Scan(&old)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return false, err
+		}
 		oldStorage = old.String
-		// Stage beside the canonical file; it is promoted (renamed into
-		// place) only after the transaction commits, so no error path below
-		// can destroy the previous good save. The deferred remove discards
-		// the staged bytes on every non-promoted return.
-		stagedTmp, storagePath, err = s.stageSaveWrite(ctx, userID, gameID, relPath, content)
+		// Preconditions hold the write lock before any file is staged. The
+		// canonical file is promoted only after all transactional checks pass.
+		stagedTmp, storagePath, err = s.stageSaveWrite(ctx, userID, gameID, pathKey, relPath, content)
 		if err != nil {
 			return false, err
 		}
@@ -946,11 +971,6 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 			}
 		}()
 		dbContent = nil
-	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return false, err
 	}
 	enforceQuota := meta != nil && meta.QuotaBytes > 0
 	enforceGlobal := meta != nil && meta.GlobalLimitBytes > 0
@@ -1068,7 +1088,12 @@ func (s *sqliteStore) UpsertSaveWithMeta(ctx context.Context, userID, gameID, pa
 		return false, err
 	}
 	if storagePath != "" && oldStorage != "" && oldStorage != storagePath {
-		removeSaveFile(oldStorage)
+		// Legacy filesystem paths may be shared by distinct slots with the
+		// same relative filename. Keep them until the last reference is gone.
+		var references int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM saves WHERE storage_path = ?`, oldStorage).Scan(&references); err == nil && references == 0 {
+			removeSaveFile(oldStorage)
+		}
 	}
 	return false, nil
 }

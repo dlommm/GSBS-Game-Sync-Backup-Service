@@ -79,7 +79,10 @@ func (s *sqliteStore) migrateBlobsToFS() error {
 		if err := s.EnsureUserStorage(context.Background(), b.userID); err != nil {
 			return fmt.Errorf("ensure storage for user %s: %w", b.userID, err)
 		}
-		absPath, err := savepath.JoinUserGamePath(s.saveRoot, b.userID, b.gameID, rel)
+		if err := savepath.ValidateRelativePath(rel); err != nil {
+			return err
+		}
+		absPath, err := savepath.JoinUserGamePath(s.saveRoot, b.userID, b.gameID, filepath.Join(".gsbs-slots", hashContent([]byte(b.pathKey))))
 		if err != nil {
 			return fmt.Errorf("join path user=%s game=%s: %w", b.userID, b.gameID, err)
 		}
@@ -118,13 +121,19 @@ func (s *sqliteStore) readSaveContent(storagePath sql.NullString, content []byte
 // stageSaveWrite prepares a save write without touching the canonical file:
 // it resolves the final path, ensures the directories exist, and stages the
 // fsync'd content in a temp file beside it. The canonical file is replaced
-// only by promoteStagedFile after the accompanying DB transaction commits,
-// so a failed transaction can never destroy the previous good save.
-func (s *sqliteStore) stageSaveWrite(ctx context.Context, userID, gameID, relPath string, content []byte) (tmpPath, finalPath string, err error) {
+// only by promoteStagedFile once the accompanying transactional checks pass.
+func (s *sqliteStore) stageSaveWrite(ctx context.Context, userID, gameID, pathKey, relPath string, content []byte) (tmpPath, finalPath string, err error) {
+	if err := savepath.ValidateRelativePath(relPath); err != nil {
+		return "", "", err
+	}
 	if err := s.EnsureUserStorage(ctx, userID); err != nil {
 		return "", "", err
 	}
-	absPath, err := savepath.JoinUserGamePath(s.saveRoot, userID, gameID, relPath)
+	// Different save rules can contain the same relative filename. The slot
+	// key, not that filename, identifies stored bytes. Hash it so opaque keys
+	// cannot introduce separators or exceed filesystem filename limits.
+	storageRel := filepath.Join(".gsbs-slots", hashContent([]byte(pathKey)))
+	absPath, err := savepath.JoinUserGamePath(s.saveRoot, userID, gameID, storageRel)
 	if err != nil {
 		return "", "", err
 	}

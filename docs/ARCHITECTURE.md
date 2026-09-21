@@ -21,6 +21,8 @@
 - **User-defined rules** (`watch_paths` in config) — `path_key` is a hash of the full rule definition and is therefore OS-specific. Two machines running different OSes will not share the same `path_key` for a manually configured path. This is intentional: user-defined paths are inherently per-machine.
 - **Per-file slots** — for rules that produce multiple files, `path_key` = hash(rule_key + relative_path). Legacy single-file slots keep one blob per rule_key.
 
+With filesystem storage enabled, new writes use `{GSBS_SAVE_ROOT}/{user_id}/{game_id}/.gsbs-slots/{SHA256(path_key)}`. This keeps different slots with the same relative filename separate. The original relative path remains in metadata; existing saves continue to read from their recorded `storage_path` and move to the slot-specific location when updated.
+
 ## Sync flow
 
 1. **Upload (client → server)**  
@@ -41,6 +43,8 @@ Two machines can change the same save between syncs. GSBS resolves this without 
 - `X-GSBS-If-Absent: 1` on the *first* push of a slot (fresh device or cleared cache) → server returns **409** if a *different* save already exists. This guard is always on as of 4.0.0, so a new machine can no longer overwrite another's save on first contact.
 
 A 409 is recorded as a conflict on the client (tray + `conflicts.json`) and resolved by the user, not auto-picked.
+
+The store checks upload preconditions inside its database write transaction, before deduplication or filesystem staging, so concurrent uploads cannot both replace the same expected version.
 
 **On pull**, `DecidePull` compares the local file mtime against the server's `updated_at`. Because those come from *different clocks*, the client first estimates the server offset from response `Date` headers and treats timestamps within a ±2-minute window as simultaneous. The decision matrix (content differs):
 
@@ -83,7 +87,7 @@ Residual (documented) gaps: unsigned installers/binaries (needs paid signing), a
   - Windows: `%USERPROFILE%`, `%LOCALAPPDATA%`, `%APPDATA%`, etc.
   - Both: `<SteamLibrary-folder>`, `<Ubisoft-Connect-folder>`, `<GOG-Galaxy-folder>`, `<Epic-Games-folder>`, `<Xbox-App-folder>`, `<user-id>` (from launcher).
 - **Resolution**: Client replaces placeholders from environment and known install paths (Steam library paths, Ubisoft Connect path, etc.). Under Linux, Proton paths: `<SteamLibrary-folder>/steamapps/compatdata/<AppID>/pfx/...` — the client synthesizes these `compatdata` paths for Windows games running under Steam/Proton.
-- **Folder-exists rule**: Before writing a pulled save, client checks directory existence; if missing, skip and optionally log “game not installed”.
+- **Folder-exists rule**: Before writing a pulled save, client checks directory existence; if missing, skip and optionally log “game not installed”. Write containment also resolves existing symlink ancestors, rejecting destinations outside the configured watch root before creating directories or backups. A configured root may itself be a symlink.
 
 ## Cross-OS sync (Windows ↔ Linux)
 
@@ -150,7 +154,7 @@ sequenceDiagram
 - **Watcher supervisor**: `RunWatcherSupervisor` in `client/sync/` restarts fsnotify on channel close, filters events by manifest patterns, removes stale paths on manifest refresh/discovery, and exposes health via `WatcherHealthy`.
 - **Network retry**: Shared `pkg/retry` backoff for pull, push, manifest fetch, SSE, and outbox (outbox uses longer delays and drops entries after 7 days). Push skips unchanged content via client hash cache and server `unchanged` response.
 - **Change-detection hash**: dedup, `X-Content-Hash`, optimistic concurrency, watcher echo-suppression, and reconcile all key off the **plaintext** content hash (`ContentChangeHash`), not the encrypted wire bytes. AES-GCM is non-deterministic (fresh salt+nonce per call), so hashing ciphertext would make encrypted saves appear changed every cycle. The encrypted wire bytes are still what's transmitted/stored; `X-Content-Size` reports the wire (stored) length.
-- **Optimistic concurrency**: steady-state pushes send `X-GSBS-If-Hash` (last known content hash); the server returns 409 if its hash differs (no wall-clock involved). When a client has no known hash for a slot it sends `X-GSBS-If-Absent: 1` so the server rejects (409) rather than silently overwriting a *different* existing save. The first-push guard is enabled for `keep_local`/`keep_server`; `last_write_wins` keeps blind overwrite by design.
+- **Optimistic concurrency**: steady-state pushes send `X-GSBS-If-Hash` (last known content hash); the server returns 409 if its hash differs (no wall-clock involved). When a client has no known hash for a slot it sends `X-GSBS-If-Absent: 1` so the server rejects (409) rather than silently overwriting a *different* existing save. The first-push guard is enabled for all conflict policies, including `last_write_wins`.
 - **Bounded pulls**: clients sync summaries-first (`/api/saves?summaries=1`) and fetch only changed blobs; the full-pull fallback paginates so neither side buffers an entire library.
 
 ## Job Runner
