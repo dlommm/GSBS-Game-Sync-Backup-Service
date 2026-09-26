@@ -18,7 +18,7 @@ func mockCatalogServer(pageIDs []int64) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		tables := q.Get("tables")
-		if tables != "Infobox_game" {
+		if tables != "Game" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -27,22 +27,13 @@ func mockCatalogServer(pageIDs []int64) *httptest.Server {
 		for _, id := range pageIDs {
 			rows = append(rows, map[string]interface{}{
 				"_pageName": fmt.Sprintf("Game_%d", id),
-				"PageID":    fmt.Sprintf("%d", id),
+				"PageID":    id,
 				"Title":     fmt.Sprintf("Game %d", id),
 			})
 		}
-		resp := map[string]interface{}{"cargoquery": makeCargoRows(rows)}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(rows)
 	}))
-}
-
-func makeCargoRows(rows []map[string]interface{}) []map[string]interface{} {
-	out := make([]map[string]interface{}, len(rows))
-	for i, r := range rows {
-		out[i] = map[string]interface{}{"title": r}
-	}
-	return out
 }
 
 func TestRunCatalogScan_ProducesCorrectCounts(t *testing.T) {
@@ -114,7 +105,7 @@ func TestRunCatalogScan_HashStability(t *testing.T) {
 func mockOffsetAwareCatalogServer(allPageIDs []int64) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if q.Get("tables") != "Infobox_game" {
+		if q.Get("tables") != "Game" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -139,13 +130,12 @@ func mockOffsetAwareCatalogServer(allPageIDs []int64) *httptest.Server {
 		for _, id := range slice {
 			rows = append(rows, map[string]interface{}{
 				"_pageName": fmt.Sprintf("Game_%d", id),
-				"PageID":    fmt.Sprintf("%d", id),
+				"PageID":    id,
 				"Title":     fmt.Sprintf("Game %d", id),
 			})
 		}
-		resp := map[string]interface{}{"cargoquery": makeCargoRows(rows)}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(rows)
 	}))
 }
 

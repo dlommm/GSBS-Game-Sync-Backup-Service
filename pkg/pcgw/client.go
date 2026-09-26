@@ -37,6 +37,11 @@ type Client struct {
 	HTTP *http.Client
 	// BaseURL overrides the API origin (for tests). Empty uses defaultBaseURL.
 	BaseURL string
+	// CargoBackend selects how Cargo tables are read: CargoBackendExport
+	// (Special:CargoExport, the default) or CargoBackendAPI (action=cargoquery,
+	// which PCGW now answers only for authenticated callers). Empty falls back
+	// to GSBS_PCGW_CARGO_BACKEND, then to the default.
+	CargoBackend string
 	// testBackoff overrides 5xx/network retry sleep duration (zero means use real backoff).
 	testBackoff time.Duration
 
@@ -237,19 +242,21 @@ func (c *Client) GetPageIDBySteamAppID(ctx context.Context, steamAppID string) (
 	if !isNumericID(steamAppID) {
 		return "", fmt.Errorf("invalid Steam AppID %q: expected digits", steamAppID)
 	}
-	rows, err := c.CargoQuery(ctx,
-		"Infobox_game",
-		"Infobox_game._pageID=PageID",
-		"Infobox_game.Steam_AppID HOLDS "+cargoQuote(steamAppID),
-		0, 0,
-	)
+	rows, err := c.runCargo(ctx, cargoRequest{
+		Tables: tableGame,
+		Fields: "Game._pageID=PageID",
+		Where:  "Game.Steam_AppID HOLDS " + cargoQuote(steamAppID),
+		Limit:  1,
+	})
 	if err != nil {
 		return "", err
 	}
 	if len(rows) == 0 {
 		return "", fmt.Errorf("no page for Steam AppID %s", steamAppID)
 	}
-	if id, ok := rows[0]["PageID"].(string); ok {
+	// Special:CargoExport returns _pageID as a JSON number, cargoquery as a
+	// string, so this cannot assert a concrete type.
+	if id := parseCargoSingleValue(rows[0]["PageID"]); id != "" {
 		return id, nil
 	}
 	return "", fmt.Errorf("invalid PageID for Steam AppID %s", steamAppID)
