@@ -71,6 +71,11 @@ type ReportProgressEx func(PCGWSyncProgress)
 // Fetch bundle now, or import a bundle file on air-gapped hosts).
 var ErrPCGWMirrorNotSeeded = errors.New("pcgw mirror is empty: fetch or import the manifest bundle before running an API sync (direct full crawls of PCGamingWiki are disabled)")
 
+// ErrPCGWCrawlDisabled is returned when a build without the `pcgwcrawl` tag
+// attempts an API sync. Manifest data reaches such builds through the
+// published bundle instead; see crawl_disabled.go.
+var ErrPCGWCrawlDisabled = errors.New("pcgw crawling is not enabled in this build: manifest data comes from the published bundle (Admin -> PCGW -> Fetch bundle now)")
+
 func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client, reportProgress ReportProgress, opts PCGWSyncOptions) (int, error) {
 	return PCGWSyncEx(ctx, st, client, reportProgress, nil, opts)
 }
@@ -78,6 +83,13 @@ func PCGWSync(ctx context.Context, st store.Store, client *pcgw.Client, reportPr
 // PCGWSyncEx is PCGWSync with optional extended progress reporting.
 // It implements the two-phase pipeline: Phase 1 = catalog scan, Phase 2 = targeted ingest.
 func PCGWSyncEx(ctx context.Context, st store.Store, client *pcgw.Client, reportProgress ReportProgress, reportEx ReportProgressEx, opts PCGWSyncOptions) (int, error) {
+	// Build gate: only the VPS publisher crawls PCGamingWiki. A manifest
+	// rebuild is exempt because it reprojects the local mirror and makes no
+	// upstream request. See crawl_disabled.go.
+	if !crawlEnabled && !opts.RebuildManifestOnly {
+		return 0, ErrPCGWCrawlDisabled
+	}
+
 	// Absolute seeded gate: never crawl the PCGW API against an empty mirror.
 	// Fresh installs must seed from the prebuilt S3 bundle (or import a bundle
 	// file manually on air-gapped hosts). There is deliberately no override —

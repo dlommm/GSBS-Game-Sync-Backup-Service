@@ -1,16 +1,13 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/gsbs/gsbs/pkg/discovery"
-	"github.com/gsbs/gsbs/pkg/pcgw"
 	"github.com/gsbs/gsbs/pkg/types"
 )
 
@@ -251,30 +248,16 @@ func appendUniquePath(slice []string, p string) []string {
 	return append(slice, p)
 }
 
-// resolveUnmatchedSteam tries PCGW lookup for unmatched Steam games (rate-limited, cached).
-func resolveUnmatchedSteam(installed []discovery.InstalledGame, idx *discovery.ManifestV2Index, idMap map[string]string) {
-	client := pcgw.NewClient()
-	ctx := context.Background()
-	for _, g := range installed {
-		if g.Launcher != "steam" {
-			continue
-		}
-		key := g.Launcher + ":" + g.GameID
-		if idMap[key] != "" {
-			continue
-		}
-		if idx.ResolveManifestGameID(g, idMap) != "" {
-			continue
-		}
-		pageID, err := client.GetPageIDBySteamAppID(ctx, g.GameID)
-		if err != nil {
-			log.Printf("discovery: PCGW lookup failed steam:%s: %v", g.GameID, err)
-			continue
-		}
-		idMap[key] = pageID
-		log.Printf("discovery: resolved steam:%s -> manifest %s", g.GameID, pageID)
-	}
-}
+// Steam games the manifest index cannot resolve used to be looked up here, one
+// at a time, against PCGamingWiki's Cargo API — from every install. That made
+// each client a direct PCGW consumer, which is the opposite of how manifest
+// data is meant to reach them: the VPS publisher is the fleet's only PCGW
+// mirror and clients take its bundle from R2.
+//
+// The lookup had also been failing on every call since PCGW withdrew anonymous
+// Cargo access on 2026-08-23, so it produced nothing but a log line per
+// unmatched game. Resolutions cached before then are still read back from the
+// discovery cache's IDMap.
 
 // currentScanOptions prepends the user's configured launcher folders (config
 // heroic_folder/lutris_folder/…) to the per-OS scan defaults — they were
@@ -316,7 +299,6 @@ func runDiscovery(manifestEntries []types.GameSaveLocation) int {
 	}
 
 	installed := discovery.ScanInstalledGamesOpts(currentScanOptions())
-	resolveUnmatchedSteam(installed, idx, idMap)
 	matched := discovery.MatchManifestWithV2Index(installed, idx, idMap)
 
 	var matchedIDs []string

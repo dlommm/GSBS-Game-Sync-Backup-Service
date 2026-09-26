@@ -22,18 +22,17 @@ func mockFullPCGWServer(pageIDs []int64) *httptest.Server {
 		q := r.URL.Query()
 
 		// Catalog listing via Cargo API.
-		if q.Get("tables") == "Infobox_game" {
+		if q.Get("tables") == "Game" {
 			rows := make([]map[string]interface{}, 0, len(pageIDs))
 			for _, id := range pageIDs {
 				rows = append(rows, map[string]interface{}{
 					"_pageName": fmt.Sprintf("Game_%d", id),
-					"PageID":    fmt.Sprintf("%d", id),
+					"PageID":    id,
 					"Title":     fmt.Sprintf("Game %d", id),
 				})
 			}
-			resp := map[string]interface{}{"cargoquery": makeCargoRows(rows)}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(rows)
 			return
 		}
 
@@ -116,6 +115,7 @@ func seedPriorSuccessRun(t *testing.T, ctx context.Context, st store.Store, cata
 // Root cause A regression: before the fix, the no-op gate only checked
 // failedCount and titleBackfillCount, silently skipping missing entries.
 func TestNoOpFix_UnchangedHashWithMissingBacklog(t *testing.T) {
+	enableCrawlForTest(t)
 	pageIDs := []int64{20001, 20002}
 	srv := mockFullPCGWServer(pageIDs)
 	defer srv.Close()
@@ -183,6 +183,7 @@ func TestNoOpFix_UnchangedHashWithMissingBacklog(t *testing.T) {
 // DOES skip Phase 2 when the catalog hash is unchanged AND there is no backlog
 // (missing=0, failed=0, title_backfill=0).
 func TestNoOpFix_UnchangedHashEmptyBacklog(t *testing.T) {
+	enableCrawlForTest(t)
 	pageIDs := []int64{20003, 20004}
 	srv := mockFullPCGWServer(pageIDs)
 	defer srv.Close()
@@ -264,6 +265,7 @@ func TestNoOpFix_UnchangedHashEmptyBacklog(t *testing.T) {
 // Root cause B regression: before the fix, resumed runs restored CatalogHash
 // from the prior run, which combined with Root Cause A could silence the backlog.
 func TestNoOpFix_ResumeDoesNotUseStaleHash(t *testing.T) {
+	enableCrawlForTest(t)
 	pageIDs := []int64{20005, 20006}
 	srv := mockFullPCGWServer(pageIDs)
 	defer srv.Close()
@@ -342,7 +344,7 @@ func mockOffsetAwarePCGWServer(pageIDs []int64) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 
-		if q.Get("tables") == "Infobox_game" {
+		if q.Get("tables") == "Game" {
 			offset := 0
 			limit := 500
 			fmt.Sscanf(q.Get("offset"), "%d", &offset)
@@ -360,13 +362,12 @@ func mockOffsetAwarePCGWServer(pageIDs []int64) *httptest.Server {
 			for _, id := range slice {
 				rows = append(rows, map[string]interface{}{
 					"_pageName": fmt.Sprintf("Game_%d", id),
-					"PageID":    fmt.Sprintf("%d", id),
+					"PageID":    id,
 					"Title":     fmt.Sprintf("Game %d", id),
 				})
 			}
-			resp := map[string]interface{}{"cargoquery": makeCargoRows(rows)}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(rows)
 			return
 		}
 
@@ -410,6 +411,7 @@ func mockOffsetAwarePCGWServer(pageIDs []int64) *httptest.Server {
 // TestFastPath_SkipsFullScan verifies that when the catalog is complete and the probe
 // finds no growth, RunCatalogScan (full) is not invoked — Phase 2 runs on backlog only.
 func TestFastPath_SkipsFullScan(t *testing.T) {
+	enableCrawlForTest(t)
 	pageIDs := []int64{30001, 30002, 30003}
 	srv := mockOffsetAwarePCGWServer(pageIDs)
 	defer srv.Close()
@@ -471,6 +473,7 @@ func TestFastPath_SkipsFullScan(t *testing.T) {
 // TestFastPath_SkipsBuildChangedQueue verifies that when the probe is empty and
 // last_rev_check_at is recent, buildChangedQueue is not invoked (no rev API calls).
 func TestFastPath_SkipsBuildChangedQueue(t *testing.T) {
+	enableCrawlForTest(t)
 	pageIDs := []int64{40001, 40002}
 	srv := mockOffsetAwarePCGWServer(pageIDs)
 	defer srv.Close()
@@ -520,19 +523,18 @@ func mockPCGWServerWithCatalogCounter(pageIDs []int64) (*httptest.Server, *int) 
 	var catalogCalls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if q.Get("tables") == "Infobox_game" {
+		if q.Get("tables") == "Game" {
 			catalogCalls++
 			rows := make([]map[string]interface{}, 0, len(pageIDs))
 			for _, id := range pageIDs {
 				rows = append(rows, map[string]interface{}{
 					"_pageName": fmt.Sprintf("Game_%d", id),
-					"PageID":    fmt.Sprintf("%d", id),
+					"PageID":    id,
 					"Title":     fmt.Sprintf("Game %d", id),
 				})
 			}
-			resp := map[string]interface{}{"cargoquery": makeCargoRows(rows)}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(rows)
 			return
 		}
 		if q.Get("action") == "parse" {
@@ -592,6 +594,7 @@ func seedCatalogAndPriorPhase1(t *testing.T, ctx context.Context, st store.Store
 
 // TestTargetedModes_SkipCatalogPhase verifies Parse Missing Only / Retry Failed skip Phase 1.
 func TestTargetedModes_SkipCatalogPhase(t *testing.T) {
+	enableCrawlForTest(t)
 	pageIDs := []int64{50001, 50002, 50003}
 	srv, catalogCalls := mockPCGWServerWithCatalogCounter(pageIDs)
 	defer srv.Close()

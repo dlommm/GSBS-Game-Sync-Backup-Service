@@ -115,10 +115,16 @@ func TestCargoQueryReturnsAPIError(t *testing.T) {
 	}
 }
 
-func TestListGamePagesParsesRows(t *testing.T) {
+// TestListGamePagesParsesExportRows covers the default path: Special:CargoExport,
+// which returns page IDs as JSON numbers and List-of columns as JSON arrays.
+func TestListGamePagesParsesExportRows(t *testing.T) {
+	var gotPath, gotTables, gotOrderBy string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotTables = r.URL.Query().Get("tables")
+		gotOrderBy = r.URL.Query().Get("order_by")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"cargoquery":[{"title":{"PageID":"5","Title":"Titan Quest","SteamAppID":"4540,4550","GOGID":"123","CoverURL":"https://example/cover.jpg","Cover":"cover.jpg","Developers":"Iron Lore","AvailableOn":"Windows, Linux"}}]}`))
+		_, _ = w.Write([]byte(`[{"PageID":5,"Title":"Titan Quest","SteamAppID":[4540,4550],"GOGID":["123"],"CoverURL":"https://example/cover.jpg","Cover":"cover.jpg","Developers":["Iron Lore","Bandai Namco, Inc."],"AvailableOn":["Windows","Linux"],"Engines":[""]}]`))
 	}))
 	defer srv.Close()
 
@@ -126,6 +132,18 @@ func TestListGamePagesParsesRows(t *testing.T) {
 	pages, err := c.ListGamePages(context.Background(), 10, 0)
 	if err != nil {
 		t.Fatalf("ListGamePages: %v", err)
+	}
+	if gotPath != "/wiki/Special:CargoExport" {
+		t.Errorf("path=%q want /wiki/Special:CargoExport", gotPath)
+	}
+	// The Infobox_game table was renamed to Game on 2026-08-25.
+	if gotTables != "Game" {
+		t.Errorf("tables=%q want Game", gotTables)
+	}
+	// Without a stable order, offset paging can repeat or skip rows, and the
+	// tail scan's "everything past this offset is new" assumption breaks.
+	if gotOrderBy != gameOrderBy {
+		t.Errorf("order_by=%q want %q", gotOrderBy, gameOrderBy)
 	}
 	if len(pages) != 1 {
 		t.Fatalf("len(pages)=%d want 1", len(pages))
@@ -144,6 +162,66 @@ func TestListGamePagesParsesRows(t *testing.T) {
 	}
 	if len(pages[0].AvailableOn) != 2 {
 		t.Fatalf("available on: %v", pages[0].AvailableOn)
+	}
+	// JSON arrays keep a value containing a comma intact. The cargoquery
+	// string path could only split on commas and would report three developers.
+	if len(pages[0].Developers) != 2 || pages[0].Developers[1] != "Bandai Namco, Inc." {
+		t.Fatalf("developers: %v", pages[0].Developers)
+	}
+	// A List-of column with no values serialises as [""], not [].
+	if len(pages[0].Engines) != 0 {
+		t.Fatalf("engines: %v want empty", pages[0].Engines)
+	}
+}
+
+// TestListGamePagesParsesAPIRows covers the cargoquery backend, which returns
+// every cell as a string. It stays exercised so the path is ready to use once
+// the client can authenticate.
+func TestListGamePagesParsesAPIRows(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("action"); got != "cargoquery" {
+			t.Errorf("action=%q want cargoquery", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"cargoquery":[{"title":{"PageID":"5","Title":"Titan Quest","SteamAppID":"4540,4550","GOGID":"123","CoverURL":"https://example/cover.jpg","Cover":"cover.jpg","Developers":"Iron Lore","AvailableOn":"Windows, Linux"}}]}`))
+	}))
+	defer srv.Close()
+
+	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL, CargoBackend: CargoBackendAPI}
+	pages, err := c.ListGamePages(context.Background(), 10, 0)
+	if err != nil {
+		t.Fatalf("ListGamePages: %v", err)
+	}
+	if len(pages) != 1 {
+		t.Fatalf("len(pages)=%d want 1", len(pages))
+	}
+	if pages[0].PageID != 5 || pages[0].Title != "Titan Quest" {
+		t.Fatalf("page: %+v", pages[0])
+	}
+	if len(pages[0].SteamAppIDs) != 2 || pages[0].SteamAppIDs[0] != "4540" {
+		t.Fatalf("steam: %v", pages[0].SteamAppIDs)
+	}
+	if len(pages[0].AvailableOn) != 2 {
+		t.Fatalf("available on: %v", pages[0].AvailableOn)
+	}
+}
+
+// TestCargoExportReportsPageErrors pins the failure mode that made the outage
+// hard to read: Special:CargoExport answers an unknown table with a plain-text
+// page under HTTP 200, which would otherwise surface as a JSON decode error.
+func TestCargoExportReportsPageErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("Error: Table Infobox_game not found."))
+	}))
+	defer srv.Close()
+
+	c := &Client{HTTP: srv.Client(), BaseURL: srv.URL}
+	_, err := c.ListGamePages(context.Background(), 10, 0)
+	if err == nil {
+		t.Fatal("expected an error for a missing table")
+	}
+	if !strings.Contains(err.Error(), "Table Infobox_game not found") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

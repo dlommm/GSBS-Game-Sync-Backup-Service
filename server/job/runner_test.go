@@ -54,6 +54,7 @@ func TestTryRunPCGWSyncDuplicateGuardDB(t *testing.T) {
 }
 
 func TestPCGWSyncCancelSetsCanceled(t *testing.T) {
+	enableCrawlForTest(t)
 	st, err := store.NewSQLite(":memory:")
 	if err != nil {
 		t.Fatal(err)

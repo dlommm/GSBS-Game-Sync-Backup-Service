@@ -26,6 +26,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y gcc
       - name: Test
         run: go test -race -coverprofile=coverage.out ./server/... ./pkg/... ./client/... ./cmd/...
+      # The VPS publisher is the only build carrying `pcgwcrawl`. Without this
+      # step nothing compiles it, and the crawler could break without CI
+      # noticing until a weekly publish failed.
+      - name: Test (pcgwcrawl build)
+        run: go test -race -tags pcgwcrawl ./server/... ./pkg/...
       - name: Upload coverage profile
         uses: actions/upload-artifact@v6
         with:

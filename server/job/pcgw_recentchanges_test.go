@@ -19,6 +19,7 @@ import (
 // TestSeededGateBlocksEmptyMirror: the absolute gate — an API sync against an
 // empty mirror must refuse before making a single API call.
 func TestSeededGateBlocksEmptyMirror(t *testing.T) {
+	enableCrawlForTest(t)
 	st, err := store.NewSQLite(":memory:")
 	if err != nil {
 		t.Fatal(err)

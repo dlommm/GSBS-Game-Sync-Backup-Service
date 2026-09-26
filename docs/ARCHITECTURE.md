@@ -102,7 +102,8 @@ For PCGW-tracked games, the same logical save location maps to the same `slot_la
 
 ## PCGamingWiki integration
 
-- **Game list**: Cargo `Infobox_game` (and redirect API by Steam App ID / GOG ID) to get game page titles/IDs.
+- **Game list**: Cargo `Game` table (renamed from `Infobox_game` upstream on 2026-08-25), read through `Special:CargoExport`; plus the redirect API by Steam App ID / GOG ID to get game page titles/IDs.
+- **Cargo access**: `action=cargoquery` has rejected anonymous callers since 2026-08-23, so the client reads Cargo through `Special:CargoExport` by default. The cargoquery transport is retained behind `GSBS_PCGW_CARGO_BACKEND=api` for when a bot login is configured.
 - **Save locations**: Stored in “Game data” sections (templates like “Save game data location”, “Configuration file(s) location”). Options:
   - **A**: Parse wikitext via MediaWiki `parse` API and extract paths (and OS/platform tags) into a local cache/DB.
   - **B**: Maintain a local DB of (game_id, os, path_template) and optionally backfill from PCGW or community data.
@@ -110,7 +111,8 @@ For PCGW-tracked games, the same logical save location maps to the same `slot_la
 
 ## Data flow
 
-- **PCGW to Server**: A weekly job (cron, or `cmd/pcgw-sync`) lists game pages from Cargo `Infobox_game`, fetches wikitext (2s rate limit by default), ingests **all sections** into `pcgw_*` tables, and **projects** save/config paths into `game_save_locations`. Incremental sync skips unchanged pages via `last_rev_id` + `content_hash`. Manual sync: admin WebUI `/admin/pcgw` or `POST /admin/run-job`.
+- **PCGW to Server**: A weekly job (cron, or `cmd/pcgw-sync`) lists game pages from the Cargo `Game` table, fetches wikitext (2s rate limit by default), ingests **all sections** into `pcgw_*` tables, and **projects** save/config paths into `game_save_locations`. Incremental sync skips unchanged pages via `last_rev_id` + `content_hash`. Manual sync: admin WebUI `/admin/pcgw` or `POST /admin/run-job`.
+- **Who may crawl**: crawling PCGamingWiki requires the `pcgwcrawl` build tag. Stock builds return `ErrPCGWCrawlDisabled` and take their data from the published manifest bundle instead; only the VPS publisher is built with the tag. See `server/job/crawl_disabled.go`.
 - **Server to Client (manifest)**: Clients call `GET /api/manifest/v2` (preferred) or `GET /api/manifest` v1. v2 returns rich per-game metadata for discovery; v1 remains flat path rows for compatibility.
 - **WebUI**: Users open the server in a browser. Login/register use the same auth as the API; a signed session cookie identifies the user. The dashboard shows the user registered clients and synced saves (game_id, path_key, updated_at).
 
