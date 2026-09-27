@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/gsbs/gsbs/pkg/pcgw"
@@ -345,4 +346,117 @@ func TestPhase2StartCursor_IgnoresStaleResumeCursor(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPersistIngestResult_SaveAndConfigInSameDirectory reproduces the
+// "UNIQUE constraint failed: game_save_locations.game_id, platform,
+// path_template" failures: a page whose save file and config file live in one
+// folder yields two rules for the same directory. They must land as one row
+// holding both rules, not fail the page.
+func TestPersistIngestResult_SaveAndConfigInSameDirectory(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	const pageID = int64(88888)
+	const gameID = "88888"
+	saveLocs := []pcgw.SaveLocationTemplate{
+		{GameID: gameID, System: "Windows", Paths: []string{`%APPDATA%\GameY\*.sav`}, IsConfig: false},
+		{GameID: gameID, System: "Windows", Paths: []string{`%APPDATA%\GameY\settings.ini`}, IsConfig: true},
+		// The same save path listed twice must not produce a duplicate rule.
+		{GameID: gameID, System: "Windows", Paths: []string{`%APPDATA%\GameY\*.sav`}, IsConfig: false},
+	}
+	result := &pcgw.IngestResult{
+		Bundle: pcgw.GameBundle{
+			PageID:      pageID,
+			ParseStatus: "ok",
+			PageInfo:    pcgw.PageInfo{PageID: pageID, Title: "GameY"},
+			Sections: map[string]pcgw.SectionResult{
+				"game_data": {Key: "game_data", Data: map[string]interface{}{"templates": saveLocs}},
+			},
+			SaveLocations: saveLocs,
+		},
+	}
+	if err := st.UpsertPCGWGame(ctx, &types.PCGWGame{
+		PageID: pageID, PageName: "GameY", Title: "GameY", ParseStatus: "ok",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := PersistIngestResult(ctx, st, "", result, PCGWFilters{}); err != nil {
+		t.Fatalf("PersistIngestResult: %v", err)
+	}
+
+	entries, err := st.ListGameSaveLocations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("want 1 merged entry for the shared directory, got %d: %+v", len(entries), entries)
+	}
+	e := entries[0]
+	if e.IsConfig {
+		t.Error("an entry holding a save rule must not be marked config-only")
+	}
+	var saves, configs int
+	for _, r := range e.SaveRules {
+		if r.IsConfig {
+			configs++
+		} else {
+			saves++
+		}
+	}
+	if saves != 1 || configs != 1 {
+		t.Errorf("want 1 save rule and 1 config rule, got %d and %d: %+v", saves, configs, e.SaveRules)
+	}
+}
+
+// TestPersistIngestResult_FailedSaveLocationsAreRetried checks that a page
+// whose save paths could not be written is not recorded as up to date, so
+// change detection fetches it again next run.
+func TestPersistIngestResult_FailedSaveLocationsAreRetried(t *testing.T) {
+	st, err := store.NewSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	const pageID = int64(99999)
+	saveLocs := []pcgw.SaveLocationTemplate{
+		{GameID: "99999", System: "Windows", Paths: []string{`%APPDATA%\GameZ`}},
+	}
+	result := &pcgw.IngestResult{
+		Bundle: pcgw.GameBundle{
+			PageID:      pageID,
+			RevisionID:  4242,
+			ParseStatus: "ok",
+			PageInfo:    pcgw.PageInfo{PageID: pageID, Title: "GameZ"},
+			Sections: map[string]pcgw.SectionResult{
+				"game_data": {Key: "game_data", Data: map[string]interface{}{"templates": saveLocs}},
+			},
+			SaveLocations: saveLocs,
+		},
+	}
+	failing := &failingSaveLocationsStore{Store: st}
+	if _, err := PersistIngestResult(ctx, failing, "", result, PCGWFilters{}); err == nil {
+		t.Fatal("want the save-location error to be returned")
+	}
+
+	g, err := st.GetPCGWGame(ctx, pageID)
+	if err != nil || g == nil {
+		t.Fatalf("GetPCGWGame: %v", err)
+	}
+	if g.LastRevID == 4242 && g.ParseStatus == "ok" {
+		t.Fatalf("page recorded as current (rev %d, %s); it would never be retried", g.LastRevID, g.ParseStatus)
+	}
+}
+
+type failingSaveLocationsStore struct{ store.Store }
+
+func (failingSaveLocationsStore) ReplaceGameSaveLocationsForGame(context.Context, string, []types.GameSaveLocation) error {
+	return errors.New("simulated write failure")
 }
