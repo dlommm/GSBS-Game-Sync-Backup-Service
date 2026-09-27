@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1138,6 +1139,7 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 				}
 			}
 		}
+		entries = mergeSaveLocationEntries(entries)
 		if gameDataOK {
 			// Replace even when the page now yields NO entries. Running this
 			// only when entries existed meant a PCGW edit that removed or
@@ -1154,12 +1156,74 @@ func PersistIngestResult(ctx context.Context, st store.Store, syncRunID string, 
 					Msg("pcgw persist: page parsed with no save locations — clearing stale manifest entries")
 			}
 			if err := st.ReplaceGameSaveLocationsForGame(ctx, gameID, entries); err != nil {
+				// The game row above already recorded this revision as parsed
+				// "ok", which makes change detection skip the page from now on.
+				// Undo that, so a page whose save paths were not written is
+				// fetched again next run instead of silently keeping its old
+				// paths until someone next edits it on PCGW.
+				g.LastRevID = 0
+				g.ParseStatus = "failed"
+				g.PlatformsPresent = platforms
+				if markErr := st.UpsertPCGWGame(ctx, g); markErr != nil {
+					logx.Logger().Error().Str("component", "pcgw").Int64("page_id", b.PageID).Err(markErr).
+						Msg("pcgw persist: could not mark page for retry")
+				}
 				return 0, err
 			}
 			return len(entries), nil
 		}
 	}
 	return 0, nil
+}
+
+// mergeSaveLocationEntries folds entries that share a platform and directory
+// into one, keeping every distinct rule.
+//
+// game_save_locations is unique on (game_id, platform, path_template), but a
+// page routinely yields several rules for one directory: a save file and a
+// config file side by side, or two file patterns in the same folder. Inserting
+// them as separate rows failed the whole page with a UNIQUE constraint error,
+// so none of its paths were updated. Each rule carries its own IsConfig, so
+// merging loses nothing; the entry counts as config only if all its rules are.
+func mergeSaveLocationEntries(entries []types.GameSaveLocation) []types.GameSaveLocation {
+	if len(entries) < 2 {
+		return entries
+	}
+	out := make([]types.GameSaveLocation, 0, len(entries))
+	index := make(map[string]int, len(entries))
+	for _, e := range entries {
+		key := e.Platform + "\x00" + e.PathTemplate
+		i, seen := index[key]
+		if !seen {
+			index[key] = len(out)
+			e.SaveRules = append([]types.SaveRule(nil), e.SaveRules...)
+			out = append(out, e)
+			continue
+		}
+		merged := &out[i]
+		merged.IsConfig = merged.IsConfig && e.IsConfig
+		for _, r := range e.SaveRules {
+			if !containsSaveRule(merged.SaveRules, r) {
+				merged.SaveRules = append(merged.SaveRules, r)
+			}
+		}
+	}
+	return out
+}
+
+// containsSaveRule reports whether rules already has one matching the same
+// files. SlotLabel is left out: a path PCGW lists twice gets a slot per listing,
+// and keeping both would sync the same files under two keys.
+func containsSaveRule(rules []types.SaveRule, r types.SaveRule) bool {
+	for _, have := range rules {
+		if have.Directory == r.Directory && have.Platform == r.Platform &&
+			have.IsConfig == r.IsConfig && have.Recursive == r.Recursive &&
+			have.SyncAll == r.SyncAll &&
+			slices.Equal(have.IncludePatterns, r.IncludePatterns) {
+			return true
+		}
+	}
+	return false
 }
 
 func upsertSection(ctx context.Context, st store.Store, key string, row *types.PCGWSectionRow) error {
