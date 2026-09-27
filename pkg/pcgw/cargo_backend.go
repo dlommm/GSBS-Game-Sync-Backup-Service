@@ -2,6 +2,7 @@ package pcgw
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 )
@@ -34,9 +35,9 @@ type cargoRequest struct {
 // Two exist because PCGW closed the documented API to anonymous callers on
 // 2026-08-23: action=cargoquery now answers "permissiondenied" unless the
 // request carries a MediaWiki bot login, while Special:CargoExport still
-// serves everyone. exportBackend is therefore the default. apiBackend stays
-// wired up so that adding authentication later means supplying credentials
-// and flipping GSBS_PCGW_CARGO_BACKEND, not rewriting the call sites.
+// serves anonymous callers — except that PCGW's Cloudflare front end
+// challenges it from data-center IPs. So apiBackend is chosen whenever a bot
+// login is configured (see auth.go), and exportBackend otherwise.
 type cargoBackend interface {
 	name() string
 	run(ctx context.Context, c *Client, q cargoRequest) ([]map[string]interface{}, error)
@@ -52,7 +53,12 @@ func (c *Client) cargoBackendFor() cargoBackend {
 	if name == "" {
 		name = strings.TrimSpace(os.Getenv("GSBS_PCGW_CARGO_BACKEND"))
 	}
-	if strings.EqualFold(name, CargoBackendAPI) {
+	switch {
+	case strings.EqualFold(name, CargoBackendAPI):
+		return apiBackend{}
+	case strings.EqualFold(name, CargoBackendExport):
+		return exportBackend{}
+	case c.hasBotCredentials():
 		return apiBackend{}
 	}
 	return exportBackend{}
@@ -65,11 +71,26 @@ func (c *Client) runCargo(ctx context.Context, q cargoRequest) ([]map[string]int
 }
 
 // apiBackend runs queries through action=cargoquery. Anonymous requests fail
-// with permissiondenied; it is usable only once the client authenticates.
+// with permissiondenied, so with a bot login configured it logs in first, and
+// logs in again once if the session has expired mid-sync.
 type apiBackend struct{}
 
 func (apiBackend) name() string { return CargoBackendAPI }
 
 func (apiBackend) run(ctx context.Context, c *Client, q cargoRequest) ([]map[string]interface{}, error) {
+	if !c.hasBotCredentials() {
+		return c.cargoQueryOrdered(ctx, q)
+	}
+	if err := c.ensureLogin(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := c.cargoQueryOrdered(ctx, q)
+	if !errors.Is(err, errNotLoggedIn) {
+		return rows, err
+	}
+	c.invalidateLogin()
+	if err := c.ensureLogin(ctx); err != nil {
+		return nil, err
+	}
 	return c.cargoQueryOrdered(ctx, q)
 }

@@ -28,7 +28,7 @@ const (
 	init5xxBackoff   = 1 * time.Second
 	max5xxBackoffDur = 30 * time.Second
 	defaultBaseURL   = "https://www.pcgamingwiki.com"
-	defaultUserAgent = "GSBS/1.0 (https://github.com/gsbs/gsbs; game-save-sync)"
+	defaultUserAgent = "GSBS/1.0 (https://github.com/dlommm/GSBS-Game-Sync-Backup-Service; game-save-sync)"
 	defaultRateLimit = 2 * time.Second
 )
 
@@ -38,21 +38,31 @@ type Client struct {
 	// BaseURL overrides the API origin (for tests). Empty uses defaultBaseURL.
 	BaseURL string
 	// CargoBackend selects how Cargo tables are read: CargoBackendExport
-	// (Special:CargoExport, the default) or CargoBackendAPI (action=cargoquery,
-	// which PCGW now answers only for authenticated callers). Empty falls back
-	// to GSBS_PCGW_CARGO_BACKEND, then to the default.
+	// (Special:CargoExport) or CargoBackendAPI (action=cargoquery, which PCGW
+	// now answers only for authenticated callers). Empty falls back to
+	// GSBS_PCGW_CARGO_BACKEND, then to CargoBackendAPI when a bot login is
+	// configured and CargoBackendExport otherwise.
 	CargoBackend string
+	// BotUser and BotPassword are a Special:BotPasswords login ("Account@bot"
+	// and its generated password). Empty falls back to GSBS_PCGW_BOT_USER and
+	// GSBS_PCGW_BOT_PASSWORD.
+	BotUser     string
+	BotPassword string
 	// testBackoff overrides 5xx/network retry sleep duration (zero means use real backoff).
 	testBackoff time.Duration
 
 	mu          sync.Mutex
 	lastRequest time.Time
+
+	authMu   sync.Mutex
+	loggedIn bool
 }
 
 // NewClient returns a new PCGW API client with sensible timeouts.
 func NewClient() *Client {
 	return &Client{HTTP: &http.Client{
 		Timeout: 30 * time.Second,
+		Jar:     newCookieJar(),
 	}}
 }
 
@@ -399,6 +409,10 @@ func decodeCargoResponse(body io.Reader) ([]map[string]interface{}, error) {
 		return nil, err
 	}
 	if out.Error != nil {
+		switch out.Error.Code {
+		case "permissiondenied", "readapidenied", "assertuserfailed", "assertbotfailed":
+			return nil, fmt.Errorf("%w: cargo query: %s: %s", errNotLoggedIn, out.Error.Code, out.Error.Info)
+		}
 		msg := out.Error.Info
 		if msg == "" {
 			msg = out.Error.Message

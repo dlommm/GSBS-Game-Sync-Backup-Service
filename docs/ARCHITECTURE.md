@@ -103,7 +103,7 @@ For PCGW-tracked games, the same logical save location maps to the same `slot_la
 ## PCGamingWiki integration
 
 - **Game list**: Cargo `Game` table (renamed from `Infobox_game` upstream on 2026-08-25), read through `Special:CargoExport`; plus the redirect API by Steam App ID / GOG ID to get game page titles/IDs.
-- **Cargo access**: `action=cargoquery` has rejected anonymous callers since 2026-08-23, so the client reads Cargo through `Special:CargoExport` by default. The cargoquery transport is retained behind `GSBS_PCGW_CARGO_BACKEND=api` for when a bot login is configured.
+- **Cargo access**: `action=cargoquery` has rejected anonymous callers since 2026-08-23, and PCGW's Cloudflare front end challenges `Special:CargoExport` from data-center IPs. With a bot password set (`GSBS_PCGW_BOT_USER` / `GSBS_PCGW_BOT_PASSWORD`, from Special:BotPasswords with the Cargo grant) the client logs in and uses `cargoquery`, logging in again if the session expires; without one it falls back to `Special:CargoExport`. `GSBS_PCGW_CARGO_BACKEND=api|export` forces either.
 - **Save locations**: Stored in “Game data” sections (templates like “Save game data location”, “Configuration file(s) location”). Options:
   - **A**: Parse wikitext via MediaWiki `parse` API and extract paths (and OS/platform tags) into a local cache/DB.
   - **B**: Maintain a local DB of (game_id, os, path_template) and optionally backfill from PCGW or community data.

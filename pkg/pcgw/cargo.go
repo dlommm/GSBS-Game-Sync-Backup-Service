@@ -268,7 +268,8 @@ func parseCargoMultiValue(v interface{}) []string {
 //
 // Since 2026-08-23 PCGW rejects anonymous cargoquery requests with
 // "permissiondenied"; reaching it needs a MediaWiki bot login. Internal
-// callers go through runCargo, which defaults to Special:CargoExport instead.
+// callers go through runCargo, which logs in first when a bot login is
+// configured and uses Special:CargoExport when it is not.
 func (c *Client) CargoQuery(ctx context.Context, tables, fields, where string, limit, offset int) ([]map[string]interface{}, error) {
 	return c.cargoQueryOrdered(ctx, cargoRequest{
 		Tables: tables,
