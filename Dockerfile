@@ -27,7 +27,7 @@ RUN CGO_ENABLED=1 go build \
 # Runtime: pinned Alpine for current security patches (see Docker Scout / Alpine
 # releases). 3.24 ships sqlite-libs 3.53.x and busybox 1.37.0-r31, clearing the
 # sqlite 3.51.x and busybox CVEs still unpatched on the 3.23 branch.
-FROM alpine:3.24.1
+FROM alpine:3.24.2
 RUN apk add --no-cache ca-certificates sqlite-libs su-exec \
   && apk upgrade --no-cache \
   && addgroup -S gsbs -g 1000 \
