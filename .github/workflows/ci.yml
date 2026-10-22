@@ -18,6 +18,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
+          check-latest: true
           cache: true
       - uses: actions/setup-node@v5
         with:
@@ -68,6 +69,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
+          check-latest: true
           cache: true
       - name: Test
         # windows-latest ships mingw gcc, so the race detector works here too.
@@ -80,6 +82,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
+          check-latest: true
           cache: true
       - uses: actions/setup-node@v5
         with:
@@ -101,6 +104,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
+          check-latest: true
           cache: true
       - name: Test (macOS, native cgo)
         # Exercises darwin-tagged code paths (tray, update-apply, launcher
@@ -118,6 +122,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
+          check-latest: true
           cache: true
       - uses: actions/setup-node@v5
         with:
@@ -141,6 +146,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
+          check-latest: true
           cache: true
       - name: Install build deps (cgo for go-sqlite3 typechecking)
         run: sudo apt-get update && sudo apt-get install -y gcc
