@@ -6,6 +6,16 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [7.0.0] — 2026-10-22
+
+A new web app built around your games, on the server and in the local client.
+
+- **Continue**: your latest save fills the screen with its art, beside what's backed up and anything that needs you; every game below as a save slot.
+- **Library** with Grid, List and the new **Browser** view; **game pages** with an artwork header; **Load a save** states exactly what loading does (the current version always stays in history).
+- **Devices** shows 14 days of saves per device as lanes, so a quiet device stands out.
+- Steam library hero art and logos, six designs with their own type voice, light and dark, phone tab bar.
+- **Upgrade note:** the Top-nav, Library and Custom layouts were removed (those accounts now see Standard). No API, sync or schema changes.
+
 ## [6.0.0] — 2026-09-21
 
 A full-project audit: 67 fixes across the server, the clients, and save-location data.

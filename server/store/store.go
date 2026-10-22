@@ -399,6 +399,10 @@ type Store interface {
 	SyncVolumeByDayAll(ctx context.Context, days int) ([]DayCount, error)
 	SyncBytesByDay(ctx context.Context, userID string, days int) ([]DayBytes, error)
 	VersionsByClient(ctx context.Context, userID string, days int) ([]ClientVolumeRow, error)
+	// RecentSaveEvents lists the user's stored versions from the last `days`
+	// days (newest first, at most limit): which device sent which game's save,
+	// and when — the Devices page's per-device lanes.
+	RecentSaveEvents(ctx context.Context, userID string, days, limit int) ([]SaveEvent, error)
 	ActivityByWeekday(ctx context.Context, userID string, days int) ([]int, error)
 	ActivityByHour(ctx context.Context, userID string, days int) ([]int, error)
 	MostActiveGames(ctx context.Context, userID string, days, limit int) ([]SaveGameStatRow, error)
@@ -491,6 +495,17 @@ type ClientInfo struct {
 }
 
 // SaveSummary is a lightweight save entry for dashboard display (no content blob).
+// SaveEvent is one stored save version: a device sent this game's save at
+// UpdatedAt. ClientName is "" when the version predates client attribution.
+type SaveEvent struct {
+	GameID     string
+	GameTitle  string
+	ClientID   string
+	ClientName string
+	UpdatedAt  string
+	Version    int
+}
+
 type SaveSummary struct {
 	GameID       string
 	PathKey      string

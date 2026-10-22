@@ -107,6 +107,23 @@ func TestInsightsAggregates(t *testing.T) {
 		t.Fatalf("SyncBytesByDay all: %v %+v", err, series)
 	}
 
+	events, err := st.RecentSaveEvents(ctx, userID, 14, 10)
+	if err != nil || len(events) != 3 {
+		t.Fatalf("RecentSaveEvents: %v %+v", err, events)
+	}
+	named := 0
+	for _, e := range events {
+		if e.ClientID == clientID && e.GameID == "730" {
+			named++
+		}
+	}
+	if named != 2 {
+		t.Fatalf("RecentSaveEvents: want 2 events attributed to the client, got %d (%+v)", named, events)
+	}
+	if capped, _ := st.RecentSaveEvents(ctx, userID, 14, 1); len(capped) != 1 {
+		t.Fatalf("RecentSaveEvents limit: got %d", len(capped))
+	}
+
 	byClient, err := st.VersionsByClient(ctx, userID, 7)
 	if err != nil || len(byClient) != 2 {
 		t.Fatalf("VersionsByClient: %v %+v", err, byClient)

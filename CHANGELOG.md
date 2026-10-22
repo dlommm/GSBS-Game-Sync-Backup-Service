@@ -2,6 +2,26 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [7.0.0] - 2026-10-22
+
+Major release: a new web app built around your games. No API, sync, schema or data changes — 6.x clients and servers remain compatible. **Upgrade note:** the Top-nav, Library and Custom (widgets) layouts were removed; accounts that chose one now see Standard (Compact remains). Every URL is unchanged.
+
+### Changed — v7 "Continue" redesign (server + client WebUI; see `docs/design/ui-overhaul/10-CONTINUE.md`)
+
+- **A new look built around games.** The dashboard is now **Continue**: your latest save fills the screen with its art and title, beside a ledger of what's backed up (games, versions kept, devices online) and anything that needs you. Below it, every game is a **save slot** with when, on which device, and which version.
+- **New shell.** One top bar (Continue · Library · Devices · Insights) with an account menu for Settings, Conflicts, Admin and Log out; a conflict chip appears only when one is waiting; phones get a bottom tab bar. All URLs are unchanged.
+- **Library** gains a **Browser** view (save blocks with the selected game's newest versions beside them) next to Grid and List. **Game** pages get an artwork header. Version history is now **Load a save**, and its dialog states exactly what happens: the chosen version becomes a new latest version and the current one stays in history.
+- **Devices** shows the last 14 days as **lanes** — one mark per save each device sent — so a device that has gone quiet is visible at a glance.
+- **Artwork:** besides the portrait cover, the server now fetches Steam's wide library hero and title logo (same CDN, same cache and limits) for the Continue and game headers, falling back to the portrait and then the generated monogram.
+- **Type:** Archivo (variable width, SIL OFL) replaces DM Sans; the six designs each set their own title voice as well as colours. Light theme reworked; WCAG AA checked in both themes.
+- **Layouts:** Standard and Compact. The Top-nav, Library and Custom (widgets) layouts were removed; saved preferences for them now show Standard.
+- README and docs screenshots refreshed.
+
+### Fixed
+
+- The client status page said "All synced" while its save watcher was restarting (the tray already showed "recovering"); it now says so. With watch folders but no auto-discovered games it reports the folders watched instead of "0 games protected".
+- README: removed the retired PCGamingWiki API-sync option and the outdated v5 banner; first-sync steps now match how clients sign in.
+
 ## [6.0.0] - 2026-09-21
 
 Major release: a full-project audit of the server, the clients, and the shared PCGamingWiki packages — 67 fixes spanning authentication, data integrity, path containment, concurrency, resource exhaustion, and observability. One sync source is retired, and two behavior changes need operator attention (see **Upgrade notes** below). Migrations 34 and 35 run automatically on first start.

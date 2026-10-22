@@ -1,0 +1,10 @@
+{{define "partials/tabbar.html"}}
+{{/* Phone/handheld navigation: the four destinations as a bottom bar with
+     44px+ targets (hidden above 720px, where the top bar carries them). */}}
+<nav class="tabbar" aria-label="Main (bottom)">
+  <a href="/dashboard"{{if eq .NavActive "dashboard"}} class="on" aria-current="page"{{end}}>{{iconSVG "save" 20}}<span>Continue</span></a>
+  <a href="/dashboard/games"{{if eq .NavActive "games"}} class="on" aria-current="page"{{end}}>{{iconSVG "game" 20}}<span>Library</span></a>
+  <a href="/dashboard/clients"{{if eq .NavActive "clients"}} class="on" aria-current="page"{{end}}>{{iconSVG "device" 20}}<span>Devices</span></a>
+  <a href="/dashboard/analytics"{{if eq .NavActive "analytics"}} class="on" aria-current="page"{{end}}>{{iconSVG "chart" 20}}<span>Insights</span></a>
+</nav>
+{{end}}

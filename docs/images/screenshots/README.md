@@ -13,8 +13,17 @@ These point at the real `example-*` captures below:
 | Setup wizard | `example-setup-wizard.png` |
 | Client status | `example-client-local-dashboard-status.png` |
 
-> Note: these captures predate the brand refresh, so their in-app logo is the
-> old emblem. Re-capture them from the rebranded app to fully update the docs.
+> Captured from the v7 "Continue" redesign (2026-10-22) with synthetic data:
+> invented games and devices, public-domain paintings (AIC / The Met, CC0) as
+> stand-in key art. `example-client-open-log-page.png` still shows the pre-v7
+> design: a fresh capture would include the capturing machine's log path.
+
+## v7 gallery (README)
+
+- `v7-library.png`, `v7-library-browser.png` (`/dashboard/games`, Grid and Browser views)
+- `v7-game.png` (`/dashboard/games/{id}`), `v7-load-a-save.png` (`/dashboard/save/versions` with the Load dialog open)
+- `v7-devices.png` (`/dashboard/clients`, device lanes), `v7-continue-attention-light.png` (light theme)
+- `v7-designs.png` (the six designs), `v7-phone.png` (390px phone layouts)
 
 ## Server WebUI pages
 

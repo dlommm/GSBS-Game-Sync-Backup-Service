@@ -88,7 +88,7 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 			CSRFToken: csrfToken, NavActive: "settings", Success: success, Error: errorMsg,
 		}),
 		AppearanceDesign: pickerKey(storedPref(h, r, userID, "appearance.design"), "default"),
-		AppearanceLayout: pickerKey(storedPref(h, r, userID, "appearance.layout"), "sidebar"),
+		AppearanceLayout: pickerKey(renderLayout(storedPref(h, r, userID, "appearance.layout")), "sidebar"),
 		Sessions:         sessions, CurrentSessionID: GetSessionID(r, h.secret), TOTPEnabled: totpEnabled,
 		RecoveryCount:     recoveryCount,
 		EncryptionEnabled: encryptionEnabled,

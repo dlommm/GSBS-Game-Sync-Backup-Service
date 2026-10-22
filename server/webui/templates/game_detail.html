@@ -1,45 +1,53 @@
 {{template "layout" .}}
 {{define "game_detail_title"}}{{.Title}} — GSBS{{end}}
 {{define "game_detail_content"}}
-<p class="breadcrumb">
-  <a href="/dashboard">Dashboard</a> <span class="crumb-sep" aria-hidden="true">/</span>
-  <a href="/dashboard/games">My Games</a> <span class="crumb-sep" aria-hidden="true">/</span>
-  <span aria-current="page">{{.Title}}</span>
-</p>
-
-<header class="game-detail-head">
-  <div class="game-detail-cover">{{gameIconSVG .Title 72}}<img class="cover-img" src="/covers/{{urlquery .GameID}}" alt="" loading="lazy"></div>
-  <div class="game-detail-heading">
-    <h1 class="game-detail-title">{{.Title}}</h1>
-    <div class="game-detail-tags">
-      <span class="status-pill status-{{.Status}}">{{.Status}}</span>
-      <span class="cell-muted">Last synced {{formatTime .LastSynced}}</span>
-    </div>
+{{/* The game screen: its art full width behind the title (Steam hero →
+     portrait cropped → monogram), the facts as big figures, the actions.
+     Destructive actions stay in a separate menu. */}}
+<header class="game-hero state-{{.Status}}">
+  <div class="game-hero-art" aria-hidden="true">
+    {{gameIconSVG .Title 240}}
+    <img class="cover-img" src="/covers/{{urlquery .GameID}}.jpg" alt="">
+    <img class="cover-img" src="/covers/{{urlquery .GameID}}-hero.jpg" alt="">
   </div>
-  <div class="game-detail-actions">
-    <a class="btn-ghost-sm" href="/dashboard/export/archive.zip?game_id={{urlquery .GameID}}" title="Latest save files as a zip">Export (.zip)</a>
-    <a class="btn-ghost-sm" href="/dashboard/export/archive.zip?game_id={{urlquery .GameID}}&versions=all" title="Includes retained version history">Export + history</a>
-    {{if not .ReadOnly}}
-    <form method="post" action="/dashboard/game/delete"
-          data-confirm="Delete ALL {{.FileCount}} saved file(s) for {{.Title}} from the server? This cannot be undone.">
-      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <input type="hidden" name="game_id" value="{{.GameID}}">
-      <button type="submit" class="btn-danger-sm">Delete all saves</button>
-    </form>
-    {{end}}
+  <div class="game-hero-inner">
+    <div class="game-hero-cover" aria-hidden="true">{{gameIconSVG .Title 160}}<img class="cover-img" src="/covers/{{urlquery .GameID}}.jpg" alt=""></div>
+    <div class="game-hero-main">
+      <p class="breadcrumb"><a href="/dashboard/games">Library</a> <span class="crumb-sep" aria-hidden="true">/</span> <span aria-current="page">{{.Title}}</span></p>
+      <h1 class="game-hero-title">{{.Title}}</h1>
+      <p class="game-hero-line">
+        <span class="state-chip state-{{.Status}}">{{if eq .Status "healthy"}}{{iconSVG "check" 12}}Backed up{{else if eq .Status "stale"}}{{iconSVG "alert" 12}}No sync in 30+ days{{else}}{{iconSVG "clock" 12}}Status unknown{{end}}</span>
+        Last saved <strong><time datetime="{{.LastSynced}}" title="{{.LastSynced}}">{{formatTime .LastSynced}}</time></strong>
+      </p>
+      <dl class="game-hero-facts" aria-label="Game metrics">
+        <div><dt>Save files</dt><dd>{{.FileCount}}</dd></div>
+        <div><dt>Total size</dt><dd>{{formatBytes .TotalBytes}}</dd></div>
+        <div><dt>Encryption</dt><dd>{{.EncryptionLabel}}</dd></div>
+      </dl>
+      <div class="game-hero-actions">
+        <a class="btn-hero" href="/dashboard/export/archive.zip?game_id={{urlquery .GameID}}" title="Latest save files as a zip">{{iconSVG "download" 16}}&nbsp;Export saves</a>
+        <a class="btn-ghost" href="/dashboard/export/archive.zip?game_id={{urlquery .GameID}}&versions=all" title="Includes retained version history">Export with history</a>
+        {{if not .ReadOnly}}
+        <details class="action-menu danger-menu">
+          <summary class="btn-ghost" aria-label="More actions for {{.Title}}">{{iconSVG "more" 16}}</summary>
+          <div class="action-menu-panel">
+            <form method="post" action="/dashboard/game/delete" class="inline-form"
+                  data-confirm="Delete ALL {{.FileCount}} saved file(s) for {{.Title}} from the server? This cannot be undone.">
+              <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+              <input type="hidden" name="game_id" value="{{.GameID}}">
+              <button type="submit" class="btn-danger-sm">Delete all saves…</button>
+            </form>
+          </div>
+        </details>
+        {{end}}
+      </div>
+    </div>
   </div>
 </header>
 
-<section class="metric-row" aria-label="Game metrics">
-  {{template "partials/metric-card.html" (dict "Label" "Save files" "Value" .FileCount)}}
-  {{template "partials/metric-card.html" (dict "Label" "Total size" "Value" (formatBytes .TotalBytes))}}
-  {{template "partials/metric-card.html" (dict "Label" "Last sync" "Value" (formatTime .LastSynced))}}
-  {{template "partials/metric-card.html" (dict "Label" "Encryption" "Value" .EncryptionLabel)}}
-</section>
-
 <div class="game-detail-grid">
-  <section class="panel" aria-labelledby="files-heading">
-    <div class="panel-header"><h2 id="files-heading">Save files</h2></div>
+  <section class="panel" id="versions" aria-labelledby="files-heading">
+    <div class="panel-header"><h2 id="files-heading">Save files</h2><p class="cell-muted u-m0">Open <strong>Versions</strong> on a file to load an older save.</p></div>
     <div class="saves-tree u-pad-cat">
       {{range .Categories}}
       <details class="tree-cat" open>
@@ -78,7 +86,7 @@
     </div>
   </section>
 
-  <aside class="panel insights-panel" aria-labelledby="insights-heading">
+  <aside class="panel insights-panel game-side" aria-labelledby="insights-heading">
     <div class="panel-header"><h2 id="insights-heading">Insights</h2></div>
     <ul class="insights-list">
       <li><span class="insight-dot" aria-hidden="true"></span>Most recent sync was {{formatTime .LastSynced}}.</li>

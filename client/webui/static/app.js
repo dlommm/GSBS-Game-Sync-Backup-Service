@@ -303,8 +303,19 @@
         setHero('sync', 'In game — sync deferred', 'Saves upload as soon as your game exits.');
         relogin.hidden = true;
         syncBtn.hidden = false;
+      } else if (s.watcher_healthy === false) {
+        // Matches the tray's "recovering" icon: never claim "All synced"
+        // while the save watcher is restarting.
+        setHero('sync', 'Watcher recovering', 'The save watcher is restarting. New saves upload once it is back, or press Sync now.');
+        relogin.hidden = true;
+        syncBtn.hidden = false;
       } else {
-        setHero('ok', 'All synced', (s.matched_games || 0) + ' game' + (s.matched_games === 1 ? '' : 's') + ' protected' +
+        // matched_games counts auto-discovered games only; with configured
+        // watch folders and no discovery match, name what is really watched.
+        var protectedLine = (s.matched_games || 0) > 0 || !s.watched_paths
+          ? (s.matched_games || 0) + ' game' + (s.matched_games === 1 ? '' : 's') + ' protected'
+          : s.watched_paths + ' save folder' + (s.watched_paths === 1 ? '' : 's') + ' watched';
+        setHero('ok', 'All synced', protectedLine +
           (s.last_sync_at ? ' · last sync ' + timeAgo(s.last_sync_at) : '') + '.');
         relogin.hidden = true;
         syncBtn.hidden = false;

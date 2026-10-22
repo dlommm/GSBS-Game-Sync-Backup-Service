@@ -19,9 +19,9 @@
 
 <table align="center">
   <tr>
-    <td align="center" bgcolor="#4338ca">
-      <strong>🚀 GSBS v5 — Major release</strong><br>
-      Redesigned web dashboard · client deep-dive (per-game tray controls, quiet hours, one-click local restore) · Steam Deck / Flatpak game-aware sync · zero-config setup wizard · built-in offsite backups + one-command restore · end-to-end encryption (Argon2id) · Windows / macOS / Linux / arm64 clients
+    <td align="center">
+      <strong>GSBS 7 — a new web app</strong><br>
+      A web app built around your games (Continue, Library, Load a save, device lanes) · six designs, light and dark · Steam Deck / Flatpak game-aware sync · zero-config setup wizard · built-in offsite backups + one-command restore · end-to-end encryption (Argon2id) · Windows / macOS / Linux / arm64 clients
     </td>
   </tr>
 </table>
@@ -44,9 +44,26 @@
 
 GSBS is a *hosted, multi-client, versioned save-sync service* — the combination Ludusavi (local backup), Syncthing (generic P2P), and Steam Cloud (Steam-only, Valve-hosted) each cover only part of.
 
-| Dashboard | System tray |
-|-----------|-------------|
-| ![Dashboard](docs/images/screenshots/example-webui-dashboard.png) | ![Client status](/assets/images/favicon-256x256.png) |
+### A look around
+
+**Continue** — your latest save leads the screen, with what's backed up and anything that needs you beside it.
+
+![Continue screen: the latest save full-bleed with backup status, save slots and device check-ins](docs/images/screenshots/example-webui-dashboard.png)
+
+| Library | Library · Browser view |
+|---------|------------------------|
+| ![Library of game covers](docs/images/screenshots/v7-library.png) | ![Browser view: save blocks and the selected game's versions](docs/images/screenshots/v7-library-browser.png) |
+| **Game** | **Load a save** |
+| ![A game's page with its art, facts and save files](docs/images/screenshots/v7-game.png) | ![Loading an older version: it becomes the new latest, the current one stays in history](docs/images/screenshots/v7-load-a-save.png) |
+| **Devices** — every save each device sent in the last 14 days | **Local client** |
+| ![Device lanes over 14 days](docs/images/screenshots/v7-devices.png) | ![Client status page](docs/images/screenshots/example-client-local-dashboard-status.png) |
+
+Six designs (Mint Vault, Night Ops, Phosphor, Hearth, Arcade, Foundry) in dark and light, and phone layouts with a bottom tab bar:
+
+![The six designs](docs/images/screenshots/v7-designs.png)
+![Phone layouts](docs/images/screenshots/v7-phone.png)
+
+<sub>Screenshots use invented games and devices; the cover art is public-domain paintings (Art Institute of Chicago, The Met — CC0) standing in for Steam library art.</sub>
 
 ## Quick install
 
@@ -79,7 +96,7 @@ Sign in via the tray menu (**Login…**), point at your server URL, and syncing 
 
 ### 3. First sync
 
-Register on the server WebUI, create an API token, and log in from the client. GSBS discovers installed games, watches save folders, and uploads changes. New machines pull existing saves when the target folder exists.
+Create your account in the server web app (the first-run wizard makes the admin), then sign in from the client with the same username and password. GSBS discovers installed games, watches save folders, and uploads changes. New machines pull existing saves when the target folder exists.
 
 ## Features
 
@@ -87,19 +104,19 @@ Register on the server WebUI, create an API token, and log in from the client. G
 - **Game-aware sync** — detects running games and defers sync until you quit, so a live save is never touched mid-session.
 - **Auto-discovery** — scans Steam, Epic, GOG, Ubisoft, EA, Xbox, Heroic, Lutris, Bottles, Prism against the PCGamingWiki manifest.
 - **OS-aware paths** — `%USERPROFILE%`, Steam libraries, Proton `compatdata`, cross-OS Windows ↔ Linux translation.
-- **Version history + restore** — every save is versioned; restore any file from the web dashboard.
+- **Version history + restore** — every save is versioned; load any older version from the web app (the current one always stays in history).
 - **End-to-end encryption** — optional client-side AES-256-GCM (Argon2id); the server only ever sees ciphertext.
 - **Built-in backups + restore** — scheduled `tar.zst` snapshots (DB + keys + saves) to local disk and/or S3, with `gsbs-server restore`.
 - **Notifications** — webhook / Discord / ntfy alerts for conflicts, quota, new devices, backups, and stale devices.
 - **Export / import** — download real save archives (per game or whole account) and re-import them anywhere.
 - **Offline queue** — failed uploads persist and retry automatically; conflicts surface in the tray.
 - **Zero-config setup** — no required env vars; a browser wizard creates the admin account on first run.
-- **Light/dark web UI + admin**, **OpenAPI spec** at `/api/openapi.json`, and a localization framework.
+- **Web app + admin** — Continue screen, cover-art library, per-device save lanes, six designs in light and dark, phone layout; **OpenAPI spec** at `/api/openapi.json`, and a localization framework.
 - **Clients for Windows, Linux (incl. Flatpak / arm64), and macOS.**
 
-See [CHANGELOG.md](CHANGELOG.md) for the full v5 release notes and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how conflict resolution and encryption work.
+See [CHANGELOG.md](CHANGELOG.md) for release notes and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how conflict resolution and encryption work.
 
-The save-location manifest comes from PCGamingWiki — fresh installs pull a pre-built bundle (full ~40k-game catalog in one fetch); switch to live API sync anytime in **Admin → Settings**. The official bundle is published weekly by [VPS-Sync-GSBS](https://github.com/dlommm/VPS-Sync-GSBS). See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
+The save-location manifest comes from PCGamingWiki — every server pulls a pre-built bundle (the full ~40k-game catalog in one fetch). The official bundle is published weekly by [VPS-Sync-GSBS](https://github.com/dlommm/VPS-Sync-GSBS). See [docs/MANIFEST_BUNDLE.md](docs/MANIFEST_BUNDLE.md).
 
 ## Documentation
 

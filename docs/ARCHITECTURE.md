@@ -172,7 +172,7 @@ sequenceDiagram
 
 ## WebUI (server and client)
 
-Both UIs share a single compiled design system. Run `./script/build-webui.sh` (requires Node/npx) before building — this compiles Tailwind CSS from `server/webui/static/src/input.css` and syncs the output (`app.css`, fonts, favicon) to both `server/webui/static/` and `client/webui/static/`. Fonts (DM Sans, JetBrains Mono) are vendored as woff2 files — no CDN dependency, works offline and in Docker.
+Both UIs share a single compiled design system. Run `./script/build-webui.sh` (requires Node/npx) before building — this compiles Tailwind CSS from `server/webui/static/src/input.css` and syncs the output (`app.css`, fonts, favicon) to both `server/webui/static/` and `client/webui/static/`. Fonts (Archivo, JetBrains Mono) are vendored as woff2 files — no CDN dependency, works offline and in Docker.
 
 ### Shared design system
 

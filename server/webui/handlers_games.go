@@ -72,7 +72,7 @@ func gamesViewParams(r *http.Request) (query, status, sortKey, view string) {
 		sortKey = "recent"
 	}
 	view = r.URL.Query().Get("view")
-	if view != "list" {
+	if view != "list" && view != "browser" {
 		view = "grid"
 	}
 	return query, status, sortKey, view
@@ -269,4 +269,38 @@ func looksTextual(b []byte) bool {
 		}
 	}
 	return control*100 <= len(b) // <=1% control bytes
+}
+
+// serveGamePanelPartial renders the Library Browser view's right pane: the
+// selected game's art, its latest save slot and that slot's newest versions
+// (Copy downloads one; Load opens the full Load-a-save page).
+func (h *WebHandler) serveGamePanelPartial(w http.ResponseWriter, r *http.Request) {
+	userID, _, ok := h.requireSession(w, r)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	gameID := strings.TrimSpace(r.URL.Query().Get("game_id"))
+	saves, err := h.store.ListSaveSummariesForGame(r.Context(), userID, gameID)
+	if gameID == "" || err != nil || len(saves) == 0 {
+		h.renderPartial(w, "partials/game_panel.html", map[string]interface{}{"Missing": true})
+		return
+	}
+	latest := saves[0]
+	var total int64
+	for _, sv := range saves {
+		total += sv.SizeBytes
+		if sv.UpdatedAt > latest.UpdatedAt {
+			latest = sv
+		}
+	}
+	versions, _ := h.store.ListSaveVersions(r.Context(), userID, gameID, latest.PathKey, 5)
+	title := latest.GameTitle
+	if title == "" {
+		title = gameID
+	}
+	h.renderPartial(w, "partials/game_panel.html", map[string]interface{}{
+		"GameID": gameID, "Title": title, "PathKey": latest.PathKey, "LastSynced": latest.UpdatedAt,
+		"FileCount": len(saves), "TotalBytes": total, "Versions": versions,
+	})
 }

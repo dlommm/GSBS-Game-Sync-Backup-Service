@@ -26,7 +26,7 @@ PORT = 18093
 BASE = f"http://127.0.0.1:{PORT}"
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 DESIGNS = ["default", "hud", "crt", "hearth", "synth", "slate"]
-CSS_LAYOUTS = ["topnav", "dense", "library"]  # pure-CSS; widgets needs the stored pref
+CSS_LAYOUTS = ["dense"]  # v7: Standard (default) + Compact
 GAMES = [
     ("1001", "Starfall Odyssey"), ("1002", "Pixel Harvest"), ("1003", "Ironclad Tactics"),
     ("1004", "Neon Drift"), ("1005", "Emberkeep"), ("1006", "Tidebound"),

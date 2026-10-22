@@ -2,6 +2,7 @@ package webui
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -55,6 +56,87 @@ type dashboardClientsData struct {
 	Online   int
 	Total    int
 	ReadOnly bool
+	// Device lanes: the last laneDays days, one lane per device, one tick per
+	// save it sent (from save_versions.client_id).
+	LaneDays []laneDay
+	Lanes    []deviceLane
+}
+
+const laneDays = 14
+
+type laneDay struct {
+	Weekday string // "Mon"
+	Day     string // "12"
+	Weekend bool
+	LeftPct float64
+	Today   bool
+}
+
+type laneTick struct {
+	LeftPct float64
+	Label   string // "Tidebreaker v4 · Oct 20, 21:15" (tooltip)
+	Latest  bool   // the newest save of this lane
+}
+
+type deviceLane struct {
+	ClientID string
+	Name     string
+	Sub      string
+	Silent   bool // no check-in for staleAfter
+	Ticks    []laneTick
+}
+
+// buildDeviceLanes places each recent save on its device's lane. Positions
+// are percentages of the window (oldest day left, now right) so the
+// template stays declarative; app.js applies them via CSSOM (CSP-safe).
+func buildDeviceLanes(rows []clientRow, events []store.SaveEvent, now time.Time) ([]laneDay, []deviceLane) {
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -(laneDays - 1))
+	span := now.Sub(start).Seconds()
+	days := make([]laneDay, 0, laneDays)
+	for i := 0; i < laneDays; i++ {
+		d := start.AddDate(0, 0, i)
+		days = append(days, laneDay{
+			Weekday: d.Format("Mon"), Day: d.Format("2"),
+			Weekend: d.Weekday() == time.Saturday || d.Weekday() == time.Sunday,
+			LeftPct: d.Sub(start).Seconds() / span * 100, Today: i == laneDays-1,
+		})
+	}
+	lanes := make([]deviceLane, 0, len(rows))
+	for _, r := range rows {
+		sub := osLabel(r.OS)
+		switch {
+		case r.Online:
+			sub += " · online now"
+		case r.StaleDays > 0:
+			sub = fmt.Sprintf("silent for %d days", r.StaleDays)
+		default:
+			sub += " · seen " + formatTime(r.LastSeen)
+		}
+		lanes = append(lanes, deviceLane{ClientID: r.ID, Name: r.Name, Sub: sub, Silent: r.StaleDays > 0})
+	}
+	byClient := map[string]*deviceLane{}
+	for i := range lanes {
+		byClient[lanes[i].ClientID] = &lanes[i]
+	}
+	for _, e := range events { // newest first
+		lane := byClient[e.ClientID]
+		if lane == nil {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, e.UpdatedAt)
+		if err != nil || t.Before(start) {
+			continue
+		}
+		pct := t.Sub(start).Seconds() / span * 100
+		if pct > 99.6 {
+			pct = 99.6
+		}
+		lane.Ticks = append(lane.Ticks, laneTick{
+			LeftPct: pct, Latest: len(lane.Ticks) == 0,
+			Label: fmt.Sprintf("%s v%d · %s", e.GameTitle, e.Version, t.Local().Format("Jan 2, 15:04")),
+		})
+	}
+	return days, lanes
 }
 
 func clientIsOnline(lastSeen string) bool {
@@ -99,6 +181,11 @@ func (h *WebHandler) serveDashboardClientsPage(w http.ResponseWriter, r *http.Re
 		success = "Device revoked. Run gsbs-client login to reconnect it."
 	}
 	rows, online := h.loadClientRows(r.Context(), userID)
+	events, err := h.store.RecentSaveEvents(r.Context(), userID, laneDays, 2000)
+	if err != nil {
+		logx.Logger().Error().Str("user_id", userID).Err(err).Msg("devices page: recent save events failed")
+	}
+	days, lanes := buildDeviceLanes(rows, events, time.Now())
 	h.render(w, "dashboard_clients.html", dashboardClientsData{
 		PageData: pageDataWithAppearance(h, r, userID, PageData{
 			PageName: "dashboard_clients", Username: username,
@@ -111,6 +198,8 @@ func (h *WebHandler) serveDashboardClientsPage(w http.ResponseWriter, r *http.Re
 		Online:   online,
 		Total:    len(rows),
 		ReadOnly: h.readOnly,
+		LaneDays: days,
+		Lanes:    lanes,
 	})
 }
 

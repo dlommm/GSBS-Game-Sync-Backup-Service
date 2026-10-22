@@ -22,6 +22,11 @@ import (
 const (
 	// steamCoverURLFmt is Steam's public CDN portrait library art (no API key).
 	steamCoverURLFmt = "https://cdn.cloudflare.steamstatic.com/steam/apps/%s/library_600x900.jpg"
+	// steamHeroURLFmt / steamLogoURLFmt are the same CDN's wide library
+	// banner (3840×1240) and transparent title logo — the Continue screen's
+	// backdrop and title treatment.
+	steamHeroURLFmt  = "https://cdn.cloudflare.steamstatic.com/steam/apps/%s/library_hero.jpg"
+	steamLogoURLFmt  = "https://cdn.cloudflare.steamstatic.com/steam/apps/%s/logo.png"
 	coverMaxBytes    = 8 << 20                  // 8 MiB cap per cover
 	coverCacheCtl    = "public, max-age=604800" // 7-day browser cache
 	defaultCoverRoot = "/app/data/covers"
@@ -69,18 +74,49 @@ func isNumericGameID(s string) bool {
 	return true
 }
 
-// serveCover serves a game's cover art from the local disk cache, fetching it
-// once from Steam's CDN on a miss. Public (no session): covers are shared,
-// non-sensitive metadata, like /static/. Missing/absent art returns 404 so the
-// UI falls back to the generated icon tile.
+// coverVariant is one kind of game art the cover proxy serves. Every variant
+// shares the cache directory, the negative cache and the per-game fetch lock.
+type coverVariant struct {
+	suffix   string // "" (portrait), "-hero", "-logo" — part of URL and cache name
+	ext      string // ".jpg" or ".png"
+	steamFmt string // Steam CDN URL format (appid)
+	pcgw     bool   // fall back to the PCGW cover_url (portrait only)
+}
+
+var (
+	coverPortrait = coverVariant{suffix: "", ext: ".jpg", steamFmt: steamCoverURLFmt, pcgw: true}
+	coverHero     = coverVariant{suffix: "-hero", ext: ".jpg", steamFmt: steamHeroURLFmt}
+	coverLogo     = coverVariant{suffix: "-logo", ext: ".png", steamFmt: steamLogoURLFmt}
+)
+
+// parseCoverPath maps "/covers/<id>.jpg", "/covers/<id>-hero.jpg" and
+// "/covers/<id>-logo.png" to the game ID and variant.
+func parseCoverPath(path string) (id string, v coverVariant, ok bool) {
+	name := strings.TrimPrefix(path, "/covers/")
+	if isNumericGameID(name) { // bare "/covers/<id>" is the portrait (pre-v7 URLs)
+		return name, coverPortrait, true
+	}
+	for _, cand := range []coverVariant{coverHero, coverLogo, coverPortrait} {
+		if rest, found := strings.CutSuffix(name, cand.suffix+cand.ext); found && isNumericGameID(rest) {
+			return rest, cand, true
+		}
+	}
+	return "", coverVariant{}, false
+}
+
+// serveCover serves a game's art (portrait cover, wide hero banner or title
+// logo) from the local disk cache, fetching it once from Steam's CDN on a
+// miss. Public (no session): covers are shared, non-sensitive metadata, like
+// /static/. Missing/absent art returns 404 so the UI falls back (hero → the
+// portrait, cropped; portrait → the generated monogram; logo → set type).
 func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/covers/"), ".jpg")
-	if !isNumericGameID(id) || h.coverRoot == "" {
+	id, variant, ok := parseCoverPath(r.URL.Path)
+	if !ok || h.coverRoot == "" {
 		http.NotFound(w, r)
 		return
 	}
-	jpgPath := filepath.Join(h.coverRoot, id+".jpg")
-	missPath := filepath.Join(h.coverRoot, id+".miss")
+	jpgPath := filepath.Join(h.coverRoot, id+variant.suffix+variant.ext)
+	missPath := filepath.Join(h.coverRoot, id+variant.suffix+".miss")
 
 	if isFile(jpgPath) {
 		h.serveCoverFile(w, r, jpgPath)
@@ -103,7 +139,8 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Cache miss — fetch under a per-game lock and re-check inside it.
-	muIface, _ := coverFetchLocks.LoadOrStore(id, &sync.Mutex{})
+	lockKey := id + variant.suffix
+	muIface, _ := coverFetchLocks.LoadOrStore(lockKey, &sync.Mutex{})
 	mu := muIface.(*sync.Mutex)
 	mu.Lock()
 	defer func() {
@@ -113,7 +150,7 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 		// distinct ID ever requested. A racing fetcher that already took this
 		// mutex still holds a valid one; the worst case is one redundant fetch,
 		// which the re-checks above absorb.
-		coverFetchLocks.Delete(id)
+		coverFetchLocks.Delete(lockKey)
 	}()
 	if isFile(jpgPath) {
 		h.serveCoverFile(w, r, jpgPath)
@@ -128,7 +165,7 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 	appID := steamAppIDForCoverGame(game)
 	if appID != "" {
 		var err error
-		if data, err = fetchSteamCover(r.Context(), appID); err != nil {
+		if data, err = fetchSteamArt(r.Context(), variant.steamFmt, appID); err != nil {
 			logx.Logger().Debug().Str("game_id", id).Str("appid", appID).Err(err).Msg("steam cover fetch failed")
 			data = nil
 		}
@@ -136,7 +173,7 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 	// Non-Steam games (GOG/Epic/…): fall back to the PCGW-hosted cover image
 	// when the game record carries one. Same proxy + permanent-cache pattern,
 	// so PCGW is hit at most once per game.
-	if data == nil {
+	if data == nil && variant.pcgw {
 		if url := strings.TrimSpace(game.CoverURL); url != "" {
 			var err error
 			if data, err = fetchAllowlistedCover(r.Context(), url); err != nil {
@@ -159,7 +196,11 @@ func (h *WebHandler) serveCover(w http.ResponseWriter, r *http.Request) {
 	if err := atomicWriteCover(jpgPath, data); err != nil {
 		logx.Logger().Error().Str("game_id", id).Err(err).Msg("cover cache write failed")
 		w.Header().Set("Cache-Control", coverCacheCtl)
-		w.Header().Set("Content-Type", "image/jpeg")
+		if variant.ext == ".png" {
+			w.Header().Set("Content-Type", "image/png")
+		} else {
+			w.Header().Set("Content-Type", "image/jpeg")
+		}
 		_, _ = w.Write(data)
 		return
 	}
@@ -244,8 +285,10 @@ func fetchAllowlistedCover(ctx context.Context, rawURL string) ([]byte, error) {
 	return data, nil
 }
 
-func fetchSteamCover(ctx context.Context, appID string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf(steamCoverURLFmt, appID), nil)
+// fetchSteamArt fetches one piece of library art (urlFmt is one of the
+// fixed steam*URLFmt constants) for a numeric Steam App ID.
+func fetchSteamArt(ctx context.Context, urlFmt, appID string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf(urlFmt, appID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +359,8 @@ func atomicWriteCover(path string, data []byte) error {
 	return nil
 }
 
-// coverCacheCount returns the number of cached cover JPEGs.
+// coverCacheCount returns the number of cached portrait covers (hero banners
+// and logos are extra art for the same games and are not counted).
 func (h *WebHandler) coverCacheCount() int {
 	if h.coverRoot == "" {
 		return 0
@@ -327,7 +371,7 @@ func (h *WebHandler) coverCacheCount() int {
 	}
 	n := 0
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".jpg") {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".jpg") && !strings.HasSuffix(e.Name(), "-hero.jpg") {
 			n++
 		}
 	}
@@ -350,8 +394,8 @@ func (h *WebHandler) clearCoverCache() (int, error) {
 			continue
 		}
 		name := e.Name()
-		if strings.HasSuffix(name, ".jpg") || strings.HasSuffix(name, ".miss") {
-			if os.Remove(filepath.Join(h.coverRoot, name)) == nil && strings.HasSuffix(name, ".jpg") {
+		if strings.HasSuffix(name, ".jpg") || strings.HasSuffix(name, ".png") || strings.HasSuffix(name, ".miss") {
+			if os.Remove(filepath.Join(h.coverRoot, name)) == nil && strings.HasSuffix(name, ".jpg") && !strings.HasSuffix(name, "-hero.jpg") {
 				removed++
 			}
 		}

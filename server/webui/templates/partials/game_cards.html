@@ -38,14 +38,36 @@
     </tbody>
   </table>
 </div>
+{{else if eq .View "browser"}}
+{{/* Browser view — the memory-card browser: save blocks on the left, the
+     selected game's newest versions on the right (loaded on select). */}}
+<div class="lib-browser">
+  <ul class="block-grid">
+    {{range $i, $g := .Games}}
+    <li><button type="button" class="block" data-block aria-pressed="{{if eq $i 0}}true{{else}}false{{end}}"
+        hx-get="/dashboard/partial/game-panel?game_id={{urlquery $g.GameID}}" hx-target="#save-pane" hx-swap="innerHTML">
+      <span class="block-art" aria-hidden="true">{{gameIconSVG $g.Title 96}}<img class="cover-img" src="/covers/{{urlquery $g.GameID}}.jpg" alt="" loading="lazy"></span>
+      <span class="block-name">{{$g.Title}}</span>
+      <span class="block-when">{{formatTime $g.LastSynced}}</span>
+    </button></li>
+    {{end}}
+  </ul>
+  <aside id="save-pane" class="save-pane" aria-live="polite" aria-label="Selected game"
+         {{with index .Games 0}}hx-get="/dashboard/partial/game-panel?game_id={{urlquery .GameID}}" hx-trigger="load" hx-swap="innerHTML"{{end}}>
+    <p class="save-pane-empty">Select a game to see its saves.</p>
+  </aside>
+</div>
 {{else}}
 <div class="game-grid">
   {{range .Games}}
-  <a class="game-card" href="/dashboard/games/{{urlquery .GameID}}" aria-label="{{.Title}}">
+  <a class="game-card state-{{.Status}}" href="/dashboard/games/{{urlquery .GameID}}"
+     aria-label="{{.Title}} — {{if eq .Status "healthy"}}synced{{else if eq .Status "stale"}}stale{{else}}status unknown{{end}}, {{.FileCount}} file{{if ne .FileCount 1}}s{{end}}, last synced {{formatTime .LastSynced}}">
     <div class="game-card-cover">
       {{gameIconSVG .Title 96}}
       <img class="cover-img" src="/covers/{{urlquery .GameID}}" alt="" loading="lazy">
-      <span class="status-dot status-{{.Status}}" title="{{.Status}}" aria-hidden="true"></span>
+      <span class="game-card-state" aria-hidden="true">
+        {{if eq .Status "healthy"}}{{iconSVG "check" 12}}Synced{{else if eq .Status "stale"}}{{iconSVG "alert" 12}}Stale{{else}}{{iconSVG "clock" 12}}Unknown{{end}}
+      </span>
     </div>
     <div class="game-card-body">
       <div class="game-card-title">{{.Title}}</div>

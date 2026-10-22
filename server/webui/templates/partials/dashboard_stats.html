@@ -1,30 +1,73 @@
 {{define "partials/dashboard_stats.html"}}
 {{if .Stats.StoreError}}
-<p class="panel-empty u-warn" role="alert">Stats could not be loaded.
-  <a href="" hx-get="/dashboard/partial/stats" hx-target="closest section" hx-swap="innerHTML">Retry</a>
-</p>
+<div class="wrap"><p class="panel-empty u-warn" role="alert">Your backup status could not be loaded.
+  <a href="" hx-get="/dashboard/partial/stats" hx-target="#dashboard-stats" hx-swap="innerHTML">Try again</a>
+</p></div>
 {{else}}
-<section class="stats-row" aria-label="Sync statistics">
-  <div class="stat-card"><div class="stat-value">{{.Stats.ClientCount}}</div><div class="stat-label">Devices</div></div>
-  <div class="stat-card"><div class="stat-value">{{.Stats.GameCount}}</div><div class="stat-label">Games</div></div>
-  <div class="stat-card"><div class="stat-value">{{.Stats.SaveCount}}</div><div class="stat-label">Synced saves</div></div>
-  <div class="stat-card"><div class="stat-value">{{formatBytes .Stats.TotalBytes}}</div><div class="stat-label">Storage used</div></div>
-</section>
-{{if gt .QuotaBytes 0}}
-<section class="storage-hero" aria-label="Storage overview">
-  <div class="storage-hero-gauge" aria-hidden="true">{{gaugeSVG .Stats.UsageBytes .QuotaBytes 168 104}}</div>
-  <div class="storage-hero-info">
-    <div class="storage-hero-label">Storage used (including version history)</div>
-    <div class="storage-hero-value">{{formatBytes .Stats.UsageBytes}} <span>/ {{formatBytes .QuotaBytes}}</span></div>
-    <div class="quota-bar-track storage-hero-bar">
-      <div class="quota-bar-fill {{quotaBarClass .Stats.UsageBytes .QuotaBytes}} has-bar-width" data-width-pct="{{printf "%.1f" (percent .Stats.UsageBytes .QuotaBytes)}}"></div>
-    </div>
+{{$quota := .QuotaBytes}}{{$stats := .Stats}}
+{{with .Protection}}
+{{/* The Continue hero: the last save, full bleed, the way a game's own
+     Continue screen shows it. Art layers fall back in order — Steam's wide
+     library hero, the portrait cover cropped wide, the generated monogram
+     (app.js removes any .cover-img that fails to load). The ledger beside it
+     answers "is everything backed up?" with real counts only. */}}
+<div class="continue tone-{{.Tone}}">
+  {{if .LatestGame}}
+  <div class="continue-art" aria-hidden="true">
+    {{gameIconSVG .LatestGame.Title 240}}
+    <img class="cover-img continue-portrait" src="/covers/{{urlquery .LatestGame.GameID}}.jpg" alt="">
+    <img class="cover-img continue-hero" src="/covers/{{urlquery .LatestGame.GameID}}-hero.jpg" alt="">
   </div>
-</section>
-{{if gt .Stats.UsageBytes .QuotaBytes}}
-<div class="alert alert-warn" role="alert">Storage quota exceeded — new save uploads are blocked until usage drops. Delete old games or versions, or ask your admin to raise the quota. Existing saves keep syncing when they shrink or stay the same size.</div>
-{{else if ge (percent .Stats.UsageBytes .QuotaBytes) 80.0}}
-<div class="alert alert-warn" role="alert">Storage {{printf "%.0f" (percent .Stats.UsageBytes .QuotaBytes)}}% full. Quota counts your saves plus their version history; free space by deleting old games or lowering version retention.</div>
+  {{end}}
+  <div class="wrap continue-inner">
+    <div class="continue-main">
+      {{if .LatestGame}}
+      <div class="continue-titlebox">
+        <img class="cover-img continue-logo" src="/covers/{{urlquery .LatestGame.GameID}}-logo.png" alt="">
+        <h2 class="continue-title">{{.LatestGame.Title}}</h2>
+      </div>
+      <p class="continue-line">
+        <strong>Saved <time datetime="{{.LatestGame.LastSynced}}" title="{{.LatestGame.LastSynced}}">{{formatTime .LatestGame.LastSynced}}</time>{{if .LatestDevice}} on {{.LatestDevice}}{{end}}.</strong>
+        {{if .LatestVersion}}Version {{.LatestVersion}} is safe on the server{{if gt .LatestOlder 0}}, with {{.LatestOlder}} earlier version{{if ne .LatestOlder 1}}s{{end}} to go back to{{end}}.{{end}}
+      </p>
+      <div class="continue-actions">
+        <a class="btn-hero" href="/dashboard/games/{{urlquery .LatestGame.GameID}}">Open save</a>
+        <a class="btn-hero-line" href="/dashboard/games/{{urlquery .LatestGame.GameID}}#versions">Older versions</a>
+      </div>
+      {{else}}
+      <h2 class="continue-title continue-title-empty">Press start</h2>
+      <p class="continue-line"><strong>No saves backed up yet.</strong> Sign in with the GSBS client on your PC or Steam Deck and every save it finds is versioned here automatically.</p>
+      <div class="continue-actions">
+        <a class="btn-hero" href="/dashboard/clients">Connect a device</a>
+      </div>
+      {{end}}
+    </div>
+
+    <dl class="ledger" aria-label="Backup status">
+      <div class="ledger-row"><dt>Games backed up</dt><dd>{{.GamesTotal}}</dd></div>
+      <div class="ledger-row"><dt>Versions kept</dt><dd>{{.VersionsKept}}</dd></div>
+      <div class="ledger-row{{if gt .DevicesOnline 0}} is-live{{end}}"><dt>Devices online now</dt><dd>{{.DevicesOnline}}<small>/{{.DevicesTotal}}</small></dd></div>
+      {{if gt .OpenConflicts 0}}
+      <div class="ledger-row is-attention"><dt><a href="/dashboard/conflicts">Conflict{{if ne .OpenConflicts 1}}s{{end}} to settle →</a></dt><dd>{{.OpenConflicts}}</dd></div>
+      {{end}}
+      {{if gt .StaleDevices 0}}
+      <div class="ledger-row is-attention"><dt><a href="/dashboard/clients">Silent 14+ days →</a></dt><dd>{{.StaleDevices}}</dd></div>
+      {{end}}
+      {{if gt .StaleGames 0}}
+      <div class="ledger-row is-attention"><dt><a href="/dashboard/games?status=stale">Not synced in 30 days →</a></dt><dd>{{.StaleGames}}</dd></div>
+      {{end}}
+      {{if gt $quota 0}}
+      <div class="ledger-row{{if ge (percent $stats.UsageBytes $quota) 80.0}} is-attention{{end}}"><dt>Storage, with history</dt><dd class="ledger-small">{{formatBytes $stats.UsageBytes}}<small> / {{formatBytes $quota}}</small></dd></div>
+      {{end}}
+    </dl>
+  </div>
+</div>
+{{if gt $quota 0}}
+{{if gt $stats.UsageBytes $quota}}
+<div class="wrap"><div class="alert alert-warn" role="alert">Storage quota exceeded — new save uploads are blocked until usage drops. Delete old games or versions, or ask your admin to raise the quota. Existing saves keep syncing when they shrink or stay the same size.</div></div>
+{{else if ge (percent $stats.UsageBytes $quota) 80.0}}
+<div class="wrap"><div class="alert alert-warn" role="alert">Storage {{printf "%.0f" (percent $stats.UsageBytes $quota)}}% full. Quota counts your saves plus their version history; free space by deleting old games or lowering version retention.</div></div>
+{{end}}
 {{end}}
 {{end}}
 {{end}}

@@ -53,7 +53,7 @@ Toasts (via the OS notification system) for sync complete/failed, new saves uplo
 
 If not logged in, the tray opens a local browser setup page (`http://127.0.0.1:41234`). On Windows, tray **Login...** now opens this browser page by default; the native Walk dialog is available as a fallback via a direct sub-item. After login, the page polls `/status` for discovery progress and lists matched games.
 
-The local browser UI (`client/webui/`) is fully embedded in the client binary — it shares the server's compiled CSS, vendored fonts (DM Sans, JetBrains Mono), and component classes, so both UIs look like the same product. All pages (Setup, Dashboard, Games, Quick Actions, Help, About) are served from `127.0.0.1` only and use the same dark theme with indigo accent.
+The local browser UI (`client/webui/`) is fully embedded in the client binary — it shares the server's compiled CSS, vendored fonts (Archivo, JetBrains Mono), and component classes, so both UIs look like the same product. All pages (Setup, Dashboard, Games, Quick Actions, Help, About) are served from `127.0.0.1` only and use the same dark theme with indigo accent.
 
 ### Autostart
 

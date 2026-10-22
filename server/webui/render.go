@@ -40,18 +40,12 @@ type PageData struct {
 	AdminNav string // non-empty enables admin sidebar: overview, users, manifest, activity
 }
 
-// dashWidgetView is one dashboard widget slot in the Custom layout editor.
-type dashWidgetView struct {
-	ID     string
-	Name   string
-	Hidden bool
-}
-
 type dashboardData struct {
 	PageData
-	// Widgets is populated only for the Custom ("widgets") layout: the full
-	// arrangement in order, hidden ones flagged (the editor needs them).
-	Widgets []dashWidgetView
+	// First-paint data for the Continue hero and save slots (the same maps
+	// their HTMX partials render on live refresh).
+	Stats map[string]interface{}
+	Saves map[string]interface{}
 }
 
 type dashboardStats struct {
@@ -126,6 +120,9 @@ type gameCard struct {
 	TotalBytes int64
 	LastSynced string
 	Status     string // healthy, stale, unknown
+	// Set only for the Continue screen's save-slot rows.
+	LatestVersion int
+	LatestDevice  string
 }
 
 // dashboardGamesData drives both the My Games page and its HTMX cards partial.
@@ -279,10 +276,18 @@ func (h *WebHandler) appearance(ctx context.Context, userID string) (design, uiL
 	if design == "" {
 		design = defaultDesign
 	}
-	if !validLayout(uiLayout) {
-		uiLayout = ""
+	return design, renderLayout(uiLayout)
+}
+
+// renderLayout maps a stored layout pref onto the v7 shell's two densities.
+// The v5 values (topnav, library, widgets) stay valid in storage — clients
+// and older servers sync them — but all render as Standard ("") now that the
+// shell is a single top-bar layout; "dense" is Compact.
+func renderLayout(stored string) string {
+	if stored == "dense" {
+		return "dense"
 	}
-	return design, uiLayout
+	return ""
 }
 
 // pageDataWithAppearance fills the Design/Layout fields on a page's PageData
@@ -303,11 +308,13 @@ func newTemplateFuncs(t *template.Template) template.FuncMap {
 		},
 		"layoutChoices": func() []struct{ Key, Name string } {
 			return []struct{ Key, Name string }{
-				{"sidebar", "Sidebar"}, {"topnav", "Top nav"}, {"dense", "Dense"}, {"library", "Library"}, {"widgets", "Custom"},
+				{"sidebar", "Standard"}, {"dense", "Compact"},
 			}
 		},
-		"dashWidget":      dashWidget(t),
 		"formatTime":      formatTime,
+		"initial":         initial,
+		"sinceShort":      sinceShort,
+		"osLabel":         osLabel,
 		"formatBytes":     formatBytes,
 		"truncate":        truncate,
 		"formatDuration":  formatDuration,
@@ -376,6 +383,9 @@ var iconPaths = map[string]string{
 	"info":     `<circle cx="8" cy="8" r="6"/><path d="M8 7.2V11"/><circle cx="8" cy="5" r="0.7" fill="currentColor" stroke="none"/>`,
 	"download": `<path d="M8 2v7.5M4.8 6.8 8 10l3.2-3.2M2.5 12.5v1h11v-1"/>`,
 	"refresh":  `<path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"/>`,
+	"restore":  `<path d="M3 8a5 5 0 1 0 1.5-3.5M3 2.5V5h2.5"/><path d="M8 5.5V8l1.8 1.2"/>`,
+	"more":     `<circle cx="3.5" cy="8" r=".6"/><circle cx="8" cy="8" r=".6"/><circle cx="12.5" cy="8" r=".6"/>`,
+	"server":   `<rect x="2.5" y="2.5" width="11" height="4.5" rx="1"/><rect x="2.5" y="9" width="11" height="4.5" rx="1"/><path d="M5 4.75h.01M5 11.25h.01"/>`,
 	"key":      `<circle cx="5" cy="8" r="3"/><path d="M8 8h6M11.5 8v2.5M13.5 8v1.8"/>`,
 	"eye":      `<path d="M1.5 8s2.4-4.2 6.5-4.2S14.5 8 14.5 8s-2.4 4.2-6.5 4.2S1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="1.9"/>`,
 	"eye-off":  `<path d="M3 3l10 10M6.3 6.4a1.9 1.9 0 0 0 2.6 2.7M5 4.6C3 5.7 1.5 8 1.5 8s2.4 4.2 6.5 4.2c1.1 0 2.1-.3 3-.7M9.9 4A6.7 6.7 0 0 0 8 3.8C3.9 3.8 1.5 8 1.5 8"/>`,
@@ -400,6 +410,44 @@ func iconSVG(name string, size int) template.HTML {
 
 // timeAgo renders a compact relative time ("2h ago", "3d ago"). Zero times
 // render as "never". Templates should pair it with an absolute title attr.
+// sinceShort renders an RFC3339 time as a compact check-in age for the
+// device lists: "now" (inside clientOnlineWindow), "12 m", "3 h", "19 d",
+// "4 mo"; "—" when unknown.
+func sinceShort(s string) string {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return "\u2014"
+	}
+	d := time.Since(t)
+	switch {
+	case d < clientOnlineWindow:
+		return "now"
+	case d < time.Hour:
+		return fmt.Sprintf("%d m", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%d h", int(d.Hours()))
+	case d < 60*24*time.Hour:
+		return fmt.Sprintf("%d d", int(d.Hours()/24))
+	default:
+		return fmt.Sprintf("%d mo", int(d.Hours()/(24*30)))
+	}
+}
+
+// osLabel is the human platform name for a client's reported OS.
+func osLabel(os string) string {
+	switch strings.ToLower(os) {
+	case "windows":
+		return "Windows"
+	case "linux":
+		return "Linux"
+	case "darwin", "macos", "mac":
+		return "macOS"
+	case "":
+		return "Unknown platform"
+	}
+	return os
+}
+
 func timeAgo(t time.Time) string {
 	if t.IsZero() {
 		return "never"
@@ -573,22 +621,6 @@ func dict(values ...interface{}) (map[string]interface{}, error) {
 	return m, nil
 }
 
-// dashWidget executes the "widget_<id>" define for the Custom dashboard
-// layout's ordered rendering. Ids are validated before they reach templates.
-func dashWidget(t *template.Template) func(id string, data interface{}) (template.HTML, error) {
-	return func(id string, data interface{}) (template.HTML, error) {
-		name := "widget_" + id
-		if t.Lookup(name) == nil {
-			return "", nil
-		}
-		var buf bytes.Buffer
-		if err := t.ExecuteTemplate(&buf, name, data); err != nil {
-			return "", err
-		}
-		return template.HTML(buf.String()), nil //nolint:gosec // html/template output, already escaped
-	}
-}
-
 func renderPageBlock(t *template.Template) func(pageName, block string, data interface{}) (template.HTML, error) {
 	return func(pageName, block string, data interface{}) (template.HTML, error) {
 		name := pageName + "_" + block
@@ -757,6 +789,16 @@ func chartLineSVG(snapshots []store.StatsSnapshotRow, field string, width, heigh
 	return template.HTML(svg) //nolint:gosec // G203: SVG markup built entirely from server-computed numbers, no user input
 }
 
+// initial is the first letter of a name, uppercased (rune-safe) — the
+// account avatar in the top bar.
+func initial(v interface{}) string {
+	name, _ := v.(string)
+	for _, r := range strings.TrimSpace(name) {
+		return strings.ToUpper(string(r))
+	}
+	return "?"
+}
+
 // gameInitials returns up to two uppercase letters representing a title: the
 // first letters of the first two words, or the first two runes of a single word.
 func gameInitials(title string) string {
@@ -795,13 +837,21 @@ func gameIconSVG(title string, size int) template.HTML {
 	initials := template.HTMLEscapeString(gameInitials(t))
 	label := template.HTMLEscapeString(t)
 	fontSize := size * 36 / 100
+	if size >= 64 {
+		// Cover-sized tiles fill a 2:3 frame (sliced), which scales the
+		// square up ~1.5×; smaller initials keep the monogram calm there.
+		fontSize = size * 26 / 100
+	}
 	radius := size * 20 / 100
-	svg := fmt.Sprintf(`<svg class="game-icon" width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label="%s" xmlns="http://www.w3.org/2000/svg">`+
+	// preserveAspectRatio "slice" lets the tile fill a portrait cover frame
+	// (2:3) edge to edge instead of floating as a square; the hue is kept
+	// deep so a monogram sits among real cover art without shouting.
+	svg := fmt.Sprintf(`<svg class="game-icon" width="%d" height="%d" viewBox="0 0 %d %d" preserveAspectRatio="xMidYMid slice" role="img" aria-label="%s" xmlns="http://www.w3.org/2000/svg">`+
 		`<defs><linearGradient id="%s" x1="0" y1="0" x2="1" y2="1">`+
-		`<stop offset="0" stop-color="hsl(%d,52%%,44%%)"/><stop offset="1" stop-color="hsl(%d,58%%,26%%)"/></linearGradient></defs>`+
+		`<stop offset="0" stop-color="hsl(%d,40%%,36%%)"/><stop offset="1" stop-color="hsl(%d,46%%,17%%)"/></linearGradient></defs>`+
 		`<rect width="%d" height="%d" rx="%d" fill="url(#%s)"/>`+
 		`<text x="50%%" y="50%%" text-anchor="middle" dominant-baseline="central" `+
-		`font-family="DM Sans, system-ui, sans-serif" font-weight="700" font-size="%d" fill="rgba(255,255,255,0.94)">%s</text></svg>`,
+		`font-family="Archivo, system-ui, sans-serif" font-weight="800" font-stretch="75%%" font-size="%d" fill="rgba(255,255,255,0.94)">%s</text></svg>`,
 		size, size, size, size, label,
 		id, hue, (hue+22)%360,
 		size, size, radius, id,

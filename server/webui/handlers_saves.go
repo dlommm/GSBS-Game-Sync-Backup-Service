@@ -46,7 +46,7 @@ func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
 		h.render(w, "save_versions.html", saveVersionsData{
 			PageData: pageDataWithAppearance(h, r, userID, PageData{
 				PageName: "save_versions", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
-				CSRFToken: csrfToken, NavActive: "dashboard", Error: "Failed to load versions",
+				CSRFToken: csrfToken, NavActive: "games", Error: "Failed to load versions",
 			}),
 			GameID: gameID, PathKey: pathKey,
 		})
@@ -73,7 +73,7 @@ func (h *WebHandler) serveSaveVersions(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "save_versions.html", saveVersionsData{
 		PageData: pageDataWithAppearance(h, r, userID, PageData{
 			PageName: "save_versions", Username: username, IsAdmin: h.isAdminUser(r.Context(), userID, username),
-			CSRFToken: csrfToken, NavActive: "dashboard", Error: errorMsg,
+			CSRFToken: csrfToken, NavActive: "games", Error: errorMsg,
 		}),
 		GameID: gameID, PathKey: pathKey, GameTitle: gameTitle,
 		Versions: versions, CurrentVersion: currentVersion,

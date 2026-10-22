@@ -3,14 +3,15 @@
 <p class="clients-summary">{{.Online}} online · {{.Total}} device{{if ne .Total 1}}s{{end}}</p>
 <div class="clients-grid">
   {{range .Clients}}
-  <div class="client-card" data-client-id="{{.ID}}" data-client-name="{{.Name}}">
+  <div class="client-card{{if .Online}} is-online{{else if gt .StaleDays 0}} is-stale{{end}}" data-client-id="{{.ID}}" data-client-name="{{.Name}}">
     <div class="client-card-head">
-      <span class="client-status {{if .Online}}online{{else}}offline{{end}}" title="{{if .Online}}Online{{else}}Offline{{end}}" aria-hidden="true"></span>
-      <span class="client-name">{{.Name}}</span>
-      <span class="os-badge os-{{.OS}}">{{.OS}}</span>
-      {{if .AppVersion}}<span class="client-version" title="Client app version">v{{.AppVersion}}</span>{{end}}
+      <span class="client-device-icon" aria-hidden="true">{{iconSVG "device" 18}}</span>
+      <span class="client-ident">
+        <span class="client-name">{{.Name}}</span>
+        <span class="client-platform"><span class="os-badge os-{{.OS}}">{{.OS}}</span>{{if .AppVersion}}<span class="client-version" title="Client app version">v{{.AppVersion}}</span>{{end}}</span>
+      </span>
     </div>
-    <div class="client-card-meta">{{if .Online}}Online now{{else}}Last seen <span title="{{.LastSeen}}">{{formatTime .LastSeen}}</span>{{end}}</div>
+    <div class="client-card-meta"><span class="client-status {{if .Online}}online{{else}}offline{{end}}" aria-hidden="true"></span>{{if .Online}}Online now{{else}}Last seen <span title="{{.LastSeen}}">{{formatTime .LastSeen}}</span>{{end}}</div>
     {{if gt .StaleDays 0}}
     <div class="client-callout client-callout-warn">
       <span aria-hidden="true">{{iconSVG "alert" 12}}</span>

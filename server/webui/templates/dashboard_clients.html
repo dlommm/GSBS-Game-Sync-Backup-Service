@@ -3,13 +3,38 @@
 {{define "dashboard_clients_content"}}
 <div class="page-head">
   <div>
-    <h1 class="page-title">Connected Devices</h1>
-    <p class="page-sub">Manage the devices syncing your game saves.</p>
+    <h1 class="page-title">Devices</h1>
+    <p class="page-sub">Every PC and handheld that backs up your saves, and what each one sent in the last two weeks.</p>
   </div>
 </div>
 
-<section class="panel" aria-labelledby="devices-heading">
-  <div class="panel-header"><h2 id="devices-heading">Devices</h2></div>
+{{if .Lanes}}
+{{/* Device lanes: one row per device, one mark per save it sent. A device
+     that has gone quiet is visibly an empty lane. Marks are real
+     save_versions rows; the newest on each lane is in the accent. */}}
+<section class="lanes-panel" aria-labelledby="lanes-heading">
+  <div class="sec-head">
+    <h2 id="lanes-heading" class="sec-title">The last fourteen days</h2>
+    <span class="cell-muted">Each mark is a save a device sent</span>
+  </div>
+  <div class="lanes" role="img" aria-label="Saves per device over the last 14 days">
+    <div class="lanes-days" aria-hidden="true">{{range .LaneDays}}<span>{{if .Today}}Today{{else}}<b class="d-wd">{{.Weekday}} </b>{{.Day}}{{end}}</span>{{end}}</div>
+    {{range .Lanes}}
+    <div class="lane-name{{if .Silent}} is-silent{{end}}"><strong>{{.Name}}</strong><small>{{.Sub}}</small></div>
+    <div class="lane-track{{if and .Silent (not .Ticks)}} is-silent{{end}}">
+      {{range $.LaneDays}}{{if .Weekend}}<span class="lane-weekend" data-left-pct="{{printf "%.2f" .LeftPct}}" data-width-pct="7.14"></span>{{end}}{{end}}
+      {{range .Ticks}}<span class="lane-tick{{if .Latest}} is-latest{{end}}" data-left-pct="{{printf "%.2f" .LeftPct}}" title="{{.Label}}"></span>{{end}}
+      {{if not .Ticks}}<span class="lane-silent">{{if .Silent}}No saves in fourteen days{{else}}No saves in this window{{end}}</span>{{end}}
+      <span class="lane-today"></span>
+    </div>
+    {{end}}
+  </div>
+  <div class="lanes-key" aria-hidden="true"><span><i></i>A save</span><span><i class="is-latest"></i>Latest save from that device</span></div>
+</section>
+{{end}}
+
+<section aria-labelledby="devices-heading">
+  <div class="sec-head"><h2 id="devices-heading" class="sec-title">Your devices</h2></div>
   <div id="clients-list"
        hx-get="/dashboard/partial/clients-list"
        hx-trigger="load, save-updated from:body throttle:2s, client-activity from:body throttle:2s, every 30s"

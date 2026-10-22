@@ -1,27 +1,20 @@
 {{define "partials/dashboard_clients.html"}}
 {{if .Clients}}
-<div class="table-wrap">
-  <table class="data-table" data-table-id="devices">
-    <thead><tr><th scope="col">Name</th><th scope="col">Platform</th><th scope="col">Last active</th><th scope="col" class="th-action"><span class="sr-only">Actions</span></th></tr></thead>
-    <tbody>
-      {{range .Clients}}
-      <tr data-client-id="{{.ID}}" data-client-name="{{.Name}}">
-        <td class="cell-primary">{{.Name}}</td>
-        <td><span class="os-badge os-{{.OS}}">{{.OS}}</span>{{if .AppVersion}} <span class="cell-muted">v{{.AppVersion}}</span>{{end}}</td>
-        <td class="cell-muted" title="{{.LastSeen}}">{{formatTime .LastSeen}}</td>
-        <td class="cell-action">
-          <form method="post" action="/dashboard/clients/revoke" class="inline-form" data-confirm="Revoke this client token? You must run gsbs-client login again.">
-            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-            <input type="hidden" name="client_id" value="{{.ID}}">
-            <button type="submit" class="btn-danger-sm">Revoke</button>
-          </form>
-        </td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
-</div>
+{{/* Continue screen device column: each device and the one number that
+     matters at a glance — how long since it last checked in. Management
+     (rename, revoke) lives on the Devices page. */}}
+<ul class="checkin-list">
+  {{range .Clients}}
+  <li class="checkin{{if .Online}} is-live{{else if gt .StaleDays 0}} is-silent{{end}}" data-client-id="{{.ID}}" data-client-name="{{.Name}}">
+    <span class="checkin-who">
+      <span class="checkin-name">{{.Name}}</span>
+      <span class="checkin-kind">{{osLabel .OS}}{{if gt .StaleDays 0}} · silent since {{formatTime .LastSeen}}{{end}}</span>
+    </span>
+    <span class="checkin-when" title="Last check-in {{.LastSeen}}"><span class="sr-only">Last check-in: </span>{{sinceShort .LastSeen}}</span>
+  </li>
+  {{end}}
+</ul>
 {{else}}
-<div class="panel-empty"><p>No clients registered yet.</p><p class="hint">Run <code>gsbs-client login</code> on your PC to connect it.</p></div>
+<div class="slot-empty"><p>No devices yet. Run <code>gsbs-client login</code> on your PC or Steam Deck to connect one.</p></div>
 {{end}}
 {{end}}

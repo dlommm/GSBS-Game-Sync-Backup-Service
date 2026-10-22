@@ -70,7 +70,7 @@ func (h *WebHandler) serveConflictBadge(w http.ResponseWriter, r *http.Request) 
 	if err != nil || n == 0 {
 		return // empty fragment: badge disappears
 	}
-	h.renderPartial(w, "partials/conflict_badge.html", n)
+	h.renderPartial(w, "partials/conflict_chip.html", n)
 }
 
 // handleResolveConflictWeb marks one conflict resolved from the web UI.

@@ -1,21 +1,29 @@
 {{template "layout" .}}
-{{define "dashboard_games_title"}}My Games — GSBS{{end}}
+{{define "dashboard_games_title"}}Library — GSBS{{end}}
 {{define "dashboard_games_content"}}
 <div class="page-head">
   <div>
-    <h1 class="page-title">My Games</h1>
-    <p class="page-sub">Every game you sync, at a glance.</p>
+    <h1 class="page-title">Library</h1>
+    <p class="page-sub">Every game GSBS keeps safe, with its saves and their history.</p>
   </div>
+  {{/* Export/import are occasional jobs: one menu instead of four buttons
+       that pushed the library below the fold on a phone. */}}
   <div class="page-head-actions">
-    <a class="btn-ghost-sm" href="/dashboard/export/saves.csv" download>Export CSV</a>
-    <a class="btn-ghost-sm" href="/dashboard/export/saves.json" download>Export JSON</a>
-    <a class="btn-ghost-sm" href="/dashboard/export/archive.zip" title="Download every save file as a zip archive (importable on any GSBS server)">Export saves (.zip)</a>
-    {{if not .ReadOnly}}
-    <form method="post" action="/dashboard/games/import" enctype="multipart/form-data" class="inline-form">
-      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <label class="btn-ghost-sm import-label">Import archive…<input type="file" name="archive" accept=".zip" class="sr-only" data-submit-on-change></label>
-    </form>
-    {{end}}
+    <details class="action-menu">
+      <summary class="btn-ghost">{{iconSVG "download" 14}} Export &amp; import</summary>
+      <div class="action-menu-panel action-menu-panel-wide">
+        <a class="btn-ghost-sm" href="/dashboard/export/archive.zip" title="Download every save file as a zip archive (importable on any GSBS server)">All saves (.zip)</a>
+        <a class="btn-ghost-sm" href="/dashboard/export/saves.csv" download>Save list (CSV)</a>
+        <a class="btn-ghost-sm" href="/dashboard/export/saves.json" download>Save list (JSON)</a>
+        {{if not .ReadOnly}}
+        <hr class="table-tools-sep">
+        <form method="post" action="/dashboard/games/import" enctype="multipart/form-data" class="inline-form">
+          <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+          <label class="btn-ghost-sm import-label">Import archive…<input type="file" name="archive" accept=".zip" class="sr-only" data-submit-on-change></label>
+        </form>
+        {{end}}
+      </div>
+    </details>
   </div>
 </div>
 {{if .ImportedMsg}}<div class="alert alert-success">{{.ImportedMsg}}</div>{{end}}
@@ -43,7 +51,7 @@
     <option value="files"{{if eq .Sort "files"}} selected{{end}}>Most files</option>
   </select>
   <div class="view-toggle" role="group" aria-label="View mode">
-    <button type="button" class="view-btn{{if ne .View "list"}} active{{end}}"
+    <button type="button" class="view-btn{{if eq .View "grid"}} active{{end}}"
             hx-get="/dashboard/partial/games" hx-target="#games-grid" hx-include="#games-filter" hx-swap="innerHTML"
             hx-vals='{"view":"grid"}'
             data-view-value="grid"
@@ -53,6 +61,11 @@
             hx-vals='{"view":"list"}'
             data-view-value="list"
             aria-label="List view">{{iconSVG "list" 13}} List</button>
+    <button type="button" class="view-btn{{if eq .View "browser"}} active{{end}}"
+            hx-get="/dashboard/partial/games" hx-target="#games-grid" hx-include="#games-filter" hx-swap="innerHTML"
+            hx-vals='{"view":"browser"}'
+            data-view-value="browser"
+            aria-label="Browser view">{{iconSVG "save" 13}} Browser</button>
   </div>
   <input type="hidden" id="games-view" name="view" value="{{.View}}">
 </form>

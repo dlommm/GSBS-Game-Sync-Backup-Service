@@ -89,7 +89,7 @@ func TestDashboardSavesPartialRenders(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 	html := buf.String()
-	for _, want := range []string{"Tesseract", "The Witcher 3", "game-row-card", "View Versions", "View all"} {
+	for _, want := range []string{"Tesseract", "The Witcher 3", "slot-list", "slot-title", "View all"} {
 		if !strings.Contains(html, want) {
 			t.Errorf("rendered HTML missing %q", want)
 		}

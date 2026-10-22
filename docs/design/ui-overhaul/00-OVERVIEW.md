@@ -34,6 +34,8 @@ dark text on filled teal elements (the mockup's white-on-teal fails WCAG AA — 
 | `06-FEATURES-AND-FUTURE.md` | extensibility slots + verified feature proposals (brief §5–6) |
 | `07-ARCHITECTURE.md` | stack decisions, budgets, a11y, PWA, i18n, new-API preview (brief §7) |
 | `08-ROADMAP.md` | phases, risks, success criteria (brief §8–9) |
+| `09-PREMIUM-LAYER.md` | v6.1 premium pass: audit, direction, tokens, motion, verification (superseded by 10) |
+| `10-CONTINUE.md` | v7 "Continue" redesign: directions, system, screens, artwork pipeline — **current look** |
 
 ## Hard constraints honored throughout
 

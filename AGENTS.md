@@ -26,6 +26,8 @@
 
 6. **When changing behavior**: Prefer extending `pkg/types` and the server `Store` interface rather than duplicating types. Client must only write pulled saves when the target directory exists.
 
-7. **Build**: From repo root, `go build -o gsbs-server ./server` and `go build -o gsbs-client ./client`. See `README.md` and `docs/DOCKER.md` for run/deploy.
+7. **Docs stay in step**: after any user-visible change or version bump, follow `.claude/skills/gsbs-docs-sync/SKILL.md` (README banner, version pins, wiki/upgrade notes, screenshots).
+
+8. **Build**: From repo root, `go build -o gsbs-server ./server` and `go build -o gsbs-client ./client`. See `README.md` and `docs/DOCKER.md` for run/deploy.
 
 Use the rules, skills, and `docs/ARCHITECTURE.md` as the source of truth for the plan and code layout.

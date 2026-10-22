@@ -3,7 +3,7 @@
 <div class="cmdk-group-label">Go to</div>
 {{range .Commands}}
 <a class="cmdk-item" href="{{.Href}}">
-  <span class="cmdk-item-icon">{{.Icon}}</span>
+  <span class="cmdk-item-icon">{{iconSVG .Icon 16}}</span>
   <span class="cmdk-item-text"><span class="cmdk-item-title">{{.Label}}</span><span class="cmdk-item-sub">{{.Sub}}</span></span>
 </a>
 {{end}}

@@ -27,7 +27,9 @@ gsbs.db
 .idea/
 .cursor/
 .cursorignore
-.claude/
+# Local Claude Code state stays private; project skills are shared.
+.claude/*
+!.claude/skills/
 .DS_Store
 *.swp
 *.swo

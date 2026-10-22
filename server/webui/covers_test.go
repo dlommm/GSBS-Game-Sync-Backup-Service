@@ -26,6 +26,32 @@ func TestIsNumericGameID(t *testing.T) {
 	}
 }
 
+func TestParseCoverPath(t *testing.T) {
+	tests := []struct {
+		path   string
+		id     string
+		suffix string
+		ok     bool
+	}{
+		{"/covers/900101.jpg", "900101", "", true},
+		{"/covers/900101", "900101", "", true}, // pre-v7 portrait URL
+		{"/covers/900101-hero.jpg", "900101", "-hero", true},
+		{"/covers/900101-logo.png", "900101", "-logo", true},
+		{"/covers/900101.png", "", "", false},      // portrait is jpg only
+		{"/covers/900101-logo.jpg", "", "", false}, // logo is png only
+		{"/covers/-hero.jpg", "", "", false},
+		{"/covers/../x-hero.jpg", "", "", false},
+		{"/covers/12a-hero.jpg", "", "", false},
+		{"/covers/900101-hero-hero.jpg", "", "", false},
+	}
+	for _, tc := range tests {
+		id, v, ok := parseCoverPath(tc.path)
+		if ok != tc.ok || id != tc.id || (ok && v.suffix != tc.suffix) {
+			t.Errorf("parseCoverPath(%q) = (%q, %q, %v), want (%q, %q, %v)", tc.path, id, v.suffix, ok, tc.id, tc.suffix, tc.ok)
+		}
+	}
+}
+
 func TestSanitizeFilenamePart(t *testing.T) {
 	tests := []struct {
 		in   string

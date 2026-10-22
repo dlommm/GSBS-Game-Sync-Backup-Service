@@ -43,14 +43,14 @@ func (h *WebHandler) serveGlobalSearch(w http.ResponseWriter, r *http.Request) {
 	ql := strings.ToLower(q)
 
 	nav := []cmdkCommand{
-		{Label: "Dashboard", Sub: "Overview", Href: "/dashboard", Icon: "🏠"},
-		{Label: "My Games", Sub: "Browse synced saves", Href: "/dashboard/games", Icon: "🎮"},
-		{Label: "Devices", Sub: "Connected devices", Href: "/dashboard/clients", Icon: "🖥️"},
-		{Label: "Insights", Sub: "Backup analytics", Href: "/dashboard/analytics", Icon: "📊"},
-		{Label: "Settings", Sub: "Security & account", Href: "/dashboard/settings", Icon: "⚙️"},
+		{Label: "Continue", Sub: "Your latest save and backup status", Href: "/dashboard", Icon: "save"},
+		{Label: "Library", Sub: "Every game and its saves", Href: "/dashboard/games", Icon: "game"},
+		{Label: "Devices", Sub: "Connected devices", Href: "/dashboard/clients", Icon: "device"},
+		{Label: "Insights", Sub: "Backup analytics", Href: "/dashboard/analytics", Icon: "chart"},
+		{Label: "Settings", Sub: "Security & account", Href: "/dashboard/settings", Icon: "settings"},
 	}
 	if h.isAdminUser(r.Context(), userID, username) {
-		nav = append(nav, cmdkCommand{Label: "Admin", Sub: "Server administration", Href: "/admin", Icon: "🛡️"})
+		nav = append(nav, cmdkCommand{Label: "Admin", Sub: "Server administration", Href: "/admin", Icon: "shield"})
 	}
 	var cmds []cmdkCommand
 	for _, c := range nav {

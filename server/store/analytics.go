@@ -295,6 +295,35 @@ func (s *sqliteStore) SyncBytesByDay(ctx context.Context, userID string, days in
 // VersionsByClient attributes a user's version writes to devices over the
 // trailing window (most active first). Versions from revoked/unknown devices
 // group under an empty ClientID.
+func (s *sqliteStore) RecentSaveEvents(ctx context.Context, userID string, days, limit int) ([]SaveEvent, error) {
+	_, since, _ := dayWindow(days, 14)
+	if limit <= 0 || limit > 2000 {
+		limit = 2000
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT v.game_id,
+			COALESCE((SELECT gsl.game_title FROM game_save_locations gsl WHERE gsl.game_id = v.game_id LIMIT 1), v.game_id),
+			COALESCE(v.client_id, ''), COALESCE(c.name, ''), v.updated_at, v.version
+		FROM save_versions v
+		LEFT JOIN clients c ON c.id = v.client_id
+		WHERE v.user_id = ? AND substr(v.updated_at, 1, 10) >= ?
+		ORDER BY v.updated_at DESC
+		LIMIT ?`, userID, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []SaveEvent
+	for rows.Next() {
+		var e SaveEvent
+		if err := rows.Scan(&e.GameID, &e.GameTitle, &e.ClientID, &e.ClientName, &e.UpdatedAt, &e.Version); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (s *sqliteStore) VersionsByClient(ctx context.Context, userID string, days int) ([]ClientVolumeRow, error) {
 	_, since, _ := dayWindow(days, 30)
 	rows, err := s.db.QueryContext(ctx, `

@@ -43,6 +43,8 @@ var handlerTemplates = []string{
 	"admin_analytics.html",
 	"partials/dashboard_stats.html",
 	"partials/dashboard_clients.html",
+	"partials/game_panel.html",
+	"partials/conflict_chip.html",
 	"partials/conflicts_list.html",
 	"partials/conflict_badge.html",
 	"partials/inbox_panel.html",
@@ -64,7 +66,7 @@ var handlerTemplates = []string{
 var nestedTemplateRefs = []string{
 	"partials/alerts.html",
 	"partials/topbar.html",
-	"partials/sidebar.html",
+	"partials/tabbar.html",
 	"partials/admin_shell.html",
 	"partials/job_status_badge.html",
 	"partials/timeline_item.html",
@@ -78,7 +80,6 @@ var nestedTemplateRefs = []string{
 // Page-specific layout blocks referenced via {{template (printf "%s_*" .PageName) .}}.
 var pageBlockTemplates = []string{
 	"dashboard_title", "dashboard_content",
-	"widget_stats", "widget_games", "widget_activity", "widget_devices", "widget_pulse",
 	"settings_title", "settings_content",
 	"enable_2fa_title", "enable_2fa_content",
 	"recovery_codes_title", "recovery_codes_content", "recovery_codes_scripts",
@@ -209,7 +210,7 @@ func TestNestedPartialsExecute(t *testing.T) {
 		{"partials/topbar.html", PageData{
 			PageName: "dashboard", Username: "testuser", IsAdmin: true, CSRFToken: "csrf", NavActive: "dashboard",
 		}},
-		{"partials/sidebar.html", PageData{
+		{"partials/tabbar.html", PageData{
 			PageName: "dashboard", Username: "testuser", IsAdmin: true, CSRFToken: "csrf", NavActive: "dashboard",
 		}},
 		{"partials/admin_shell.html", adminOverviewData{
@@ -665,16 +666,28 @@ func templateTestData(name string) interface{} {
 		}
 	case "partials/dashboard_stats.html":
 		return map[string]interface{}{
-			"Stats":      dashboardStats{ClientCount: 1, SaveCount: 2, GameCount: 1, TotalBytes: 1024},
+			"Stats":      dashboardStats{ClientCount: 1, SaveCount: 2, GameCount: 1, TotalBytes: 1024, UsageBytes: 3900},
 			"QuotaBytes": int64(4096),
+			"Protection": protectionSummary{
+				Tone: "attention", GamesTotal: 3, StaleGames: 1, OpenConflicts: 2, DevicesTotal: 2, DevicesOnline: 1, StaleDevices: 1,
+				LatestGame:    &gameCard{GameID: "730", Title: "CS2", LastSynced: now, Status: "healthy"},
+				LatestVersion: 4, LatestDevice: "Steam Deck", LatestOlder: 3, VersionsKept: 12,
+			},
 		}
 	case "partials/dashboard_clients.html":
 		return map[string]interface{}{
-			"Clients": []store.ClientInfo{
-				{ID: "c1", Name: "PC", OS: "windows", LastSeen: now},
+			"Clients": []clientRow{
+				{ClientInfo: store.ClientInfo{ID: "c1", Name: "PC", OS: "windows", LastSeen: now}, Online: true},
+				{ClientInfo: store.ClientInfo{ID: "c2", Name: "HTPC", OS: "linux", LastSeen: "2026-01-01T00:00:00Z"}, StaleDays: 40},
 			},
-			"CSRFToken": "csrf-test",
-			"ReadOnly":  false,
+			"Online": 1,
+		}
+	case "partials/conflict_chip.html":
+		return 2
+	case "partials/game_panel.html":
+		return map[string]interface{}{
+			"GameID": "730", "Title": "CS2", "PathKey": "main", "LastSynced": now, "FileCount": 2, "TotalBytes": int64(2048),
+			"Versions": []store.SaveVersionInfo{{Version: 3, UpdatedAt: now, ClientName: "PC"}, {Version: 2, UpdatedAt: now}},
 		}
 	case "partials/dashboard_saves.html":
 		return map[string]interface{}{

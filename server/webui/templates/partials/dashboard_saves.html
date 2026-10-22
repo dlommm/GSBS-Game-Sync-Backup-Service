@@ -1,37 +1,33 @@
 {{define "partials/dashboard_saves.html"}}
 {{if .Games}}
-<div class="recent-games-grid">
+{{/* Save slots: the Load-screen list. Each row is one game's latest save —
+     art strip, title, when and on which device, then version · files · size. */}}
+<ol class="slot-list">
   {{range .Games}}
-  <article class="game-row-card">
-    <a class="game-row-main" href="/dashboard/games/{{urlquery .GameID}}">
-      <span class="game-row-cover" aria-hidden="true">
-        {{gameIconSVG .Title 44}}
-        <img class="cover-img" src="/covers/{{urlquery .GameID}}" alt="" loading="lazy">
+  <li class="slot state-{{.Status}}">
+    <a class="slot-link" href="/dashboard/games/{{urlquery .GameID}}">
+      <span class="slot-art" aria-hidden="true">
+        {{gameIconSVG .Title 96}}
+        <img class="cover-img" src="/covers/{{urlquery .GameID}}.jpg" alt="" loading="lazy">
       </span>
-      <span class="game-row-info">
-        <span class="game-row-title">{{.Title}}</span>
-        <span class="game-row-when">Last synced {{formatTime .LastSynced}}</span>
-        <span class="game-row-status">
-          {{if eq .Status "healthy"}}<span class="status-glyph status-glyph-ok" aria-hidden="true">{{iconSVG "check" 12}}</span>Synced
-          {{else if eq .Status "stale"}}<span class="status-glyph status-glyph-warn" aria-hidden="true">{{iconSVG "alert" 12}}</span>Stale
-          {{else}}<span class="status-glyph" aria-hidden="true">{{iconSVG "clock" 12}}</span>Unknown{{end}}
-          · {{.FileCount}} file{{if ne .FileCount 1}}s{{end}} · {{formatBytes .TotalBytes}}
-        </span>
+      <span class="slot-body">
+        <span class="slot-title">{{.Title}}</span>
+        <span class="slot-meta"><time datetime="{{.LastSynced}}" title="{{.LastSynced}}">{{formatTime .LastSynced}}</time>{{if .LatestDevice}} · {{.LatestDevice}}{{end}}</span>
       </span>
-      {{if eq .Status "healthy"}}<span class="game-row-badge" title="Synced" aria-hidden="true">{{iconSVG "check" 12}}</span>{{end}}
+      <span class="slot-state">
+        <span class="slot-status">{{if eq .Status "healthy"}}{{iconSVG "check" 14}}Backed up{{else if eq .Status "stale"}}{{iconSVG "alert" 14}}No sync in 30 days{{else}}{{iconSVG "clock" 14}}Unknown{{end}}</span>
+        <span class="slot-figs">{{if .LatestVersion}}v{{.LatestVersion}} · {{end}}{{.FileCount}} file{{if ne .FileCount 1}}s{{end}} · {{formatBytes .TotalBytes}}</span>
+      </span>
     </a>
-    <div class="game-row-actions">
-      <a class="btn-primary-sm" href="/dashboard/games/{{urlquery .GameID}}">View Versions</a>
-    </div>
-  </article>
+  </li>
   {{end}}
-</div>
+</ol>
 {{if gt .TotalGames (len .Games)}}
-<p class="recent-games-more"><a href="/dashboard/games">View all {{.TotalGames}} games →</a></p>
+<p class="slot-more"><a href="/dashboard/games">View all {{.TotalGames}} games →</a></p>
 {{end}}
 {{else}}
-<div class="panel-empty">
-  <p>No games synced yet. Connect a client and your recently synced games appear here.</p>
+<div class="slot-empty">
+  <p>Your save slots appear here once a device backs up its first game.</p>
 </div>
 {{end}}
 {{end}}

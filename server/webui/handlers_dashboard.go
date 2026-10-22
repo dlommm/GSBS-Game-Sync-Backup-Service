@@ -77,23 +77,9 @@ func (h *WebHandler) serveDashboard(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("revoked") == "1" {
 		success = "Client token revoked. Run gsbs-client login to reconnect."
 	}
-	if r.URL.Query().Get("widgets_saved") == "1" {
-		success = "Dashboard arrangement saved."
-	}
-	var widgets []dashWidgetView
-	if uiLayout == "widgets" {
-		raw, _ := h.store.GetUserPref(r.Context(), userID, widgetPrefKey)
-		cfg := parseWidgetConfig(raw)
-		hidden := map[string]bool{}
-		for _, id := range cfg.Hidden {
-			hidden[id] = true
-		}
-		for _, id := range cfg.Order {
-			widgets = append(widgets, dashWidgetView{ID: id, Name: widgetName(id), Hidden: hidden[id]})
-		}
-	}
 	h.render(w, "dashboard.html", dashboardData{
-		Widgets: widgets,
+		Stats: h.dashboardStatsData(r.Context(), userID),
+		Saves: h.dashboardSavesData(r.Context(), userID),
 		PageData: PageData{
 			PageName:  "dashboard",
 			Username:  username,
@@ -156,12 +142,82 @@ func (h *WebHandler) serveDashboardStatsPartial(w http.ResponseWriter, r *http.R
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	stats := h.loadDashboardStats(r.Context(), userID)
-	quotaBytes, _ := h.store.UserQuotaBytes(r.Context(), userID)
-	h.renderPartial(w, "partials/dashboard_stats.html", map[string]interface{}{
+	h.renderPartial(w, "partials/dashboard_stats.html", h.dashboardStatsData(r.Context(), userID))
+}
+
+// dashboardStatsData feeds partials/dashboard_stats.html (the Continue hero)
+// for both the first page render and its live HTMX refreshes.
+func (h *WebHandler) dashboardStatsData(ctx context.Context, userID string) map[string]interface{} {
+	stats := h.loadDashboardStats(ctx, userID)
+	quotaBytes, _ := h.store.UserQuotaBytes(ctx, userID)
+	return map[string]interface{}{
 		"Stats":      stats,
 		"QuotaBytes": quotaBytes,
-	})
+		"Protection": h.loadProtection(ctx, userID, stats),
+	}
+}
+
+// protectionSummary drives the dashboard's protection hero: one answer to
+// "are my saves safe and in sync?", built only from data the server holds.
+// It never claims more than it knows — e.g. "online" means seen in the last
+// clientOnlineWindow, not "fully synced".
+type protectionSummary struct {
+	Tone          string    // ok | warn | attention | empty
+	LatestGame    *gameCard // most recently synced game (nil when none)
+	GamesTotal    int
+	StaleGames    int // no sync for 30+ days (gameSyncStatus "stale")
+	OpenConflicts int
+	DevicesTotal  int
+	DevicesOnline int
+	StaleDevices  int // not seen for staleAfter (14 days)
+	// The latest save itself (the Continue hero): which version it is, which
+	// device wrote it, and how many earlier versions of that slot are kept.
+	LatestVersion int
+	LatestDevice  string
+	LatestOlder   int
+	VersionsKept  int // every stored version across all slots (current ones included)
+}
+
+func (h *WebHandler) loadProtection(ctx context.Context, userID string, stats dashboardStats) protectionSummary {
+	p := protectionSummary{Tone: "ok"}
+	cards, _, _, _ := h.buildGameCards(ctx, userID, "", "all", "recent")
+	p.GamesTotal = len(cards)
+	if len(cards) > 0 {
+		latest := cards[0]
+		p.LatestGame = &latest
+		if slot, ok := h.latestSlot(ctx, userID, latest.GameID); ok {
+			if vers, err := h.store.ListSaveVersions(ctx, userID, latest.GameID, slot, 100); err == nil && len(vers) > 0 {
+				p.LatestVersion, p.LatestDevice, p.LatestOlder = vers[0].Version, vers[0].ClientName, len(vers)-1
+			}
+		}
+	}
+	if depth, err := h.store.VersionDepth(ctx, userID); err == nil {
+		p.VersionsKept = depth.Versions
+	}
+	for _, c := range cards {
+		if c.Status == "stale" {
+			p.StaleGames++
+		}
+	}
+	if n, err := h.store.CountOpenConflicts(ctx, userID); err == nil {
+		p.OpenConflicts = n
+	}
+	rows, online := h.loadClientRows(ctx, userID)
+	p.DevicesTotal, p.DevicesOnline = len(rows), online
+	for _, row := range rows {
+		if row.StaleDays > 0 {
+			p.StaleDevices++
+		}
+	}
+	switch {
+	case p.GamesTotal == 0 && !stats.StoreError:
+		p.Tone = "empty"
+	case p.OpenConflicts > 0:
+		p.Tone = "attention"
+	case p.StaleGames > 0 || p.StaleDevices > 0:
+		p.Tone = "warn"
+	}
+	return p
 }
 
 func (h *WebHandler) serveDashboardClientsPartial(w http.ResponseWriter, r *http.Request) {
@@ -170,21 +226,16 @@ func (h *WebHandler) serveDashboardClientsPartial(w http.ResponseWriter, r *http
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	clients, err := h.store.ListClientsByUserID(r.Context(), userID)
-	if err != nil {
-		http.Error(w, "Failed to load clients", http.StatusInternalServerError)
-		return
-	}
-	csrfToken := SetCSRFToken(w, r, h.secret)
+	rows, online := h.loadClientRows(r.Context(), userID)
 	h.renderPartial(w, "partials/dashboard_clients.html", map[string]interface{}{
-		"Clients": clients, "CSRFToken": csrfToken, "ReadOnly": h.readOnly,
+		"Clients": rows, "Online": online,
 	})
 }
 
 // dashboardRecentGames caps the dashboard "Recent games" card strip.
 const dashboardRecentGames = 6
 
-// serveDashboardSavesPartial renders the dashboard "Recent games" cards: the
+// serveDashboardSavesPartial renders the Continue screen's save slots: the
 // most recently synced games, reusing the My Games card builder (groupSaves
 // order is most-recent-first, which is the default sort).
 func (h *WebHandler) serveDashboardSavesPartial(w http.ResponseWriter, r *http.Request) {
@@ -193,20 +244,40 @@ func (h *WebHandler) serveDashboardSavesPartial(w http.ResponseWriter, r *http.R
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	cards, _, _, _ := h.buildGameCards(r.Context(), userID, "", "all", "recent")
+	h.renderPartial(w, "partials/dashboard_saves.html", h.dashboardSavesData(r.Context(), userID))
+}
+
+func (h *WebHandler) dashboardSavesData(ctx context.Context, userID string) map[string]interface{} {
+	cards, _, _, _ := h.buildGameCards(ctx, userID, "", "all", "recent")
 	total := len(cards)
-	limit := dashboardRecentGames
-	if _, uiLayout := h.appearance(r.Context(), userID); uiLayout == "library" {
-		// Library-first: the shelf is the dashboard's point — show more.
-		limit = 2 * dashboardRecentGames
+	if len(cards) > dashboardRecentGames {
+		cards = cards[:dashboardRecentGames]
 	}
-	if len(cards) > limit {
-		cards = cards[:limit]
+	// Save-slot rows name the version and the device that wrote it — one
+	// indexed lookup per row, capped at dashboardRecentGames rows.
+	for i := range cards {
+		if slot, ok := h.latestSlot(ctx, userID, cards[i].GameID); ok {
+			if vers, err := h.store.ListSaveVersions(ctx, userID, cards[i].GameID, slot, 1); err == nil && len(vers) > 0 {
+				cards[i].LatestVersion, cards[i].LatestDevice = vers[0].Version, vers[0].ClientName
+			}
+		}
 	}
-	h.renderPartial(w, "partials/dashboard_saves.html", map[string]interface{}{
-		"Games":      cards,
-		"TotalGames": total,
-	})
+	return map[string]interface{}{"Games": cards, "TotalGames": total}
+}
+
+// latestSlot returns the path_key of a game's most recently updated save.
+func (h *WebHandler) latestSlot(ctx context.Context, userID, gameID string) (string, bool) {
+	saves, err := h.store.ListSaveSummariesForGame(ctx, userID, gameID)
+	if err != nil || len(saves) == 0 {
+		return "", false
+	}
+	best := saves[0]
+	for _, sv := range saves[1:] {
+		if sv.UpdatedAt > best.UpdatedAt {
+			best = sv
+		}
+	}
+	return best.PathKey, true
 }
 
 const dashboardActivityPageSize = 20
@@ -263,52 +334,4 @@ func (h *WebHandler) handleDashboardRevokeClient(w http.ResponseWriter, r *http.
 	h.appendAuditBroadcast(r.Context(), userID, username, "revoke_client", clientID, "")
 	logx.Logger().Info().Str("client_id", clientID).Str("username", username).Msg("webui dashboard revoke ok")
 	Redirect(w, r, "/dashboard?revoked=1")
-}
-
-// widgetName is the human label for a dashboard widget id (the editor's
-// control cluster names what it moves).
-func widgetName(id string) string {
-	switch id {
-	case "stats":
-		return "Stats"
-	case "games":
-		return "Recent games"
-	case "activity":
-		return "Recent Activity"
-	case "devices":
-		return "Your Devices"
-	case "pulse":
-		return "Live activity"
-	}
-	return id
-}
-
-// handleWidgetsSave stores the Custom layout's widget arrangement.
-func (h *WebHandler) handleWidgetsSave(w http.ResponseWriter, r *http.Request) {
-	if !ValidateCSRF(r, h.secret) {
-		http.Error(w, "Invalid security token.", http.StatusBadRequest)
-		return
-	}
-	userID, _, ok := h.requireSession(w, r)
-	if !ok {
-		return
-	}
-	if r.FormValue("reset") == "1" {
-		if err := h.store.SetUserPref(r.Context(), userID, widgetPrefKey, ""); err != nil {
-			Redirect(w, r, "/dashboard?error=widgets_save_failed")
-			return
-		}
-		Redirect(w, r, "/dashboard?widgets_saved=1")
-		return
-	}
-	cfg, valid := widgetConfigFromForm(r.FormValue("order"), r.FormValue("hidden"))
-	if !valid {
-		Redirect(w, r, "/dashboard?error=invalid_widgets")
-		return
-	}
-	if err := h.store.SetUserPref(r.Context(), userID, widgetPrefKey, cfg.marshal()); err != nil {
-		Redirect(w, r, "/dashboard?error=widgets_save_failed")
-		return
-	}
-	Redirect(w, r, "/dashboard?widgets_saved=1")
 }

@@ -284,6 +284,11 @@
     var img = e.target;
     if (img && img.classList && img.classList.contains('cover-img')) img.remove();
   }, true);
+  // Eager art (the Continue and game heroes) can fail before this deferred
+  // script attaches the listener above: sweep anything already broken.
+  document.querySelectorAll('img.cover-img').forEach(function (img) {
+    if (img.complete && img.naturalWidth === 0) img.remove();
+  });
 
   // Forms inside <summary> rows must not toggle the row when clicked
   // (stopPropagation has to happen ON the element, so bind directly and
@@ -302,6 +307,11 @@
     (root || document).querySelectorAll('[data-width-pct]').forEach(function (el) {
       var v = parseFloat(el.getAttribute('data-width-pct'));
       if (!isNaN(v)) el.style.width = Math.max(0, Math.min(100, v)) + '%';
+    });
+    // Positioned marks (device lanes on Devices): CSSOM, CSP-safe.
+    (root || document).querySelectorAll('[data-left-pct]').forEach(function (el) {
+      var v = parseFloat(el.getAttribute('data-left-pct'));
+      if (!isNaN(v)) el.style.left = Math.max(0, Math.min(100, v)) + '%';
     });
   }
 
@@ -421,10 +431,29 @@
     });
   }
 
-  // Close table menus when clicking elsewhere.
+  // Library Browser view: one selected save block at a time.
   document.addEventListener('click', function (e) {
-    if (e.target.closest('details.table-tools-menu')) return;
-    document.querySelectorAll('details.table-tools-menu[open]').forEach(function (m) { m.open = false; });
+    var block = e.target.closest('[data-block]');
+    if (!block) return;
+    document.querySelectorAll('[data-block][aria-pressed="true"]').forEach(function (b) { b.setAttribute('aria-pressed', 'false'); });
+    block.setAttribute('aria-pressed', 'true');
+  });
+
+  // Close disclosure menus (table tools, Export & import, a game's More menu)
+  // when clicking elsewhere or pressing Escape; focus returns to the trigger.
+  document.addEventListener('click', function (e) {
+    var inside = e.target.closest('details.action-menu');
+    document.querySelectorAll('details.action-menu[open]').forEach(function (m) {
+      if (m !== inside) m.open = false;
+    });
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var open = document.querySelector('details.action-menu[open]');
+    if (!open) return;
+    open.open = false;
+    var s = open.querySelector('summary');
+    if (s) s.focus();
   });
 
   /* ---- Shared table pager: per-page select (partials/table_pager.html) ---- */
@@ -437,90 +466,6 @@
     if (!target) return;
     window.htmx.ajax('GET', base + 'per=' + encodeURIComponent(sel.value) + '&page=1', { target: target, swap: 'innerHTML' });
   });
-
-  /* ---- Custom dashboard layout: widget arrange/hide editor ----
-     Buttons are the accessible core (move up/down, show/hide); HTML5
-     drag-drop is a pointer enhancement over the same DOM order. The state
-     lives in the DOM and is serialized into the save form's hidden fields. */
-  function initWidgetEditor() {
-    var grid = document.getElementById('dash-widgets');
-    var editBtn = document.querySelector('[data-widget-edit]');
-    if (!grid || !editBtn) return;
-    var orderInput = document.getElementById('widgets-order');
-    var hiddenInput = document.getElementById('widgets-hidden');
-
-    function widgets() {
-      return Array.prototype.slice.call(grid.querySelectorAll('.dash-widget'));
-    }
-    function syncState() {
-      var order = [], hidden = [];
-      widgets().forEach(function (el) {
-        var id = el.getAttribute('data-widget');
-        order.push(id);
-        if (el.getAttribute('data-widget-hidden') === '1') hidden.push(id);
-      });
-      orderInput.value = order.join(',');
-      hiddenInput.value = hidden.join(',');
-    }
-    syncState();
-
-    editBtn.addEventListener('click', function () {
-      document.body.classList.add('widgets-editing');
-      widgets().forEach(function (el) { el.setAttribute('draggable', 'true'); });
-    });
-    document.addEventListener('click', function (e) {
-      if (e.target.closest('[data-widget-cancel]')) window.location.reload();
-      var move = e.target.closest('[data-widget-move]');
-      if (move) {
-        var el = move.closest('.dash-widget');
-        if (move.getAttribute('data-widget-move') === 'up' && el.previousElementSibling) {
-          grid.insertBefore(el, el.previousElementSibling);
-        } else if (move.getAttribute('data-widget-move') === 'down' && el.nextElementSibling) {
-          grid.insertBefore(el.nextElementSibling, el);
-        }
-        move.focus();
-        syncState();
-      }
-      var toggle = e.target.closest('[data-widget-toggle]');
-      if (toggle) {
-        var w = toggle.closest('.dash-widget');
-        var nowHidden = w.getAttribute('data-widget-hidden') !== '1';
-        if (nowHidden) {
-          w.setAttribute('data-widget-hidden', '1');
-        } else {
-          w.removeAttribute('data-widget-hidden');
-        }
-        toggle.textContent = nowHidden ? 'Show' : 'Hide';
-        toggle.setAttribute('aria-pressed', nowHidden ? 'true' : 'false');
-        syncState();
-      }
-    });
-
-    // Drag-drop enhancement (edit mode only — draggable is set on entry).
-    var dragging = null;
-    grid.addEventListener('dragstart', function (e) {
-      var el = e.target.closest('.dash-widget');
-      if (!el || !document.body.classList.contains('widgets-editing')) return;
-      dragging = el;
-      el.classList.add('widget-dragging');
-      e.dataTransfer.effectAllowed = 'move';
-    });
-    grid.addEventListener('dragover', function (e) {
-      if (!dragging) return;
-      e.preventDefault();
-      var over = e.target.closest('.dash-widget');
-      if (!over || over === dragging) return;
-      var rect = over.getBoundingClientRect();
-      var before = e.clientY < rect.top + rect.height / 2;
-      grid.insertBefore(dragging, before ? over : over.nextElementSibling);
-    });
-    grid.addEventListener('dragend', function () {
-      if (!dragging) return;
-      dragging.classList.remove('widget-dragging');
-      dragging = null;
-      syncState();
-    });
-  }
 
   function initDynamic(root) {
     bindStopPropagation(root);
@@ -575,7 +520,6 @@
     initBulkForm();
     initOnboardingTour();
     initSetupWizard();
-    initWidgetEditor();
   });
 
   /* ---- Live Sync Pulse (v5.1): dashboard rail stream + per-device flash ---- */
@@ -790,11 +734,11 @@
     try { if (localStorage.getItem(KEY) === '1') return; } catch (err) { return; }
 
     var steps = [
-      { title: 'Welcome to GSBS', body: 'Your game saves are synced and versioned here. This 30-second tour shows you around — press Esc anytime to skip.' },
-      { title: 'Storage at a glance', body: 'The dashboard shows connected devices, synced saves, and your storage usage including version history.' },
-      { title: 'Connect your PCs', body: 'Install the GSBS client on each machine and run “gsbs-client login”. Devices appear under Devices, and saves flow automatically.' },
-      { title: 'My Games', body: 'Browse every synced game with cover art, drill into files, restore old versions, and export real save archives.' },
-      { title: 'Insights & Settings', body: 'Insights charts your sync activity and warns about stale devices. Settings has 2FA, end-to-end encryption, sessions, and personal notifications.' }
+      { title: 'Welcome to GSBS', body: 'Your game saves are backed up and versioned here. This 30-second tour shows you around — press Esc anytime to skip.' },
+      { title: 'Continue', body: 'Your latest save leads the screen. Beside it: how many games are backed up, how many versions are kept, and anything that needs you.' },
+      { title: 'Connect your devices', body: 'Install the GSBS client on each PC or Steam Deck and sign in. Devices shows every one of them and what it sent in the last two weeks.' },
+      { title: 'Library', body: 'Every game with its art, files and history. Open Versions on a save to load an older one — the current save always stays in history.' },
+      { title: 'Insights & your account', body: 'Insights charts your sync activity. Settings, conflicts and admin live in the account menu (your initial, top right).' }
     ];
     var i = 0;
     var overlay = document.createElement('div');

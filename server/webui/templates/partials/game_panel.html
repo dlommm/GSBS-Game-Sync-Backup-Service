@@ -1,0 +1,24 @@
+{{define "partials/game_panel.html"}}
+{{if .Missing}}
+<p class="save-pane-empty">That game has no saves on the server.</p>
+{{else}}
+<div class="save-pane-art" aria-hidden="true">{{gameIconSVG .Title 160}}<img class="cover-img" src="/covers/{{urlquery .GameID}}.jpg" alt=""></div>
+<h2 class="save-pane-title slot-title">{{.Title}}</h2>
+<p class="save-pane-sub">Saved {{formatTime .LastSynced}} · {{.FileCount}} file{{if ne .FileCount 1}}s{{end}} · {{formatBytes .TotalBytes}}</p>
+{{if .Versions}}
+<ol class="load-list">
+  {{range $i, $v := .Versions}}
+  <li class="load-slot{{if eq $i 0}} is-current{{end}}">
+    <span class="load-num">v{{$v.Version}}</span>
+    <div><div class="load-when">{{formatTime $v.UpdatedAt}}</div><div class="load-meta">{{if $v.ClientName}}{{$v.ClientName}}{{else}}Device unknown{{end}}</div></div>
+    <div class="load-actions">
+      <a class="btn-ghost-sm" href="/dashboard/save/versions/download?game_id={{urlquery $.GameID}}&path_key={{urlquery $.PathKey}}&version={{$v.Version}}" aria-label="Copy version {{$v.Version}}">Copy</a>
+      {{if ne $i 0}}<a class="btn-secondary-sm" href="/dashboard/save/versions?game_id={{urlquery $.GameID}}&path_key={{urlquery $.PathKey}}" aria-label="Load version {{$v.Version}}">Load…</a>{{end}}
+    </div>
+  </li>
+  {{end}}
+</ol>
+{{end}}
+<p class="slot-more"><a href="/dashboard/games/{{urlquery .GameID}}">Open {{.Title}} →</a></p>
+{{end}}
+{{end}}

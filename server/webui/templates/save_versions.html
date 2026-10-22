@@ -1,65 +1,80 @@
 {{template "layout" .}}
-{{define "save_versions_title"}}Save versions — {{.GameTitle}} — GSBS{{end}}
+{{define "save_versions_title"}}Load a save — {{.GameTitle}} — GSBS{{end}}
 {{define "save_versions_content"}}
-<h1 class="sr-only">Save Versions</h1>
-<p class="breadcrumb"><a href="/dashboard">Dashboard</a> <span class="crumb-sep" aria-hidden="true">/</span> <span aria-current="page">Save versions</span></p>
-<section class="panel">
-  <div class="panel-header">
-    <h2>Versions: {{.GameTitle}}</h2>
-    <p class="cell-muted"><code class="code-inline">{{.PathKey}}</code></p>
+<p class="breadcrumb">
+  <a href="/dashboard/games">Library</a> <span class="crumb-sep" aria-hidden="true">/</span>
+  <a href="/dashboard/games/{{urlquery .GameID}}">{{.GameTitle}}</a> <span class="crumb-sep" aria-hidden="true">/</span>
+  <span aria-current="page">Load a save</span>
+</p>
+<header class="load-head">
+  <div class="load-head-art" aria-hidden="true">{{gameIconSVG .GameTitle 96}}<img class="cover-img" src="/covers/{{urlquery .GameID}}.jpg" alt="" loading="lazy"></div>
+  <div>
+    <h1 class="page-title">Load a save</h1>
+    <p class="page-sub">{{.GameTitle}} · <code class="code-inline">{{.PathKey}}</code>{{if .Versions}} · {{len .Versions}} version{{if ne (len .Versions) 1}}s{{end}} kept{{end}}</p>
   </div>
+</header>
+<section aria-labelledby="versions-heading">
+  <h2 class="sr-only" id="versions-heading">Versions</h2>
   {{if .Versions}}
-  <div class="table-wrap">
-    <table class="data-table" data-table-id="save-versions">
-      <thead><tr><th scope="col">Version</th><th scope="col">Updated</th><th scope="col">Size</th><th scope="col">Change</th><th scope="col">Device</th><th scope="col" class="th-action">Actions</th></tr></thead>
-      <tbody>
-        {{range .Versions}}
-        <tr{{if eq .Version $.CurrentVersion}} class="current-version"{{end}}>
-          <td class="cell-primary">
-            v{{.Version}}
-            {{if eq .Version $.CurrentVersion}}<span class="badge-success">current</span>{{end}}
-          </td>
-          <td class="cell-muted">{{formatTime .UpdatedAt}}{{with index $.SessionNotes .Version}}<span class="session-note">{{.}}</span>{{end}}</td>
-          <td class="cell-size">{{formatBytes .SizeBytes}}</td>
-          <td class="cell-size {{if gt .ChangeBytes 0}}change-up{{else if lt .ChangeBytes 0}}change-down{{end}}">{{signedBytes .ChangeBytes}}</td>
-          <td class="cell-muted">{{if .ClientName}}{{.ClientName}}{{else}}—{{end}}</td>
-          <td class="cell-action">
-            <div class="actions-stack">
-              <a href="/dashboard/save/versions/download?game_id={{urlquery $.GameID}}&path_key={{urlquery $.PathKey}}&version={{.Version}}" class="btn-ghost-sm">Download</a>
-              {{if ne .Version $.CurrentVersion}}
-              <button type="button" class="btn-primary-sm"
-                      data-open-dialog="restore-dialog-{{.Version}}">Restore</button>
-              <dialog id="restore-dialog-{{.Version}}">
-                <div class="dialog-body">
-                  <h3 class="u-mt0">Restore version {{.Version}}?</h3>
-                  <p class="cell-muted">The server rolls back to this version; your devices pull it on their next sync (or “Sync now”).</p>
-                  <ul class="restore-review-list">
-                    <li><span>Saved</span><strong>{{formatTime .UpdatedAt}}</strong></li>
-                    <li><span>Size</span><strong>{{formatBytes .SizeBytes}}</strong></li>
-                    <li><span>Written by</span><strong>{{if .ClientName}}{{.ClientName}}{{else}}unknown device{{end}}</strong></li>
-                  </ul>
-                </div>
-                <div class="dialog-actions">
-                  <button type="button" class="btn-ghost-sm" data-close-dialog>Cancel</button>
-                  <form method="post" action="/dashboard/save/versions/restore" class="inline-form">
-                    <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-                    <input type="hidden" name="game_id" value="{{$.GameID}}">
-                    <input type="hidden" name="path_key" value="{{$.PathKey}}">
-                    <input type="hidden" name="version" value="{{.Version}}">
-                    <button type="submit" class="btn-primary-sm">Restore</button>
-                  </form>
-                </div>
-              </dialog>
-              {{end}}
+  {{/* Every kept version as a save slot, newest first. Loading never
+       overwrites history: the chosen contents become a NEW latest version,
+       so the current one stays loadable (RestoreSaveVersion). */}}
+  <ol class="load-list">
+    {{range .Versions}}
+    {{$isCurrent := eq .Version $.CurrentVersion}}
+    <li class="load-slot{{if $isCurrent}} is-current{{end}}">
+      <span class="load-num">v{{.Version}}</span>
+      <div>
+        <div class="load-when"><time datetime="{{.UpdatedAt}}" title="{{.UpdatedAt}}">{{formatTime .UpdatedAt}}</time></div>
+        <div class="load-meta">
+          <span>{{if .ClientName}}Saved on {{.ClientName}}{{else}}Device unknown{{end}}</span>
+          {{with index $.SessionNotes .Version}}<span class="session-note">{{.}}</span>{{end}}
+        </div>
+      </div>
+      <div class="load-size">{{formatBytes .SizeBytes}}<span class="load-delta {{if gt .ChangeBytes 0}}change-up{{else if lt .ChangeBytes 0}}change-down{{end}}" title="Change from the previous version">{{signedBytes .ChangeBytes}}</span></div>
+      <div class="load-actions">
+        {{if $isCurrent}}<span class="load-current">{{iconSVG "check" 14}} On your devices</span>{{end}}
+        <a href="/dashboard/save/versions/download?game_id={{urlquery $.GameID}}&path_key={{urlquery $.PathKey}}&version={{.Version}}" class="btn-ghost-sm" aria-label="Copy version {{.Version}} to this computer">{{iconSVG "download" 13}} Copy</a>
+        {{if not $isCurrent}}
+        <button type="button" class="btn-secondary-sm" data-open-dialog="restore-dialog-{{.Version}}">{{iconSVG "restore" 13}} Load</button>
+        <dialog id="restore-dialog-{{.Version}}" class="restore-dialog" aria-labelledby="restore-title-{{.Version}}">
+          <div class="dialog-body">
+            <h3 class="dialog-title" id="restore-title-{{.Version}}">Load v{{.Version}} of {{$.GameTitle}}?</h3>
+            <div class="restore-compare">
+              <div class="restore-side">
+                <span class="restore-side-label">Loading</span>
+                <strong>v{{.Version}}</strong>
+                <span>{{formatTime .UpdatedAt}}</span>
+                <span>{{formatBytes .SizeBytes}} · {{if .ClientName}}{{.ClientName}}{{else}}unknown device{{end}}</span>
+              </div>
+              <span class="restore-arrow" aria-hidden="true">→</span>
+              <div class="restore-side is-new">
+                <span class="restore-side-label">Becomes</span>
+                <strong>v{{add $.CurrentVersion 1}}</strong>
+                <span>the new latest save</span>
+                <span>v{{$.CurrentVersion}} stays in history</span>
+              </div>
             </div>
-          </td>
-        </tr>
+            <p class="restore-note">Nothing is overwritten or deleted. Your devices pull the loaded save on their next sync, or right away with <em>Sync now</em> in the client.</p>
+          </div>
+          <div class="dialog-actions">
+            <button type="button" class="btn-ghost-sm" data-close-dialog>Cancel</button>
+            <form method="post" action="/dashboard/save/versions/restore" class="inline-form">
+              <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+              <input type="hidden" name="game_id" value="{{$.GameID}}">
+              <input type="hidden" name="path_key" value="{{$.PathKey}}">
+              <input type="hidden" name="version" value="{{.Version}}">
+              <button type="submit" class="btn-primary-sm">Load v{{.Version}}</button>
+            </form>
+          </div>
+        </dialog>
         {{end}}
-      </tbody>
-    </table>
-  </div>
+      </div>
+    </li>
+    {{end}}
+  </ol>
   {{else}}
-  <div class="panel-empty"><p>No versions found for this save.</p></div>
+  {{template "partials/empty-state.html" (dict "Icon" "save" "Title" "No versions yet" "Sub" "Versions appear here each time a device uploads a changed save.")}}
   {{end}}
 </section>
 {{end}}

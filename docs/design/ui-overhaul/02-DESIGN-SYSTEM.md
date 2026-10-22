@@ -185,6 +185,14 @@ Rule of thumb: hue is stable across themes; only luminance ramps flip. Both them
 - **Client local WebUI**: no mapping needed — it consumes the same compiled `app.css`.
 - **OS notifications, menus**: native-rendered; no theming possible or attempted.
 
+### 1.9 v6.1 premium layer
+
+Derived tokens (`--surface-raised`, `--scrim`, `--art-edge`, `--shadow-float`/`--shadow-lift`,
+`--focus-ring`, `--ease-out`, `--dur-press`, per-design `--heading-font`/`--title-weight`/
+`--title-tracking`, and the `--state-*` sync vocabulary) are specified in
+`09-PREMIUM-LAYER.md` §4. They are computed from the tokens above, so a new design only
+needs to set the base palette; it may optionally set its heading voice and scrim tint.
+
 ## 2. Component library inventory
 
 Existing classes keep their names; states listed are the acceptance surface for B1. New

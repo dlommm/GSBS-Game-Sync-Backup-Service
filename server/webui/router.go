@@ -192,6 +192,8 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveDashboardClientsPartial(w, r)
 	case path == "/dashboard/partial/saves" && r.Method == http.MethodGet:
 		h.serveDashboardSavesPartial(w, r)
+	case path == "/dashboard/partial/game-panel" && r.Method == http.MethodGet:
+		h.serveGamePanelPartial(w, r)
 	case path == "/dashboard/partial/activity" && r.Method == http.MethodGet:
 		h.serveDashboardActivityPartial(w, r)
 	case path == "/dashboard/games" && r.Method == http.MethodGet:
@@ -278,8 +280,6 @@ func (h *WebHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleAdminBackupRun(w, r)
 	case path == "/admin/notify/test" && r.Method == http.MethodPost:
 		h.handleAdminNotifyTest(w, r)
-	case path == "/dashboard/widgets/save" && r.Method == http.MethodPost:
-		h.handleWidgetsSave(w, r)
 	case path == "/dashboard/settings/appearance" && r.Method == http.MethodPost:
 		h.handleAppearanceSave(w, r)
 	case path == "/dashboard/settings/notifications" && r.Method == http.MethodPost:

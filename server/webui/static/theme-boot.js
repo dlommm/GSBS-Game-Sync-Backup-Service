@@ -49,6 +49,6 @@
     applyAxis('data-design', 'design', 'gsbs.design', 'gsbs-design',
       ['default', 'hud', 'crt', 'hearth', 'synth', 'slate'], 'default');
     applyAxis('data-layout', 'layout', 'gsbs.layout', 'gsbs-layout',
-      ['sidebar', 'topnav', 'dense', 'library', 'widgets'], 'sidebar');
+      ['sidebar', 'dense'], 'sidebar'); // v7: Standard + Compact
   } catch (e) { /* keep default look */ }
 })();
