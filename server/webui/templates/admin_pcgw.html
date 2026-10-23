@@ -1,16 +1,11 @@
 {{template "layout" .}}
 {{define "admin_pcgw_title"}}PCGW Sync — GSBS Admin{{end}}
 {{define "admin_pcgw_content"}}
-<h1 class="sr-only">PCGW Sync</h1>
-<nav class="breadcrumb" aria-label="Breadcrumb">
-  <a href="/admin">Admin</a> / PCGW Sync
-</nav>
-
-<div class="panel">
-  <div class="panel-header">
-    <h2>PCGW Sync</h2>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">PCGamingWiki</h1>
+    <p class="page-sub">The game catalog behind every save location: what's been fetched, what parsed, and the jobs that keep it current.</p>
   </div>
-  <p class="panel-subtitle">Manage PCGamingWiki game data synchronization. Browse the games catalog, trigger sync jobs, and manage the save location manifest served to GSBS clients.</p>
 </div>
 
 <section class="panel pcgw-hero pcgw-hero-{{.Recommend.Tone}}" aria-labelledby="pcgw-recommend-heading">
@@ -31,29 +26,21 @@
   {{end}}
 </section>
 
-<section class="stats-row stats-row-6" aria-label="PCGW statistics">
-  <div class="stat-card"><div class="stat-value">{{.Stats.TotalGames}}</div><div class="stat-label">Total games</div></div>
-  <div class="stat-card"><div class="stat-value">{{.Stats.OK}}</div><div class="stat-label">Parse OK</div></div>
-  <div class="stat-card"><div class="stat-value">{{.Stats.Partial}}</div><div class="stat-label">Partial</div></div>
-  <div class="stat-card"><div class="stat-value">{{.Stats.Failed}}</div><div class="stat-label">Failed</div></div>
-  <div class="stat-card">
-    <div class="stat-value stat-value-sm">{{if .LatestSyncRun}}{{formatTime .LatestSyncRun.StartedAt}}{{else}}—{{end}}</div>
-    <div class="stat-label">Last sync</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-value stat-value-sm">{{if .JobRunning}}Running{{else if .LatestSyncRun}}Idle{{else}}Never{{end}}</div>
-    <div class="stat-label">Status</div>
-  </div>
-</section>
+<dl class="figs figs-lg admin-figs" aria-label="Catalog totals">
+  <div><dt>Games</dt><dd>{{.Stats.TotalGames}}</dd></div>
+  <div><dt>Parsed</dt><dd>{{.Stats.OK}}</dd></div>
+  <div><dt>Partly parsed</dt><dd>{{.Stats.Partial}}</dd></div>
+  <div><dt>Failed</dt><dd{{if gt .Stats.Failed 0}} class="is-warn"{{end}}>{{.Stats.Failed}}</dd></div>
+  <div><dt>Last sync</dt><dd class="figs-word">{{if .LatestSyncRun}}{{formatTime .LatestSyncRun.StartedAt}}{{else}}Never{{end}}</dd></div>
+  <div><dt>Job</dt><dd class="figs-word">{{if .JobRunning}}Running{{else}}Idle{{end}}</dd></div>
+</dl>
 
 <div id="job-status" role="status" aria-live="polite" aria-label="PCGW sync job status">
   {{template "partials/admin_pcgw_job_status.html" .}}
 </div>
 
-<section class="panel">
-  <div class="panel-header-actions">
-    <h2>Games</h2>
-  </div>
+<div class="sec-head"><h2 class="sec-title">Games</h2></div>
+<section class="panel" aria-label="Games">
 
   <form id="pcgw-filters" method="get" action="/admin/pcgw" class="filter-toolbar">
     <input type="search" class="search-input filter-search" name="q" value="{{.Query}}" placeholder="Search title…"
@@ -62,7 +49,7 @@
            hx-target="#pcgw-table"
            hx-include="#pcgw-filters"
            hx-indicator="#pcgw-table-skeleton">
-    <select name="status" class="filter-select"
+    <select name="status" class="filter-select" aria-label="Parse status"
             hx-get="/admin/partial/pcgw"
             hx-trigger="change"
             hx-target="#pcgw-table"
@@ -74,7 +61,7 @@
       <option value="failed" {{if eq .FilterStatus "failed"}}selected{{end}}>failed</option>
       <option value="pending" {{if eq .FilterStatus "pending"}}selected{{end}}>pending</option>
     </select>
-    <select name="platform" class="filter-select"
+    <select name="platform" class="filter-select" aria-label="Platform"
             hx-get="/admin/partial/pcgw"
             hx-trigger="change"
             hx-target="#pcgw-table"

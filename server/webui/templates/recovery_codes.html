@@ -1,25 +1,23 @@
 {{template "layout" .}}
 {{define "recovery_codes_title"}}Recovery codes — GSBS{{end}}
 {{define "recovery_codes_content"}}
-<h1 class="sr-only">Recovery Codes</h1>
-<section class="panel recovery-panel">
-  <div class="panel-header"><h2>Your two-factor recovery codes</h2></div>
-  <div class="panel-body">
-    <p class="alert alert-warn">
-      <strong>Save these codes now — they are shown only once.</strong>
-      Each code signs you in exactly one time if you lose access to your authenticator app.
-      Store them somewhere safe (a password manager is ideal).
-    </p>
-    <ul class="recovery-code-grid" id="recovery-codes">
-      {{range .Codes}}<li><code>{{.}}</code></li>{{end}}
-    </ul>
-    <div class="recovery-actions">
-      <button type="button" class="btn-secondary" data-copy="{{.CodesJoined}}">{{iconSVG "copy" 14}} Copy all</button>
-      <a class="btn-secondary" href="{{.DownloadData}}" download="gsbs-recovery-codes.txt">{{iconSVG "download" 14}} Download .txt</a>
-      <a class="btn-primary" href="/dashboard/settings">I saved them — done</a>
-    </div>
-    <p class="form-hint">Regenerating codes from Settings invalidates this entire set.</p>
+<p class="breadcrumb"><a href="/dashboard/settings#two-factor">Settings</a> <span class="crumb-sep" aria-hidden="true">/</span> <span aria-current="page">Recovery codes</span></p>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Recovery codes</h1>
+    <p class="page-sub">Shown this once. Each code signs you in one time if you lose your authenticator; a password manager is a good home for them.</p>
   </div>
+</div>
+<section class="recovery" aria-label="Your recovery codes">
+  <ul class="recovery-code-grid" id="recovery-codes">
+    {{range .Codes}}<li><code>{{.}}</code></li>{{end}}
+  </ul>
+  <div class="recovery-actions">
+    <button type="button" class="btn-ghost-sm" data-copy="{{.CodesJoined}}">{{iconSVG "copy" 14}} Copy all</button>
+    <a class="btn-ghost-sm" href="{{.DownloadData}}" download="gsbs-recovery-codes.txt">{{iconSVG "download" 14}} Download .txt</a>
+    <a class="btn-primary-sm" href="/dashboard/settings">I've saved them</a>
+  </div>
+  <p class="form-hint">Making new codes in Settings cancels this whole set.</p>
 </section>
 {{end}}
 {{define "recovery_codes_scripts"}}{{end}}

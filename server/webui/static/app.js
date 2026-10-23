@@ -520,7 +520,45 @@
     initBulkForm();
     initOnboardingTour();
     initSetupWizard();
+    initLookPicker();
   });
+
+  /* ---- Settings › Appearance: try a design or spacing on this page ----
+     Picking an option applies it to <html> at once (the same attributes the
+     server renders), so the whole page is the preview. Saving makes it the
+     account's; leaving without saving drops it on the next page load. */
+
+  function initLookPicker() {
+    var form = document.querySelector('[data-look-form]');
+    if (!form) return;
+    var root = document.documentElement;
+    var status = form.querySelector('[data-look-status]');
+    var saved = {
+      design: root.getAttribute('data-design') || 'default',
+      layout: root.getAttribute('data-layout') || 'sidebar'
+    };
+    function apply(attr, value, defaultValue) {
+      if (value === defaultValue) root.removeAttribute(attr);
+      else root.setAttribute(attr, value);
+    }
+    form.addEventListener('change', function (e) {
+      var t = e.target;
+      if (t.name === 'design') {
+        apply('data-design', t.value, 'default');
+        form.querySelectorAll('[data-look-follow]').forEach(function (el) {
+          el.setAttribute('data-preview', t.value);
+        });
+      } else if (t.name === 'layout') {
+        apply('data-layout', t.value, 'sidebar');
+      } else {
+        return;
+      }
+      var design = form.querySelector('input[name="design"]:checked');
+      var layout = form.querySelector('input[name="layout"]:checked');
+      var changed = (design && design.value !== saved.design) || (layout && layout.value !== saved.layout);
+      if (status) status.textContent = changed ? 'Trying it on this page. Save to keep it.' : '';
+    });
+  }
 
   /* ---- Live Sync Pulse (v5.1): dashboard rail stream + per-device flash ---- */
 

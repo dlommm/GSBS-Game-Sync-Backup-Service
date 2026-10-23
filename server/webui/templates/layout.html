@@ -14,21 +14,16 @@
   {{if designDefault}}<meta name="gsbs-design" content="{{designDefault}}">{{end}}
   <script src="/static/theme-boot.js"></script>
 </head>
-<body class="{{if .BodyClass}}{{.BodyClass}}{{else if .AdminNav}}admin-shell{{else}}app-shell{{end}}"
-      data-page="{{.PageName}}"{{if not .AdminNav}} data-sse="/dashboard/events"{{end}}>
+<body class="{{if .BodyClass}}{{.BodyClass}}{{else}}app-shell{{end}}"
+      data-page="{{.PageName}}" data-sse="/dashboard/events">
   <a href="#main-content" class="skip-link">Skip to main content</a>
-  {{if .AdminNav}}
-  <div class="shell">
-    {{template "partials/admin_shell.html" .}}
-  </div>
-  {{else}}
   {{template "partials/topbar.html" .}}
   <main id="main-content" class="page-content page-{{.PageName}}" role="main">
+    {{if .AdminNav}}{{template "partials/admin_shell.html" .}}{{end}}
     {{template "partials/alerts.html" .}}
     {{renderPageBlock .PageName "content" .}}
   </main>
   {{template "partials/tabbar.html" .}}
-  {{end}}
   <dialog id="cmdk-dialog" class="cmdk-dialog" aria-label="Search and navigate">
     <div class="cmdk-box">
       <input id="cmdk-input" class="cmdk-input" type="search" name="q"
@@ -44,6 +39,7 @@
   <script src="/static/toast.js"></script>
   <script src="/static/cmdk.js"></script>
   <script src="/static/app.js" defer></script>
+  {{if .AdminNav}}<script src="/static/admin.js" defer></script>{{end}}
   {{renderPageBlock .PageName "scripts" .}}
   <div id="toast-container"></div>
 </body>

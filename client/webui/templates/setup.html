@@ -15,8 +15,19 @@
 </head>
 <body class="auth-page">
   <a href="#main-content" class="skip-link">Skip to main content</a>
+  <aside class="auth-hero" aria-label="GSBS">
+    <span class="auth-mark"><img src="/static/favicon.png" alt="" width="34" height="34"><span>GSBS</span></span>
+    <div class="auth-slots" aria-hidden="true">
+      <span class="auth-slot"><span class="auth-slot-art">HA</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">ER</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">SV</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+    </div>
+    <div>
+      <p class="auth-display">Every save.<br>Every machine.</p>
+      <p class="auth-hero-sub">Connect this PC once. From then on its game saves back up as they change and follow you to your other machines.</p>
+    </div>
+  </aside>
   <main id="main-content" class="auth-card setup-card" role="main">
-    <img src="/client-logo" alt="GSBS" class="auth-logo">
     <h1>Connect this PC</h1>
     <p class="subtitle">Log in to your GSBS server and this PC starts syncing automatically.</p>
 
@@ -56,11 +67,9 @@
       <input id="client_name" name="client_name" type="text" required value="{{.SetupClientName}}" autocomplete="off">
       <label for="totp_code">Two-factor code <span class="label-optional">(only if 2FA is enabled)</span></label>
       <input id="totp_code" name="totp_code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456">
-      <button type="submit">Log in &amp; start syncing</button>
+      <button type="submit">Connect and start syncing</button>
     </form>
-    <section class="auth-help">
-      <p class="cell-muted">No server yet? Deploy one in minutes — see the <a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Installation" target="_blank" rel="noopener">installation guide ↗</a>.</p>
-    </section>
+    <p class="auth-footer">No server yet? The <a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki/Installation" target="_blank" rel="noopener">installation guide ↗</a> sets one up in minutes.</p>
     {{end}}
   </main>
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>

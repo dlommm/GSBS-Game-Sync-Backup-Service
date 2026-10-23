@@ -932,6 +932,28 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 	if len(titles) == 0 {
 		titles = append(titles, cache.MatchedGameIDs...)
 	}
+	// Games added by hand ("Add a game") live in config.WatchPaths, not in the
+	// discovery cache: list each once, after the discovered games, so Status
+	// shows every game this PC syncs.
+	matched := len(cache.MatchedGameIDs)
+	seen := make(map[string]bool, matched)
+	for _, id := range cache.MatchedGameIDs {
+		seen[id] = true
+	}
+	if cfg != nil {
+		for _, wp := range cfg.WatchPaths {
+			if wp.GameID == "" || seen[wp.GameID] {
+				continue
+			}
+			seen[wp.GameID] = true
+			name := gameTitleFor(wp.GameID)
+			if name == "" {
+				name = wp.GameID
+			}
+			titles = append(titles, name)
+			matched++
+		}
+	}
 
 	snap := GetTraySnapshot()
 	syncAt, syncErr := getLastSync()
@@ -941,7 +963,7 @@ func handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 		LoggedIn:       loggedIn,
 		AuthFailed:     snap.AuthFailed,
 		LastScanAt:     cache.LastScanAt,
-		MatchedGames:   len(cache.MatchedGameIDs),
+		MatchedGames:   matched,
 		GameTitles:     titles,
 		WatcherHealthy: WatcherHealthy.Load(),
 		PendingUploads: snap.PendingUploads,

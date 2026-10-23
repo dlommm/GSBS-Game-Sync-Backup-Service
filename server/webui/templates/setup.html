@@ -15,8 +15,19 @@
 </head>
 <body class="auth-page">
   <a href="#main-content" class="skip-link">Skip to main content</a>
+    <aside class="auth-hero" aria-label="GSBS">
+    <span class="auth-mark"><img src="/static/favicon.png" alt="" width="34" height="34"><span>GSBS</span></span>
+    <div class="auth-slots" aria-hidden="true">
+      <span class="auth-slot"><span class="auth-slot-art">HA</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">ER</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">SV</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+    </div>
+    <div>
+      <p class="auth-display">Every save.<br>Every machine.</p>
+      <p class="auth-hero-sub">Game Sync &amp; Backup keeps your saves backed up and in step across your PCs and handhelds, with every version kept.</p>
+    </div>
+  </aside>
   <main id="main-content" class="auth-card setup-card" role="main">
-    <img src="/static/logo.png" alt="GSBS" class="auth-logo">
     <h1>Welcome to GSBS</h1>
     <p class="subtitle">Let's create your admin account and finish setup. No configuration files needed.</p>
     {{if .Error}}<p class="alert alert-error" role="alert">{{.Error}}</p>{{end}}
@@ -51,10 +62,7 @@
 
       <fieldset class="setup-fieldset setup-step" data-step="2">
         <legend>Registration</legend>
-        <label class="settings-toggle">
-          <input type="checkbox" name="allow_register" value="1">
-          Allow anyone to register new accounts
-        </label>
+        <label class="switch-row"><span><strong>Allow anyone to register new accounts</strong></span><input type="checkbox" class="switch" name="allow_register" value="1"></label>
         <p class="form-hint">Leave off for a private server (recommended). You create additional users from the admin panel.</p>
       </fieldset>
 
@@ -67,10 +75,7 @@
 
       <fieldset class="setup-fieldset setup-step" data-step="4">
         <legend>Backups &amp; alerts</legend>
-        <label class="settings-toggle">
-          <input type="checkbox" name="enable_backups" value="1">
-          Enable nightly backups
-        </label>
+        <label class="switch-row"><span><strong>Enable nightly backups</strong></span><input type="checkbox" class="switch" name="enable_backups" value="1"></label>
         <p class="form-hint">Snapshots the database, keys, and saves to <code>backups/</code> beside the database. Configure S3 and schedule later in Settings.</p>
         <label for="notify_webhook_url">Notification webhook URL</label>
         <input id="notify_webhook_url" name="notify_webhook_url" type="url" placeholder="https://example.com/hook (optional)">

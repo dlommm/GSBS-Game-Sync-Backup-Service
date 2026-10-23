@@ -76,13 +76,13 @@ func TestAdminPCGWActionLabelsClarifyPhases(t *testing.T) {
 	}
 	html := buf.String()
 	want := []string{
-		"Incremental Sync",
-		"Refresh New Games",
-		"Auto Catch-Up",
-		"Parse Missing Only",
-		"Retry Failed Pages",
-		"Refresh Catalog Only",
-		"Full Reparse",
+		"Incremental sync",
+		"Refresh new games",
+		"Auto catch-up",
+		"Parse missing only",
+		"Retry failed pages",
+		"Refresh catalog only",
+		"Full reparse",
 	}
 	for _, needle := range want {
 		if !strings.Contains(html, needle) {

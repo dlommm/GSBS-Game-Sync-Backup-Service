@@ -2,8 +2,8 @@
 {{define "insights_content"}}
 <div class="page-head">
   <div>
-    <h1 class="page-title">Sync insights</h1>
-    <p class="page-sub">What this PC has been syncing — history survives restarts.</p>
+    <h1 class="page-title">Insights</h1>
+    <p class="page-sub">What this PC has synced, what is waiting, and anything that needs a decision.</p>
   </div>
 </div>
 
@@ -28,8 +28,9 @@
 </div>
 
 <div class="analytics-cols">
-  <section class="panel">
-    <div class="panel-header"><h2>Sync cycles — last 7 days</h2></div>
+  <section class="c-sec">
+  <div class="sec-head"><h2 class="sec-title">This week</h2><span class="cell-muted">sync cycles per day</span></div>
+  <div class="panel">
     {{if .DayBars}}
     <div class="topgames-list">
       {{range .DayBars}}
@@ -45,13 +46,12 @@
     {{else}}
     <div class="panel-empty"><p>No sync cycles recorded yet — history starts collecting now.</p></div>
     {{end}}
-  </section>
-
-  <section class="panel">
-    <div class="panel-header-actions">
-      <h2>Pending uploads</h2>
-      <span class="cell-muted">{{len .Outbox}} queued</span>
     </div>
+</section>
+
+  <section class="c-sec">
+  <div class="sec-head"><h2 class="sec-title">Pending uploads</h2><span class="cell-muted">{{len .Outbox}} queued</span></div>
+  <div class="panel">
     {{if .Outbox}}
     <div class="table-wrap">
       <table class="data-table">
@@ -73,14 +73,13 @@
     {{else}}
     <div class="panel-empty"><p>Nothing queued — every save is on the server. ✓</p></div>
     {{end}}
-  </section>
+    </div>
+</section>
 </div>
 
-<section class="panel">
-  <div class="panel-header-actions">
-    <h2>Conflicts</h2>
-    <span class="cell-muted">{{len .Conflicts}} recorded</span>
-  </div>
+<section class="c-sec">
+  <div class="sec-head"><h2 class="sec-title">Conflicts</h2><span class="cell-muted">{{len .Conflicts}} recorded</span></div>
+  <div class="panel">
   {{if .Resolving}}<div class="alert alert-info">Resolving in the background — this row disappears once the sync completes (refresh in a moment).</div>{{end}}
   {{if .Conflicts}}
   <div class="table-wrap">
@@ -112,11 +111,13 @@
   {{else}}
   <div class="panel-empty"><p>No conflicts recorded. Your devices are taking turns nicely.</p></div>
   {{end}}
+  </div>
 </section>
 
 <div class="analytics-cols">
-  <section class="panel">
-    <div class="panel-header"><h2>Recent activity — this PC</h2></div>
+  <section class="c-sec">
+  <div class="sec-head"><h2 class="sec-title">Recent activity</h2></div>
+  <div class="panel">
     {{if .Activity}}
     <div class="table-wrap">
       <table class="data-table">
@@ -141,10 +142,12 @@
     {{else}}
     <div class="panel-empty"><p>No activity recorded yet — entries appear as saves sync.</p></div>
     {{end}}
-  </section>
+    </div>
+</section>
 
-  <section class="panel">
-    <div class="panel-header"><h2>Server storage</h2></div>
+  <section class="c-sec">
+  <div class="sec-head"><h2 class="sec-title">Server storage</h2></div>
+  <div class="panel">
     {{if .StorageKnown}}
     {{if .QuotaBytes}}
     <p class="panel-subtitle">{{formatBytes .UsageBytes}} of {{formatBytes .QuotaBytes}} used ({{.UsagePct}}%). Quota counts saves plus version history.</p>
@@ -168,14 +171,13 @@
     {{else}}
     <div class="panel-empty"><p>Storage details unavailable — the server may be offline or older than 5.4.</p></div>
     {{end}}
-  </section>
+    </div>
+</section>
 </div>
 
-<section class="panel">
-  <div class="panel-header-actions">
-    <h2>Per-game state</h2>
-    <a class="btn-ghost-sm" href="/games">Add a game</a>
-  </div>
+<section class="c-sec">
+  <div class="sec-head"><h2 class="sec-title">Sync by game</h2><a class="btn-ghost-sm" href="/games">Add a game</a></div>
+  <div class="panel">
   {{if .Games}}
   <div class="table-wrap">
     <table class="data-table">
@@ -207,7 +209,8 @@
     </table>
   </div>
   {{else}}
-  <div class="panel-empty"><p>No games tracked yet on this PC. <a href="/games">Add one</a> or let discovery find them after login.</p></div>
+  <div class="panel-empty"><p>No game has synced yet. A game shows up here after its first upload or download; your watched games are listed on <a href="/dashboard">Status</a>.</p></div>
   {{end}}
+  </div>
 </section>
 {{end}}

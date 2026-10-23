@@ -15,8 +15,10 @@ These point at the real `example-*` captures below:
 
 > Captured from the v7 "Continue" redesign (2026-10-22) with synthetic data:
 > invented games and devices, public-domain paintings (AIC / The Met, CC0) as
-> stand-in key art. `example-client-open-log-page.png` still shows the pre-v7
-> design: a fresh capture would include the capturing machine's log path.
+> stand-in key art. Admin, settings, sign-in and client pages were recaptured
+> after the v7 look reached every page. Still older on purpose:
+> `example-client-open-log-page.png` and `example-webui-admin-settings.png`
+> (a fresh capture would show the capturing machine's log or cache path).
 
 ## v7 gallery (README)
 

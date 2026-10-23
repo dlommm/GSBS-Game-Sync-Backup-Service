@@ -1,16 +1,20 @@
 {{template "layout" .}}
 {{define "admin_users_title"}}Admin Users — GSBS{{end}}
 {{define "admin_users_content"}}
-<h1 class="sr-only">Users & Clients</h1>
-<section class="panel panel-users">
-  <div class="panel-header-actions">
-    <h2>Users</h2>
-    <button type="button" class="btn-primary-sm" data-open-dialog="create-user-dialog">Create user</button>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Users</h1>
+    <p class="page-sub">{{len .Users}} account{{if ne (len .Users) 1}}s{{end}} on this server, with {{len .Clients}} device{{if ne (len .Clients) 1}}s{{end}} signed in between them.</p>
   </div>
+  <button type="button" class="btn-primary-sm" data-open-dialog="create-user-dialog">Create user</button>
+</div>
+
+<div class="sec-head"><h2 class="sec-title">Accounts</h2></div>
+<section class="panel panel-users" aria-label="Accounts">
   {{if .Users}}
   <div class="table-wrap users-table-wrap">
     <table class="data-table users-table" data-table-id="admin-users">
-      <thead><tr><th scope="col">Username</th><th scope="col">Status</th><th scope="col">Quota</th><th scope="col" class="col-clients">Clients</th><th scope="col" class="col-saves">Saves</th><th scope="col" class="col-storage">Storage</th><th scope="col" class="th-action">Actions</th></tr></thead>
+      <thead><tr><th scope="col">Username</th><th scope="col">Status</th><th scope="col">Quota</th><th scope="col" class="col-clients">Clients</th><th scope="col" class="col-saves num">Saves</th><th scope="col" class="col-storage num">Storage</th><th scope="col" class="th-action">Actions</th></tr></thead>
       <tbody>
         {{range .Users}}
         <tr>
@@ -36,8 +40,8 @@
               <div class="client-bar-track"><div data-width-pct="{{clientBarWidth .ClientCount $.MaxClientCount}}" class="client-bar-fill has-bar-width"></div></div>
             </div>
           </td>
-          <td class="col-saves">{{.SaveCount}}</td>
-          <td class="col-storage cell-size">{{formatBytes .StorageBytes}}</td>
+          <td class="col-saves num">{{.SaveCount}}</td>
+          <td class="col-storage cell-size num">{{formatBytes .StorageBytes}}</td>
           <td class="cell-action">
             <details class="action-menu">
               <summary class="btn-ghost-sm">Actions</summary>
@@ -63,8 +67,8 @@
   {{else}}{{template "partials/empty-state.html" (dict "Icon" "user" "Title" "No users yet" "Sub" "Use the button above to create the first account.")}}{{end}}
 </section>
 
-<section class="panel">
-  <div class="panel-header"><h2>All Clients</h2></div>
+<div class="sec-head"><h2 class="sec-title">Devices</h2><span class="cell-muted">Revoking a device signs it out; it must sign in again to sync</span></div>
+<section class="panel" aria-label="Devices">
   {{if .Clients}}
   <div class="table-wrap">
     <table class="data-table" data-table-id="admin-clients">

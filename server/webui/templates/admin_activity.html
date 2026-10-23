@@ -1,7 +1,12 @@
 {{template "layout" .}}
 {{define "admin_activity_title"}}Admin Activity — GSBS{{end}}
 {{define "admin_activity_content"}}
-<h1 class="sr-only">Activity & Jobs</h1>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Activity</h1>
+    <p class="page-sub">Catalog jobs, manifest fetches from clients, and every admin and account action, newest first.</p>
+  </div>
+</div>
 <section class="panel" id="admin-jobs-panel"
          hx-get="/admin/partial/jobs?context=activity"
          hx-trigger="load, job-finished from:body, job-progress from:body"
@@ -12,7 +17,7 @@
 
 <section class="panel">
   <div class="panel-header-actions">
-    <h2>Recent Manifest Fetches{{if .FetchesTable.Pager.Total}} <span class="count-badge">{{.FetchesTable.Pager.Total}}</span>{{end}}</h2>
+    <h2>Manifest fetches{{if .FetchesTable.Pager.Total}} <span class="count-badge">{{.FetchesTable.Pager.Total}}</span>{{end}}</h2>
   </div>
   <div id="fetches-table-region">
     {{template "partials/admin_fetches_table.html" .FetchesTable}}

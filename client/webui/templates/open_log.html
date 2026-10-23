@@ -1,17 +1,17 @@
 {{define "open_log"}}{{template "layout" .}}{{end}}
 {{define "open_log_content"}}
-<section class="panel">
-  <div class="panel-header"><h2>Log file opened</h2></div>
-  <div class="panel-body">
-    <p class="cell-muted">The client log should now be open in your default text editor. If nothing happened, open it manually:</p>
-    <div class="twofa-secret-row">
-      <code class="code-inline" id="log-path">{{.LogPath}}</code>
-      <button type="button" class="btn-ghost-sm" data-copy-target="#log-path" aria-label="Copy log path"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 3.5v-1h-8v8h1"/></svg> Copy path</button>
-    </div>
-    <div class="form-actions-row">
-      <a href="/logs" class="btn-primary">View logs in browser instead</a>
-      <a href="/dashboard" class="btn-ghost">Back to status</a>
-    </div>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Log opened</h1>
+    <p class="page-sub">The client log should now be open in your default text editor. If nothing opened, here is where it lives.</p>
   </div>
-</section>
+</div>
+<div class="twofa-secret-row">
+  <code class="code-inline" id="log-path">{{.LogPath}}</code>
+  <button type="button" class="btn-ghost-sm" data-copy-target="#log-path" aria-label="Copy log path"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 3.5v-1h-8v8h1"/></svg> Copy path</button>
+</div>
+<div class="page-actions u-mt-sm">
+  <a href="/logs" class="btn-primary-sm">Read it here instead</a>
+  <a href="/dashboard" class="btn-ghost-sm">Back to Status</a>
+</div>
 {{end}}

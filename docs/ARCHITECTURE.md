@@ -201,7 +201,7 @@ Both UIs share a single compiled design system. Run `./script/build-webui.sh` (r
 `client/webui/`: Embedded Go templates + the same compiled `app.css` (synced from server). Served locally on `127.0.0.1:41234–41239`. No CDN dependency — fonts, CSS, and JS are all embedded in the binary.
 
 - **Package**: `github.com/gsbs/gsbs/client/webui` — `embed.go` (embeds templates + static), `render.go` (`PageData`, `ParseTemplates()`, `RenderPage()`).
-- **Pages**: Setup/login (`/`), Dashboard (`/dashboard`), Add game (`/games`), Quick actions (`/quick-actions`), Help (`/help`), About (`/about`), Open log (`/open-log`).
+- **Pages**: Setup/login (`/`), Status (`/dashboard`), Add a game (`/games`), Insights (`/insights`), Actions (`/quick-actions`), Settings (`/settings`), Logs (`/logs`), Help (`/help`), About (`/about`), Open log (`/open-log`).
 - **JSON endpoints** (not pages): `/status`, `/games/search`, `/api/sync-now`.
 - **Navigation**: All 6 pages share the same `.topbar` + `.topbar-nav` structure as the server UI; About is included in the nav (previously orphaned).
 - **Live updates**: Dashboard polls `/status` every 5 seconds; status dots use `var(--success)` / `var(--error)` CSS variables; toast notifications replace `alert()` calls.

@@ -3,13 +3,17 @@
 <div class="page-head">
   <div>
     <h1 class="page-title">Add a game</h1>
-    <p class="page-sub">Search the save-location catalog, or point GSBS at any folder manually.</p>
+    <p class="page-sub">Tell GSBS where a game keeps its saves on this PC, and they start backing up.</p>
   </div>
 </div>
 
-<section class="panel" aria-labelledby="search-heading">
-  <div class="panel-header"><h2 id="search-heading">Search the catalog</h2></div>
-  <div class="panel-body">
+<div class="set-rows">
+<section class="set-row" aria-labelledby="search-heading">
+  <div class="set-label">
+    <h2 id="search-heading" class="sec-title">Find it</h2>
+    <p>Search the save-location catalog. Picking a match fills in the details below.</p>
+  </div>
+  <div class="set-body">
     <div class="form-group">
       <label for="search">Game name</label>
       <input type="search" id="search" class="search-input" placeholder="e.g. Witcher 3" autocomplete="off" aria-controls="results" data-games-search>
@@ -34,9 +38,13 @@
   </div>
 </section>
 
-<section class="panel" aria-labelledby="manual-heading">
-  <div class="panel-header"><h2 id="manual-heading">Save folder details</h2></div>
-  <form method="post" action="/games/add" class="panel-body form-stack">
+<section class="set-row" aria-labelledby="manual-heading">
+  <div class="set-label">
+    <h2 id="manual-heading" class="sec-title">Or add a folder</h2>
+    <p>Point GSBS at any folder on this PC. It watches the subfolders too.</p>
+  </div>
+  <div class="set-body">
+  <form method="post" action="/games/add" class="form-stack">
     <div class="form-group">
       <label for="game_id">Game ID</label>
       <input type="text" name="game_id" id="game_id" class="text-input" required placeholder="manifest game id" autocomplete="off">
@@ -56,8 +64,10 @@
       <input type="text" name="patterns" id="patterns" class="text-input" placeholder="*.sav, *.save  (leave blank to sync all files)" spellcheck="false" autocomplete="off">
     </div>
     <div class="form-actions-row">
-      <button type="submit" class="btn-primary">Add game</button>
+      <button type="submit" class="btn-primary-sm">Add game</button>
     </div>
   </form>
+  </div>
 </section>
+</div>
 {{end}}

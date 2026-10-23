@@ -13,17 +13,13 @@
   {{if designDefault}}<meta name="gsbs-design" content="{{designDefault}}">{{end}}
   <script src="/static/theme-boot.js"></script>
 </head>
-<body class="app-shell">
+<body class="app-shell client-shell" data-page="client-{{.PageName}}">
   <a href="#main-content" class="skip-link">Skip to main content</a>
-  <div class="shell">
-    <div class="app-main">
-      {{template "partials/topbar.html" .}}
-      <main id="main-content" class="page-content" role="main">
-        {{template "partials/alerts.html" .}}
-        {{pageBlock .PageName "content" .}}
-      </main>
-    </div>
-  </div>
+  {{template "partials/topbar.html" .}}
+  <main id="main-content" class="page-content page-client-{{.PageName}}" role="main">
+    {{template "partials/alerts.html" .}}
+    {{pageBlock .PageName "content" .}}
+  </main>
   <div id="toast-container"></div>
   <script src="/static/toast.js"></script>
   <script src="/static/app.js" defer></script>

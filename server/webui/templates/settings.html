@@ -1,138 +1,174 @@
 {{template "layout" .}}
 {{define "settings_title"}}Settings — GSBS{{end}}
 {{define "settings_content"}}
-<h1 class="sr-only">Settings</h1>
-<div class="settings-grid">
-  <section class="panel settings-card" aria-labelledby="appearance-heading">
-    <div class="panel-header"><h2 id="appearance-heading">Appearance</h2></div>
-    <form method="post" action="/dashboard/settings/appearance" class="settings-card-body appearance-form">
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Settings</h1>
+    <p class="page-sub">How GSBS looks for you, how you sign in, and where your alerts go.</p>
+  </div>
+</div>
+
+{{/* Each setting is a row: what it is on the left, the controls on the
+     right. One save per row, at the row's foot. Destructive actions last. */}}
+<div class="set-rows">
+
+  <section class="set-row" id="appearance" aria-labelledby="appearance-heading">
+    <div class="set-label">
+      <h2 id="appearance-heading" class="sec-title">Appearance</h2>
+      <p>Follows your account to every device, including the client's own pages. Pick one to try it on this page; nothing changes elsewhere until you save. Light or dark stays with each browser.</p>
+    </div>
+    <form method="post" action="/dashboard/settings/appearance" class="set-body look-form" data-look-form>
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <fieldset class="appearance-group">
-        <legend>Color scheme</legend>
-        <div class="appearance-options">
-          {{$sel := .AppearanceDesign}}
+      {{$sel := .AppearanceDesign}}
+      <fieldset class="look-group">
+        <legend>Design</legend>
+        <div class="look-grid">
           {{range designChoices}}
-          <label class="appearance-option">
+          <label class="look">
             <input type="radio" name="design" value="{{.Key}}" {{if eq $sel .Key}}checked{{end}}>
-            <img class="appearance-preview" src="/static/previews/design-{{.Key}}.jpg" alt="" loading="lazy">
-            <span class="appearance-option-name">{{.Name}}</span>
+            <span class="look-screen" data-preview="{{.Key}}" aria-hidden="true">
+              <span class="look-bar"><b></b><i></i><i></i><i></i></span>
+              <span class="look-title">{{$.LookTitle}}</span>
+              <span class="look-sub"></span>
+              <span class="look-actions"><span class="look-btn">Load</span><span class="look-ghost"></span></span>
+              <span class="look-slot"><span class="look-art"></span><span class="look-lines"><i></i><i></i></span><span class="look-ok"></span></span>
+            </span>
+            <span class="look-name">{{.Name}}</span>
+            <span class="look-voice">{{.Voice}}</span>
           </label>
           {{end}}
         </div>
       </fieldset>
-      <fieldset class="appearance-group">
-        <legend>Layout</legend>
-        <div class="appearance-options">
+      <fieldset class="look-group">
+        <legend>Spacing</legend>
+        <div class="look-grid look-grid-2">
           {{$lsel := .AppearanceLayout}}
           {{range layoutChoices}}
-          <label class="appearance-option">
+          <label class="look">
             <input type="radio" name="layout" value="{{.Key}}" {{if eq $lsel .Key}}checked{{end}}>
-            <img class="appearance-preview" src="/static/previews/layout-{{.Key}}.jpg" alt="" loading="lazy">
-            <span class="appearance-option-name">{{.Name}}</span>
+            <span class="look-screen look-list{{if eq .Key "dense"}} is-dense{{end}}" data-preview="{{$sel}}" data-look-follow aria-hidden="true">
+              <span class="look-bar"><b></b><i></i><i></i><i></i></span>
+              <span class="look-slot"><span class="look-art"></span><span class="look-lines"><i></i><i></i></span><span class="look-ok"></span></span>
+              <span class="look-slot"><span class="look-art"></span><span class="look-lines"><i></i><i></i></span><span class="look-ok"></span></span>
+              <span class="look-slot"><span class="look-art"></span><span class="look-lines"><i></i><i></i></span><span class="look-ok"></span></span>
+              <span class="look-slot"><span class="look-art"></span><span class="look-lines"><i></i><i></i></span><span class="look-ok"></span></span>
+              <span class="look-slot"><span class="look-art"></span><span class="look-lines"><i></i><i></i></span><span class="look-ok"></span></span>
+            </span>
+            <span class="look-name">{{.Name}}</span>
+            <span class="look-voice">{{if eq .Key "dense"}}Tighter rows, more on screen{{else}}Room to breathe{{end}}</span>
           </label>
           {{end}}
         </div>
       </fieldset>
-      <p class="cell-muted appearance-note">Follows your account onto every device, including the client's local pages. The dark/light toggle stays per-browser. Preview before saving by adding <code class="code-inline">?design=hud</code> or <code class="code-inline">?layout=dense</code> to any page's address.</p>
-      <button type="submit" class="btn-primary-sm">Save appearance</button>
+      <div class="set-foot">
+        <span class="set-status" data-look-status aria-live="polite"></span>
+        <button type="submit" class="btn-primary-sm">Save appearance</button>
+      </div>
     </form>
   </section>
 
-  <section class="panel settings-card">
-    <div class="panel-header"><h2>Change password</h2></div>
-    <form method="post" action="/dashboard/settings" class="auth-form settings-card-body">
+  <section class="set-row" id="password" aria-labelledby="password-heading">
+    <div class="set-label">
+      <h2 id="password-heading" class="sec-title">Password</h2>
+      <p>At least 8 characters. Changing it signs out your devices and every other browser; each device signs in again with the new one.</p>
+    </div>
+    <form method="post" action="/dashboard/settings" class="set-body field-stack">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <label for="current_password">Current password</label>
-      <input id="current_password" name="current_password" type="password" required autocomplete="current-password">
+      <input id="current_password" name="current_password" type="password" class="text-input" required autocomplete="current-password">
       <label for="new_password">New password</label>
       <div class="password-wrap">
-        <input id="new_password" name="new_password" type="password" required autocomplete="new-password">
+        <input id="new_password" name="new_password" type="password" class="text-input" required autocomplete="new-password">
         <button type="button" class="password-toggle-btn" data-password-toggle="new_password" aria-label="Show password" aria-pressed="false"><span class="icon-eye">{{iconSVG "eye" 15}}</span><span class="icon-eye-off">{{iconSVG "eye-off" 15}}</span></button>
       </div>
       <div class="strength-meter" data-strength-for="new_password" data-score="0" aria-hidden="true"><div class="strength-track"><div class="strength-fill"></div></div><span class="strength-label"></span></div>
       <label for="confirm_password">Confirm new password</label>
-      <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password" data-match-of="new_password">
-      <button type="submit">Update password</button>
+      <input id="confirm_password" name="confirm_password" type="password" class="text-input" required autocomplete="new-password" data-match-of="new_password">
+      <div class="set-foot"><button type="submit" class="btn-primary-sm">Update password</button></div>
     </form>
   </section>
 
-  <section class="panel settings-card">
-    <div class="panel-header"><h2>Two-factor authentication</h2></div>
-    <div class="settings-card-body">
+  <section class="set-row" id="two-factor" aria-labelledby="totp-heading">
+    <div class="set-label">
+      <h2 id="totp-heading" class="sec-title">Two-factor</h2>
+      <p>A code from an authenticator app at every sign-in, on top of your password.</p>
+    </div>
+    <div class="set-body">
       {{if .TOTPEnabled}}
-      <p><span class="badge-success">Enabled</span></p>
-      <p class="cell-muted">Your account requires an authenticator code at login.</p>
-      <p class="cell-muted">
-        Recovery codes remaining:
-        {{if le .RecoveryCount 2}}<span class="badge-warn">{{.RecoveryCount}}</span>{{else}}<span class="badge-success">{{.RecoveryCount}}</span>{{end}}
-      </p>
-      <details class="settings-subsection">
-        <summary class="btn-ghost-sm">Regenerate recovery codes</summary>
-        <form method="post" action="/dashboard/settings/2fa/recovery" class="auth-form">
+      <div class="set-state">
+        <span class="state-chip state-healthy">{{iconSVG "check" 13}} On</span>
+        <span>Recovery codes left: <strong class="{{if le .RecoveryCount 2}}u-warn{{end}}">{{.RecoveryCount}}</strong> of 10</span>
+      </div>
+      <details class="set-more">
+        <summary class="btn-ghost-sm">New recovery codes</summary>
+        <form method="post" action="/dashboard/settings/2fa/recovery" class="field-stack">
           <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+          <p class="form-hint">Replaces every existing code with a fresh set of 10.</p>
           <label for="recovery_password">Confirm password</label>
-          <input id="recovery_password" name="password" type="password" required autocomplete="current-password">
-          <button type="submit" class="btn-secondary-sm">Generate new codes</button>
-          <p class="form-hint">Replaces every existing recovery code with a fresh set of 10 codes.</p>
+          <input id="recovery_password" name="password" type="password" class="text-input" required autocomplete="current-password">
+          <div class="set-foot"><button type="submit" class="btn-secondary-sm">Generate new codes</button></div>
         </form>
       </details>
-      <details class="settings-subsection">
-        <summary class="btn-ghost-sm">Disable 2FA</summary>
-        <form method="post" action="/dashboard/settings/2fa/disable" class="auth-form">
+      <details class="set-more">
+        <summary class="btn-ghost-sm">Turn off</summary>
+        <form method="post" action="/dashboard/settings/2fa/disable" class="field-stack">
           <input type="hidden" name="csrf" value="{{.CSRFToken}}">
           <label for="password">Password</label>
-          <input id="password" name="password" type="password" required>
+          <input id="password" name="password" type="password" class="text-input" required>
           <label for="code">Authenticator code</label>
-          <input id="code" name="code" type="text" inputmode="numeric" required>
-          <button type="submit" class="btn-danger-sm">Disable 2FA</button>
+          <input id="code" name="code" type="text" inputmode="numeric" class="text-input" required>
+          <div class="set-foot"><button type="submit" class="btn-danger-sm">Turn off two-factor</button></div>
         </form>
       </details>
       {{else}}
-      <p><span class="badge-warn">Off</span></p>
-      <p class="cell-muted">Add an extra layer of security with an authenticator app.</p>
-      <a href="/dashboard/settings/2fa/enable" class="btn-primary-sm">Enable 2FA</a>
+      <div class="set-state">
+        <span class="state-chip state-stale">Off</span>
+        <span>Anyone with your password can sign in.</span>
+      </div>
+      <div class="set-foot"><a href="/dashboard/settings/2fa/enable" class="btn-primary-sm">Set up two-factor</a></div>
       {{end}}
     </div>
   </section>
 
-  <section class="panel settings-card">
-    <div class="panel-header"><h2>End-to-end encryption</h2></div>
-    <div class="settings-card-body">
-      {{if .EncryptionEnabled}}
-      <p><span class="badge-success">On</span></p>
-      {{else}}
-      <p><span class="badge-warn">Off</span></p>
-      {{end}}
-      <ul class="settings-list cell-muted">
-        <li>Clients encrypt save data on your device before upload.</li>
-        <li>The server stores ciphertext only — it cannot read your saves.</li>
-        <li>Requires a GSBS client that supports encryption.</li>
-      </ul>
-      <form method="post" action="/dashboard/settings/encryption" class="auth-form">
+  <section class="set-row" id="encryption" aria-labelledby="enc-heading">
+    <div class="set-label">
+      <h2 id="enc-heading" class="sec-title">Encryption</h2>
+      <p>Your devices encrypt saves before upload, so the server only ever holds ciphertext it cannot read. Needs a client that supports it.</p>
+    </div>
+    <div class="set-body">
+      <form method="post" action="/dashboard/settings/encryption" class="field-stack">
         <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <label class="settings-toggle">
-          <input type="checkbox" name="encryption_enabled" value="1" {{if .EncryptionEnabled}}checked{{end}}>
-          Enable E2E encryption for my account
+        <label class="switch-row">
+          <span><strong>End-to-end encryption</strong><small>{{if .EncryptionEnabled}}On for your account{{else}}Off — saves are stored as sent{{end}}</small></span>
+          <input type="checkbox" class="switch" name="encryption_enabled" value="1" {{if .EncryptionEnabled}}checked{{end}}>
         </label>
-        <button type="submit">Save encryption setting</button>
+        <div class="set-foot"><button type="submit" class="btn-ghost-sm">Save</button></div>
       </form>
 
-      <h3 class="cell-muted u-title-sm u-mt-sm">Encryption format</h3>
+      {{if gt .TotalSaves 0}}
+      <dl class="figs">
+        <div><dt>Saves encrypted</dt><dd>{{.EncryptedSaves}}<small>/{{.TotalSaves}}</small></dd></div>
+        <div><dt>Coverage</dt><dd>{{.EncryptedPct}}<small>%</small></dd></div>
+        <div><dt>Format</dt><dd class="figs-word">{{if .CryptoV2Ready}}Argon2id{{else}}Legacy{{end}}</dd></div>
+      </dl>
+      {{if and .EncryptionEnabled (lt .EncryptedPct 100)}}<p class="form-hint">Plain saves convert the next time each one changes and syncs.</p>{{end}}
+      {{end}}
+
       {{if .CryptoV2Ready}}
       <p class="crypto-status tone-ok-text"><span class="status-glyph status-glyph-ok">{{iconSVG "check" 13}}</span>
-        <span>Your whole fleet supports modern encryption — new encrypted saves use the Argon2id (gsbs2) format.</span></p>
+        <span>Every device supports the modern format, so new encrypted saves use Argon2id (gsbs2).</span></p>
       {{else if .CryptoBlockers}}
       <p class="crypto-status"><span class="status-glyph status-glyph-warn">{{iconSVG "alert" 13}}</span>
-        <span>Encrypted saves stay on the legacy format until every device is on v4+.
-        Waiting on: <strong>{{range $i, $n := .CryptoBlockers}}{{if $i}}, {{end}}{{$n}}{{end}}</strong> — update those clients and the switch happens automatically.</span></p>
+        <span>Encrypted saves stay on the legacy format until every device runs v4 or later.
+        Waiting on <strong>{{range $i, $n := .CryptoBlockers}}{{if $i}}, {{end}}{{$n}}{{end}}</strong>; the switch happens on its own once they update.</span></p>
       {{else}}
-      <p class="crypto-status cell-muted">Connect a device to determine the fleet's encryption format.</p>
+      <p class="crypto-status cell-muted">Connect a device to see which encryption format your devices can use.</p>
       {{end}}
       {{if .CryptoStaleLegacy}}
       <p class="alert alert-warn"><strong>{{range $i, $n := .CryptoStaleLegacy}}{{if $i}}, {{end}}{{$n}}{{end}}</strong>
         {{if eq (len .CryptoStaleLegacy) 1}}hasn't{{else}}haven't{{end}} synced in 30+ days and only
-        {{if eq (len .CryptoStaleLegacy) 1}}supports{{else}}support{{end}} legacy encryption — that device won't be able to read
-        newly encrypted saves until it's updated. Update it on its next use, or revoke it from the Devices page.</p>
+        {{if eq (len .CryptoStaleLegacy) 1}}supports{{else}}support{{end}} legacy encryption, so it can't read
+        newly encrypted saves until it's updated. Update it on its next use, or revoke it on the Devices page.</p>
       {{end}}
 
       {{if .CryptoDevices}}
@@ -140,118 +176,109 @@
         {{range .CryptoDevices}}
         <li class="crypto-device">
           <span class="client-status {{if .Online}}online{{else}}offline{{end}}" aria-hidden="true"></span>
-          <span>{{.Name}}</span>
+          <span class="crypto-device-name">{{.Name}}</span>
           {{if .Version}}<span class="client-version">v{{.Version}}</span>{{end}}
-          {{if .V2Capable}}<span class="pill-yes">modern crypto</span>{{else}}<span class="pill-no">legacy only</span>{{end}}
-          {{if .Stale}}<span class="badge-warn" title="Unseen for 30+ days — not counted toward fleet readiness">stale</span>{{end}}
+          {{if .V2Capable}}<span class="pill-yes">modern</span>{{else}}<span class="pill-no">legacy only</span>{{end}}
+          {{if .Stale}}<span class="badge-warn" title="Unseen for 30+ days — not counted toward readiness">stale</span>{{end}}
         </li>
         {{end}}
       </ul>
       {{end}}
 
-      {{if gt .TotalSaves 0}}
-      <h3 class="cell-muted u-title-sm u-mt-sm">Coverage</h3>
-      <p class="cell-muted">{{.EncryptedSaves}} of {{.TotalSaves}} saves encrypted ({{.EncryptedPct}}%).
-        {{if and .EncryptionEnabled (lt .EncryptedPct 100)}}Plaintext saves convert automatically the next time each one changes and syncs.{{end}}</p>
-      <div class="table-wrap">
-        <table class="data-table" data-table-id="settings-crypto-coverage">
-          <thead><tr><th scope="col">Game</th><th scope="col">Encrypted</th></tr></thead>
-          <tbody>
-            {{range .CryptoGames}}
-            <tr>
-              <td class="cell-primary"><a class="game-list-name" href="/dashboard/games/{{urlquery .GameID}}">{{.Title}}</a></td>
-              <td>{{if eq .Encrypted .Total}}<span class="pill-yes">all {{.Total}}</span>{{else}}{{.Encrypted}} / {{.Total}}{{end}}</td>
-            </tr>
-            {{end}}
-          </tbody>
-        </table>
-      </div>
+      {{if .CryptoGames}}
+      <details class="set-more">
+        <summary class="btn-ghost-sm">Coverage by game</summary>
+        <div class="table-wrap">
+          <table class="data-table" data-table-id="settings-crypto-coverage">
+            <thead><tr><th scope="col">Game</th><th scope="col" class="num">Encrypted</th></tr></thead>
+            <tbody>
+              {{range .CryptoGames}}
+              <tr>
+                <td class="cell-primary"><a class="game-list-name" href="/dashboard/games/{{urlquery .GameID}}">{{.Title}}</a></td>
+                <td class="num">{{.Encrypted}} / {{.Total}}</td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </details>
       {{end}}
     </div>
   </section>
 
-  {{if gt (len .Locales) 1}}
-  <section class="panel settings-card">
-    <div class="panel-header"><h2>Language</h2></div>
-    <div class="settings-card-body">
-      <form method="post" action="/dashboard/settings/language" class="auth-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <label for="locale">Interface language</label>
-        <select id="locale" name="locale" class="select-input" data-submit-on-change>
-          <option value=""{{if eq .Locale ""}} selected{{end}}>Automatic (browser)</option>
-          {{range .Locales}}
-          <option value="{{.}}"{{if eq . $.Locale}} selected{{end}}>{{.}}</option>
-          {{end}}
-        </select>
-        <p class="form-hint">Untranslated text falls back to English.</p>
-        <noscript><button type="submit">Save language</button></noscript>
-      </form>
+  <section class="set-row" id="notifications" aria-labelledby="notify-heading">
+    <div class="set-label">
+      <h2 id="notify-heading" class="sec-title">Alerts</h2>
+      <p>Conflicts, quota warnings, new devices and sign-ins, and devices that go quiet. Sent only to you. Leave a field empty to skip it.</p>
     </div>
+    <form method="post" action="/dashboard/settings/notifications" class="set-body field-stack">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <label for="notify_webhook_url">Webhook (JSON)</label>
+      <input id="notify_webhook_url" type="url" class="text-input" name="notify_webhook_url" value="{{.Notify.WebhookURL}}" placeholder="https://example.com/hook" spellcheck="false">
+      <label for="notify_discord_url">Discord webhook</label>
+      <input id="notify_discord_url" type="url" class="text-input" name="notify_discord_url" value="{{.Notify.DiscordURL}}" placeholder="https://discord.com/api/webhooks/…" spellcheck="false">
+      <label for="notify_ntfy_url">ntfy topic</label>
+      <input id="notify_ntfy_url" type="url" class="text-input" name="notify_ntfy_url" value="{{.Notify.NtfyURL}}" placeholder="https://ntfy.sh/my-topic" spellcheck="false">
+      <label class="switch-row">
+        <span><strong>Send a test</strong><small>One test alert to each address after saving</small></span>
+        <input type="checkbox" class="switch" name="send_test" value="1">
+      </label>
+      <div class="set-foot"><button type="submit" class="btn-ghost-sm">Save alerts</button></div>
+    </form>
+  </section>
+
+  {{if gt (len .Locales) 1}}
+  <section class="set-row" id="language" aria-labelledby="lang-heading">
+    <div class="set-label">
+      <h2 id="lang-heading" class="sec-title">Language</h2>
+      <p>Untranslated text falls back to English.</p>
+    </div>
+    <form method="post" action="/dashboard/settings/language" class="set-body field-stack">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <label for="locale">Interface language</label>
+      <select id="locale" name="locale" class="select-input" data-submit-on-change>
+        <option value=""{{if eq .Locale ""}} selected{{end}}>Automatic (browser)</option>
+        {{range .Locales}}
+        <option value="{{.}}"{{if eq . $.Locale}} selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+      <noscript><div class="set-foot"><button type="submit" class="btn-secondary-sm">Save language</button></div></noscript>
+    </form>
   </section>
   {{end}}
 
-  <section class="panel settings-card">
-    <div class="panel-header"><h2>My notifications</h2></div>
-    <div class="settings-card-body">
-      <ul class="settings-list cell-muted">
-        <li>Personal alerts for your account: sync conflicts, quota warnings, new devices and logins, stale devices.</li>
-        <li>Delivered to your own webhook, Discord webhook, or ntfy topic. Leave empty to disable.</li>
+  <section class="set-row" id="sessions" aria-labelledby="sessions-heading">
+    <div class="set-label">
+      <h2 id="sessions-heading" class="sec-title">Sessions</h2>
+      <p>Browsers signed in to this account. Device apps are on the <a href="/dashboard/clients">Devices</a> page.</p>
+    </div>
+    <div class="set-body">
+      {{if .Sessions}}
+      <ul class="session-list">
+        {{range .Sessions}}
+        <li class="session">
+          <span class="session-who"><strong>{{truncate .UserAgent 72}}</strong><small>Signed in {{formatTime .CreatedAt}} · last seen {{formatTime .LastSeen}}</small></span>
+          {{if eq .ID $.CurrentSessionID}}<span class="state-chip state-healthy">This browser</span>{{else}}
+          <form method="post" action="/dashboard/settings/sessions/revoke" class="inline-form">
+            <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
+            <input type="hidden" name="session_id" value="{{.ID}}">
+            <button type="submit" class="btn-ghost-sm">Sign out</button>
+          </form>
+          {{end}}
+        </li>
+        {{end}}
       </ul>
-      <form method="post" action="/dashboard/settings/notifications" class="auth-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <label>Webhook URL (JSON)
-          <input type="url" name="notify_webhook_url" value="{{.Notify.WebhookURL}}" placeholder="https://example.com/hook" spellcheck="false">
-        </label>
-        <label>Discord webhook URL
-          <input type="url" name="notify_discord_url" value="{{.Notify.DiscordURL}}" placeholder="https://discord.com/api/webhooks/…" spellcheck="false">
-        </label>
-        <label>ntfy topic URL
-          <input type="url" name="notify_ntfy_url" value="{{.Notify.NtfyURL}}" placeholder="https://ntfy.sh/my-topic" spellcheck="false">
-        </label>
-        <label class="settings-toggle">
-          <input type="checkbox" name="send_test" value="1">
-          Send a test notification after saving
-        </label>
-        <button type="submit">Save notification settings</button>
-      </form>
+      <div class="set-danger">
+        <p><strong>Sign out everywhere.</strong> Ends every browser session, including this one. Device apps stay signed in.</p>
+        <form method="post" action="/dashboard/settings/sessions/revoke-all" class="inline-form" data-confirm="Sign out of every browser, including this one?">
+          <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+          <button type="submit" class="btn-danger-sm">Sign out everywhere</button>
+        </form>
+      </div>
+      {{else}}
+      <p class="cell-muted">No browser sessions.</p>
+      {{end}}
     </div>
   </section>
 </div>
-
-<section class="panel">
-  <div class="panel-header"><h2>Active sessions</h2></div>
-  {{if .Sessions}}
-  <div class="table-wrap">
-    <table class="data-table" data-table-id="settings-sessions">
-      <thead><tr><th scope="col">Created</th><th scope="col">Last seen</th><th scope="col">Device</th><th scope="col" class="th-action"><span class="sr-only">Actions</span></th></tr></thead>
-      <tbody>
-        {{range .Sessions}}
-        <tr>
-          <td class="cell-muted">{{formatTime .CreatedAt}}</td>
-          <td class="cell-muted">{{formatTime .LastSeen}}</td>
-          <td class="cell-muted">{{truncate .UserAgent 60}}</td>
-          <td class="cell-action">
-            {{if eq .ID $.CurrentSessionID}}<span class="badge-success">current</span>{{else}}
-            <form method="post" action="/dashboard/settings/sessions/revoke" class="inline-form">
-              <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-              <input type="hidden" name="session_id" value="{{.ID}}">
-              <button type="submit" class="btn-ghost-sm">Revoke</button>
-            </form>
-            {{end}}
-          </td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
-  </div>
-  <div class="u-pad-foot">
-    <form method="post" action="/dashboard/settings/sessions/revoke-all" class="inline-form" data-confirm="Revoke all sessions including this one?">
-      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <button type="submit" class="btn-danger-sm">Revoke all sessions</button>
-    </form>
-  </div>
-  {{else}}
-  <div class="panel-empty"><p>No other sessions.</p></div>
-  {{end}}
-</section>
 {{end}}

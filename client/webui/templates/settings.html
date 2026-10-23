@@ -3,31 +3,32 @@
 <div class="page-head">
   <div>
     <h1 class="page-title">Settings</h1>
-    <p class="page-sub">Edit common client options without touching <code class="code-inline">config.json</code>. Saving restarts sync.</p>
+    <p class="page-sub">How this PC syncs. Saving restarts sync; nothing here needs <code class="code-inline">config.json</code>.</p>
   </div>
 </div>
 
 <form method="POST" action="/settings/save" data-dirty-track>
-  <section class="panel" aria-labelledby="sync-heading">
-    <div class="panel-header"><h2 id="sync-heading">Sync</h2></div>
-    <div class="panel-body form-stack">
-      <div class="form-group">
-        <label for="sync_interval">Sync interval</label>
-        <input type="text" id="sync_interval" name="sync_interval" value="{{.SyncInterval}}" class="text-input input-narrow" spellcheck="false">
-        <p class="form-hint">How often to pull from the server — e.g. 30s, 5m, 1h (minimum 30s).</p>
-      </div>
-      <div class="form-group">
-        <label for="conflict_policy">Conflict policy</label>
-        <select id="conflict_policy" name="conflict_policy" class="filter-select input-medium">
-          <option value="last_write_wins" {{if eq .ConflictPolicy "last_write_wins"}}selected{{end}}>Last write wins (default)</option>
-          <option value="keep_local" {{if eq .ConflictPolicy "keep_local"}}selected{{end}}>Keep local copy</option>
-          <option value="keep_server" {{if eq .ConflictPolicy "keep_server"}}selected{{end}}>Keep server copy</option>
-        </select>
-        <p class="form-hint">What happens when the same save changed on two PCs.</p>
-      </div>
-      <div class="form-group">
-        <label>Per-game policy overrides</label>
-        {{if .PolicyOverrides}}
+  <div class="set-rows">
+  <section class="set-row" aria-labelledby="sync-heading">
+    <div class="set-label">
+      <h2 id="sync-heading" class="sec-title">Sync</h2>
+      <p>How often this PC checks the server, what wins when two PCs change the same save, and what it sends.</p>
+    </div>
+    <div class="set-body field-stack">
+      <label for="sync_interval">Check the server every</label>
+      <input type="text" id="sync_interval" name="sync_interval" value="{{.SyncInterval}}" class="text-input input-narrow" spellcheck="false">
+      <p class="form-hint">For example 30s, 5m or 1h; at least 30s. Saves still upload the moment they change.</p>
+
+      <label for="conflict_policy">When two PCs changed the same save</label>
+      <select id="conflict_policy" name="conflict_policy" class="select-input">
+        <option value="last_write_wins" {{if eq .ConflictPolicy "last_write_wins"}}selected{{end}}>Newest change wins (default)</option>
+        <option value="keep_local" {{if eq .ConflictPolicy "keep_local"}}selected{{end}}>Keep this PC's copy</option>
+        <option value="keep_server" {{if eq .ConflictPolicy "keep_server"}}selected{{end}}>Keep the server's copy</option>
+      </select>
+
+      <label for="override_add_game">Per-game exceptions</label>
+      {{if .PolicyOverrides}}
+      <div class="panel override-table">
         <div class="table-wrap">
           <table class="data-table">
             <thead><tr><th scope="col">Game</th><th scope="col">Policy</th></tr></thead>
@@ -36,11 +37,11 @@
               <tr>
                 <td class="cell-primary">{{if .Title}}{{.Title}} <span class="cell-muted">({{.GameID}})</span>{{else}}{{.GameID}}{{end}}</td>
                 <td>
-                  <select name="override_policy::{{.GameID}}" class="filter-select input-medium" aria-label="Policy for {{if .Title}}{{.Title}}{{else}}{{.GameID}}{{end}}">
-                    <option value="last_write_wins" {{if eq .Policy "last_write_wins"}}selected{{end}}>Last write wins</option>
-                    <option value="keep_local" {{if eq .Policy "keep_local"}}selected{{end}}>Keep local copy</option>
-                    <option value="keep_server" {{if eq .Policy "keep_server"}}selected{{end}}>Keep server copy</option>
-                    <option value="remove">— Remove override —</option>
+                  <select name="override_policy::{{.GameID}}" class="select-input" aria-label="Policy for {{if .Title}}{{.Title}}{{else}}{{.GameID}}{{end}}">
+                    <option value="last_write_wins" {{if eq .Policy "last_write_wins"}}selected{{end}}>Newest change wins</option>
+                    <option value="keep_local" {{if eq .Policy "keep_local"}}selected{{end}}>Keep this PC's copy</option>
+                    <option value="keep_server" {{if eq .Policy "keep_server"}}selected{{end}}>Keep the server's copy</option>
+                    <option value="remove">Remove this exception</option>
                   </select>
                 </td>
               </tr>
@@ -48,129 +49,126 @@
             </tbody>
           </table>
         </div>
-        {{end}}
-        <div class="override-add">
-          <input type="text" name="override_add_game" class="text-input input-medium" placeholder="game id (e.g. 292030)" spellcheck="false" aria-label="Game ID for new override">
-          <select name="override_add_policy" class="filter-select input-medium" aria-label="Policy for new override">
-            <option value="">— add override: pick policy —</option>
-            <option value="last_write_wins">Last write wins</option>
-            <option value="keep_local">Keep local copy</option>
-            <option value="keep_server">Keep server copy</option>
-          </select>
-        </div>
-        <p class="form-hint">Overrides beat the global policy for one game. Find a game's ID on the server's game page or the Insights per-game table.</p>
       </div>
-      <div class="form-group">
-        <label for="manifest_include">Sync content</label>
-        <select id="manifest_include" name="manifest_include" class="filter-select input-medium">
-          <option value="both" {{if eq .ManifestInclude "both"}}selected{{end}}>Saves and config (default)</option>
-          <option value="saves" {{if eq .ManifestInclude "saves"}}selected{{end}}>Saves only</option>
-          <option value="config" {{if eq .ManifestInclude "config"}}selected{{end}}>Config only</option>
+      {{end}}
+      <div class="override-add">
+        <input type="text" id="override_add_game" name="override_add_game" class="text-input input-medium" placeholder="Game ID, e.g. 292030" spellcheck="false">
+        <select name="override_add_policy" class="select-input input-medium" aria-label="Policy for the new exception">
+          <option value="">Pick a policy</option>
+          <option value="last_write_wins">Newest change wins</option>
+          <option value="keep_local">Keep this PC's copy</option>
+          <option value="keep_server">Keep the server's copy</option>
         </select>
       </div>
-      <div class="form-group">
-        <label for="max_sync_kbps">Max bandwidth</label>
-        <input type="number" id="max_sync_kbps" name="max_sync_kbps" min="0" value="{{if .MaxSyncKbps}}{{.MaxSyncKbps}}{{end}}" class="text-input input-narrow">
-        <p class="form-hint">KiB/s; blank or 0 = unlimited.</p>
+      <p class="form-hint">An exception beats the policy above for one game. Game IDs are on the server's game page and in Insights.</p>
+
+      <label for="manifest_include">What to sync</label>
+      <select id="manifest_include" name="manifest_include" class="select-input">
+        <option value="both" {{if eq .ManifestInclude "both"}}selected{{end}}>Saves and config (default)</option>
+        <option value="saves" {{if eq .ManifestInclude "saves"}}selected{{end}}>Saves only</option>
+        <option value="config" {{if eq .ManifestInclude "config"}}selected{{end}}>Config only</option>
+      </select>
+
+      <label for="max_sync_kbps">Bandwidth limit (KiB/s)</label>
+      <input type="number" id="max_sync_kbps" name="max_sync_kbps" min="0" value="{{if .MaxSyncKbps}}{{.MaxSyncKbps}}{{end}}" class="text-input input-narrow" placeholder="No limit">
+    </div>
+  </section>
+
+  <section class="set-row" aria-labelledby="behavior-heading">
+    <div class="set-label">
+      <h2 id="behavior-heading" class="sec-title">Safety</h2>
+      <p>Extra care when a download replaces a file on this PC, and when the connection costs money.</p>
+    </div>
+    <div class="set-body field-stack">
+      <label class="switch-row">
+        <span><strong>Keep a backup before overwriting</strong><small>Saves a <code class="code-inline">.gsbs.bak</code> copy of a file before a download replaces it</small></span>
+        <input type="checkbox" class="switch" name="backup_on_pull" {{if .BackupOnPull}}checked{{end}}>
+      </label>
+      <label class="switch-row">
+        <span><strong>Compress traffic</strong><small>Gzip uploads and downloads to save bandwidth</small></span>
+        <input type="checkbox" class="switch" name="use_compression" {{if .UseCompression}}checked{{end}}>
+      </label>
+      <label class="switch-row{{if not .MeteredSupported}} is-disabled{{end}}">
+        <span><strong>Pause on metered connections</strong><small>{{if .MeteredSupported}}Waits for an unmetered network before syncing{{else}}Windows only; has no effect on this system{{end}}</small></span>
+        <input type="checkbox" class="switch" name="skip_sync_when_metered" {{if .SkipSyncWhenMetered}}checked{{end}} {{if not .MeteredSupported}}disabled{{end}}>
+      </label>
+    </div>
+  </section>
+
+  <section class="set-row" aria-labelledby="notifications-heading">
+    <div class="set-label">
+      <h2 id="notifications-heading" class="sec-title">Notifications</h2>
+      <p>What this PC tells you about, as desktop notifications.</p>
+    </div>
+    <div class="set-body field-stack">
+      <fieldset class="choice-list">
+        <legend class="sr-only">Notification level</legend>
+        <label class="choice-row"><input type="radio" name="notification_level" value="all" {{if eq .NotificationLevel "all"}}checked{{end}}><span><strong>Everything</strong><small>Sync results, uploads, new games and problems</small></span></label>
+        <label class="choice-row"><input type="radio" name="notification_level" value="errors" {{if eq .NotificationLevel "errors"}}checked{{end}}><span><strong>Problems only</strong><small>Errors and conflicts</small></span></label>
+        <label class="choice-row"><input type="radio" name="notification_level" value="silent" {{if eq .NotificationLevel "silent"}}checked{{end}}><span><strong>Silent</strong><small>Only setup prompts and replies to what you click</small></span></label>
+      </fieldset>
+      <label class="switch-row">
+        <span><strong>Tell me when a save uploads</strong><small>At most one notification per game at a time</small></span>
+        <input type="checkbox" class="switch" name="notify_per_upload" {{if .NotifyPerUpload}}checked{{end}}>
+      </label>
+    </div>
+  </section>
+
+  <section class="set-row" aria-labelledby="quiet-heading">
+    <div class="set-label">
+      <h2 id="quiet-heading" class="sec-title">Quiet hours</h2>
+      <p>No syncing inside a daily window; it may cross midnight. Changes made meanwhile upload when it ends. Leave both empty to turn it off.</p>
+    </div>
+    <div class="set-body">
+      <div class="time-pair">
+        <label class="field-label">From<input type="time" class="text-input" name="quiet_hours_start" value="{{.QuietHoursStart}}"></label>
+        <label class="field-label">To<input type="time" class="text-input" name="quiet_hours_end" value="{{.QuietHoursEnd}}"></label>
       </div>
     </div>
   </section>
+  </div>
 
-  <section class="panel" aria-labelledby="behavior-heading">
-    <div class="panel-header"><h2 id="behavior-heading">Behavior</h2></div>
-    <div class="panel-body form-stack">
-      <label class="checkbox-label">
-        <input type="checkbox" name="backup_on_pull" {{if .BackupOnPull}}checked{{end}}>
-        <span>Back up the existing file (<code class="code-inline">.gsbs.bak</code>) before overwriting on pull</span>
-      </label>
-      <label class="checkbox-label">
-        <input type="checkbox" name="use_compression" {{if .UseCompression}}checked{{end}}>
-        <span>Compress sync traffic (gzip) to save bandwidth</span>
-      </label>
-      <label class="checkbox-label">
-        <input type="checkbox" name="skip_sync_when_metered" {{if .SkipSyncWhenMetered}}checked{{end}} {{if not .MeteredSupported}}disabled{{end}}>
-        <span>Skip syncing on metered connections{{if not .MeteredSupported}} (Windows only — has no effect on this OS){{end}}</span>
-      </label>
-    </div>
-  </section>
-
-  <section class="panel" aria-labelledby="notifications-heading">
-    <div class="panel-header"><h2 id="notifications-heading">Notifications</h2></div>
-    <div class="panel-body form-stack">
-      <label class="checkbox-label">
-        <input type="radio" name="notification_level" value="all" {{if eq .NotificationLevel "all"}}checked{{end}}>
-        <span>All — sync results, uploads, discoveries, and problems</span>
-      </label>
-      <label class="checkbox-label">
-        <input type="radio" name="notification_level" value="errors" {{if eq .NotificationLevel "errors"}}checked{{end}}>
-        <span>Problems only — errors and conflicts</span>
-      </label>
-      <label class="checkbox-label">
-        <input type="radio" name="notification_level" value="silent" {{if eq .NotificationLevel "silent"}}checked{{end}}>
-        <span>Silent — only setup prompts and direct action feedback</span>
-      </label>
-      <label class="checkbox-label">
-        <input type="checkbox" name="notify_per_upload" {{if .NotifyPerUpload}}checked{{end}}>
-        <span>Toast when a game's save uploads (debounced per game)</span>
-      </label>
-    </div>
-  </section>
-
-  <section class="panel" aria-labelledby="quiet-heading">
-    <div class="panel-header"><h2 id="quiet-heading">Quiet hours</h2></div>
-    <div class="panel-body form-stack">
-      <p class="field-hint">Defer all syncing inside a daily window (crosses midnight fine). Changes made during quiet hours upload automatically when the window ends. Leave both empty to disable.</p>
-      <div class="form-row">
-        <label class="field-label">From
-          <input type="time" name="quiet_hours_start" value="{{.QuietHoursStart}}">
-        </label>
-        <label class="field-label">To
-          <input type="time" name="quiet_hours_end" value="{{.QuietHoursEnd}}">
-        </label>
-      </div>
-    </div>
-  </section>
-
-  <div class="form-actions-row">
-    <button type="submit" class="btn-primary">Save settings</button>
-    <a href="/dashboard" class="btn-ghost">Cancel</a>
+  <div class="set-savebar">
     <span class="save-bar-hint" data-dirty-hint hidden>Unsaved changes</span>
+    <a href="/dashboard" class="btn-ghost-sm">Cancel</a>
+    <button type="submit" class="btn-primary-sm">Save settings</button>
   </div>
 </form>
 
-<section class="panel" aria-labelledby="encryption-heading">
-  <div class="panel-header"><h2 id="encryption-heading">End-to-end encryption</h2></div>
-  <div class="panel-body form-stack">
+<div class="set-rows">
+<section class="set-row" aria-labelledby="encryption-heading">
+  <div class="set-label">
+    <h2 id="encryption-heading" class="sec-title">Encryption</h2>
+    <p>Saves are encrypted on this PC before they leave it, so the server only stores ciphertext. Use the same passphrase on every device.</p>
+  </div>
+  <div class="set-body">
     {{if not .EncryptionKnown}}
-    <p class="cell-muted">Server unreachable — encryption state unknown. {{if .PassphraseSet}}A passphrase is stored in this PC's keyring.{{end}}</p>
+    <p class="cell-muted">Can't reach the server, so the encryption state is unknown.{{if .PassphraseSet}} A passphrase is stored in this PC's keyring.{{end}}</p>
     {{else if .EncryptionAccountEnabled}}
-    <p><span class="badge-success">enabled</span> Saves are encrypted on this PC before upload{{if not .PassphraseSet}} — <strong>but no passphrase is stored here</strong>: enter the account passphrase below or this device uploads plaintext and cannot read encrypted saves{{end}}.</p>
+    <div class="set-state"><span class="state-chip state-healthy">On</span>
+      <span>{{if .PassphraseSet}}Passphrase stored in this PC's keyring; never shown, never sent.{{else}}<strong>No passphrase on this PC yet.</strong> Until you add it, this PC uploads plain saves and can't read encrypted ones.{{end}}</span></div>
     {{if not .PassphraseSet}}
-    <form method="post" action="/settings/encryption" class="form-stack">
-      <label class="field-label">Account passphrase
-        <input type="password" name="passphrase" required minlength="8" autocomplete="new-password">
-      </label>
-      <label class="field-label">Confirm passphrase
-        <input type="password" name="passphrase_confirm" required minlength="8" autocomplete="new-password">
-      </label>
-      <div class="form-actions-row"><button type="submit" class="btn-primary">Store passphrase on this PC</button></div>
+    <form method="post" action="/settings/encryption" class="field-stack u-mt-sm">
+      <label for="enc_pass">Account passphrase</label>
+      <input id="enc_pass" class="text-input" type="password" name="passphrase" required minlength="8" autocomplete="new-password">
+      <label for="enc_pass2">Confirm passphrase</label>
+      <input id="enc_pass2" class="text-input" type="password" name="passphrase_confirm" required minlength="8" autocomplete="new-password">
+      <div class="set-foot"><button type="submit" class="btn-primary-sm">Store passphrase on this PC</button></div>
     </form>
     {{else}}
-    <p class="cell-muted">Passphrase: stored in this PC's keyring (never shown, never sent to the server). Disabling encryption is only possible from the server web interface.</p>
+    <p class="form-hint">Turning encryption off is done from the server's web interface.</p>
     {{end}}
     {{else}}
-    <p class="cell-muted">Encrypt your saves on this PC before they leave it — the server only ever stores ciphertext.</p>
-    <form method="post" action="/settings/encryption" class="form-stack">
-      <label class="field-label">Choose a passphrase (min 8 characters)
-        <input type="password" name="passphrase" required minlength="8" autocomplete="new-password">
-      </label>
-      <label class="field-label">Confirm passphrase
-        <input type="password" name="passphrase_confirm" required minlength="8" autocomplete="new-password">
-      </label>
-      <p class="field-hint"><strong>Write it down.</strong> Losing the passphrase means losing access to encrypted saves — the server cannot recover them. Use the SAME passphrase on every device; existing saves convert as they next change and sync.</p>
-      <div class="form-actions-row"><button type="submit" class="btn-primary">Enable encryption</button></div>
+    <form method="post" action="/settings/encryption" class="field-stack">
+      <label for="enc_pass">Choose a passphrase (8+ characters)</label>
+      <input id="enc_pass" class="text-input" type="password" name="passphrase" required minlength="8" autocomplete="new-password">
+      <label for="enc_pass2">Confirm passphrase</label>
+      <input id="enc_pass2" class="text-input" type="password" name="passphrase_confirm" required minlength="8" autocomplete="new-password">
+      <p class="set-warn"><strong>Write it down.</strong> Lose it and the encrypted saves are gone; the server can't recover them. Existing saves convert as each one next changes and syncs.</p>
+      <div class="set-foot"><button type="submit" class="btn-primary-sm">Turn on encryption</button></div>
     </form>
     {{end}}
   </div>
 </section>
+</div>
 {{end}}

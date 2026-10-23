@@ -3,8 +3,8 @@
 {{define "dashboard_conflicts_content"}}
 <div class="page-head">
   <div>
-    <h1>Sync Conflicts</h1>
-    <p class="page-sub">Two devices changed the same save. Nothing is lost — the server kept its copy and every version stays in history.</p>
+    <h1 class="page-title">Conflicts</h1>
+    <p class="page-sub">When two devices change the same save, the server keeps its copy and every version stays in history. Nothing is lost.</p>
   </div>
 </div>
 
@@ -15,16 +15,14 @@
   {{template "partials/conflicts_list.html" .}}
 </div>
 
-<section class="panel panel-compact u-mt-md" aria-labelledby="conflict-help-heading">
-  <div class="panel-header"><h2 id="conflict-help-heading">How resolution works</h2></div>
-  <div class="panel-body">
-    <ul class="setup-checklist">
-      <li><strong>Keep server version</strong> (here) dismisses the conflict — the server's copy stands, and the device will pick it up according to its conflict policy.</li>
-      <li><strong>Keep the device's copy instead:</strong> on that device, open the tray → <em>⚠ Resolve conflicts</em> → <em>Keep all local files</em>. Its push then supersedes this conflict automatically.</li>
-      <li><strong>Rescue any version:</strong> nothing is deleted — open the file's version history to download or restore an older copy.</li>
-      <li><strong>Prevent repeats:</strong> set a per-game conflict policy (last-write-wins, keep local, keep server) in the client's Settings on each device.</li>
-    </ul>
-  </div>
+<section class="conflict-help" aria-labelledby="conflict-help-heading">
+  <div class="sec-head"><h2 id="conflict-help-heading" class="sec-title">How it resolves</h2></div>
+  <dl class="how-list">
+    <div><dt>Keep the server's copy</dt><dd>Dismiss the conflict here. The device picks the server's copy up according to its conflict policy.</dd></div>
+    <div><dt>Keep the device's copy</dt><dd>On that device, open the tray, choose <em>Resolve conflicts</em>, then <em>Keep all local files</em>. Its next push replaces this conflict.</dd></div>
+    <div><dt>Rescue any version</dt><dd>Nothing is deleted. Open the file's version history to download or load an older copy.</dd></div>
+    <div><dt>Stop it happening again</dt><dd>Set a per-game conflict policy (last write wins, keep local or keep server) in each device's settings.</dd></div>
+  </dl>
 </section>
 {{end}}
 {{define "dashboard_conflicts_scripts"}}{{end}}

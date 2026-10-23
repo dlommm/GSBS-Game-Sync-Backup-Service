@@ -2,39 +2,46 @@
 {{define "quick_actions_content"}}
 <div class="page-head">
   <div>
-    <h1 class="page-title">Quick actions</h1>
-    <p class="page-sub">One-click tasks for this PC's client.</p>
+    <h1 class="page-title">Actions</h1>
+    <p class="page-sub">Things you can do on this PC right now.</p>
   </div>
 </div>
 
-<div class="quick-actions-grid">
-  <button type="button" class="quick-action-card" data-sync-now>
-    <span class="quick-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"/></svg></span>
-    <span class="quick-action-text"><span class="quick-action-title" data-sync-now-label>Run sync now</span><span class="quick-action-sub">Push pending changes and pull the latest saves</span></span>
-  </button>
-  <button type="button" class="quick-action-card" data-check-update>
-    <span class="quick-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.8 8 10l3.2-3.2M2.5 12.5v1h11v-1"/></svg></span>
-    <span class="quick-action-text"><span class="quick-action-title" data-check-update-label>Check for updates</span><span class="quick-action-sub">Ask the release server for a newer client</span></span>
-  </button>
-  <a href="/games" class="quick-action-card">
-    <span class="quick-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="5" width="13" height="7" rx="3"/><path d="M5 7.5v2M4 8.5h2"/><circle cx="10.5" cy="7.8" r="0.8" fill="currentColor" stroke="none"/><circle cx="12.2" cy="9.4" r="0.8" fill="currentColor" stroke="none"/></svg></span>
-    <span class="quick-action-text"><span class="quick-action-title">Add a game folder</span><span class="quick-action-sub">Search the catalog or add any folder</span></span>
-  </a>
-  <a href="/open-log" class="quick-action-card">
-    <span class="quick-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2.5h8.5l2.5 2.5v8.5h-11Z"/><path d="M5 8h6M5 10.5h6"/></svg></span>
-    <span class="quick-action-text"><span class="quick-action-title">Open log file</span><span class="quick-action-sub">In your default text editor</span></span>
-  </a>
-  <a href="/diagnostics/export.zip" class="quick-action-card" download>
-    <span class="quick-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/><path d="M8 4.5v5M5.8 7.3 8 9.5l2.2-2.2M5.5 12h5"/></svg></span>
-    <span class="quick-action-text"><span class="quick-action-title">Export diagnostics</span><span class="quick-action-sub">Zip of logs and secret-free config for bug reports</span></span>
-  </a>
-  <a id="qa-server-dash" href="#" target="_blank" rel="noopener" class="quick-action-card" data-server-dash hidden>
-    <span class="quick-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1"/><path d="M5.5 14h5M8 11v3"/></svg></span>
-    <span class="quick-action-text"><span class="quick-action-title">Open server dashboard</span><span class="quick-action-sub">Web UI on your GSBS server</span></span>
-  </a>
-  <a href="/insights" class="quick-action-card">
-    <span class="quick-action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 14V2M2 14h12"/><rect x="4" y="8" width="2.2" height="4" fill="currentColor" stroke="none"/><rect x="7.5" y="5" width="2.2" height="7" fill="currentColor" stroke="none"/><rect x="11" y="9" width="2.2" height="3" fill="currentColor" stroke="none"/></svg></span>
-    <span class="quick-action-text"><span class="quick-action-title">Sync insights</span><span class="quick-action-sub">History, conflicts, and pending uploads</span></span>
-  </a>
-</div>
+<ul class="action-list" role="list">
+  <li><button type="button" class="action-row" data-sync-now>
+    <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"/></svg></span>
+    <span class="action-text"><span class="action-title" data-sync-now-label>Sync now</span><span class="action-sub">Push pending changes and pull the latest saves</span></span>
+    <span class="action-go" aria-hidden="true">→</span>
+  </button></li>
+  <li><button type="button" class="action-row" data-check-update>
+    <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5M4.8 6.8 8 10l3.2-3.2M2.5 12.5v1h11v-1"/></svg></span>
+    <span class="action-text"><span class="action-title" data-check-update-label>Check for updates</span><span class="action-sub">Ask the release server for a newer client</span></span>
+    <span class="action-go" aria-hidden="true">→</span>
+  </button></li>
+  <li><a href="/games" class="action-row">
+    <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="5" width="13" height="7" rx="3"/><path d="M5 7.5v2M4 8.5h2"/><circle cx="10.5" cy="7.8" r="0.8" fill="currentColor" stroke="none"/><circle cx="12.2" cy="9.4" r="0.8" fill="currentColor" stroke="none"/></svg></span>
+    <span class="action-text"><span class="action-title">Add a game folder</span><span class="action-sub">Search the catalog or add any folder</span></span>
+    <span class="action-go" aria-hidden="true">→</span>
+  </a></li>
+  <li><a href="/open-log" class="action-row">
+    <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2.5h8.5l2.5 2.5v8.5h-11Z"/><path d="M5 8h6M5 10.5h6"/></svg></span>
+    <span class="action-text"><span class="action-title">Open log file</span><span class="action-sub">In your default text editor</span></span>
+    <span class="action-go" aria-hidden="true">→</span>
+  </a></li>
+  <li><a href="/diagnostics/export.zip" class="action-row" download>
+    <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/><path d="M8 4.5v5M5.8 7.3 8 9.5l2.2-2.2M5.5 12h5"/></svg></span>
+    <span class="action-text"><span class="action-title">Export diagnostics</span><span class="action-sub">Zip of logs and secret-free config for bug reports</span></span>
+    <span class="action-go" aria-hidden="true">→</span>
+  </a></li>
+  <li><a id="qa-server-dash" href="#" target="_blank" rel="noopener" class="action-row" data-server-dash hidden>
+    <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="8.5" rx="1"/><path d="M5.5 14h5M8 11v3"/></svg></span>
+    <span class="action-text"><span class="action-title">Open server dashboard</span><span class="action-sub">Web UI on your GSBS server</span></span>
+    <span class="action-go" aria-hidden="true">→</span>
+  </a></li>
+  <li><a href="/insights" class="action-row">
+    <span class="action-icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 14V2M2 14h12"/><rect x="4" y="8" width="2.2" height="4" fill="currentColor" stroke="none"/><rect x="7.5" y="5" width="2.2" height="7" fill="currentColor" stroke="none"/><rect x="11" y="9" width="2.2" height="3" fill="currentColor" stroke="none"/></svg></span>
+    <span class="action-text"><span class="action-title">Insights</span><span class="action-sub">History, conflicts, and pending uploads</span></span>
+    <span class="action-go" aria-hidden="true">→</span>
+  </a></li>
+</ul>
 {{end}}

@@ -3,7 +3,7 @@
 <div class="page-head">
   <div>
     <h1 class="page-title">Version history</h1>
-    <p class="page-sub">{{if .GameTitle}}{{.GameTitle}}{{else}}{{.GameID}}{{end}} — restore any earlier save right from this PC.</p>
+    <p class="page-sub">{{if .GameTitle}}{{.GameTitle}}{{else}}Game {{.GameID}}{{end}}: every version the server keeps. Restore one and this PC picks it up on the next sync.</p>
   </div>
   <a class="btn-ghost-sm" href="/insights">Back to Insights</a>
 </div>
@@ -19,11 +19,9 @@
   </div>
 </section>
 {{else}}
-<section class="panel">
-  <div class="panel-header-actions">
-    <h2>Server versions</h2>
-    <span class="cell-muted">{{len .Versions}} kept</span>
-  </div>
+<section class="c-sec">
+  <div class="sec-head"><h2 class="sec-title">Server versions</h2><span class="cell-muted">{{len .Versions}} kept</span></div>
+  <div class="panel">
   {{if .Versions}}
   <div class="table-wrap">
     <table class="data-table">
@@ -55,6 +53,7 @@
   {{else}}
   <div class="panel-empty"><p>No versions recorded for this save yet — history appears after the first few syncs.</p></div>
   {{end}}
+  </div>
 </section>
 {{end}}
 {{end}}

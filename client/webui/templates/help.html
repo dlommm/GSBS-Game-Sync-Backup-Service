@@ -3,31 +3,29 @@
 <div class="page-head">
   <div>
     <h1 class="page-title">Help</h1>
-    <p class="page-sub">What the statuses mean and how to fix common problems.</p>
+    <p class="page-sub">What each status on this PC means, and what to try when something looks wrong.</p>
   </div>
 </div>
 
-<section class="panel">
-  <div class="panel-header"><h2>Status reference</h2></div>
-  <div class="config-grid">
-    <div class="config-item"><span class="config-key">Connection</span><span class="config-val">Whether this PC has a valid login to your GSBS server. "Re-login required" means the token was revoked — open Setup and sign in again.</span></div>
-    <div class="config-item"><span class="config-key">Last sync</span><span class="config-val">When the most recent push/pull cycle finished, and whether it succeeded.</span></div>
-    <div class="config-item"><span class="config-key">Watcher</span><span class="config-val">The file watcher that notices save changes instantly. "Recovering" fixes itself; syncing continues on the interval either way.</span></div>
-    <div class="config-item"><span class="config-key">Pending uploads</span><span class="config-val">Saves queued while the server was unreachable. They retry automatically for 7 days.</span></div>
-    <div class="config-item"><span class="config-key">Conflicts</span><span class="config-val">The same save changed on two PCs. Your conflict policy decided which copy won; details in Insights.</span></div>
-  </div>
+<section class="c-sec" aria-labelledby="ref-heading">
+  <div class="sec-head"><h2 id="ref-heading" class="sec-title">Statuses</h2></div>
+  <dl class="how-list">
+    <div><dt>Connection</dt><dd>Whether this PC is signed in to your GSBS server. "Re-login required" means its token was revoked; open <a href="/">Setup</a> and sign in again.</dd></div>
+    <div><dt>Last sync</dt><dd>When the latest upload and download cycle finished, and whether it worked.</dd></div>
+    <div><dt>Watcher</dt><dd>Notices save changes the moment they happen. "Recovering" fixes itself; syncing carries on at the interval meanwhile.</dd></div>
+    <div><dt>Pending uploads</dt><dd>Saves queued while the server was out of reach. They retry on their own for 7 days.</dd></div>
+    <div><dt>Conflicts</dt><dd>The same save changed on two PCs. Your conflict policy picked a copy; the details are in <a href="/insights">Insights</a>.</dd></div>
+  </dl>
 </section>
 
-<section class="panel">
-  <div class="panel-header"><h2>Quick troubleshooting</h2></div>
-  <div class="panel-body">
-    <ol class="help-steps">
-      <li><strong>Not connected?</strong> Open <a href="/">Setup</a> and log in with your server address and account.</li>
-      <li><strong>A game isn't syncing?</strong> Check it appears under <a href="/dashboard">Status → Matched games</a>; if not, <a href="/games">add its save folder</a>.</li>
-      <li><strong>Sync errors?</strong> Check <a href="/logs">Logs</a> with the level filter on <em>error</em>.</li>
-      <li><strong>Unexpected save contents?</strong> Restore any older version from the server dashboard → My Games → the file's history.</li>
-      <li><strong>Still stuck?</strong> <a href="/open-log">Open the log file</a> and attach it to a GitHub issue.</li>
-    </ol>
-  </div>
+<section class="c-sec" aria-labelledby="fix-heading">
+  <div class="sec-head"><h2 id="fix-heading" class="sec-title">Something wrong?</h2></div>
+  <ol class="fix-list">
+    <li><strong>Not connected.</strong> Open <a href="/">Setup</a> and sign in with your server address and account.</li>
+    <li><strong>A game isn't syncing.</strong> Check it's listed under <a href="/dashboard">Status</a>; if not, <a href="/games">add its save folder</a>.</li>
+    <li><strong>Sync errors.</strong> Open <a href="/logs">Logs</a> and filter to errors.</li>
+    <li><strong>A save looks wrong.</strong> Load an older version from the server's Library, on that game's version history.</li>
+    <li><strong>Still stuck.</strong> <a href="/open-log">Open the log file</a> and attach it to a GitHub issue.</li>
+  </ol>
 </section>
 {{end}}

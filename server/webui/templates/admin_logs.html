@@ -1,27 +1,21 @@
 {{template "layout" .}}
 {{define "admin_logs_title"}}Admin Logs — GSBS{{end}}
 {{define "admin_logs_content"}}
-<h1 class="sr-only">Server Logs</h1>
-<section class="panel panel-compact">
-  <div class="panel-header"><h2>Server Logs</h2></div>
-  <p class="panel-subtitle">
-    {{if .LogSourcePresent}}
-      Showing logs from <code>{{.LogSourcePath}}</code>. {{.LogSourceInfo}}
-    {{else}}
-      {{.LogSourceInfo}}
-    {{end}}
-  </p>
-  <p class="panel-subtitle">Source precedence: <code>GSBS_SERVICE_LOG_PATH</code> (preferred), <code>GSBS_LOG_FILE</code> (legacy), then Windows default <code>C:\ProgramData\GSBS\logs\server.log</code>.</p>
-</section>
-
-<section class="panel">
-  <div class="panel-header-actions">
-    <h2>Filters</h2>
-    <div class="panel-actions">
-      <a id="logs-csv-btn" href="#" class="btn-ghost-sm" download="server-logs.csv">Export CSV</a>
-      <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
-    </div>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Logs</h1>
+    <p class="page-sub">
+      {{if .LogSourcePresent}}Reading <code class="code-inline">{{.LogSourcePath}}</code>. {{.LogSourceInfo}}{{else}}{{.LogSourceInfo}}{{end}}
+    </p>
+    <p class="admin-note">The server reads <code class="code-inline">GSBS_SERVICE_LOG_PATH</code> first, then <code class="code-inline">GSBS_LOG_FILE</code>, then the Windows default <code class="code-inline">C:\ProgramData\GSBS\logs\server.log</code>.</p>
   </div>
+  <div class="page-actions">
+    <a id="logs-csv-btn" href="#" class="btn-ghost-sm" download="server-logs.csv">Export CSV</a>
+    <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
+  </div>
+</div>
+
+<section class="panel" aria-label="Log lines">
   <form id="logs-filters" class="filter-toolbar" method="get" action="/admin/logs">
     <input type="hidden" name="offset" id="logs-offset" value="{{.Query.Offset}}">
     <select name="component" class="filter-select" aria-label="Application">
@@ -35,7 +29,7 @@
       <option value="api" {{if eq .Query.Component "api"}}selected{{end}}>api</option>
       <option value="server" {{if eq .Query.Component "server"}}selected{{end}}>server</option>
     </select>
-    <select name="level" class="filter-select">
+    <select name="level" class="filter-select" aria-label="Level">
       <option value="all" {{if eq .Query.Level "all"}}selected{{end}}>All levels</option>
       <option value="debug" {{if eq .Query.Level "debug"}}selected{{end}}>debug</option>
       <option value="info" {{if eq .Query.Level "info"}}selected{{end}}>info</option>
@@ -43,7 +37,7 @@
       <option value="error" {{if eq .Query.Level "error"}}selected{{end}}>error</option>
     </select>
     <input type="search" class="search-input filter-search" name="q" value="{{.Query.Text}}" placeholder="Search event, summary, run_id, request_id…">
-    <select name="limit" class="filter-select">
+    <select name="limit" class="filter-select" aria-label="Lines per page">
       <option value="100" {{if eq .Query.Limit 100}}selected{{end}}>100 lines</option>
       <option value="200" {{if eq .Query.Limit 200}}selected{{end}}>200 lines</option>
       <option value="500" {{if eq .Query.Limit 500}}selected{{end}}>500 lines</option>
@@ -57,7 +51,7 @@
       <input type="checkbox" name="auto" value="1" {{if .Query.AutoRefresh}}checked{{end}}>
       Auto-refresh
     </label>
-    <select name="refresh" class="filter-select">
+    <select name="refresh" class="filter-select" aria-label="Auto-refresh">
       <option value="2" {{if eq .Query.RefreshSeconds 2}}selected{{end}}>2s</option>
       <option value="5" {{if eq .Query.RefreshSeconds 5}}selected{{end}}>5s</option>
       <option value="10" {{if eq .Query.RefreshSeconds 10}}selected{{end}}>10s</option>

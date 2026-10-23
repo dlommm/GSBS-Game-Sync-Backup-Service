@@ -2,31 +2,31 @@
 {{define "about_content"}}
 <div class="page-head">
   <div>
-    <h1 class="page-title">About GSBS</h1>
-    <p class="page-sub">Game Sync &amp; Backup Service — self-hosted save syncing &amp; versioned backups.</p>
+    <h1 class="page-title">About</h1>
+    <p class="page-sub">Game Sync &amp; Backup Service: self-hosted save syncing with every version kept.</p>
   </div>
 </div>
 
-<section class="panel">
-  <div class="panel-header"><h2>This client</h2></div>
-  <div class="config-grid">
-    <div class="config-item"><span class="config-key">Version</span><span class="config-val">{{.Version}}</span></div>
-    <div class="config-item"><span class="config-key">Platform</span><span class="config-val">{{.GOOS}}/{{.GOARCH}}</span></div>
-    {{if .BuildDate}}<div class="config-item"><span class="config-key">Built</span><span class="config-val">{{.BuildDate}}</span></div>{{end}}
-    {{if .Commit}}<div class="config-item"><span class="config-key">Commit</span><span class="config-val"><code class="code-inline">{{.Commit}}</code></span></div>{{end}}
-    {{if .ServerURL}}<div class="config-item"><span class="config-key">Server</span><span class="config-val">{{.ServerURL}}</span></div>{{end}}
-  </div>
-</section>
+<div class="insight-split">
+  <section class="c-sec" aria-labelledby="client-heading">
+    <div class="sec-head"><h2 id="client-heading" class="sec-title">This client</h2></div>
+    <dl class="kv">
+      <div><dt>Version</dt><dd>{{.Version}}</dd></div>
+      <div><dt>Platform</dt><dd>{{.GOOS}}/{{.GOARCH}}</dd></div>
+      {{if .BuildDate}}<div><dt>Built</dt><dd>{{.BuildDate}}</dd></div>{{end}}
+      {{if .Commit}}<div><dt>Commit</dt><dd><code class="code-inline">{{.Commit}}</code></dd></div>{{end}}
+      {{if .ServerURL}}<div><dt>Server</dt><dd>{{.ServerURL}}</dd></div>{{end}}
+    </dl>
+  </section>
 
-<section class="panel">
-  <div class="panel-header"><h2>Links</h2></div>
-  <div class="panel-body">
-    <ul class="settings-list">
-      <li><a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service" target="_blank" rel="noopener">GitHub repository ↗</a></li>
-      <li><a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases" target="_blank" rel="noopener">Releases &amp; changelog ↗</a></li>
-      <li><a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/issues" target="_blank" rel="noopener">Report an issue ↗</a></li>
-      <li><a href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki" target="_blank" rel="noopener">Documentation wiki ↗</a></li>
+  <section class="c-sec" aria-labelledby="links-heading">
+    <div class="sec-head"><h2 id="links-heading" class="sec-title">Links</h2></div>
+    <ul class="action-list" role="list">
+      <li><a class="action-row" href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service" target="_blank" rel="noopener"><span class="action-text"><span class="action-title">Source code</span><span class="action-sub">The GitHub repository</span></span><span class="action-go" aria-hidden="true">↗</span></a></li>
+      <li><a class="action-row" href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/releases" target="_blank" rel="noopener"><span class="action-text"><span class="action-title">Releases</span><span class="action-sub">Downloads and what changed</span></span><span class="action-go" aria-hidden="true">↗</span></a></li>
+      <li><a class="action-row" href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/wiki" target="_blank" rel="noopener"><span class="action-text"><span class="action-title">Documentation</span><span class="action-sub">The project wiki</span></span><span class="action-go" aria-hidden="true">↗</span></a></li>
+      <li><a class="action-row" href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service/issues" target="_blank" rel="noopener"><span class="action-text"><span class="action-title">Report a problem</span><span class="action-sub">Open a GitHub issue</span></span><span class="action-go" aria-hidden="true">↗</span></a></li>
     </ul>
-  </div>
-</section>
+  </section>
+</div>
 {{end}}

@@ -75,9 +75,9 @@
   </a>
 </div>
 
-<section id="accessPanel" class="panel" aria-labelledby="access-heading" hidden>
-  <div class="panel-header"><h2 id="access-heading">Folders that need access</h2></div>
-  <div class="panel-body">
+<section id="accessPanel" class="c-sec" aria-labelledby="access-heading" hidden>
+  <div class="sec-head"><h2 id="access-heading" class="sec-title">Folders that need access</h2></div>
+  <div class="panel panel-body">
     <p id="accessIntro" class="panel-subtitle"></p>
     <ul id="blockedDirList" class="client-game-list" role="list"></ul>
     <p id="gameAwareNote" class="stat-footnote" hidden>Game detection under Flatpak covers Steam games only (via Steam's own state file) — non-Steam games sync immediately instead of waiting for the game to exit.</p>
@@ -85,13 +85,12 @@
   </div>
 </section>
 
-<section class="panel" aria-labelledby="gameList-heading">
-  <div class="panel-header-actions">
-    <h2 id="gameList-heading">Matched games</h2>
-    <a class="btn-ghost-sm" href="/games">Add a game</a>
-  </div>
+<section class="c-sec" aria-labelledby="gameList-heading">
+  <div class="sec-head"><h2 id="gameList-heading" class="sec-title">Matched games</h2><a class="btn-ghost-sm" href="/games">Add a game</a></div>
+  <div class="panel">
   <ul id="gameList" class="client-game-list" role="list">
     <li class="panel-empty">Loading…</li>
   </ul>
+  </div>
 </section>
 {{end}}

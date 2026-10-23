@@ -7,28 +7,6 @@
     else fn();
   }
 
-  /* ---- Sidebar nav groups (collapse state persisted) ---- */
-
-  function initNavGroups() {
-    var KEY = 'gsbs.admin.nav.';
-    document.querySelectorAll('.admin-nav-group').forEach(function (group) {
-      var name = group.getAttribute('data-group');
-      var btn = group.querySelector('.admin-group-toggle');
-      if (!btn) return;
-      try {
-        if (localStorage.getItem(KEY + name) === '0') {
-          group.classList.add('collapsed');
-          btn.setAttribute('aria-expanded', 'false');
-        }
-      } catch (e) { /* private mode */ }
-      btn.addEventListener('click', function () {
-        var collapsed = group.classList.toggle('collapsed');
-        btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-        try { localStorage.setItem(KEY + name, collapsed ? '0' : '1'); } catch (e) { /* ignore */ }
-      });
-    });
-  }
-
   /* ---- Users page: quota dialog ---- */
 
   function initQuotaDialog() {
@@ -243,7 +221,6 @@
   }
 
   onReady(function () {
-    initNavGroups();
     initQuotaDialog();
     initActionMenus();
     initLogsPage();

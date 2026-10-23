@@ -1,123 +1,117 @@
 {{template "layout" .}}
-{{define "admin_overview_title"}}Admin Overview — GSBS{{end}}
+{{define "admin_overview_title"}}Admin — GSBS{{end}}
 {{define "admin_overview_content"}}
-<h1 class="sr-only">Admin Overview</h1>
-<section class="about-card" aria-label="About GSBS">
-  <img src="/static/favicon.png" alt="GSBS" class="about-logo">
-  <div class="about-body">
-    <div class="about-title">GSBS — Game Sync &amp; Backup Service</div>
-    <p class="about-tagline">Self-hosted save syncing &amp; versioned backups. Sync. Backup. Protect.</p>
-    <div class="about-meta">
-      {{if .Version}}<span class="about-pill">v{{.Version}}</span>{{end}}
-      <a class="about-link" href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service" target="_blank" rel="noopener">GitHub ↗</a>
-      <a class="about-link" href="/admin/settings">Settings</a>
-    </div>
+{{$done := 0}}{{range .SetupHealth}}{{if .Done}}{{$done = add $done 1}}{{end}}{{end}}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Server</h1>
+    <p class="page-sub">
+      {{if gt .IntegrityCount 0}}<strong class="u-warn">{{.IntegrityCount}} stored save{{if ne .IntegrityCount 1}}s{{end}} failed the integrity check.</strong>
+      {{else if not .SetupHealthAllDone}}{{sub (len .SetupHealth) $done}} setup check{{if ne (sub (len .SetupHealth) $done) 1}}s{{end}} still open.
+      {{else if .IntegrityLastRun}}Everything is set up and every stored save checks out.{{else}}Everything is set up.{{end}}
+      {{if .Version}}Running GSBS v{{.Version}}.{{end}}
+    </p>
   </div>
-</section>
+  <a class="btn-ghost-sm" href="https://github.com/dlommm/GSBS-Game-Sync-Backup-Service" target="_blank" rel="noopener">GitHub ↗</a>
+</div>
 
-<section class="stats-row stats-row-6" aria-label="Global statistics">
-  <div class="stat-card"><div class="stat-value">{{.Stats.UserCount}}</div><div class="stat-label">Users</div></div>
-  <div class="stat-card"><div class="stat-value">{{.Stats.ClientCount}}</div><div class="stat-label">Clients</div></div>
-  <div class="stat-card"><div class="stat-value">{{.Stats.SaveCount}}</div><div class="stat-label">Total saves</div></div>
-  <div class="stat-card"><div class="stat-value">{{formatBytes .Stats.TotalBytes}}</div><div class="stat-label">Storage</div></div>
-  <div class="stat-card"><div class="stat-value">{{.Stats.ManifestCount}}</div><div class="stat-label">Manifest entries</div></div>
-  <div class="stat-card"><div class="stat-value">{{.SSEClients}}</div><div class="stat-label">SSE clients</div></div>
-</section>
+<dl class="figs figs-lg admin-figs" aria-label="Server totals">
+  <div><dt>Users</dt><dd>{{.Stats.UserCount}}</dd></div>
+  <div><dt>Devices</dt><dd>{{.Stats.ClientCount}}</dd></div>
+  <div><dt>Saves stored</dt><dd>{{.Stats.SaveCount}}</dd></div>
+  <div><dt>Storage</dt><dd>{{formatBytes .Stats.TotalBytes}}</dd></div>
+  <div><dt>Save locations</dt><dd>{{.Stats.ManifestCount}}</dd></div>
+  <div><dt>Live connections</dt><dd>{{.SSEClients}}</dd></div>
+</dl>
 
 {{if .ShowSourcePrompt}}
-<section class="panel panel-compact" aria-label="Choose save-location source">
-  <div class="panel-header"><h2>Choose your game save-location source</h2></div>
-  <div class="panel-body">
-    <p class="cell-muted u-mb-sm">
-      GSBS needs PCGamingWiki save-location data to know where each game stores its saves. Pick how this server gets it — you can change this later in <a href="/admin/settings">Settings</a>.
-    </p>
-    <div class="u-flex-row">
-      <form method="post" action="/admin/pcgw/source" class="inline-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <input type="hidden" name="source" value="s3">
-        <button type="submit" class="btn-primary">Use prebuilt S3 bundle <span class="badge-success">Recommended</span></button>
-        <span class="cell-muted u-sub-line">Fast, low-maintenance. Avoids PCGamingWiki API limits. Falls back to the API automatically if no bundle is available yet.</span>
-      </form>
-      <form method="post" action="/admin/pcgw/source" class="inline-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <input type="hidden" name="source" value="api">
-        <button type="submit" class="btn-ghost">Manual (sync live from PCGamingWiki API)</button>
-        <span class="cell-muted u-sub-line">Seeds once from the S3 bundle, then syncs on demand. Always current, but slower and subject to API rate limits.</span>
-      </form>
-    </div>
+<section class="admin-sec" aria-labelledby="source-heading">
+  <div class="sec-head"><h2 id="source-heading" class="sec-title">Where save locations come from</h2></div>
+  <p class="admin-lede">GSBS needs PCGamingWiki's save-location data to know where each game keeps its saves. Choose how this server gets it; you can change it later in <a href="/admin/settings">Settings</a>.</p>
+  <div class="choice-pair">
+    <form method="post" action="/admin/pcgw/source" class="choice">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <input type="hidden" name="source" value="s3">
+      <strong>Prebuilt bundle <span class="state-chip state-healthy">Recommended</span></strong>
+      <p>Fast and low-maintenance, with no PCGamingWiki rate limits. Falls back to the API if no bundle is published yet.</p>
+      <button type="submit" class="btn-primary-sm">Use the bundle</button>
+    </form>
+    <form method="post" action="/admin/pcgw/source" class="choice">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <input type="hidden" name="source" value="api">
+      <strong>Live from PCGamingWiki</strong>
+      <p>Seeds once from the bundle, then syncs on demand. Always current, but slower and rate limited.</p>
+      <button type="submit" class="btn-ghost-sm">Sync from the API</button>
+    </form>
   </div>
 </section>
 {{end}}
 
-<section class="panel panel-compact">
-  <div class="panel-header-actions">
-    <h2>Setup health</h2>
-    {{if .SetupHealthAllDone}}<span class="badge-success">All green</span>{{end}}
+<section class="admin-sec" aria-labelledby="setup-heading">
+  <div class="sec-head">
+    <h2 id="setup-heading" class="sec-title">Setup</h2>
+    <span class="cell-muted">{{$done}} of {{len .SetupHealth}} done</span>
   </div>
-  <div class="panel-body">
-    {{if .ShowGettingStarted}}
-    <p class="cell-muted u-mb-sm">Fresh server — work through this checklist for a trustworthy setup. Populate the game catalog first: open <a href="/admin/pcgw">PCGW</a> and run <strong>Phase 1+2: Refresh IDs and Parse/Store Backlog</strong> (or fetch the S3 bundle).</p>
+  {{if .ShowGettingStarted}}
+  <p class="admin-lede">A fresh server. Fill the game catalog first: open <a href="/admin/pcgw">PCGW</a> and run <strong>Refresh IDs and parse backlog</strong>, or fetch the bundle.</p>
+  {{end}}
+  <ul class="checks">
+    {{range .SetupHealth}}
+    <li class="check{{if .Done}} is-done{{end}}">
+      <span class="check-mark" aria-hidden="true">{{if .Done}}{{iconSVG "check" 14}}{{else}}{{iconSVG "alert" 14}}{{end}}</span>
+      <span class="check-text"><strong>{{.Label}}</strong>{{if not .Done}}<small>{{.Hint}}</small>{{end}}</span>
+      {{if not .Done}}<a class="btn-ghost-sm" href="{{.Href}}">Fix</a>{{else}}<span class="check-ok">Done</span>{{end}}
+    </li>
     {{end}}
-    <ul class="setup-health">
-      {{range .SetupHealth}}
-      <li class="setup-health-item{{if .Done}} done{{end}}">
-        <span class="setup-health-icon" aria-hidden="true">{{if .Done}}{{iconSVG "check" 14}}{{else}}{{iconSVG "alert" 14}}{{end}}</span>
-        <span class="setup-health-label">{{.Label}}</span>
-        {{if not .Done}}<a class="btn-ghost-sm setup-health-fix" href="{{.Href}}">Fix →</a><span class="setup-health-hint">{{.Hint}}</span>{{end}}
-      </li>
-      {{end}}
-    </ul>
-  </div>
+  </ul>
 </section>
 
-<section class="panel panel-compact">
-  <div class="panel-header"><h2>Server Configuration</h2></div>
-  <div class="config-grid">
-    <div class="config-item"><span class="config-key">Registration</span>
-      {{if .AllowRegister}}<span class="badge-success">Open</span>{{else}}<span class="badge-warn">Disabled</span>{{end}}
-    </div>
-    <div class="config-item"><span class="config-key">Admin user</span><span class="config-val">{{.Username}}</span></div>
-    <div class="config-item"><span class="config-key">Global storage limit</span>
-      <span class="config-val">{{if eq .MaxStorageBytes 0}}Unlimited{{else}}{{formatBytes .MaxStorageBytes}}{{end}}</span>
-    </div>
-    <div class="config-item"><span class="config-key">Read-only mode</span>
-      {{if .ReadOnly}}<span class="badge-warn">Yes</span>{{else}}<span class="badge-success">No</span>{{end}}
-    </div>
-  </div>
-</section>
+<div class="admin-split">
+  <section class="admin-sec" aria-labelledby="config-heading">
+    <div class="sec-head"><h2 id="config-heading" class="sec-title">Configuration</h2><a class="sec-link" href="/admin/settings">Settings →</a></div>
+    <dl class="kv">
+      <div><dt>Registration</dt><dd>{{if .AllowRegister}}Open to anyone{{else}}Closed{{end}}</dd></div>
+      <div><dt>Admin</dt><dd>{{.Username}}</dd></div>
+      <div><dt>Storage limit</dt><dd>{{if eq .MaxStorageBytes 0}}None{{else}}{{formatBytes .MaxStorageBytes}}{{end}}</dd></div>
+      <div><dt>Read-only mode</dt><dd>{{if .ReadOnly}}<span class="u-warn">On, uploads are refused</span>{{else}}Off{{end}}</dd></div>
+    </dl>
+  </section>
 
-<section class="panel panel-compact" aria-label="Data integrity">
-  <div class="panel-header">
-    <h2>Data Integrity
-      {{if gt .IntegrityCount 0}}<span class="badge-warn">{{.IntegrityCount}} problem{{if ne .IntegrityCount 1}}s{{end}}</span>
-      {{else}}<span class="badge-success">Healthy</span>{{end}}
-    </h2>
-    <form method="POST" action="/admin/integrity/run">
-      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <button type="submit" class="btn-secondary-sm" {{if .IntegrityRunning}}disabled{{end}}>
-        {{if .IntegrityRunning}}Verifying&hellip;{{else}}Verify now{{end}}
-      </button>
-    </form>
-  </div>
-  <div class="panel-body">
-    <p class="cell-muted u-m0">
-      Weekly job that re-hashes every stored save against its recorded checksum (client-encrypted saves are skipped — the server cannot read them).
-      {{if .IntegrityLastRun}}Last run {{formatTime .IntegrityLastRun.StartedAt}} ({{.IntegrityLastRun.Status}}).{{else}}Not run yet.{{end}}
-    </p>
-    {{if .IntegrityFindings}}
-    <div class="table-wrap u-mt-sm">
+  <section class="admin-sec" aria-labelledby="integrity-heading">
+    <div class="sec-head">
+      <h2 id="integrity-heading" class="sec-title">Integrity</h2>
+      <form method="POST" action="/admin/integrity/run" class="inline-form">
+        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+        <button type="submit" class="btn-ghost-sm" {{if .IntegrityRunning}}disabled{{end}}>{{if .IntegrityRunning}}Checking&hellip;{{else}}Check now{{end}}</button>
+      </form>
+    </div>
+    <div class="set-state">
+      {{if gt .IntegrityCount 0}}<span class="state-chip state-stale">{{.IntegrityCount}} problem{{if ne .IntegrityCount 1}}s{{end}}</span>
+      {{else if .IntegrityLastRun}}<span class="state-chip state-healthy">{{iconSVG "check" 13}} Healthy</span>
+      {{else}}<span class="state-chip">Not checked yet</span>{{end}}
+      {{if .IntegrityLastRun}}<span>Last checked {{formatTime .IntegrityLastRun.StartedAt}} ({{.IntegrityLastRun.Status}})</span>{{end}}
+    </div>
+    <p class="admin-note">Every week each stored save is re-hashed against its recorded checksum. Client-encrypted saves are skipped, since the server can't read them.</p>
+  </section>
+</div>
+
+{{if .IntegrityFindings}}
+<section class="admin-sec" aria-labelledby="findings-heading">
+  <div class="sec-head"><h2 id="findings-heading" class="sec-title">Damaged saves</h2><span class="cell-muted">Restore from version history, or purge the slot so the device sends a fresh copy</span></div>
+  <div class="panel">
+    <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Found</th><th>User</th><th>Game</th><th>File</th><th>Problem</th><th>Action</th></tr></thead>
+        <thead><tr><th>Found</th><th>User</th><th>Game</th><th>File</th><th>Problem</th><th class="th-action"><span class="sr-only">Action</span></th></tr></thead>
         <tbody>
         {{range .IntegrityFindings}}
           <tr>
-            <td>{{.At}}</td>
+            <td class="cell-muted">{{.At}}</td>
             <td>{{if .Username}}{{.Username}}{{else}}{{.UserID}}{{end}}</td>
             <td>{{.GameID}}</td>
             <td class="cell-muted">{{.PathKey}}</td>
             <td><span class="badge-warn">{{.Kind}}</span></td>
-            <td>
-              <form method="POST" action="/admin/integrity/purge">
+            <td class="cell-action">
+              <form method="POST" action="/admin/integrity/purge" class="inline-form">
                 <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
                 <input type="hidden" name="user_id" value="{{.UserID}}">
                 <input type="hidden" name="game_id" value="{{.GameID}}">
@@ -130,21 +124,11 @@
         </tbody>
       </table>
     </div>
-    <p class="cell-muted u-mt-xs">Restore an affected save from its version history, or purge the slot and let the client push a fresh copy.</p>
-    {{end}}
-    <form method="POST" action="/admin/saves/purge-game" class="u-mt-sm">
-      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <label class="cell-muted" for="purge-game-id">Purge one game across <strong>all</strong> users — cleanup for data uploaded in error (e.g. a mislabeled save path). Type the game ID twice to confirm:</label>
-      <div class="u-flex u-mt-sm">
-        <input type="text" id="purge-game-id" name="game_id" class="text-input" placeholder="game ID" autocomplete="off">
-        <input type="text" name="confirm" class="text-input" placeholder="repeat game ID" autocomplete="off">
-        <button type="submit" class="btn-danger-sm">Purge across all users</button>
-      </div>
-    </form>
   </div>
 </section>
+{{end}}
 
-<section class="panel" id="admin-jobs-panel"
+<section class="panel admin-jobs" id="admin-jobs-panel"
          hx-get="/admin/partial/jobs?context=overview"
          hx-trigger="load, job-finished from:body, job-progress from:body"
          hx-swap="innerHTML">
@@ -152,16 +136,31 @@
 </section>
 
 {{if .StatsSnapshots}}
-<section class="panel">
-  <div class="panel-header"><h2>Stats over time</h2></div>
-  <div class="chart-wrap u-chart-grid">
-    <div><h3 class="cell-muted u-title-sm">Users</h3>{{chartLineSVG .StatsSnapshots "users" 400 120}}</div>
-    <div><h3 class="cell-muted u-title-sm">Clients</h3>{{chartLineSVG .StatsSnapshots "clients" 400 120}}</div>
-    <div><h3 class="cell-muted u-title-sm">Saves</h3>{{chartLineSVG .StatsSnapshots "saves" 400 120}}</div>
-    <div><h3 class="cell-muted u-title-sm">Storage</h3>{{chartLineSVG .StatsSnapshots "storage" 400 120}}</div>
+<section class="admin-sec" aria-labelledby="trend-heading">
+  <div class="sec-head"><h2 id="trend-heading" class="sec-title">Over time</h2></div>
+  <div class="trend-grid">
+    <figure><figcaption>Users</figcaption>{{chartLineSVG .StatsSnapshots "users" 400 120}}</figure>
+    <figure><figcaption>Devices</figcaption>{{chartLineSVG .StatsSnapshots "clients" 400 120}}</figure>
+    <figure><figcaption>Saves</figcaption>{{chartLineSVG .StatsSnapshots "saves" 400 120}}</figure>
+    <figure><figcaption>Storage</figcaption>{{chartLineSVG .StatsSnapshots "storage" 400 120}}</figure>
   </div>
 </section>
 {{end}}
+
+<section class="admin-sec" aria-labelledby="danger-heading">
+  <div class="sec-head"><h2 id="danger-heading" class="sec-title">Purge a game</h2></div>
+  <form method="POST" action="/admin/saves/purge-game" class="set-danger danger-form">
+    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+    <p><strong>Deletes one game's saves for every user.</strong> For cleaning up data uploaded by mistake, such as a mislabeled save path. Type the game ID twice to confirm.</p>
+    <div class="danger-fields">
+      <label class="sr-only" for="purge-game-id">Game ID</label>
+      <input type="text" id="purge-game-id" name="game_id" class="text-input" placeholder="Game ID" autocomplete="off">
+      <label class="sr-only" for="purge-game-confirm">Game ID again</label>
+      <input type="text" id="purge-game-confirm" name="confirm" class="text-input" placeholder="Game ID again" autocomplete="off">
+      <button type="submit" class="btn-danger-sm">Purge for all users</button>
+    </div>
+  </form>
+</section>
 {{end}}
 {{define "admin_overview_scripts"}}
 <div hidden

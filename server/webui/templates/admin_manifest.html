@@ -1,20 +1,22 @@
 {{template "layout" .}}
 {{define "admin_manifest_title"}}Admin Manifest — GSBS{{end}}
 {{define "admin_manifest_content"}}
-<h1 class="sr-only">Save-Location Manifest</h1>
-<section class="panel">
-  <div class="panel-header-actions">
-    <h2>Manifest<span class="table-count">({{.Stats.ManifestCount}} entries)</span></h2>
-    <div class="panel-actions">
-      <form method="get" action="/admin/manifest.csv" class="inline-form">
-        <button type="submit" class="btn-ghost-sm">Export CSV</button>
-      </form>
-      <form method="post" action="/admin/push-manifest" class="inline-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <button type="submit" class="btn-primary-sm">Push to Clients</button>
-      </form>
-    </div>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Manifest</h1>
+    <p class="page-sub">{{.Stats.ManifestCount}} save location{{if ne .Stats.ManifestCount 1}}s{{end}}: where each game keeps its saves, sent to every client.</p>
   </div>
+  <div class="page-actions">
+    <form method="get" action="/admin/manifest.csv" class="inline-form">
+      <button type="submit" class="btn-ghost-sm">Export CSV</button>
+    </form>
+    <form method="post" action="/admin/push-manifest" class="inline-form">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <button type="submit" class="btn-primary-sm">Push to clients</button>
+    </form>
+  </div>
+</div>
+<section class="panel" aria-label="Save locations">
   <div class="search-wrap">
     <input type="search" class="search-input" name="q" value="{{.Query}}" placeholder="Search manifest…"
            hx-get="/admin/partial/manifest"

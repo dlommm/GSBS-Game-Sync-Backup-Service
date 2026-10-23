@@ -23,12 +23,12 @@
     {{else}}
     <form method="post" action="/admin/run-job" class="inline-form">
       <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
-      <button type="submit" class="btn-primary-sm">Phase 1+2: Refresh IDs and Parse/Store Backlog</button>
+      <button type="submit" class="btn-primary-sm">Refresh IDs and parse backlog</button>
     </form>
     <form method="post" action="/admin/run-job" class="inline-form" data-confirm="Force a full PCGW resync? This bypasses resume and may take a long time.">
       <input type="hidden" name="csrf" value="{{$.CSRFToken}}">
       <input type="hidden" name="full" value="1">
-      <button type="submit" class="btn-ghost-sm">Phase 1+2 Full Reparse (No Resume)</button>
+      <button type="submit" class="btn-ghost-sm">Full reparse</button>
     </form>
     {{end}}
   </div>

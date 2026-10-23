@@ -1,121 +1,107 @@
 {{define "partials/insights_body.html"}}
-<section class="metric-row" aria-label="Summary">
-  {{template "partials/metric-card.html" (dict "Label" "Games" "Value" .GameCount)}}
-  {{template "partials/metric-card.html" (dict "Label" "Saves" "Value" .SaveCount)}}
-  {{template "partials/metric-card.html" (dict "Label" "Storage" "Value" (formatBytes .TotalBytes))}}
-  {{template "partials/metric-card.html" (dict "Label" "Devices" "Value" .DeviceCount "Sub" (printf "%d online" .OnlineCount))}}
-</section>
+{{/* Insights, v7: the finding first, figures as one strip, protection as a
+     checklist with the fix beside each open item, then the activity charts
+     as open sections. Shared by /dashboard/analytics (LinkGames) and the
+     admin's read-only user view. */}}
+{{if .Alerts}}
+<ul class="finding-list" aria-label="Backup health">
+  {{range .Alerts}}<li class="finding tone-{{.Tone}}"><span class="finding-dot" aria-hidden="true"></span>{{.Text}}</li>{{end}}
+</ul>
+{{end}}
 
-<section class="panel protection-panel" aria-labelledby="protection-heading">
-  <div class="panel-header"><h2 id="protection-heading">Protection at a glance</h2></div>
-  <div class="protection-grid">
-    <div class="protection-item {{if .Protection.BackupsHealthy}}tone-ok{{else}}tone-danger{{end}}">
-      <span class="protection-icon">{{iconSVG "shield" 18}}</span>
-      <span class="protection-text">
-        <span class="protection-title">Backups</span>
-        <span class="protection-sub">{{if .Protection.BackupsHealthy}}All devices syncing{{else}}A device has gone quiet{{end}}</span>
-      </span>
-    </div>
-    <div class="protection-item {{if .Protection.TOTPEnabled}}tone-ok{{else}}tone-warn{{end}}">
-      <span class="protection-icon">{{iconSVG "key" 18}}</span>
-      <span class="protection-text">
-        <span class="protection-title">Two-factor auth</span>
-        <span class="protection-sub">{{if .Protection.TOTPEnabled}}Enabled{{else}}Off — enable it in Settings{{end}}</span>
-      </span>
-    </div>
-    <div class="protection-item {{if gt .Protection.EncryptedPct 0}}tone-ok{{else}}tone-neutral{{end}}">
-      <span class="protection-icon">{{iconSVG "save" 18}}</span>
-      <span class="protection-text">
-        <span class="protection-title">End-to-end encryption</span>
-        <span class="protection-sub">{{if gt .Protection.TotalSaves 0}}{{.Protection.EncryptedPct}}% of saves encrypted{{else}}No saves yet{{end}}</span>
-      </span>
-    </div>
-    <div class="protection-item {{if gt .Protection.DevicesOnline 0}}tone-ok{{else}}tone-neutral{{end}}">
-      <span class="protection-icon">{{iconSVG "device" 18}}</span>
-      <span class="protection-text">
-        <span class="protection-title">Devices</span>
-        <span class="protection-sub">{{.Protection.DevicesOnline}} of {{.Protection.DeviceCount}} online now</span>
-      </span>
-    </div>
-  </div>
-</section>
+<dl class="figs figs-lg insight-figs" aria-label="Summary">
+  <div><dt>Games</dt><dd>{{.GameCount}}</dd></div>
+  <div><dt>Saves</dt><dd>{{.SaveCount}}</dd></div>
+  <div><dt>Storage</dt><dd>{{formatBytes .TotalBytes}}</dd></div>
+  <div><dt>Devices online</dt><dd>{{.OnlineCount}}<small>/{{.DeviceCount}}</small></dd></div>
+</dl>
 
-<section class="panel protection-panel" aria-labelledby="restore-confidence-heading">
-  <div class="panel-header"><h2 id="restore-confidence-heading">Restore confidence</h2></div>
-  <div class="protection-grid protection-grid-2">
+<section class="insight-sec" aria-labelledby="protection-heading">
+  <div class="sec-head"><h2 id="protection-heading" class="sec-title">Protection</h2></div>
+  <ul class="checks">
+    <li class="check{{if .Protection.BackupsHealthy}} is-done{{else}} is-bad{{end}}">
+      <span class="check-mark" aria-hidden="true">{{if .Protection.BackupsHealthy}}{{iconSVG "check" 14}}{{else}}{{iconSVG "alert" 14}}{{end}}</span>
+      <span class="check-text"><strong>Device backups</strong><small>{{if .Protection.BackupsHealthy}}Every device has synced recently{{else}}A device has gone quiet{{end}}</small></span>
+      {{if and $.LinkGames (not .Protection.BackupsHealthy)}}<a class="btn-ghost-sm" href="/dashboard/clients">Devices</a>{{end}}
+    </li>
+    <li class="check{{if .Protection.TOTPEnabled}} is-done{{end}}">
+      <span class="check-mark" aria-hidden="true">{{if .Protection.TOTPEnabled}}{{iconSVG "check" 14}}{{else}}{{iconSVG "key" 14}}{{end}}</span>
+      <span class="check-text"><strong>Two-factor sign-in</strong><small>{{if .Protection.TOTPEnabled}}On{{else}}Off: a password alone opens this account{{end}}</small></span>
+      {{if and $.LinkGames (not .Protection.TOTPEnabled)}}<a class="btn-ghost-sm" href="/dashboard/settings#two-factor">Set up</a>{{end}}
+    </li>
+    <li class="check{{if gt .Protection.EncryptedPct 0}} is-done{{else}} is-idle{{end}}">
+      <span class="check-mark" aria-hidden="true">{{if gt .Protection.EncryptedPct 0}}{{iconSVG "check" 14}}{{else}}{{iconSVG "save" 14}}{{end}}</span>
+      <span class="check-text"><strong>End-to-end encryption</strong><small>{{if gt .Protection.TotalSaves 0}}{{.Protection.EncryptedPct}}% of saves encrypted{{else}}No saves yet{{end}}</small></span>
+      {{if and $.LinkGames (lt .Protection.EncryptedPct 100) (gt .Protection.TotalSaves 0)}}<a class="btn-ghost-sm" href="/dashboard/settings#encryption">Settings</a>{{end}}
+    </li>
     {{if not .Protection.ServerBackupConfigured}}
-    <div class="protection-item tone-warn">
-      <span class="protection-icon">{{iconSVG "shield" 18}}</span>
-      <span class="protection-text">
-        <span class="protection-title">Server backup</span>
-        <span class="protection-sub">Not configured — admins can enable scheduled backups in Admin → Settings.</span>
-      </span>
-    </div>
+    <li class="check">
+      <span class="check-mark" aria-hidden="true">{{iconSVG "shield" 14}}</span>
+      <span class="check-text"><strong>Server backup</strong><small>Not set up. An admin can turn on scheduled backups in Admin › Settings.</small></span>
+      {{if .IsAdmin}}<a class="btn-ghost-sm" href="/admin/settings#section-backups">Set up</a>{{end}}
+    </li>
     {{else if not .Protection.ServerBackupAt}}
-    <div class="protection-item tone-neutral">
-      <span class="protection-icon">{{iconSVG "shield" 18}}</span>
-      <span class="protection-text">
-        <span class="protection-title">Server backup</span>
-        <span class="protection-sub">Enabled — first scheduled run hasn't happened yet.</span>
-      </span>
-    </div>
+    <li class="check is-idle">
+      <span class="check-mark" aria-hidden="true">{{iconSVG "shield" 14}}</span>
+      <span class="check-text"><strong>Server backup</strong><small>On; the first scheduled run hasn't happened yet</small></span>
+    </li>
     {{else}}
-    <div class="protection-item {{if .Protection.ServerBackupOK}}tone-ok{{else}}tone-danger{{end}}">
-      <span class="protection-icon">{{iconSVG "shield" 18}}</span>
-      <span class="protection-text">
-        <span class="protection-title">Server backup</span>
-        <span class="protection-sub">{{if .Protection.ServerBackupOK}}Last backup succeeded{{else}}Last backup FAILED{{end}} · <span title="{{.Protection.ServerBackupAt}}">{{formatTime .Protection.ServerBackupAt}}</span></span>
-      </span>
-    </div>
+    <li class="check{{if .Protection.ServerBackupOK}} is-done{{else}} is-bad{{end}}">
+      <span class="check-mark" aria-hidden="true">{{if .Protection.ServerBackupOK}}{{iconSVG "check" 14}}{{else}}{{iconSVG "alert" 14}}{{end}}</span>
+      <span class="check-text"><strong>Server backup</strong><small>{{if .Protection.ServerBackupOK}}Last backup succeeded{{else}}Last backup failed{{end}} <span title="{{.Protection.ServerBackupAt}}">{{formatTime .Protection.ServerBackupAt}}</span></small></span>
+    </li>
     {{end}}
     {{if not .Protection.IntegrityAt}}
-    <div class="protection-item tone-neutral">
-      <span class="protection-icon">{{iconSVG "check" 18}}</span>
-      <span class="protection-text">
-        <span class="protection-title">Data integrity</span>
-        <span class="protection-sub">Weekly checksum verification hasn't run yet.</span>
-      </span>
-    </div>
+    <li class="check is-idle">
+      <span class="check-mark" aria-hidden="true">{{iconSVG "check" 14}}</span>
+      <span class="check-text"><strong>Integrity check</strong><small>The weekly checksum run hasn't happened yet</small></span>
+    </li>
     {{else}}
-    <div class="protection-item {{if .Protection.IntegrityOK}}tone-ok{{else}}tone-danger{{end}}">
-      <span class="protection-icon">{{iconSVG "check" 18}}</span>
-      <span class="protection-text">
-        <span class="protection-title">Data integrity</span>
-        <span class="protection-sub">{{if .Protection.IntegrityOK}}All saves verified{{else}}Verification found problems{{end}} · <span title="{{.Protection.IntegrityAt}}">{{formatTime .Protection.IntegrityAt}}</span></span>
-      </span>
-    </div>
+    <li class="check{{if .Protection.IntegrityOK}} is-done{{else}} is-bad{{end}}">
+      <span class="check-mark" aria-hidden="true">{{if .Protection.IntegrityOK}}{{iconSVG "check" 14}}{{else}}{{iconSVG "alert" 14}}{{end}}</span>
+      <span class="check-text"><strong>Integrity check</strong><small>{{if .Protection.IntegrityOK}}Every save verified{{else}}Problems found{{end}} <span title="{{.Protection.IntegrityAt}}">{{formatTime .Protection.IntegrityAt}}</span></small></span>
+    </li>
     {{end}}
-  </div>
+  </ul>
 </section>
 
-<div class="analytics-cols">
-  <section class="panel" aria-labelledby="volume-heading">
-    <div class="panel-header-actions">
-      <h2 id="volume-heading">Sync volume</h2>
-      <span class="cell-muted">{{.SyncTotal}} sync{{if ne .SyncTotal 1}}s{{end}} · last {{.WindowDays}} days</span>
-    </div>
-    <div class="panel-body">
-      <div class="bars-chart">{{barsSVG .SyncByDay 480 120}}</div>
-    </div>
+<div class="insight-split">
+  <section class="insight-sec" aria-labelledby="volume-heading">
+    <div class="sec-head"><h2 id="volume-heading" class="sec-title">Syncs</h2><span class="cell-muted">last {{.WindowDays}} days</span></div>
+    <p class="chart-lead"><b>{{.SyncTotal}}</b> save{{if ne .SyncTotal 1}}s{{end}} sent</p>
+    <div class="bars-chart">{{barsSVG .SyncByDay 480 120}}</div>
   </section>
-
-  <section class="panel" aria-labelledby="bytes-heading">
-    <div class="panel-header-actions">
-      <h2 id="bytes-heading">Data synced</h2>
-      <span class="cell-muted">{{formatBytes .BytesTotal}} · last {{.WindowDays}} days</span>
-    </div>
-    <div class="panel-body">
-      <div class="bars-chart">{{bytesBarsSVG .BytesByDay 480 120}}</div>
-    </div>
+  <section class="insight-sec" aria-labelledby="bytes-heading">
+    <div class="sec-head"><h2 id="bytes-heading" class="sec-title">Data</h2><span class="cell-muted">last {{.WindowDays}} days</span></div>
+    <p class="chart-lead"><b>{{formatBytes .BytesTotal}}</b> uploaded</p>
+    <div class="bars-chart">{{bytesBarsSVG .BytesByDay 480 120}}</div>
   </section>
 </div>
 
-<div class="analytics-cols">
-  <section class="panel" aria-labelledby="byclient-heading">
-    <div class="panel-header-actions">
-      <h2 id="byclient-heading">Activity by device</h2>
-      <span class="cell-muted">version writes · last {{.WindowDays}} days</span>
+<div class="insight-split">
+  <section class="insight-sec" aria-labelledby="mostactive-heading">
+    <div class="sec-head"><h2 id="mostactive-heading" class="sec-title">Most played</h2><span class="cell-muted">by saves sent</span></div>
+    {{if .MostActive}}
+    <div class="topgames-list">
+      {{$link := .LinkGames}}
+      {{range .MostActive}}
+      {{if $link}}<a class="topgame-row" href="/dashboard/games/{{urlquery .GameID}}">{{else}}<div class="topgame-row">{{end}}
+        <span class="topgame-icon">{{gameIconSVG .Title 28}}</span>
+        <span class="topgame-info">
+          <span class="topgame-title">{{.Title}}</span>
+          <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
+        </span>
+        <span class="topgame-size">{{.Versions}}</span>
+      {{if $link}}</a>{{else}}</div>{{end}}
+      {{end}}
     </div>
+    {{else}}
+    <p class="cell-muted">Nothing synced in this window. Saves sync on their own while GSBS runs.</p>
+    {{end}}
+  </section>
+
+  <section class="insight-sec" aria-labelledby="byclient-heading">
+    <div class="sec-head"><h2 id="byclient-heading" class="sec-title">By device</h2>{{if .LinkGames}}<a class="sec-link" href="/dashboard/clients">Devices →</a>{{end}}</div>
     {{if .ByClient}}
     <div class="topgames-list">
       {{range .ByClient}}
@@ -130,142 +116,62 @@
       {{end}}
     </div>
     {{else}}
-    {{template "partials/empty-state.html" (dict "Icon" "device" "Title" "No sync activity yet" "Sub" "Once your devices push saves, you'll see which device does the work.")}}
+    <p class="cell-muted">No device has sent a save in this window.</p>
     {{end}}
-  </section>
-
-  <section class="panel" aria-labelledby="health-heading">
-    <div class="panel-header"><h2 id="health-heading">Backup health</h2></div>
-    <ul class="health-list">
-      {{range .Alerts}}
-      <li class="health-item tone-{{.Tone}}">
-        <span class="health-dot" aria-hidden="true"></span>
-        <span>{{.Text}}</span>
-      </li>
-      {{end}}
-    </ul>
   </section>
 </div>
 
-<div class="analytics-cols">
-  <section class="panel" aria-labelledby="rhythm-heading">
-    <div class="panel-header-actions">
-      <h2 id="rhythm-heading">Play rhythm</h2>
-      <span class="cell-muted">when your saves change · last {{.WindowDays}} days</span>
-    </div>
-    <div class="panel-body rhythm-grid">
-      <div>
-        <h3 class="cell-muted u-title-sm">By weekday</h3>
+<div class="insight-split">
+  <section class="insight-sec" aria-labelledby="rhythm-heading">
+    <div class="sec-head"><h2 id="rhythm-heading" class="sec-title">When you play</h2><span class="cell-muted">when saves change</span></div>
+    <div class="rhythm-grid">
+      <figure>
+        <figcaption>By weekday</figcaption>
         <div class="bars-chart bars-chart-sm">{{barsSVG .WeekdaySeries 280 70}}</div>
         <div class="rhythm-axis"><span>Sun</span><span>Wed</span><span>Sat</span></div>
-      </div>
-      <div>
-        <h3 class="cell-muted u-title-sm">By hour (UTC)</h3>
+      </figure>
+      <figure>
+        <figcaption>By hour (UTC)</figcaption>
         <div class="bars-chart bars-chart-sm">{{barsSVG .HoursSeries 280 70}}</div>
         <div class="rhythm-axis"><span>00</span><span>12</span><span>23</span></div>
-      </div>
+      </figure>
     </div>
   </section>
 
-  <section class="panel" aria-labelledby="mostactive-heading">
-    <div class="panel-header-actions">
-      <h2 id="mostactive-heading">Most active games</h2>
-      <span class="cell-muted">by version writes · last {{.WindowDays}} days</span>
-    </div>
-    {{if .MostActive}}
-    <div class="topgames-list">
-      {{$link := .LinkGames}}
-      {{range .MostActive}}
-      {{if $link}}<a class="topgame-row" href="/dashboard/games/{{urlquery .GameID}}">{{else}}<div class="topgame-row">{{end}}
-        <span class="topgame-icon">{{gameIconSVG .Title 28}}</span>
-        <span class="topgame-info">
-          <span class="topgame-title">{{.Title}}</span>
-          <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
-        </span>
-        <span class="topgame-size">{{.Versions}} sync{{if ne .Versions 1}}s{{end}}</span>
-      {{if $link}}</a>{{else}}</div>{{end}}
-      {{end}}
-    </div>
-    {{else}}
-    {{template "partials/empty-state.html" (dict "Title" "Nothing synced in this window" "Sub" "Play something! Saves sync automatically while GSBS is running.")}}
-    {{end}}
-  </section>
-</div>
-
-<div class="analytics-cols">
-  <section class="panel" aria-labelledby="topgames-heading">
-    <div class="panel-header"><h2 id="topgames-heading">Top games by storage</h2></div>
-    {{if .TopGames}}
-    <div class="topgames-list">
-      {{$link := .LinkGames}}
-      {{range .TopGames}}
-      {{if $link}}<a class="topgame-row" href="/dashboard/games/{{urlquery .GameID}}">{{else}}<div class="topgame-row">{{end}}
-        <span class="topgame-icon">{{gameIconSVG .Title 28}}</span>
-        <span class="topgame-info">
-          <span class="topgame-title">{{.Title}}</span>
-          <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
-        </span>
-        <span class="topgame-size">{{formatBytes .TotalBytes}}</span>
-      {{if $link}}</a>{{else}}</div>{{end}}
-      {{end}}
-    </div>
-    {{else}}
-    <div class="panel-empty"><p>No games to rank yet.</p></div>
-    {{end}}
-  </section>
-
-  <section class="panel" aria-labelledby="history-heading">
-    <div class="panel-header"><h2 id="history-heading">Version history</h2></div>
-    <div class="panel-body">
-      <div class="config-grid config-grid-stacked">
-        <div class="config-item"><span class="config-key">Files tracked</span><span class="config-val">{{.Depth.Slots}}</span></div>
-        <div class="config-item"><span class="config-key">Versions kept</span><span class="config-val">{{.Depth.Versions}}</span></div>
-        <div class="config-item"><span class="config-key">Average depth</span><span class="config-val">{{printf "%.1f" .Depth.AvgPerSlot}} versions/file</span></div>
-        {{if .Depth.TopCount}}
-        <div class="config-item"><span class="config-key">Deepest history</span><span class="config-val">{{.Depth.TopGameTitle}} · {{.Depth.TopCount}} versions</span></div>
-        {{end}}
-      </div>
-      {{if .CategoryBars}}
-      <h3 class="cell-muted u-title-sm u-mt-sm">Storage by content type</h3>
-      <div class="topgames-list">
-        {{range .CategoryBars}}
-        <div class="topgame-row">
-          <span class="topgame-info">
-            <span class="topgame-title">{{.Label}}</span>
-            <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
-          </span>
-          <span class="topgame-size">{{formatBytes .Bytes}}</span>
-        </div>
-        {{end}}
-      </div>
-      {{end}}
-    </div>
+  <section class="insight-sec" aria-labelledby="history-heading">
+    <div class="sec-head"><h2 id="history-heading" class="sec-title">Version history</h2></div>
+    <dl class="kv">
+      <div><dt>Files tracked</dt><dd>{{.Depth.Slots}}</dd></div>
+      <div><dt>Versions kept</dt><dd>{{.Depth.Versions}}</dd></div>
+      <div><dt>Average per file</dt><dd>{{printf "%.1f" .Depth.AvgPerSlot}}</dd></div>
+      {{if .Depth.TopCount}}<div><dt>Deepest</dt><dd>{{.Depth.TopGameTitle}} · {{.Depth.TopCount}}</dd></div>{{end}}
+      {{range .CategoryBars}}<div><dt>{{.Label}} stored</dt><dd>{{formatBytes .Bytes}}</dd></div>{{end}}
+    </dl>
   </section>
 </div>
 
 {{if and .LinkGames .Storage}}
-<section class="panel" aria-labelledby="storage-explorer-heading">
-  <div class="panel-header"><h2 id="storage-explorer-heading">Storage breakdown</h2></div>
-  <div class="panel-body">
-    <p class="cell-muted u-mb-sm">Where your quota goes, per game. Pruning trims a game's history down to its retention policy — the newest versions always stay.</p>
+<section class="insight-sec" aria-labelledby="storage-explorer-heading">
+  <div class="sec-head"><h2 id="storage-explorer-heading" class="sec-title">Storage</h2><span class="cell-muted">Pruning trims a game's history to its retention policy; the newest versions always stay</span></div>
+  <div class="panel">
     <div class="table-wrap">
       <table class="data-table" data-table-id="storage-explorer">
         <thead>
           <tr>
             <th scope="col">Game</th>
-            <th scope="col">Current</th>
-            <th scope="col">History</th>
+            <th scope="col" class="num">Current</th>
+            <th scope="col" class="num">History</th>
             <th scope="col">Keeps</th>
-            <th scope="col" class="th-action">Actions</th>
+            <th scope="col" class="th-action"><span class="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
           {{range .Storage}}
           <tr>
             <td class="cell-primary"><a class="game-list-name" href="/dashboard/games/{{urlquery .GameID}}">{{.Title}}</a></td>
-            <td class="cell-size">{{formatBytes .CurrentBytes}}</td>
-            <td class="cell-size">{{formatBytes .HistoryBytes}} <span class="cell-muted">({{.Versions}} version{{if ne .Versions 1}}s{{end}})</span></td>
-            <td class="cell-muted">last {{.Keep}} per file</td>
+            <td class="cell-size num">{{formatBytes .CurrentBytes}}</td>
+            <td class="cell-size num">{{formatBytes .HistoryBytes}} <span class="cell-muted">· {{.Versions}} version{{if ne .Versions 1}}s{{end}}</span></td>
+            <td class="cell-muted">Newest {{.Keep}} per file</td>
             <td class="cell-action">
               {{if and .Prunable (not $.ReadOnly)}}
               <form method="post" action="/dashboard/storage/prune" class="inline-form"
@@ -275,7 +181,7 @@
                 <button type="submit" class="btn-ghost-sm">Prune</button>
               </form>
               {{else}}
-              <span class="cell-muted">{{if .Prunable}}—{{else}}at policy{{end}}</span>
+              <span class="cell-muted">{{if .Prunable}}—{{else}}At policy{{end}}</span>
               {{end}}
             </td>
           </tr>
@@ -285,23 +191,40 @@
     </div>
   </div>
 </section>
+{{else if .TopGames}}
+<section class="insight-sec" aria-labelledby="topgames-heading">
+  <div class="sec-head"><h2 id="topgames-heading" class="sec-title">Storage by game</h2></div>
+  <div class="topgames-list">
+    {{range .TopGames}}
+    <div class="topgame-row">
+      <span class="topgame-icon">{{gameIconSVG .Title 28}}</span>
+      <span class="topgame-info">
+        <span class="topgame-title">{{.Title}}</span>
+        <span class="topgame-bar-track"><span data-width-pct="{{.Pct}}" class="topgame-bar-fill has-bar-width"></span></span>
+      </span>
+      <span class="topgame-size">{{formatBytes .TotalBytes}}</span>
+    </div>
+    {{end}}
+  </div>
+</section>
 {{end}}
 
-<section class="panel" aria-labelledby="devices-heading">
-  <div class="panel-header"><h2 id="devices-heading">Devices</h2></div>
+{{if not .LinkGames}}
+<section class="insight-sec" aria-labelledby="devices-heading">
+  <div class="sec-head"><h2 id="devices-heading" class="sec-title">Devices</h2></div>
   {{if .Devices}}
-  <ul class="device-mini-list">
+  <ul class="checks">
     {{range .Devices}}
-    <li class="device-mini">
+    <li class="check{{if .Online}} is-done{{else}} is-idle{{end}}">
       <span class="client-status {{if .Online}}online{{else}}offline{{end}}" aria-hidden="true"></span>
-      <span class="device-mini-name">{{.Name}}</span>
-      <span class="os-badge os-{{.OS}}">{{.OS}}</span>
-      <span class="device-mini-when">{{if .Online}}online{{else}}<span title="{{.LastSeen}}">{{formatTime .LastSeen}}</span>{{end}}</span>
+      <span class="check-text"><strong>{{.Name}}</strong><small>{{osLabel .OS}}</small></span>
+      <span class="check-ok">{{if .Online}}Online now{{else}}<span title="{{.LastSeen}}">{{formatTime .LastSeen}}</span>{{end}}</span>
     </li>
     {{end}}
   </ul>
   {{else}}
-  <div class="panel-empty"><p>No devices connected.</p></div>
+  <p class="cell-muted">No devices signed in.</p>
   {{end}}
 </section>
+{{end}}
 {{end}}

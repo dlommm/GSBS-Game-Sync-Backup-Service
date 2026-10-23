@@ -15,16 +15,27 @@
 </head>
 <body class="auth-page">
   <a href="#main-content" class="skip-link">Skip to main content</a>
+    <aside class="auth-hero" aria-label="GSBS">
+    <span class="auth-mark"><img src="/static/favicon.png" alt="" width="34" height="34"><span>GSBS</span></span>
+    <div class="auth-slots" aria-hidden="true">
+      <span class="auth-slot"><span class="auth-slot-art">HA</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">ER</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">SV</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+    </div>
+    <div>
+      <p class="auth-display">Every save.<br>Every machine.</p>
+      <p class="auth-hero-sub">Game Sync &amp; Backup keeps your saves backed up and in step across your PCs and handhelds, with every version kept.</p>
+    </div>
+  </aside>
   <main id="main-content" class="auth-card" role="main">
-    <img src="/static/logo.png" alt="GSBS" class="auth-logo">
-    <h1>Two-factor authentication</h1>
-    <p class="subtitle">Enter the 6-digit code from your authenticator app</p>
+    <h1>One more step</h1>
+    <p class="subtitle">Enter the six-digit code from your authenticator app.</p>
     {{if .Error}}<p class="alert alert-error" role="alert">{{.Error}}</p>{{end}}
     <form method="post" action="/login/totp" class="auth-form">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
       <label for="code">Code</label>
-      <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" {{if not .Recovery}}autofocus{{end}}>
-      <button type="submit">Verify</button>
+      <input id="code" name="code" type="text" class="code-input" inputmode="numeric" autocomplete="one-time-code" {{if not .Recovery}}autofocus{{end}}>
+      <button type="submit">Sign in</button>
     </form>
     <details class="auth-recovery" {{if .Recovery}}open{{end}}>
       <summary>Lost your authenticator? Use a recovery code</summary>

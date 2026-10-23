@@ -97,7 +97,23 @@ func (h *WebHandler) serveSettings(w http.ResponseWriter, r *http.Request) {
 		Locales:           i18n.AvailableLocales(),
 	}
 	h.buildEncryptionCenter(r.Context(), userID, &data)
+	data.LookTitle = lookPreviewTitle(data.CryptoGames)
 	h.render(w, "settings.html", data)
+}
+
+// lookPreviewTitle picks the game named in the Appearance previews: the
+// shortest of the user's own titles, so the widest title voices still fit.
+func lookPreviewTitle(games []cryptoGameRow) string {
+	title := ""
+	for _, g := range games {
+		if title == "" || len([]rune(g.Title)) < len([]rune(title)) {
+			title = g.Title
+		}
+	}
+	if title == "" {
+		return "Continue"
+	}
+	return title
 }
 
 // buildEncryptionCenter fills the Encryption Center fields (v5.2): fleet

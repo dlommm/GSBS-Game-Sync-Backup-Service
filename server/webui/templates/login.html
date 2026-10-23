@@ -15,10 +15,21 @@
 </head>
 <body class="auth-page">
   <a href="#main-content" class="skip-link">Skip to main content</a>
+    <aside class="auth-hero" aria-label="GSBS">
+    <span class="auth-mark"><img src="/static/favicon.png" alt="" width="34" height="34"><span>GSBS</span></span>
+    <div class="auth-slots" aria-hidden="true">
+      <span class="auth-slot"><span class="auth-slot-art">HA</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">ER</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">SV</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+    </div>
+    <div>
+      <p class="auth-display">Every save.<br>Every machine.</p>
+      <p class="auth-hero-sub">Game Sync &amp; Backup keeps your saves backed up and in step across your PCs and handhelds, with every version kept.</p>
+    </div>
+  </aside>
   <main id="main-content" class="auth-card" role="main">
-    <img src="/static/logo.png" alt="GSBS" class="auth-logo">
-    <h1>Game Sync &amp; Backup</h1>
-    <p class="subtitle">Sign in to your account</p>
+    <h1>Sign in</h1>
+    <p class="subtitle">Sign in to see your saves.</p>
     {{if .Error}}<p class="alert alert-error" role="alert">{{.Error}}</p>{{end}}
     <form method="post" action="/login" class="auth-form">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
@@ -28,20 +39,7 @@
       <input id="password" name="password" type="password" required autocomplete="current-password">
       <button type="submit">Sign in</button>
     </form>
-    <section class="auth-help">
-      <h2>Getting Started</h2>
-      {{if .AllowRegister}}
-      <p class="cell-muted">First run on a new server? Create the first account, then open Admin to configure PCGW sync.</p>
-      <ol>
-        <li><a href="/register">Register</a> an admin account.</li>
-        <li>Sign in and open <strong>Admin → Settings</strong> for initial cron/sync preferences.</li>
-        <li>Open <strong>Admin → PCGW</strong> and run an incremental sync.</li>
-      </ol>
-      {{else}}
-      <p class="cell-muted">Registration is disabled on this server. Ask an admin to create your account before first login.</p>
-      {{end}}
-    </section>
-    {{if .AllowRegister}}<p class="auth-footer">Don't have an account? <a href="/register">Register</a></p>{{end}}
+    {{if .AllowRegister}}<p class="auth-footer">New here? <a href="/register">Create an account</a></p>{{else}}<p class="auth-footer">Accounts on this server are made by its admin.</p>{{end}}
   </main>
 </body>
 </html>

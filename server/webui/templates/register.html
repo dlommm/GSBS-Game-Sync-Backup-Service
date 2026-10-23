@@ -15,10 +15,21 @@
 </head>
 <body class="auth-page">
   <a href="#main-content" class="skip-link">Skip to main content</a>
+    <aside class="auth-hero" aria-label="GSBS">
+    <span class="auth-mark"><img src="/static/favicon.png" alt="" width="34" height="34"><span>GSBS</span></span>
+    <div class="auth-slots" aria-hidden="true">
+      <span class="auth-slot"><span class="auth-slot-art">HA</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">ER</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">SV</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+    </div>
+    <div>
+      <p class="auth-display">Every save.<br>Every machine.</p>
+      <p class="auth-hero-sub">Game Sync &amp; Backup keeps your saves backed up and in step across your PCs and handhelds, with every version kept.</p>
+    </div>
+  </aside>
   <main id="main-content" class="auth-card" role="main">
-    <img src="/static/logo.png" alt="GSBS" class="auth-logo">
     <h1>Create account</h1>
-    <p class="subtitle">Register for GSBS</p>
+    <p class="subtitle">Pick a username and a password of at least 8 characters.</p>
     {{if .Error}}<p class="alert alert-error" role="alert">{{.Error}}</p>{{end}}
     <form method="post" action="/register" class="auth-form">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
@@ -32,17 +43,9 @@
       <div class="strength-meter" data-strength-for="password" data-score="0" aria-hidden="true"><div class="strength-track"><div class="strength-fill"></div></div><span class="strength-label"></span></div>
       <label for="confirm_password">Confirm password</label>
       <input id="confirm_password" name="confirm_password" type="password" required autocomplete="new-password" data-match-of="password">
-      <button type="submit">Register</button>
+      <button type="submit">Create account</button>
     </form>
-    <section class="auth-help">
-      <h2>Initial Configuration</h2>
-      <ol>
-        <li>Create your first account here, then sign in.</li>
-        <li>Open <strong>Admin → Settings</strong> to review cron and first-start sync options.</li>
-        <li>Open <strong>Admin → PCGW</strong> and start the initial incremental sync.</li>
-      </ol>
-    </section>
-    <p class="auth-footer"><a href="/login">Back to sign in</a></p>
+    <p class="auth-footer">Already have one? <a href="/login">Sign in</a></p>
   </main>
   <script src="/static/app.js" defer></script>
 </body>

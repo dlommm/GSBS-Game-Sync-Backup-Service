@@ -6,6 +6,15 @@ For the complete machine-readable changelog, see [CHANGELOG.md](https://github.c
 
 ---
 
+## [7.1.0] — 2026-10-23
+
+The 7.0 design on every page, on the server and in the local client.
+
+- **Admin** joins the shared top bar with a tab strip for its sections; every page opens with a title and what needs attention.
+- **Settings** (account, server and client) are rows with switches; the **Appearance** tiles are live previews you can try before saving.
+- **Insights** leads with a health line and a protection checklist; **sign-in pages** are a split screen; the client's **Status**, **Actions** and other pages match.
+- **Fixed (client):** hand-added games now appear under Status, and Status no longer sticks on "Watcher recovering" after a sync restart.
+
 ## [7.0.0] — 2026-10-22
 
 A new web app built around your games, on the server and in the local client.

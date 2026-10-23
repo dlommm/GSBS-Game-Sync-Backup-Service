@@ -21,7 +21,7 @@
   <tr>
     <td align="center">
       <strong>GSBS 7 — a new web app</strong><br>
-      A web app built around your games (Continue, Library, Load a save, device lanes) · six designs, light and dark · Steam Deck / Flatpak game-aware sync · zero-config setup wizard · built-in offsite backups + one-command restore · end-to-end encryption (Argon2id) · Windows / macOS / Linux / arm64 clients
+      A web app built around your games (Continue, Library, Load a save, device lanes), now on every page including admin and the client · six designs, light and dark · Steam Deck / Flatpak game-aware sync · zero-config setup wizard · built-in offsite backups + one-command restore · end-to-end encryption (Argon2id) · Windows / macOS / Linux / arm64 clients
     </td>
   </tr>
 </table>

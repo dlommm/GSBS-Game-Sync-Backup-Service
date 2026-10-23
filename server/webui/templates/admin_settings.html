@@ -1,9 +1,13 @@
 {{template "layout" .}}
 {{define "admin_settings_title"}}Admin Settings — GSBS{{end}}
 {{define "admin_settings_content"}}
-<h1 class="sr-only">Server Settings</h1>
-<section class="panel">
-  <div class="panel-header"><h2>Server Settings</h2></div>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Server settings</h1>
+    <p class="page-sub">Where the game catalog comes from, when it updates, backups, alerts and safety limits. Saved together with the button at the foot of the form.</p>
+  </div>
+</div>
+<section class="admin-settings">
   <nav class="settings-anchor-nav" aria-label="Settings sections">
     <a href="#section-sync-source">Sync source</a>
     <a href="#section-bundle">Bundle schedule</a>
@@ -19,8 +23,11 @@
     <input type="hidden" name="csrf" value="{{.CSRFToken}}">
 
     <div class="settings-form-section" id="section-sync-source">
-      <h3 class="settings-form-section-title">Sync source</h3>
-      <p class="settings-form-section-desc">Choose how the server updates PCGW mirror data. The S3 bundle is a prebuilt snapshot fetched from object storage (Cloudflare R2/S3) and avoids direct PCGW API calls. Switching to Manual imports the S3 bundle once to seed, then runs only on-demand PCGW API syncs.</p>
+      <div class="settings-form-section-label">
+        <h2 class="settings-form-section-title sec-title">Sync source</h2>
+        <p class="settings-form-section-desc">Choose how the server updates PCGW mirror data. The S3 bundle is a prebuilt snapshot fetched from object storage (Cloudflare R2/S3) and avoids direct PCGW API calls. Switching to Manual imports the S3 bundle once to seed, then runs only on-demand PCGW API syncs.</p>
+      </div>
+      <div class="settings-form-section-body">
       {{if .PCGWSyncSourceEnvOverride}}
       <p class="alert alert-warn">Sync source is controlled by the <code>GSBS_PCGW_SYNC_SOURCE</code> environment variable.</p>
       {{end}}
@@ -30,11 +37,15 @@
           <span>S3 manifest bundle (recommended)</span>
         </label>
       </div>
+      </div>
     </div>
 
     <div class="settings-form-section" id="section-bundle">
-      <h3 class="settings-form-section-title">Bundle fetch schedule</h3>
-      <p class="settings-form-section-desc">Used when sync source is the S3 bundle. Fetches the small index.json version pointer and only downloads the full bundle when a newer version is published (ETag/304 = no download).</p>
+      <div class="settings-form-section-label">
+        <h2 class="settings-form-section-title sec-title">Bundle schedule</h2>
+        <p class="settings-form-section-desc">Used when sync source is the S3 bundle. Fetches the small index.json version pointer and only downloads the full bundle when a newer version is published (ETag/304 = no download).</p>
+      </div>
+      <div class="settings-form-section-body">
       {{if .PCGWBundleCronEnvOverride}}
       <p class="alert alert-warn">Bundle cron is controlled by <code>GSBS_PCGW_BUNDLE_CRON</code> environment variable.</p>
       {{end}}
@@ -57,11 +68,15 @@
           <span>After bundle fetch, also run lightweight incremental PCGW API sync</span>
         </label>
       </div>
+      </div>
     </div>
 
     <div class="settings-form-section" id="section-api-sync">
-      <h3 class="settings-form-section-title">API sync schedule</h3>
-      <p class="settings-form-section-desc">Used in Manual mode. Switching to Manual clears this schedule (manual-only); set a cron here to re-enable automatic PCGW API syncs.</p>
+      <div class="settings-form-section-label">
+        <h2 class="settings-form-section-title sec-title">API schedule</h2>
+        <p class="settings-form-section-desc">Used in Manual mode. Switching to Manual clears this schedule (manual-only); set a cron here to re-enable automatic PCGW API syncs.</p>
+      </div>
+      <div class="settings-form-section-body">
     {{if .PCGWCronEnvOverride}}
     <p class="alert alert-warn">Cron is controlled by <code>GSBS_PCGW_CRON</code> environment variable (overrides database). Change it in Docker/compose and restart the server to update.</p>
     {{end}}
@@ -87,7 +102,6 @@
       <div class="config-item"><span class="config-key">Next run</span><span class="config-val">{{.PCGWCronNextRun}}</span></div>
       {{end}}
     </div>
-    </div>
 
     <div class="form-group">
       <label class="checkbox-label">
@@ -95,11 +109,16 @@
         <span>Auto-run sync on first server start</span>
       </label>
       <p class="form-hint">S3 mode: fetch the full bundle. Manual mode: incremental PCGW sync. Runs once until the first-run marker is set.</p>
+      </div>
+      </div>
     </div>
 
     <div class="settings-form-section" id="section-backups">
-      <h3 class="settings-form-section-title">Backups</h3>
-      <p class="settings-form-section-desc">Nightly archive of the database, encryption keys, and stored saves (tar.zst). Destination: <code>GSBS_BACKUP_DIR</code>{{if .BackupDirEnv}} <span class="badge-success">set via environment</span>{{else}} (defaults to <code>backups/</code> beside the database){{end}}. Optional S3 upload via <code>GSBS_BACKUP_S3_*</code> variables. Restore with <code>gsbs-server restore</code> — see docs/RESTORE.md.</p>
+      <div class="settings-form-section-label">
+        <h2 class="settings-form-section-title sec-title">Backups</h2>
+        <p class="settings-form-section-desc">Nightly archive of the database, encryption keys, and stored saves (tar.zst). Destination: <code>GSBS_BACKUP_DIR</code>{{if .BackupDirEnv}} <span class="badge-success">set via environment</span>{{else}} (defaults to <code>backups/</code> beside the database){{end}}. Optional S3 upload via <code>GSBS_BACKUP_S3_*</code> variables. Restore with <code>gsbs-server restore</code> — see docs/RESTORE.md.</p>
+      </div>
+      <div class="settings-form-section-body">
       <div class="form-group">
         <label class="checkbox-label">
           <input type="checkbox" name="backup_enabled" value="1" {{if .BackupEnabled}}checked{{end}}>
@@ -124,11 +143,15 @@
       {{if .BackupLastRun}}
       <p class="form-hint">Last backup: {{.BackupLastRun.StartedAt}} — {{.BackupLastRun.Status}}{{if .BackupLastRun.ErrorMessage}} ({{.BackupLastRun.ErrorMessage}}){{end}}</p>
       {{end}}
+      </div>
     </div>
 
     <div class="settings-form-section" id="section-notifications">
-      <h3 class="settings-form-section-title">Notifications</h3>
-      <p class="settings-form-section-desc">Server alerts via plain HTTP — a generic webhook (JSON), a Discord webhook, and/or an <a href="https://ntfy.sh" rel="noopener noreferrer" target="_blank">ntfy</a> topic URL. Leave a field empty to disable that channel. Users can additionally set personal channels in their own Settings.</p>
+      <div class="settings-form-section-label">
+        <h2 class="settings-form-section-title sec-title">Notifications</h2>
+        <p class="settings-form-section-desc">Server alerts via plain HTTP — a generic webhook (JSON), a Discord webhook, and/or an <a href="https://ntfy.sh" rel="noopener noreferrer" target="_blank">ntfy</a> topic URL. Leave a field empty to disable that channel. Users can additionally set personal channels in their own Settings.</p>
+      </div>
+      <div class="settings-form-section-body">
       <div class="form-group">
         <label for="notify_webhook_url">Webhook URL (JSON POST)</label>
         <input id="notify_webhook_url" name="notify_webhook_url" class="text-input text-input-mono" value="{{.NotifyWebhookURL}}" spellcheck="false" placeholder="https://example.com/hook">
@@ -155,19 +178,27 @@
         <input id="notify_stale_days" name="notify_stale_days" class="text-input" type="number" min="0" max="3650" value="{{.NotifyStaleDays}}">
         <p class="form-hint">Alerts once when a device stops syncing for this long (0 disables).</p>
       </div>
+      </div>
     </div>
 
     <div class="settings-form-section" id="section-retention">
-      <h3 class="settings-form-section-title">Version Retention Overrides</h3>
-      <p class="settings-form-section-desc">Per-game override of how many save versions are kept (global default: <code>GSBS_SAVE_VERSION_RETENTION</code>). JSON object of game ID to count (1–50), e.g. <code>{"12345": 20}</code>. Applies within a minute of saving.</p>
+      <div class="settings-form-section-label">
+        <h2 class="settings-form-section-title sec-title">Version retention</h2>
+        <p class="settings-form-section-desc">Per-game override of how many save versions are kept (global default: <code>GSBS_SAVE_VERSION_RETENTION</code>). JSON object of game ID to count (1–50), e.g. <code>{"12345": 20}</code>. Applies within a minute of saving.</p>
+      </div>
+      <div class="settings-form-section-body">
       <div class="form-group">
         <label for="retention_overrides">Overrides (JSON)</label>
         <textarea id="retention_overrides" name="retention_overrides" class="text-input text-input-mono" rows="3" spellcheck="false">{{.RetentionOverridesJSON}}</textarea>
       </div>
+      </div>
     </div>
 
     <div class="settings-form-section" id="section-safety">
-      <h3 class="settings-form-section-title">Sync Safety</h3>
+      <div class="settings-form-section-label">
+        <h2 class="settings-form-section-title sec-title">Sync safety</h2>
+      </div>
+      <div class="settings-form-section-body">
       <div class="form-group">
         <label class="checkbox-label">
           <input type="checkbox" name="legacy_push_protection" value="1" {{if .LegacyPushProtection}}checked{{end}}>
@@ -175,11 +206,15 @@
         </label>
         <p class="form-hint">Rejects a push that carries no safety precondition when the save was last written by a different device — the older client records it as a conflict instead of overwriting. Clients 4.0+ always send preconditions, so this only affects fleets still running 3.x. May surface conflicts on legitimate alternating play under last-write-wins; leave off unless you need it.</p>
       </div>
+      </div>
     </div>
 
     <div class="settings-form-section" id="section-filters">
-      <h3 class="settings-form-section-title">PCGW Filters</h3>
-      <p class="settings-form-section-desc">Substring excludes applied during API sync. Path excludes use defaults when empty.</p>
+      <div class="settings-form-section-label">
+        <h2 class="settings-form-section-title sec-title">Catalog filters</h2>
+        <p class="settings-form-section-desc">Substring excludes applied during API sync. Path excludes use defaults when empty.</p>
+      </div>
+      <div class="settings-form-section-body">
 
       <div class="form-group">
         <label for="pcgw_title_excludes">Title excludes (JSON array)</label>
@@ -188,6 +223,7 @@
       <div class="form-group">
         <label for="pcgw_path_excludes">Path excludes (JSON array)</label>
         <textarea id="pcgw_path_excludes" name="pcgw_path_excludes" class="text-input text-input-mono" rows="4" spellcheck="false">{{.PCGWPathExcludesJSON}}</textarea>
+      </div>
       </div>
     </div>
 
@@ -201,12 +237,13 @@
   </form>
 </section>
 
-<section class="panel" id="section-https">
-  <div class="panel-header-actions">
-    <h2>HTTPS</h2>
-    {{if .TLSActive}}<span class="badge-success">Active on this connection</span>{{else}}<span class="badge-warn">Not detected</span>{{end}}
+<div class="set-rows admin-set-rows">
+<section class="set-row" id="section-https" aria-labelledby="https-heading">
+  <div class="set-label">
+    <h2 id="https-heading" class="sec-title">HTTPS</h2>
+    <p>{{if .TLSActive}}<span class="state-chip state-healthy">On for this connection</span>{{else}}<span class="state-chip state-stale">Not detected</span>{{end}}</p>
   </div>
-  <div class="panel-body">
+  <div class="set-body">
     {{if .TLSActive}}
     <p class="cell-muted u-mb-sm">This page was served over HTTPS{{if .NativeTLS}} by GSBS's built-in TLS listener{{else}} (via your reverse proxy){{end}}. Passwords, tokens, and saves travel encrypted.</p>
     {{else}}
@@ -222,40 +259,42 @@
   </div>
 </section>
 
-<section class="panel">
-  <div class="panel-header"><h2>Test Notifications</h2></div>
-  <div class="panel-body">
-    <p class="cell-muted u-mb-sm">Sends a test event to every configured channel above (save settings first).</p>
+<section class="set-row" aria-labelledby="test-heading">
+  <div class="set-label">
+    <h2 id="test-heading" class="sec-title">Test alerts</h2>
+    <p>Sends a test event to every channel set above. Save the settings first.</p>
+  </div>
+  <div class="set-body">
     <form method="POST" action="/admin/notify/test">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <button type="submit" class="btn-secondary">Send test notification</button>
+      <button type="submit" class="btn-secondary-sm">Send test alert</button>
     </form>
   </div>
 </section>
 
-<section class="panel">
-  <div class="panel-header"><h2>Backup Now</h2></div>
-  <div class="panel-body">
-    <p class="cell-muted u-mb-sm">
-      Runs a full backup immediately (database snapshot, encryption keys, stored saves{{if .BackupIncludeCovers}}, covers{{end}}), regardless of the schedule above.
-    </p>
+<section class="set-row" aria-labelledby="backup-heading">
+  <div class="set-label">
+    <h2 id="backup-heading" class="sec-title">Back up now</h2>
+    <p>A full backup right away (database, encryption keys, stored saves{{if .BackupIncludeCovers}}, covers{{end}}), whatever the schedule says.</p>
+  </div>
+  <div class="set-body">
     <form method="POST" action="/admin/backup/run">
       <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-      <button type="submit" class="btn-secondary" {{if .BackupRunning}}disabled{{end}}>
+      <button type="submit" class="btn-secondary-sm" {{if .BackupRunning}}disabled{{end}}>
         {{if .BackupRunning}}Backup running&hellip;{{else}}Backup now{{end}}
       </button>
     </form>
   </div>
 </section>
 
-<section class="panel">
-  <div class="panel-header"><h2>Cover Art Cache</h2></div>
-  <div class="panel-body">
-    <p class="cell-muted u-mb-sm">
-      Game covers are pulled from Steam's public CDN on demand and cached on disk, then served locally to My Games. Games without Steam art fall back to a generated icon. Clearing the cache forces covers to re-download on next view.
-    </p>
+<section class="set-row" aria-labelledby="covers-heading">
+  <div class="set-label">
+    <h2 id="covers-heading" class="sec-title">Cover art</h2>
+    <p>Covers come from Steam's public CDN when first needed and are kept on disk. Games without Steam art get a generated tile. Clearing the cache makes covers download again on next view.</p>
+  </div>
+  <div class="set-body">
     {{if .CoversCleared}}<p class="alert alert-success">Cover cache cleared.</p>{{end}}
-    <div class="config-grid u-pad-head">
+    <div class="config-grid config-flush">
       <div class="config-item"><span class="config-key">Cached covers</span><span class="config-val">{{.CoverCacheCount}}</span></div>
       <div class="config-item"><span class="config-key">Cache directory</span><span class="config-val cell-muted"><code class="code-inline">{{.CoverRoot}}</code></span></div>
     </div>
@@ -265,5 +304,6 @@
     </form>
   </div>
 </section>
+</div>
 {{end}}
 {{define "admin_settings_scripts"}}{{end}}

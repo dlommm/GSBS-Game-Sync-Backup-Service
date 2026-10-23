@@ -38,6 +38,23 @@ var SyncPaused atomic.Bool
 // WatcherHealthy indicates the file watcher supervisor is running normally.
 var WatcherHealthy atomic.Bool
 
+// watcherHealthGen numbers sync runs. A restart cancels the old run, whose
+// supervisor then reports "unhealthy"; without the number that late report
+// overwrote the new run's health and Status stuck on "Watcher recovering".
+var watcherHealthGen atomic.Uint64
+
+// newWatcherHealthReporter marks the watcher healthy for a new sync run and
+// returns the run's health callback, which is ignored once a newer run starts.
+func newWatcherHealthReporter() func(bool) {
+	gen := watcherHealthGen.Add(1)
+	WatcherHealthy.Store(true)
+	return func(ok bool) {
+		if watcherHealthGen.Load() == gen {
+			WatcherHealthy.Store(ok)
+		}
+	}
+}
+
 // NextRetryAt is when the next pull retry is scheduled (for tray tooltip). Zero means no retry pending.
 var NextRetryAt atomic.Value // time.Time
 
@@ -98,6 +115,11 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 	//  8. Drain outbox from previous session
 	//  9. Start SSE listener, tickers (pull, outbox, discovery)
 	// 10. Event loop: periodic pull, sync-now, SSE, manifest refresh, discovery rebuild
+
+	// Claim watcher-health reporting now, at the start of the run: runs that a
+	// restart replaced can reach their watcher step later than this one, and
+	// must not be able to take the newest generation from it.
+	reportWatcherHealth := newWatcherHealthReporter()
 
 	initDiscoveryState()
 	// Restore discovery state from cache for watch filtering before first scan.
@@ -434,10 +456,7 @@ func runSync(ctx context.Context, cfg *config, syncNowCh <-chan struct{}, refres
 		triggerSyncNow()
 	})
 	defer setResumeCatchUpHook(nil)
-	WatcherHealthy.Store(true)
-	go sync.RunWatcherSupervisor(ctx, watcher, getSyncWatchPaths, func(ok bool) {
-		WatcherHealthy.Store(ok)
-	})
+	go sync.RunWatcherSupervisor(ctx, watcher, getSyncWatchPaths, reportWatcherHealth)
 
 	// Startup reconciliation: upload local saves that are missing on the server.
 	// Runs in a goroutine with a short delay so the watcher is running first,

@@ -13,13 +13,24 @@
   <script src="/static/theme-boot.js"></script>
 </head>
 <body class="auth-page">
+    <aside class="auth-hero" aria-label="GSBS">
+    <span class="auth-mark"><img src="/static/favicon.png" alt="" width="34" height="34"><span>GSBS</span></span>
+    <div class="auth-slots" aria-hidden="true">
+      <span class="auth-slot"><span class="auth-slot-art">HA</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">ER</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+      <span class="auth-slot"><span class="auth-slot-art">SV</span><span class="auth-slot-lines"><i></i><i></i></span><span class="auth-slot-ok">Backed up</span></span>
+    </div>
+    <div>
+      <p class="auth-display">Every save.<br>Every machine.</p>
+      <p class="auth-hero-sub">Game Sync &amp; Backup keeps your saves backed up and in step across your PCs and handhelds, with every version kept.</p>
+    </div>
+  </aside>
   <main id="main-content" class="auth-card error-card" role="main">
-    <img src="/static/logo.png" alt="GSBS" class="auth-logo">
     <p class="error-code" aria-hidden="true">{{.StatusCode}}</p>
     <h1>{{.Title}}</h1>
     <p class="subtitle">{{.Message}}</p>
     <div class="error-actions">
-      <a class="btn-primary" href="/dashboard">Back to dashboard</a>
+      <a class="btn-primary" href="/dashboard">Back to Continue</a>
       <a class="btn-ghost" href="/login">Sign in</a>
     </div>
   </main>

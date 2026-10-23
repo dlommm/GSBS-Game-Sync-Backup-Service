@@ -70,9 +70,9 @@ feature's name from the changelog's **Removed** section across `README.md`,
   `<cover root>/<game_id>.jpg` (portrait) and `<game_id>-hero.jpg` (wide).
   Screenshot with Playwright using `waitUntil: 'load'` (the SSE stream never
   goes idle) and `localStorage gsbs.tour.done = "1"` (skips the tour).
-- Settings › Appearance previews (`server/webui/static/previews/`) must match
-  the current designs and layouts; `script/gen-appearance-previews.py` lists
-  them (monogram tiles only — no third-party art ships in the binary).
+- Settings › Appearance previews are live CSS (each design's token block also
+  applies to `[data-preview="<key>"]`), so they need no regenerating; a new
+  design needs its key in `designChoices` and in both selectors of its block.
 - Desktop 1440×900 for pages, 390×844 for phone views; crop tall pages.
 
 ## 5. Design and reference docs

@@ -107,6 +107,7 @@ type settingsData struct {
 	// cannot read newly encrypted saves until updated.
 	CryptoStaleLegacy []string
 	CryptoGames       []cryptoGameRow
+	LookTitle         string // game named in the Appearance previews
 	EncryptedSaves    int
 	TotalSaves        int
 	EncryptedPct      int
@@ -300,10 +301,14 @@ func pageDataWithAppearance(h *WebHandler, r *http.Request, userID string, pd Pa
 func newTemplateFuncs(t *template.Template) template.FuncMap {
 	return template.FuncMap{
 		"designDefault": func() string { return defaultDesign },
-		"designChoices": func() []struct{ Key, Name string } {
-			return []struct{ Key, Name string }{
-				{"default", "Mint Vault"}, {"hud", "Night Ops"}, {"crt", "Phosphor"},
-				{"hearth", "Hearth"}, {"synth", "Arcade"}, {"slate", "Foundry"},
+		"designChoices": func() []struct{ Key, Name, Voice string } {
+			return []struct{ Key, Name, Voice string }{
+				{"default", "Mint Vault", "Mint on near-black, condensed caps"},
+				{"hud", "Night Ops", "Steel and cyan, wide tracked caps"},
+				{"crt", "Phosphor", "Green glass, terminal caps"},
+				{"hearth", "Hearth", "Warm night, soft green, mixed case"},
+				{"synth", "Arcade", "Violet night, magenta, heavy caps"},
+				{"slate", "Foundry", "Graphite and amber, square caps"},
 			}
 		},
 		"layoutChoices": func() []struct{ Key, Name string } {

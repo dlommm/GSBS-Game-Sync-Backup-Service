@@ -1,12 +1,17 @@
 {{template "layout" .}}
 {{define "admin_analytics_title"}}Analytics — GSBS Admin{{end}}
 {{define "admin_analytics_content"}}
-<h1 class="sr-only">Server Analytics</h1>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Analytics</h1>
+    <p class="page-sub">How the whole server is used: storage, devices, sync volume and the health of the game catalog.</p>
+  </div>
+</div>
 <nav class="analytics-tabs" aria-label="Analytics sections">
   <a href="/admin/analytics?tab=overview" class="analytics-tab{{if eq .Tab "overview"}} active{{end}}">Overview</a>
-  <a href="/admin/analytics?tab=fleet" class="analytics-tab{{if eq .Tab "fleet"}} active{{end}}">Fleet Activity</a>
-  <a href="/admin/analytics?tab=pcgw" class="analytics-tab{{if eq .Tab "pcgw"}} active{{end}}">PCGW Catalog</a>
-  <a href="/admin/analytics?tab=sync" class="analytics-tab{{if eq .Tab "sync"}} active{{end}}">Sync History</a>
+  <a href="/admin/analytics?tab=fleet" class="analytics-tab{{if eq .Tab "fleet"}} active{{end}}">Devices</a>
+  <a href="/admin/analytics?tab=pcgw" class="analytics-tab{{if eq .Tab "pcgw"}} active{{end}}">Catalog</a>
+  <a href="/admin/analytics?tab=sync" class="analytics-tab{{if eq .Tab "sync"}} active{{end}}">Sync history</a>
 </nav>
 
 {{if eq .Tab "overview"}}

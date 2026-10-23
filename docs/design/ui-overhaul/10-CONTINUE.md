@@ -53,3 +53,18 @@ including ones that failed before the deferred script ran.
 Go tests (server, client, pkg), `script/ui-smoke.sh` (46/46), `script/check-contrast.py`, and
 axe-core WCAG 2 A/AA on Continue, Library (grid + browser), Game, Load a save, Devices and
 Settings — 0 violations in dark and light (default design).
+
+## Rollout to every page (after 7.0.0)
+
+The grammar above now covers the rest of the server and the client:
+
+- **Page head** on every screen: a caps noun title, and a sub-line that states the finding (what needs attention) rather than describing the interface.
+- **Figures** are one strip split by rules (`.figs`; the carried `.stats-row` is restyled to match): label above a condensed number, no tiles.
+- **Settings** are rows (`.set-row`): title and explanation left, controls right, destructive actions last. Checkboxes are switches (`.switch`). Admin's long server-settings form uses the same rows.
+- **Admin** shares the user shell; its sections are an underline tab strip (`partials/admin_shell.html`).
+- **Lists of states** (setup checks, protection, devices) are `.checks` rows with the fix on the right.
+- **Auth pages** are a split screen: the hero ground tinted by the design's accent on the left, the form on the page ground right.
+- **Appearance previews** are live: each design's token block also applies to `[data-preview="<key>"]`, so a tile is a miniature Continue screen in that design; choosing one applies it to the page before saving.
+- Boxes (`.panel`) only hold dense tables and consoles. No blur, no tinted icon chips, no accent on chrome.
+
+Verified: Go tests, `script/ui-smoke.sh`, `script/check-contrast.py`, and axe-core WCAG 2 A/AA with 0 violations on every server page (user, admin, auth) and every client page, in dark and light.

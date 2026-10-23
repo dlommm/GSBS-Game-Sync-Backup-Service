@@ -1,32 +1,28 @@
 {{template "layout" .}}
 {{define "admin_pcgw_detail_title"}}{{.Game.Title}} — PCGW — GSBS{{end}}
 {{define "admin_pcgw_detail_content"}}
-<h1 class="sr-only">PCGW Game Detail</h1>
 <nav class="breadcrumb" aria-label="Breadcrumb">
-  <a href="/admin/pcgw">PCGW games</a> / {{.Game.Title}}
+  <a href="/admin/pcgw">PCGamingWiki</a> / {{.Game.Title}}
 </nav>
-
-<section class="panel panel-compact">
-  <div class="panel-header-actions">
-    <div>
-      <h2 class="u-m0">{{.Game.Title}}</h2>
-      <p class="cell-muted u-hint">
-        Page ID {{.Game.PageID}} ·
-        {{if eq .Game.ParseStatus "ok"}}<span class="badge-success">ok</span>
-        {{else if eq .Game.ParseStatus "partial"}}<span class="badge-warn">partial</span>
-        {{else if eq .Game.ParseStatus "failed"}}<span class="badge-failed">failed</span>
-        {{else}}<span class="cell-muted">{{.Game.ParseStatus}}</span>{{end}}
-      </p>
-    </div>
-    <div class="panel-actions actions-stack">
-      <a href="{{.ExportJSONPath}}" class="btn-ghost-sm">Export JSON</a>
-      <form method="post" action="/admin/pcgw/{{.Game.PageID}}/refresh" class="inline-form">
-        <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-        <button type="submit" class="btn-primary-sm">Refresh this game</button>
-      </form>
-    </div>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">{{.Game.Title}}</h1>
+    <p class="page-sub">
+      PCGamingWiki page {{.Game.PageID}} ·
+      {{if eq .Game.ParseStatus "ok"}}<span class="badge-success">parsed</span>
+      {{else if eq .Game.ParseStatus "partial"}}<span class="badge-warn">partly parsed</span>
+      {{else if eq .Game.ParseStatus "failed"}}<span class="badge-failed">failed</span>
+      {{else}}<span class="cell-muted">{{.Game.ParseStatus}}</span>{{end}}
+    </p>
   </div>
-</section>
+  <div class="page-actions">
+    <a href="{{.ExportJSONPath}}" class="btn-ghost-sm">Export JSON</a>
+    <form method="post" action="/admin/pcgw/{{.Game.PageID}}/refresh" class="inline-form">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <button type="submit" class="btn-primary-sm">Refresh this game</button>
+    </form>
+  </div>
+</div>
 
 {{if .ParseFailures}}
 <section class="panel">

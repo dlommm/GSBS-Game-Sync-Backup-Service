@@ -2,7 +2,7 @@
 {{define "logs_content"}}
 <div class="page-head">
   <div>
-    <h1 class="page-title">Client logs</h1>
+    <h1 class="page-title">Logs</h1>
     <p class="page-sub">
       {{if .LogSourcePresent}}Reading <code class="code-inline">{{.LogSourcePath}}</code>. {{.LogSourceInfo}}{{else}}{{.LogSourceInfo}}{{end}}
       Prefer a text editor? <a href="/open-log">Open the log file</a>.
@@ -10,14 +10,12 @@
   </div>
 </div>
 
-<section class="panel">
-  <div class="panel-header-actions">
-    <h2>Filters</h2>
-    <div class="panel-actions">
+<section class="c-sec">
+  <div class="sec-head"><h2 class="sec-title">Lines</h2><div class="panel-actions">
       <span id="logs-tailing" class="badge-running" hidden>auto-refreshing</span>
       <a id="logs-csv-btn" href="/logs/export.csv" class="btn-ghost-sm" download="client-logs.csv">Export CSV</a>
-      <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button>
-    </div>
+      <button type="button" class="btn-ghost-sm" id="logs-refresh-btn">Refresh now</button></div>
+  <div class="panel">
   </div>
   <form id="logs-filters" class="filter-toolbar" method="get" action="/logs">
     <input type="hidden" name="offset" id="logs-offset" value="{{.Query.Offset}}">
@@ -57,6 +55,7 @@
   </form>
   <div id="client-logs-table">
     {{template "partials/logs_table.html" .}}
+  </div>
   </div>
 </section>
 {{end}}

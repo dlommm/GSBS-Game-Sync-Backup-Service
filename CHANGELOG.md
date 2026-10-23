@@ -2,6 +2,34 @@
 
 All notable changes to GSBS are documented here. Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [7.1.0] - 2026-10-23
+
+The 7.0 design reaches every page of the server and the client. No API, sync, schema or data changes.
+
+### Changed — the v7 look on every page
+
+- **Admin** joins the shared top bar: the separate "GSBS Admin" sidebar is gone, and its eight sections (Overview, Users, Manifest, PCGW, Analytics, Activity, Logs, Settings) are a tab strip under it. Every admin page opens with a title and a one-line summary of what needs attention; totals are one strip of figures; Overview's setup checks are a checklist with a fix beside each open item, and the purge-a-game tool moved to a danger zone at the foot.
+- **Settings** (account and server) are laid out as rows: what a setting does on the left, its controls on the right. Checkboxes are real on/off switches, and destructive actions sit last.
+- **Appearance previews are live.** The six design tiles were identical screenshots; each is now a miniature Continue screen drawn in that design's own colours, corners and title lettering, named after one of your games. Picking a design or spacing applies it to the page at once so you can try it before saving.
+- **Insights** leads with what matters: a one-line health finding, the totals, then a protection checklist (device backups, two-factor, encryption, server backup, integrity) with a link to fix each, then the activity charts. The admin's per-user view uses the same page.
+- **Sign-in pages** (sign in, create account, two-factor, first-run setup, error pages) share a split screen: the game-screen panel on the left, the form on the right.
+- **Conflicts, two-factor setup and recovery codes** get the same page titles and layout as the rest of the app.
+- **Client pages**: Status opens on the same dark game-screen panel as Continue; Actions is a list instead of icon tiles; Settings, Add a game, Help, About, Insights and Logs follow the server's layout.
+- The search palette and notifications panel lost their blur and accent outline; empty states, figures and key/value rows share one style everywhere.
+
+### Fixed
+
+- The admin Integrity panel said "Healthy" for a server that had never run the check.
+- The PCGW page pointed to "Quick Actions" and "Advanced Maintenance", which only exist on the Activity page.
+- Several checkboxes (Settings, the setup wizard) rendered as large empty squares.
+- Settings no longer suggests a password change keeps devices signed in: it signs out every device and every other browser, and now says so.
+- **Client:** games added by hand on "Add a game" were watched and synced but never listed under Status, and the game count stayed at 0. Status now lists them after the discovered games, each once.
+- **Client:** after a sync restart (adding a game, saving settings) Status could stay on "Watcher recovering" for good: the replaced run's shutdown report overwrote the new run's health. Only the current run reports now.
+
+### Removed
+
+- The pre-rendered appearance preview images and `script/gen-appearance-previews.py` (the previews are drawn live now).
+
 ## [7.0.0] - 2026-10-22
 
 Major release: a new web app built around your games. No API, sync, schema or data changes — 6.x clients and servers remain compatible. **Upgrade note:** the Top-nav, Library and Custom (widgets) layouts were removed; accounts that chose one now see Standard (Compact remains). Every URL is unchanged.

@@ -1,32 +1,33 @@
 {{template "layout" .}}
-{{define "enable_2fa_title"}}Enable 2FA — GSBS{{end}}
+{{define "enable_2fa_title"}}Set up two-factor — GSBS{{end}}
 {{define "enable_2fa_content"}}
-<h1 class="sr-only">Enable Two-Factor Authentication</h1>
-<section class="panel">
-  <div class="panel-header"><h2>Set up two-factor authentication</h2></div>
-  <div class="panel-body">
-    {{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
-    <div class="twofa-setup-grid">
-      <div class="twofa-qr-col">
-        <img src="{{.QRDataURL}}" alt="2FA QR code" width="200" height="200">
-        <p class="cell-muted">Scan with any authenticator app<br>(1Password, Aegis, Google Authenticator…)</p>
-      </div>
-      <div class="twofa-manual-col">
-        <h3 class="u-title-sm cell-muted">Can't scan?</h3>
-        <p class="cell-muted">Enter this secret manually:</p>
-        <div class="twofa-secret-row">
-          <code class="code-inline" id="totp-secret">{{.Secret}}</code>
-          <button type="button" class="btn-ghost-sm" data-copy-target="#totp-secret" aria-label="Copy secret">{{iconSVG "copy" 13}} Copy</button>
-        </div>
-        <form method="post" action="/dashboard/settings/2fa/confirm" class="auth-form u-maxw-16">
-          <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-          <label for="code">Verification code</label>
-          <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" required autofocus>
-          <button type="submit">Confirm and enable</button>
-        </form>
-        <p class="form-hint">After confirming, you'll get 10 one-time recovery codes — save them; they're your way in if you lose this device.</p>
-      </div>
-    </div>
+<p class="breadcrumb"><a href="/dashboard/settings#two-factor">Settings</a> <span class="crumb-sep" aria-hidden="true">/</span> <span aria-current="page">Two-factor</span></p>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Two-factor</h1>
+    <p class="page-sub">Scan the code with an authenticator app, then enter the six-digit code it shows to turn it on.</p>
   </div>
-</section>
+</div>
+{{if .Error}}<div class="alert alert-error">{{.Error}}</div>{{end}}
+<div class="twofa">
+  <figure class="twofa-qr">
+    <img src="{{.QRDataURL}}" alt="QR code for your authenticator app" width="200" height="200">
+    <figcaption>Works with 1Password, Aegis, Google Authenticator and others</figcaption>
+  </figure>
+  <div class="twofa-body">
+    <h2 class="sec-title">Can't scan it?</h2>
+    <p class="cell-muted">Type this key into the app instead:</p>
+    <div class="twofa-secret-row">
+      <code class="code-inline" id="totp-secret">{{.Secret}}</code>
+      <button type="button" class="btn-ghost-sm" data-copy-target="#totp-secret" aria-label="Copy key">{{iconSVG "copy" 13}} Copy</button>
+    </div>
+    <form method="post" action="/dashboard/settings/2fa/confirm" class="field-stack twofa-form">
+      <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+      <label for="code">Code from the app</label>
+      <input id="code" name="code" type="text" class="text-input code-input" inputmode="numeric" autocomplete="one-time-code" required autofocus>
+      <div class="set-foot"><button type="submit" class="btn-primary-sm">Turn on two-factor</button></div>
+    </form>
+    <p class="form-hint">Next you'll get 10 one-time recovery codes. Keep them safe: they get you in if you lose this device.</p>
+  </div>
+</div>
 {{end}}
